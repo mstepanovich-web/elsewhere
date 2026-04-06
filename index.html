@@ -167,6 +167,7 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
     <div class="abt" onclick="sendReact('⭐')"><span class="abt-icon">⭐</span>Star</div>
     <div class="abt" onclick="sendReact('💫')"><span class="abt-icon">💫</span>Vibe</div>
     <div class="abt" onclick="sendReact('❤️')"><span class="abt-icon">❤️</span>Love</div>
+    <div class="abt" onclick="toggleFullscreen()" id="fs-btn"><span class="abt-icon">⛶</span>Full</div>
   </div>
 </div>
 
@@ -203,7 +204,8 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 </div>
 
 <!-- Agora SDK — try primary CDN, fallback to jsDelivr -->
-<script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
+<script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
+<script>if(typeof AgoraRTC==='undefined'){document.write('<script src="https://cdn.jsdelivr.net/npm/agora-rtc-sdk-ng@4.20.0/AgoraRTC_N-4.20.0.js"><\/script>');}</script>
 <script>
 // If primary CDN failed, try fallback
 if (typeof AgoraRTC === 'undefined') {
@@ -363,43 +365,24 @@ async function joinRoom() {
 }
 
 // ═══════════════════════════════════════
-// SINGER COMPOSITING — draw video onto stage canvas each frame
+// DISPLAY — just play the incoming stream full screen on canvas
+// The stage app sends an already-composited video (stage + singer)
+// No processing needed here at all
 // ═══════════════════════════════════════
-function singerRect(){
-  const W=bgC.width, H=bgC.height;
-  const sh=H*.67, sw=sh*.68, footY=H*.82;
-  return { x:W/2-sw/2, y:footY-sh, w:sw, h:sh };
-}
-
 let renderRunning = false;
+
 function startRenderLoop(){
   if(renderRunning) return;
   renderRunning = true;
   (function loop(){
     requestAnimationFrame(loop);
-    // Draw stage background
-    drawBG();
-    // Draw singer video on top if ready
     if(streamEl && streamEl.readyState >= 2){
-      const r = singerRect();
-      // Mirror the video (webcam is flipped)
-      bctx.save();
-      bctx.translate(r.x + r.w, r.y);
-      bctx.scale(-1, 1);
-      bctx.drawImage(streamEl, 0, 0, r.w, r.h);
-      bctx.restore();
-      // Simple foot blend
-      bctx.save();
-      bctx.globalCompositeOperation = 'multiply';
-      const lg = bctx.createLinearGradient(r.x, r.y+r.h*.8, r.x, r.y+r.h);
-      lg.addColorStop(0,'transparent'); lg.addColorStop(1,'rgba(6,3,4,.5)');
-      bctx.fillStyle = lg; bctx.fillRect(r.x, r.y, r.w, r.h);
-      bctx.restore();
-      // Shadow under feet
-      const cx = r.x+r.w/2;
-      const shg = bctx.createRadialGradient(cx,r.y+r.h,0,cx,r.y+r.h,r.w*.6);
-      shg.addColorStop(0,'rgba(0,0,0,.5)'); shg.addColorStop(1,'transparent');
-      bctx.fillStyle=shg; bctx.fillRect(r.x-r.w*.4,r.y+r.h-8,r.w*1.8,24);
+      // Draw the incoming composited stream to fill the canvas
+      bgC.width  = window.innerWidth;
+      bgC.height = window.innerHeight;
+      bctx.drawImage(streamEl, 0, 0, bgC.width, bgC.height);
+    } else {
+      drawBG(); // waiting state
     }
   })();
 }
@@ -539,8 +522,49 @@ function showApplause() {
 }
 
 // ═══════════════════════════════════════
-// PREVENT SCROLL BOUNCE ON IOS
+// FULLSCREEN
 // ═══════════════════════════════════════
+function toggleFullscreen(){
+  if(!document.fullscreenElement && !document.webkitFullscreenElement){
+    // Enter fullscreen — hide bottom controls for clean view
+    const el = document.documentElement;
+    if(el.requestFullscreen) el.requestFullscreen();
+    else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    document.getElementById('bottom').style.display = 'none';
+    document.getElementById('fs-btn').querySelector('.abt-icon').textContent = '✕';
+    document.getElementById('fs-btn').querySelector('span:last-child') && null;
+    document.getElementById('fs-btn').lastChild.textContent = 'Exit';
+  } else {
+    // Exit fullscreen — show controls
+    if(document.exitFullscreen) document.exitFullscreen();
+    else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
+    document.getElementById('bottom').style.display = 'flex';
+    document.getElementById('fs-btn').querySelector('.abt-icon').textContent = '⛶';
+    document.getElementById('fs-btn').lastChild.textContent = 'Full';
+  }
+}
+
+// Double-tap stage to toggle fullscreen (natural phone gesture)
+let lastTap = 0;
+document.getElementById('stage-bg').addEventListener('touchend', e => {
+  const now = Date.now();
+  if(now - lastTap < 300){ toggleFullscreen(); e.preventDefault(); }
+  lastTap = now;
+});
+
+// Restore controls if user exits fullscreen via browser UI
+document.addEventListener('fullscreenchange', () => {
+  if(!document.fullscreenElement && !document.webkitFullscreenElement){
+    document.getElementById('bottom').style.display = 'flex';
+    document.getElementById('fs-btn').querySelector('.abt-icon').textContent = '⛶';
+    document.getElementById('fs-btn').lastChild.textContent = 'Full';
+  }
+});
+document.addEventListener('webkitfullscreenchange', () => {
+  if(!document.fullscreenElement && !document.webkitFullscreenElement){
+    document.getElementById('bottom').style.display = 'flex';
+  }
+});
 document.addEventListener('touchmove', e => {
   if (!e.target.closest('#cmt-in, #comments')) e.preventDefault();
 }, { passive: false });
