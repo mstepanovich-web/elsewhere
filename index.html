@@ -12,16 +12,13 @@
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM Mono',monospace;}
 
-/* ── STREAM VIDEO — fills entire screen ── */
+/* ── STREAM VIDEO — hidden, used as source for canvas compositing ── */
 #stream{
-  position:fixed;inset:0;width:100%;height:100%;
-  object-fit:cover;  /* fills screen, crops if needed */
-  z-index:1;
-  display:none;  /* shown when stream arrives */
-  background:#000;
+  position:fixed;left:-9999px;width:1px;height:1px;
+  pointer-events:none;
 }
 
-/* Stage canvas — shown while waiting for stream */
+/* Stage canvas — always visible, singer composited on top */
 #stage-bg{position:fixed;inset:0;z-index:1;}
 
 /* ── LYRICS overlay ── */
@@ -223,7 +220,7 @@ if (typeof AgoraRTC === 'undefined') {
 <script>
 'use strict';
 
-const AGORA_APP_ID   = '5ea97c18232a4b85866a902d2d9339d4';
+const AGORA_APP_ID   = 'b2c6543a9ed946829e6526cb68c7efc9';
 const CHAN_PREFIX     = 'elsewhere_';
 
 // ═══════════════════════════════════════
@@ -304,26 +301,16 @@ async function joinRoom() {
       remoteUID = user.uid;
 
       if (mediaType === 'video') {
-        // Singer is publishing their composited canvas — just display it
         const track = user.videoTrack;
-        // Play into our video element
-        track.play(streamEl);
-        // Also grab the MediaStream for fallback
-        try {
-          const ms = new MediaStream([track.getMediaStreamTrack()]);
-          streamEl.srcObject = ms;
-        } catch(e) {}
-
-        // Show stream, hide background canvas
-        streamEl.style.display = 'block';
-        document.getElementById('stage-bg').style.display = 'none';
-
-        // Handle autoplay restriction — show unmute banner
-        streamEl.play().then(() => {
-          document.getElementById('unmute-banner').style.display = 'none';
-        }).catch(() => {
-          document.getElementById('unmute-banner').style.display = 'block';
-        });
+        // Put video into hidden element, composite it onto stage canvas
+        const ms = new MediaStream([track.getMediaStreamTrack()]);
+        streamEl.srcObject = ms;
+        streamEl.muted = true; // muted so autoplay works — audio handled separately
+        streamEl.play().catch(() => {});
+        streamEl.onloadedmetadata = () => {
+          // Start render loop once video dimensions are known
+          startRenderLoop();
+        };
 
         document.getElementById('cdot').className = 'dot ok';
         document.getElementById('clbl').textContent = 'Live 🔴';
@@ -332,20 +319,17 @@ async function joinRoom() {
 
       if (mediaType === 'audio') {
         audioTrack = user.audioTrack;
-        audioTrack.play();
+        // Don't autoplay audio — wait for user tap to avoid browser block
+        document.getElementById('unmute-banner').style.display = 'block';
       }
     });
 
     client.on('user-unpublished', () => {
-      streamEl.style.display = 'none';
-      document.getElementById('stage-bg').style.display = 'block';
       document.getElementById('cdot').className = 'dot of';
       document.getElementById('clbl').textContent = 'Singer paused';
     });
 
     client.on('user-left', () => {
-      streamEl.style.display = 'none';
-      document.getElementById('stage-bg').style.display = 'block';
       document.getElementById('cdot').className = 'dot of';
       document.getElementById('clbl').textContent = 'Singer left';
     });
@@ -378,10 +362,51 @@ async function joinRoom() {
   }
 }
 
+// ═══════════════════════════════════════
+// SINGER COMPOSITING — draw video onto stage canvas each frame
+// ═══════════════════════════════════════
+function singerRect(){
+  const W=bgC.width, H=bgC.height;
+  const sh=H*.67, sw=sh*.68, footY=H*.82;
+  return { x:W/2-sw/2, y:footY-sh, w:sw, h:sh };
+}
+
+let renderRunning = false;
+function startRenderLoop(){
+  if(renderRunning) return;
+  renderRunning = true;
+  (function loop(){
+    requestAnimationFrame(loop);
+    // Draw stage background
+    drawBG();
+    // Draw singer video on top if ready
+    if(streamEl && streamEl.readyState >= 2){
+      const r = singerRect();
+      // Mirror the video (webcam is flipped)
+      bctx.save();
+      bctx.translate(r.x + r.w, r.y);
+      bctx.scale(-1, 1);
+      bctx.drawImage(streamEl, 0, 0, r.w, r.h);
+      bctx.restore();
+      // Simple foot blend
+      bctx.save();
+      bctx.globalCompositeOperation = 'multiply';
+      const lg = bctx.createLinearGradient(r.x, r.y+r.h*.8, r.x, r.y+r.h);
+      lg.addColorStop(0,'transparent'); lg.addColorStop(1,'rgba(6,3,4,.5)');
+      bctx.fillStyle = lg; bctx.fillRect(r.x, r.y, r.w, r.h);
+      bctx.restore();
+      // Shadow under feet
+      const cx = r.x+r.w/2;
+      const shg = bctx.createRadialGradient(cx,r.y+r.h,0,cx,r.y+r.h,r.w*.6);
+      shg.addColorStop(0,'rgba(0,0,0,.5)'); shg.addColorStop(1,'transparent');
+      bctx.fillStyle=shg; bctx.fillRect(r.x-r.w*.4,r.y+r.h-8,r.w*1.8,24);
+    }
+  })();
+}
+
 function unmuteStream() {
+  if(audioTrack) audioTrack.play();
   streamEl.muted = false;
-  streamEl.play().catch(()=>{});
-  if (audioTrack) audioTrack.play();
   document.getElementById('unmute-banner').style.display = 'none';
 }
 
@@ -545,4 +570,3 @@ if (window.location.protocol === 'file:') {
 </script>
 </body>
 </html>
-
