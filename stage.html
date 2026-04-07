@@ -201,8 +201,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <video id="webcam" autoplay playsinline muted></video>
 <canvas id="proc"></canvas>
 <canvas id="maskc"></canvas>
-<!-- YouTube player — tiny but visible, required for autoplay permission -->
-<div id="yt-player" style="position:fixed;bottom:3px;left:3px;width:2px;height:2px;z-index:1;"></div>
+<!-- YouTube player — proper size, positioned below viewport so it initializes correctly -->
+<div id="yt-player" style="position:fixed;bottom:-200px;left:0;width:320px;height:180px;z-index:1;pointer-events:none;"></div>
 
 <div id="rx"></div>
 <div id="lw"><div id="lm"></div><div id="ln"></div></div>
@@ -1156,8 +1156,8 @@ function handleAudienceMsg(msg){
     document.getElementById('pf').style.width='0%';
     document.getElementById('lm').textContent='';
     document.getElementById('ln').textContent='';
-    if(phoneControlled && ytReady && ytPlayer){
-      try{ ytPlayer.seekTo(0, true); }catch(e){}
+    if(phoneControlled && ytReady && ytPlayer && song.videoId){
+      loadAndPlay(song.videoId, true);
     }
     phoneControlled ? doPlayWithYT() : doPlay();
     sendMsg({type:'restart-song'});
@@ -1231,41 +1231,42 @@ let phoneControlled = false; // true when singer phone has taken over
 // Called by YouTube IFrame API when ready
 window.onYouTubeIframeAPIReady = function(){
   ytPlayer = new YT.Player('yt-player',{
-    height:'1', width:'1',
-    playerVars:{ autoplay:0, controls:0, disablekb:1, fs:0, modestbranding:1, playsinline:1 },
+    width:'320', height:'180',
+    playerVars:{
+      autoplay:0, controls:0, disablekb:1,
+      fs:0, modestbranding:1, playsinline:1
+    },
     events:{
       onReady: ()=>{
         ytReady=true;
-        console.log('YT player ready');
+        console.log('✓ YT player ready');
         if(ytPendingId){
-          loadAndPlay(ytPendingId, false);
+          ytPlayer.loadVideoById(ytPendingId);
           ytPendingId=null;
         }
       },
       onStateChange: e=>{
-        console.log('YT state:', e.data);
+        const states={'-1':'unstarted','0':'ended','1':'playing','2':'paused','3':'buffering','5':'cued'};
+        console.log('YT state:', states[e.data]||e.data);
         if(e.data===YT.PlayerState.ENDED) doEnd();
       },
-      onError: e=>{ console.warn('YT error:', e.data); }
+      onError: e=>{ console.warn('YT error code:', e.data); }
     }
   });
 };
 
-// Load a video, warm up autoplay, then pause ready for playVideo()
 function loadAndPlay(videoId, autoplay){
-  if(!ytReady || !ytPlayer) return;
+  if(!ytReady || !ytPlayer){ ytPendingId=videoId; return; }
+  console.log('YT: loading', videoId, 'autoplay:', autoplay);
   ytPlayer.loadVideoById(videoId);
-  // After load, do the warm-up gesture then pause
-  setTimeout(()=>{
-    try{
-      ytPlayer.playVideo(); // triggers browser autoplay unlock
-      setTimeout(()=>{
-        try{
-          if(!autoplay) ytPlayer.pauseVideo(); // pause if not ready to play yet
-        }catch(e){}
-      }, 500);
-    }catch(e){}
-  }, 800);
+  if(autoplay){
+    // Play immediately — called from doPlayWithYT
+    // Give the player 1s to buffer then play
+    setTimeout(()=>{
+      try{ ytPlayer.playVideo(); console.log('YT: playVideo'); }catch(e){ console.warn(e); }
+    }, 1000);
+  }
+  // If autoplay=false, just load/buffer — playVideo called later by doPlayWithYT
 }
 
 function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
@@ -1284,10 +1285,10 @@ function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
   document.getElementById('ln').textContent='';
   document.getElementById('sp').style.display='none';
 
-  // Load YouTube video — warm up autoplay, pause until countdown GO
-  if(!isDemo){
-    if(ytReady) loadAndPlay(videoId, false);
-    else ytPendingId = videoId;
+  // Store videoId — will load and play when countdown hits GO
+  // Don't pre-load here — browser autoplay unlock requires gesture proximity to playVideo()
+  if(!isDemo && !videoId.startsWith('demo')){
+    ytPendingId = videoId; // store for when ytReady if not ready yet
   }
 
   // Tell audience what's coming — include videoId so they can load it too
@@ -1303,26 +1304,17 @@ function doPlayWithYT(){
   const songDuration = song.lyrics.length>0 ? song.lyrics[song.lyrics.length-1].t + 10 : 240;
   scheduleZoomsForSong(songDuration);
 
-  // Tell YouTube to play from the beginning
-  if(phoneControlled && ytReady && ytPlayer){
-    try{
-      ytPlayer.seekTo(0, true);
-      ytPlayer.playVideo();
-      console.log('YT: playVideo() called at GO');
-      // Retry after 2s in case first call didn't stick (buffering)
+  // Start YouTube audio
+  if(phoneControlled){
+    if(ytReady && ytPlayer){
+      loadAndPlay(song.videoId, true);
+    } else {
+      console.warn('YT not ready — phoneControlled:', phoneControlled, 'ytReady:', ytReady);
+      // Try again in 2s
       setTimeout(()=>{
-        try{
-          const state = ytPlayer.getPlayerState();
-          // state 1 = playing, 3 = buffering — both are fine
-          if(state !== 1 && state !== 3){
-            console.log('YT: retrying playVideo, state was', state);
-            ytPlayer.playVideo();
-          }
-        }catch(e){}
+        if(ytReady && ytPlayer) loadAndPlay(song.videoId, true);
       }, 2000);
-    }catch(e){ console.warn('YT playVideo error:', e); }
-  } else {
-    console.warn('YT not ready at GO — phoneControlled:', phoneControlled, 'ytReady:', ytReady, 'ytPlayer:', !!ytPlayer);
+    }
   }
 
   const startTime = Date.now();
@@ -1400,7 +1392,13 @@ function doPlay(){
     if(elapsed>song.lyrics[song.lyrics.length-1].t+5) doEnd();
   },100);
 }
-function doPause(){playing=false;clearInterval(ticker);document.getElementById('pbtn').textContent='▶ Resume';sendMsg({type:'pause'});}
+function doPause(){
+  playing=false;
+  clearInterval(ticker);
+  document.getElementById('pbtn').textContent='▶ Resume';
+  sendMsg({type:'pause'});
+  if(phoneControlled && ytReady && ytPlayer) try{ ytPlayer.pauseVideo(); }catch(e){}
+}
 function resetPlay(){doPause();elapsed=0;lIdx=-1;document.getElementById('pbtn').textContent='▶ Start';document.getElementById('pf').style.width='0%';document.getElementById('lm').textContent='';document.getElementById('ln').textContent='';}
 function updL(){let i=-1;for(let j=0;j<song.lyrics.length;j++){if(elapsed>=song.lyrics[j].t)i=j;}if(i!==lIdx){lIdx=i;const m=i>=0?song.lyrics[i].m:'',n=i>=0?(song.lyrics[i].n||''):'';document.getElementById('lm').textContent=m;document.getElementById('ln').textContent=n;sendMsg({type:'lyric',main:m,next:n});}}
 function updP(){const last=song.lyrics[song.lyrics.length-1];const pct=Math.min(100,(elapsed/(last.t+5))*100);document.getElementById('pf').style.width=pct+'%';sendMsg({type:'progress',pct,elapsed});}
