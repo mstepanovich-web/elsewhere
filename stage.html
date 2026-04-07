@@ -1479,8 +1479,8 @@ function setLoadStatus(status){
     if(bar) bar.style.display = 'none';
     stopLoadPoller();
   } else if(status === 'ready'){
-    el.textContent = 'Ready when you are';
-    el.style.color = 'rgba(255,200,120,.35)';
+    el.textContent = 'Ready · tap Start on your phone';
+    el.style.color = 'rgba(255,200,120,.6)';
     if(bar) bar.style.display = 'none';
   }
 }
@@ -1689,8 +1689,8 @@ function doPlay(){
   scheduleZoomsForSong(songDuration);
   clearAllTickers();
   ticker=setInterval(()=>{
-    elapsed+=0.1; updL(); updP();
-    if(elapsed>songDuration) doEnd();
+    elapsed+=0.1; updL(elapsed); updP();
+    if(!phoneControlled && elapsed>songDuration) doEnd();
   },100);
 }
 function doPause(){
@@ -1725,7 +1725,8 @@ function updL(le){
 }
 function updP(){const pct=Math.min(100,(elapsed/600)*100);document.getElementById('pf').style.width=pct+'%';sendMsg({type:'progress',pct,elapsed});}
 function doEnd(){
-  log('doEnd() called — elapsed:'+Math.round(elapsed)+'s', 'warn');
+  const stack = new Error().stack.split('\n').slice(1,4).join(' | ');
+  log('doEnd() called — elapsed:'+Math.round(elapsed)+'s | '+stack, 'warn');
   doPause();
   stopLoadPoller();
   clearInterval(songProgressPoller); songProgressPoller=null;
