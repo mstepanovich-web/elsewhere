@@ -190,8 +190,23 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 .sb:hover{background:rgba(255,200,80,.18);}
 #shint{font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:1.9;}
 
-/* Hidden elements */
-#webcam,#proc,#maskc{display:none;position:fixed;left:-9999px;}
+/* ── ON-SCREEN DEBUG LOG ── */
+#dbg{
+  position:fixed;top:44px;right:0;width:320px;max-height:50vh;
+  background:rgba(0,0,0,.88);border-left:1px solid rgba(255,200,80,.15);
+  font-size:10px;font-family:'DM Mono',monospace;color:rgba(255,220,150,.8);
+  overflow-y:auto;z-index:999;display:none;padding:6px;
+}
+#dbg-toggle{
+  position:fixed;top:46px;right:4px;z-index:1000;
+  background:rgba(0,0,0,.7);border:1px solid rgba(255,200,80,.25);
+  border-radius:4px;padding:3px 7px;font-size:9px;color:rgba(255,200,80,.7);
+  cursor:pointer;font-family:'DM Mono',monospace;letter-spacing:.06em;
+}
+.dl{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04);line-height:1.4;}
+.dl.warn{color:rgba(255,150,80,.9);}
+.dl.err{color:rgba(196,100,80,.9);}
+.dl.ok{color:rgba(0,232,122,.8);}
 </style>
 </head>
 <body>
@@ -203,6 +218,10 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <canvas id="maskc"></canvas>
 <!-- YouTube player — proper size, positioned below viewport so it initializes correctly -->
 <div id="yt-player" style="position:fixed;bottom:-200px;left:0;width:320px;height:180px;z-index:1;pointer-events:none;"></div>
+
+<!-- On-screen debug log -->
+<div id="dbg-toggle" onclick="toggleDbg()">LOG</div>
+<div id="dbg"></div>
 
 <div id="rx"></div>
 <div id="lw"><div id="lm"></div><div id="ln"></div></div>
@@ -1157,7 +1176,7 @@ function handleAudienceMsg(msg){
     document.getElementById('lm').textContent='';
     document.getElementById('ln').textContent='';
     if(phoneControlled && ytReady && ytPlayer && song.videoId){
-      loadAndPlay(song.videoId, true);
+      ytPlaySong(song.videoId);
     }
     phoneControlled ? doPlayWithYT() : doPlay();
     sendMsg({type:'restart-song'});
@@ -1221,52 +1240,121 @@ function spawnComment(t){ const el=document.createElement('div'); el.style.cssTe
 function playCheer(){ try{ const c=new(window.AudioContext||window.webkitAudioContext)(),buf=c.createBuffer(1,c.sampleRate*.8,c.sampleRate),d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/c.sampleRate*4); const s=c.createBufferSource(); s.buffer=buf; const g=c.createGain(); g.gain.value=.15; s.connect(g); g.connect(c.destination); s.start(); setTimeout(()=>c.close(),1000); }catch(e){} }
 
 // ═══════════════════════════════════════
-// YOUTUBE PLAYER — hidden audio source
+// ON-SCREEN LOG
 // ═══════════════════════════════════════
-let ytPlayer     = null;
-let ytReady      = false;
-let ytPendingId  = null;
-let phoneControlled = false; // true when singer phone has taken over
+function log(msg, type=''){
+  console.log(msg);
+  const dbg=document.getElementById('dbg');
+  if(!dbg) return;
+  const el=document.createElement('div');
+  el.className='dl'+(type?' '+type:'');
+  el.textContent=new Date().toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'})+' '+msg;
+  dbg.appendChild(el);
+  dbg.scrollTop=dbg.scrollHeight;
+  // Keep max 80 lines
+  while(dbg.children.length>80) dbg.removeChild(dbg.firstChild);
+}
+function toggleDbg(){
+  const d=document.getElementById('dbg');
+  d.style.display=d.style.display==='block'?'none':'block';
+}
 
-// Called by YouTube IFrame API when ready
+// ═══════════════════════════════════════
+// YOUTUBE PLAYER
+// ═══════════════════════════════════════
+let ytPlayer        = null;
+let ytReady         = false;
+let ytPendingId     = null;
+let phoneControlled = false;
+let ytIsAd          = false;  // track when an ad is playing
+
+const YT_STATES = {'-1':'unstarted','0':'ended','1':'playing','2':'paused','3':'buffering','5':'cued'};
+
 window.onYouTubeIframeAPIReady = function(){
+  log('YT API loaded — creating player', 'ok');
   ytPlayer = new YT.Player('yt-player',{
     width:'320', height:'180',
     playerVars:{
       autoplay:0, controls:0, disablekb:1,
-      fs:0, modestbranding:1, playsinline:1
+      fs:0, modestbranding:1, playsinline:1,
+      // These params skip ads where possible
+      iv_load_policy:3, rel:0
     },
     events:{
       onReady: ()=>{
         ytReady=true;
-        console.log('✓ YT player ready');
+        log('YT player ready ✓', 'ok');
         if(ytPendingId){
+          log('YT: loading pending video: '+ytPendingId);
           ytPlayer.loadVideoById(ytPendingId);
           ytPendingId=null;
         }
       },
       onStateChange: e=>{
-        const states={'-1':'unstarted','0':'ended','1':'playing','2':'paused','3':'buffering','5':'cued'};
-        console.log('YT state:', states[e.data]||e.data);
-        if(e.data===YT.PlayerState.ENDED) doEnd();
+        const s=YT_STATES[e.data]||e.data;
+        log('YT state → '+s+(ytIsAd?' [AD]':''));
+
+        // Detect ad via getAdState if available
+        if(ytPlayer.getAdState) ytIsAd = ytPlayer.getAdState()===1;
+
+        if(e.data===YT.PlayerState.ENDED){
+          if(ytIsAd){
+            log('YT: ad ended — song should start now');
+            ytIsAd=false;
+            // Don't call doEnd — wait for actual song to end
+          } else {
+            log('YT: song ended → doEnd()');
+            doEnd();
+          }
+        }
+        if(e.data===YT.PlayerState.PLAYING){
+          log('YT: playing — getCurrentTime: '+Math.round(ytPlayer.getCurrentTime())+'s');
+        }
       },
-      onError: e=>{ console.warn('YT error code:', e.data); }
+      onError: e=>{
+        const errs={2:'invalid videoId',5:'HTML5 error',100:'not found',101:'embed disabled',150:'embed disabled'};
+        log('YT error: '+(errs[e.data]||e.data), 'err');
+      }
     }
   });
 };
 
-function loadAndPlay(videoId, autoplay){
-  if(!ytReady || !ytPlayer){ ytPendingId=videoId; return; }
-  console.log('YT: loading', videoId, 'autoplay:', autoplay);
-  ytPlayer.loadVideoById(videoId);
-  if(autoplay){
-    // Play immediately — called from doPlayWithYT
-    // Give the player 1s to buffer then play
-    setTimeout(()=>{
-      try{ ytPlayer.playVideo(); console.log('YT: playVideo'); }catch(e){ console.warn(e); }
-    }, 1000);
+function ytPlaySong(videoId){
+  if(!videoId){ log('ytPlaySong: no videoId!', 'err'); return; }
+  log('ytPlaySong: '+videoId);
+  if(!ytReady || !ytPlayer){
+    log('YT not ready — storing pending: '+videoId, 'warn');
+    ytPendingId=videoId;
+    return;
   }
-  // If autoplay=false, just load/buffer — playVideo called later by doPlayWithYT
+  ytIsAd=false;
+
+  // cueVideoById first (doesn't require gesture), then playVideo (does)
+  // This is the most reliable sequence for embedded players
+  try{
+    ytPlayer.cueVideoById(videoId);
+    log('YT: cueVideoById done');
+  }catch(e){ log('YT cue err: '+e.message, 'err'); }
+
+  // Play after brief pause — gives player time to cue
+  setTimeout(()=>{
+    try{
+      ytPlayer.playVideo();
+      log('YT: playVideo called');
+    }catch(e){ log('YT play err: '+e.message, 'err'); }
+  }, 800);
+
+  // Safety retry at 3s
+  setTimeout(()=>{
+    try{
+      const state = ytPlayer.getPlayerState();
+      log('YT state check at 3s: '+YT_STATES[state]);
+      if(state !== 1 && state !== 3){
+        log('YT: retry playVideo at 3s');
+        ytPlayer.playVideo();
+      }
+    }catch(e){}
+  }, 3000);
 }
 
 function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
@@ -1285,11 +1373,8 @@ function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
   document.getElementById('ln').textContent='';
   document.getElementById('sp').style.display='none';
 
-  // Store videoId — will load and play when countdown hits GO
-  // Don't pre-load here — browser autoplay unlock requires gesture proximity to playVideo()
-  if(!isDemo && !videoId.startsWith('demo')){
-    ytPendingId = videoId; // store for when ytReady if not ready yet
-  }
+  // videoId stored on song object — ytPlaySong called at countdown GO
+  log('Song loaded: '+title+' ['+videoId+']', 'ok');
 
   // Tell audience what's coming — include videoId so they can load it too
   sendMsg({type:'song-announce', title, artist, videoId, isDemo});
@@ -1305,14 +1390,15 @@ function doPlayWithYT(){
   scheduleZoomsForSong(songDuration);
 
   // Start YouTube audio
+  log('doPlayWithYT — videoId:'+song.videoId+' phoneControlled:'+phoneControlled+' ytReady:'+ytReady);
   if(phoneControlled){
     if(ytReady && ytPlayer){
-      loadAndPlay(song.videoId, true);
+      ytPlaySong(song.videoId);
     } else {
-      console.warn('YT not ready — phoneControlled:', phoneControlled, 'ytReady:', ytReady);
-      // Try again in 2s
+      log('YT not ready at GO — will retry in 2s', 'warn');
       setTimeout(()=>{
-        if(ytReady && ytPlayer) loadAndPlay(song.videoId, true);
+        if(ytReady && ytPlayer) ytPlaySong(song.videoId);
+        else log('YT still not ready after 2s retry', 'err');
       }, 2000);
     }
   }
@@ -1332,7 +1418,9 @@ function doPlayWithYT(){
     }
 
     updL(); updP();
-    if(elapsed > songDuration) doEnd();
+    // When phone-controlled, YouTube's ENDED event handles doEnd()
+    // Only use timer-based end for fallback local songs
+    if(!phoneControlled && elapsed > songDuration) doEnd();
   },100);
 }
 
@@ -1403,6 +1491,7 @@ function resetPlay(){doPause();elapsed=0;lIdx=-1;document.getElementById('pbtn')
 function updL(){let i=-1;for(let j=0;j<song.lyrics.length;j++){if(elapsed>=song.lyrics[j].t)i=j;}if(i!==lIdx){lIdx=i;const m=i>=0?song.lyrics[i].m:'',n=i>=0?(song.lyrics[i].n||''):'';document.getElementById('lm').textContent=m;document.getElementById('ln').textContent=n;sendMsg({type:'lyric',main:m,next:n});}}
 function updP(){const last=song.lyrics[song.lyrics.length-1];const pct=Math.min(100,(elapsed/(last.t+5))*100);document.getElementById('pf').style.width=pct+'%';sendMsg({type:'progress',pct,elapsed});}
 function doEnd(){
+  log('doEnd() called — elapsed:'+Math.round(elapsed)+'s ytIsAd:'+ytIsAd, 'warn');
   doPause();
   if(phoneControlled && ytReady && ytPlayer) try{ ytPlayer.stopVideo(); }catch(e){}
   const msgs=['Bravo!','Amazing!','Encore!','Take a bow!'];
