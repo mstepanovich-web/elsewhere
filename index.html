@@ -183,7 +183,7 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
   <div id="song-title">Elsewhere</div>
   <div id="room-indicator" onclick="changeRoom()" style="display:none;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.4);cursor:pointer;padding:2px 6px;border:1px solid rgba(255,200,80,.15);border-radius:4px;font-family:'DM Mono',monospace;" title="Tap to change room">Room: <span id="room-display">––––––</span></div>
   <div class="bi" id="wcount"></div>
-  <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;white-space:nowrap;">v0.73</div>
+  <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;white-space:nowrap;">v0.76</div>
 </div>
 <div id="prog"><div id="pf"></div></div>
 
@@ -466,9 +466,12 @@ function handleMsg(msg) {
   if (msg.type === 'tv-search-clear') {
     hideAudSearch();
   }
-  if (msg.type === 'song-select') {
+  if (msg.type === 'tv-song-card') {
     hideAudSearch();
     showAudSongCard(msg.title, msg.artist, msg.thumb||'');
+  }
+  if (msg.type === 'tv-song-card-clear') {
+    hideAudSongCard();
   }
   if (msg.type === 'song-announce') {
     const title  = msg.title || '';
@@ -509,6 +512,13 @@ function handleMsg(msg) {
   if (msg.type === 'video-chat-available') {
     showVideoChatOffer();
   }
+  if (msg.type === 'video-chat-ended') {
+    const p = document.getElementById('vc-preview');
+    if(p) p.remove();
+    const b = document.getElementById('vc-banner');
+    if(b) b.style.display = 'none';
+    showToast('Video chat ended by singer');
+  }
   if (msg.type === 'cheer-bounce') {
     spawnRx('🔥', Math.random()*80+10);
     playCheerSound();
@@ -540,7 +550,40 @@ function sendCheer() {
 
 function sendApplause() {
   spawnRx('👏', Math.random()*75+12);
+  playApplauseSound();
   sendToSinger({ type:'applause' });
+}
+
+// Distinct crowd applause — rhythmic clapping texture, different from cheer noise
+function playApplauseSound() {
+  try {
+    const c = new (window.AudioContext || window.webkitAudioContext)();
+    const sr = c.sampleRate;
+    const dur = 3.0;
+    const buf = c.createBuffer(2, sr * dur, sr);
+    for(let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for(let i = 0; i < d.length; i++){
+        const t = i / sr;
+        // Fade in then slow fade out
+        const env = Math.min(t * 3, 1) * Math.pow(1 - t / dur, 0.6);
+        // Rhythmic clap bursts at ~2.5 Hz
+        const clap = Math.abs(Math.sin(Math.PI * 2.5 * t));
+        const clapEnv = Math.pow(clap, 6); // sharp attack
+        // Broadband noise shaped by clap rhythm
+        const noise = (Math.random() * 2 - 1);
+        // Low crowd murmur underneath
+        const murmur = Math.sin(2 * Math.PI * 220 * t + Math.random()) * 0.08;
+        d[i] = (noise * clapEnv * 0.7 + murmur) * env * (ch === 0 ? 0.9 : 1.0);
+      }
+    }
+    const src = c.createBufferSource(); src.buffer = buf;
+    const g = c.createGain(); g.gain.value = 0.55;
+    const comp = c.createDynamicsCompressor();
+    src.connect(comp); comp.connect(g); g.connect(c.destination);
+    src.start();
+    setTimeout(() => c.close(), (dur + 0.5) * 1000);
+  } catch(e) {}
 }
 
 function sendReact(emoji) {
