@@ -1313,6 +1313,8 @@ window.onYouTubeIframeAPIReady = function(){
       onStateChange: e=>{
         const s=YT_STATES[e.data]||e.data;
         log('YT state → '+s);
+        // Stop ticker on pause
+        if(e.data===YT.PlayerState.PAUSED && phoneControlled) clearAllTickers();
 
         if(e.data===YT.PlayerState.ENDED){
           const secsPlayed = (Date.now() - ytSongStartTime) / 1000;
@@ -1328,7 +1330,17 @@ window.onYouTubeIframeAPIReady = function(){
           }
         }
         if(e.data===YT.PlayerState.PLAYING){
-          log('YT: playing — getCurrentTime: '+Math.round(ytPlayer.getCurrentTime())+'s');
+          const ct = ytPlayer.getCurrentTime();
+          log('YT: playing — getCurrentTime: '+Math.round(ct)+'s');
+          // Start lyrics ticker now — synced to actual audio start
+          if(playing && phoneControlled){
+            clearAllTickers();
+            ticker=setInterval(()=>{
+              try{ elapsed = ytPlayer.getCurrentTime(); }catch(ex){ elapsed+=0.1; }
+              updL(); updP();
+            },100);
+            log('Lyrics ticker started at YT time '+Math.round(ct)+'s', 'ok');
+          }
         }
       },
       onError: e=>{
@@ -1398,59 +1410,32 @@ function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
   showToast(`🎵 ${title} — ${artist}`);
 }
 
+let ytSongDuration = 600; // set by doPlayWithYT, used by onStateChange ticker
+
 function doPlayWithYT(){
   playing=true;
   elapsed=0;
+  lIdx=-1;
+  clearAllTickers();
   document.getElementById('pbtn').textContent='⏸ Pause';
   sendMsg({type:'play-start', song:song.title, artist:song.artist, videoId:song.videoId||'', ts:Date.now()});
-  const songDuration = song.lyrics.length>0 ? song.lyrics[song.lyrics.length-1].t + 10 : 600;
-  scheduleZoomsForSong(songDuration);
+  ytSongDuration = song.lyrics.length>0 ? song.lyrics[song.lyrics.length-1].t + 10 : 600;
+  scheduleZoomsForSong(ytSongDuration);
 
-  // Start YouTube audio
-  log('doPlayWithYT — videoId:'+song.videoId+' phoneControlled:'+phoneControlled+' ytReady:'+ytReady);
+  log('doPlayWithYT — videoId:'+song.videoId+' ytReady:'+ytReady);
+  // Ticker starts in onStateChange when YT reports PLAYING
+  // This ensures lyrics are in sync with actual audio
+
   if(phoneControlled){
-    if(ytReady && ytPlayer){
-      ytPlaySong(song.videoId);
-    } else {
-      log('YT not ready at GO — will retry in 2s', 'warn');
+    if(ytReady && ytPlayer) ytPlaySong(song.videoId);
+    else{
+      log('YT not ready at GO — retrying in 2s', 'warn');
       setTimeout(()=>{
         if(ytReady && ytPlayer) ytPlaySong(song.videoId);
-        else log('YT still not ready after 2s retry', 'err');
+        else log('YT still not ready', 'err');
       }, 2000);
     }
   }
-
-  const startTime = Date.now();
-  clearInterval(ticker);
-  ticker=setInterval(()=>{
-    // Drive elapsed by real wall clock — reliable even if YT time query fails
-    elapsed = (Date.now() - startTime) / 1000;
-
-    // Try to sync to actual YouTube time if available (corrects for buffering)
-    if(phoneControlled && ytReady && ytPlayer){
-      try{
-        const yt = ytPlayer.getCurrentTime();
-        if(yt > 0) elapsed = yt; // only trust YT time if it's nonzero
-      }catch(e){}
-    }
-
-    updL(); updP();
-    // When phone-controlled, YouTube's ENDED event handles doEnd()
-    // Only use timer-based end for fallback local songs
-    if(!phoneControlled && elapsed > songDuration) doEnd();
-    // If YouTube is stuck in unstarted/cued for >8s, video is likely not embeddable
-    if(phoneControlled && elapsed > 8){
-      try{
-        const state=ytPlayer.getPlayerState();
-        if(state===-1 || state===5){ // unstarted or cued = failed to play
-          log('YT stuck in state '+YT_STATES[state]+' after 8s — video may not be embeddable','err');
-          doPause();
-          showToast('⚠️ This video cannot be played here — try a different result');
-          return;
-        }
-      }catch(ex){}
-    }
-  },100);
 }
 
 // ═══════════════════════════════════════
@@ -1462,7 +1447,16 @@ const SONGS=[
   {title:"Sweet Caroline",artist:"Neil Diamond",lyrics:[{t:0,m:"Where it began",n:"I can't begin to knowing"},{t:6,m:"But then I know it's growing strong",n:""},{t:12,m:"Sweet Caroline",n:"Good times never seemed so good"},{t:18,m:"Good times never seemed so good",n:"I've been inclined"},{t:24,m:"To believe they never would",n:"Oh no, no!"},{t:29,m:"Oh no, no!",n:""}]},
   {title:"Livin' on a Prayer",artist:"Bon Jovi",lyrics:[{t:0,m:"Tommy used to work on the docks",n:"Union's been on strike"},{t:5,m:"He's down on his luck",n:"It's tough, so tough"},{t:11,m:"Gina works the diner all day",n:"Working for her man"},{t:22,m:"Whoa, we're half way there",n:"Whoa, livin' on a prayer"},{t:27,m:"Take my hand, we'll make it I swear",n:"Whoa, livin' on a prayer"},{t:32,m:"Whoa, livin' on a prayer",n:""}]},
 ];
-let song=SONGS[0],playing=false,elapsed=0,ticker=null,lIdx=-1;
+// Single authoritative ticker management
+let ticker = null;
+let ticker2 = null; // safety second reference
+
+function clearAllTickers(){
+  if(ticker){ clearInterval(ticker); ticker=null; }
+  if(ticker2){ clearInterval(ticker2); ticker2=null; }
+}
+
+let song=SONGS[0],playing=false,elapsed=0,lIdx=-1;
 
 function showSongs(){
   const sl=document.getElementById('slist');
@@ -1503,17 +1497,17 @@ function startCountdown(){
 function doPlay(){
   playing=true; document.getElementById('pbtn').textContent='⏸ Pause';
   sendMsg({type:'play-start',song:song.title,artist:song.artist,ts:Date.now()});
-  // Schedule two auto-zooms at 1/3 and 2/3 through the song
-  const songDuration = song.lyrics[song.lyrics.length-1].t + 5;
+  const songDuration = song.lyrics.length>0 ? song.lyrics[song.lyrics.length-1].t + 5 : 300;
   scheduleZoomsForSong(songDuration);
+  clearAllTickers();
   ticker=setInterval(()=>{
     elapsed+=0.1; updL(); updP();
-    if(elapsed>song.lyrics[song.lyrics.length-1].t+5) doEnd();
+    if(elapsed>songDuration) doEnd();
   },100);
 }
 function doPause(){
   playing=false;
-  clearInterval(ticker);
+  clearAllTickers();
   document.getElementById('pbtn').textContent='▶ Resume';
   sendMsg({type:'pause'});
   if(phoneControlled && ytReady && ytPlayer) try{ ytPlayer.pauseVideo(); }catch(e){}
