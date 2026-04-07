@@ -190,8 +190,53 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 <div id="screen-home" class="screen">
   <div id="home-body">
 
-    <!-- Room code + video chat row -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 18px 0;">
+    <!-- Now Selected — top of screen -->
+    <div id="song-card">
+      <div class="label" style="margin-bottom:8px;">Now Selected</div>
+      <div id="song-title">No song selected</div>
+      <div id="song-artist">Search to pick a song</div>
+      <div style="margin-top:12px;">
+        <div class="btn primary" id="start-btn" onclick="goToCountdown()" style="display:none;">▶ Start Performance</div>
+      </div>
+    </div>
+
+    <!-- 2×2 action grid:
+         [Find Song] [Mic Live]
+         [Invite   ] [Mic Setup] -->
+    <div class="action-grid">
+
+      <!-- Find Song -->
+      <div class="action-card" onclick="showScreen('screen-search')">
+        <div class="ac-icon">🔍</div>
+        <div class="ac-label">Find Song</div>
+        <div class="ac-sub">Search catalog</div>
+      </div>
+
+      <!-- Mic Live toggle -->
+      <div class="action-card" id="home-mute-btn" onclick="toggleHomeMute()">
+        <div class="ac-icon" id="home-mute-icon">🎤</div>
+        <div class="ac-label" id="home-mute-label">Mic Live</div>
+        <div class="ac-sub" id="home-mute-sub">Tap to mute</div>
+      </div>
+
+      <!-- Invite -->
+      <div class="action-card" onclick="doInvite()">
+        <div class="ac-icon">📨</div>
+        <div class="ac-label">Invite</div>
+        <div class="ac-sub">Share audience link</div>
+      </div>
+
+      <!-- Mic Setup -->
+      <div class="action-card" onclick="showScreen('screen-mic')">
+        <div class="ac-icon">⚙️</div>
+        <div class="ac-label">Mic Setup</div>
+        <div class="ac-sub">Test &amp; adjust</div>
+      </div>
+
+    </div>
+
+    <!-- Room code + video chat -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px 0;">
       <div style="font-family:'DM Mono',monospace;font-size:13px;color:rgba(255,200,80,.7);letter-spacing:.18em;">
         <span style="font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.4);display:block;margin-bottom:1px;">Room</span>
         <span id="stat-r">––––––</span>
@@ -203,40 +248,6 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <div id="aud-box">
       <div id="aud-box-hdr"><span>In the Audience</span><span id="aud-cnt">0 watching</span></div>
       <div id="aud-list"><div style="font-size:11px;color:rgba(255,200,120,.25);">No one has joined yet</div></div>
-    </div>
-
-    <!-- Now Selected -->
-    <div id="song-card">
-      <div class="label" style="margin-bottom:8px;">Now Selected</div>
-      <div id="song-title">No song selected</div>
-      <div id="song-artist">Search to pick a song</div>
-      <div style="margin-top:12px;">
-        <div class="btn primary" id="start-btn" onclick="goToCountdown()" style="display:none;">▶ Start Performance</div>
-      </div>
-    </div>
-
-    <!-- Action grid -->
-    <div class="action-grid">
-      <div class="action-card" onclick="showScreen('screen-search')">
-        <div class="ac-icon">🔍</div><div class="ac-label">Find Song</div><div class="ac-sub">Search catalog</div>
-      </div>
-      <div class="action-card" onclick="doInvite()">
-        <div class="ac-icon">📨</div><div class="ac-label">Invite</div><div class="ac-sub">Share audience link</div>
-      </div>
-    </div>
-
-    <!-- Mic mute toggle + setup -->
-    <div style="display:flex;flex-direction:column;gap:8px;padding:0 2px;">
-      <div id="home-mute-btn" onclick="toggleHomeMute()"
-        style="padding:14px;background:rgba(0,232,122,.1);border:1px solid rgba(0,232,122,.35);border-radius:10px;
-               text-align:center;font-size:14px;color:rgba(0,232,122,.9);cursor:pointer;
-               font-family:'DM Mono',monospace;letter-spacing:.06em;-webkit-user-select:none;touch-action:manipulation;">
-        🎤 Mic Live — Tap to Mute
-      </div>
-      <div class="action-card" onclick="showScreen('screen-mic')" style="text-align:left;display:flex;align-items:center;gap:12px;padding:12px 14px;">
-        <span style="font-size:20px;">⚙️</span>
-        <div><div class="ac-label" style="text-align:left;">Mic Setup</div><div class="ac-sub" style="text-align:left;">Test &amp; adjust levels</div></div>
-      </div>
     </div>
 
   </div>
@@ -822,7 +833,6 @@ function goToCountdown(){
     if(cdCount===0){ document.getElementById('cd-num').textContent='Go!'; }
     else if(cdCount<0){
       clearInterval(cdInterval);
-      // GO — publish and unmute mic, switch to performing screen
       publishMic().then(()=>{
         unmuteMic();
         document.getElementById('perf-sname').textContent=selectedVideo?.title||'';
@@ -833,10 +843,11 @@ function goToCountdown(){
         zoomActive = false; perfCommentsOn = true;
         const zb=document.getElementById('perf-zoom-btn'); if(zb) zb.textContent='🔍 Zoom In';
         const cb=document.getElementById('perf-comments-btn'); if(cb) cb.textContent='Comments On';
+        // Reset lyrics button
+        const lb=document.getElementById('perf-lyrics-btn');
         if(lb){ lb.textContent='▶ Start Lyrics'; lb.style.opacity='1'; lb.style.pointerEvents='auto'; }
         document.getElementById('lyric-transport').style.display='none';
         document.getElementById('lyric-pause-btn').textContent='⏸';
-        // Show first lyric as preview
         showLyricPreview();
         showScreen('screen-performing');
       });
@@ -931,19 +942,24 @@ function showLyricPreview(){
 let homeMuted = false;
 function toggleHomeMute(){
   homeMuted = !homeMuted;
-  const btn = document.getElementById('home-mute-btn');
+  const card = document.getElementById('home-mute-btn');
+  const icon = document.getElementById('home-mute-icon');
+  const label = document.getElementById('home-mute-label');
+  const sub = document.getElementById('home-mute-sub');
   if(homeMuted){
     muteMic();
-    btn.textContent = '🔇 Mic Muted — Tap to Unmute';
-    btn.style.background = 'rgba(196,80,80,.1)';
-    btn.style.borderColor = 'rgba(196,80,80,.35)';
-    btn.style.color = 'rgba(196,122,107,.9)';
+    icon.textContent = '🔇';
+    label.textContent = 'Mic Muted';
+    sub.textContent = 'Tap to unmute';
+    card.style.borderColor = 'rgba(196,80,80,.4)';
+    card.style.background = 'rgba(196,80,80,.06)';
   } else {
     unmuteMic();
-    btn.textContent = '🎤 Mic Live — Tap to Mute';
-    btn.style.background = 'rgba(0,232,122,.1)';
-    btn.style.borderColor = 'rgba(0,232,122,.35)';
-    btn.style.color = 'rgba(0,232,122,.9)';
+    icon.textContent = '🎤';
+    label.textContent = 'Mic Live';
+    sub.textContent = 'Tap to mute';
+    card.style.borderColor = '';
+    card.style.background = '';
   }
 }
 
