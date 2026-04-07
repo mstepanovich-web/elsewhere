@@ -1452,6 +1452,8 @@ const SONGS=[
   {title:"Sweet Caroline",artist:"Neil Diamond",lyrics:[{t:0,m:"Where it began",n:"I can't begin to knowing"},{t:6,m:"But then I know it's growing strong",n:""},{t:12,m:"Sweet Caroline",n:"Good times never seemed so good"},{t:18,m:"Good times never seemed so good",n:"I've been inclined"},{t:24,m:"To believe they never would",n:"Oh no, no!"},{t:29,m:"Oh no, no!",n:""}]},
   {title:"Livin' on a Prayer",artist:"Bon Jovi",lyrics:[{t:0,m:"Tommy used to work on the docks",n:"Union's been on strike"},{t:5,m:"He's down on his luck",n:"It's tough, so tough"},{t:11,m:"Gina works the diner all day",n:"Working for her man"},{t:22,m:"Whoa, we're half way there",n:"Whoa, livin' on a prayer"},{t:27,m:"Take my hand, we'll make it I swear",n:"Whoa, livin' on a prayer"},{t:32,m:"Whoa, livin' on a prayer",n:""}]},
 ];
+let song=SONGS[0], playing=false, elapsed=0, lIdx=-1;
+
 // Single authoritative ticker management
 let ticker = null;
 let ticker2 = null; // safety second reference
