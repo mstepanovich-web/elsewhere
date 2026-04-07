@@ -81,7 +81,33 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 .abt.cheer:active{background:rgba(255,90,30,.3);}
 .abt-icon{font-size:22px;display:block;margin-bottom:3px;}
 
-/* ── NOTIFICATION TOAST ── */
+/* ── SEARCH OVERLAY (mirrors stage TV search) ── */
+#aud-search{
+  position:fixed;inset:0;z-index:250;background:rgba(4,2,6,.92);backdrop-filter:blur(8px);
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  padding:60px 20px 24px;gap:12px;
+}
+#aud-search-label{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,200,120,.4);font-family:'DM Mono',monospace;}
+#aud-search-query{font-family:'Cormorant Garamond',serif;font-size:clamp(24px,6vw,44px);color:rgba(255,220,150,.95);font-style:italic;text-align:center;}
+#aud-results-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;max-width:400px;overflow-y:auto;}
+.aud-result{background:rgba(255,200,80,.04);border:1px solid rgba(255,200,80,.1);border-radius:8px;padding:8px;display:flex;gap:8px;align-items:center;}
+.aud-result.selected{border-color:rgba(255,200,80,.5);background:rgba(255,200,80,.1);}
+.aud-result-num{font-family:'Cormorant Garamond',serif;font-size:22px;color:rgba(255,200,80,.4);width:20px;text-align:center;flex-shrink:0;}
+.aud-result-thumb{width:52px;height:38px;border-radius:4px;object-fit:cover;background:rgba(255,200,80,.06);flex-shrink:0;}
+.aud-result-info{flex:1;min-width:0;}
+.aud-result-title{font-size:11px;color:rgba(255,220,150,.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.aud-result-meta{font-size:9px;color:rgba(255,200,120,.4);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* ── SONG SELECTED CARD (mirrors stage TV song card) ── */
+#aud-song-card{
+  position:fixed;inset:0;z-index:250;background:rgba(4,2,6,.92);backdrop-filter:blur(8px);
+  display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+  padding:60px 24px 24px;
+}
+.aud-song-thumb{width:160px;height:110px;border-radius:8px;object-fit:cover;background:rgba(255,200,80,.06);border:1px solid rgba(255,200,80,.12);}
+.aud-song-title{font-family:'Cormorant Garamond',serif;font-size:clamp(22px,5vw,36px);color:rgba(255,220,150,.95);font-style:italic;text-align:center;}
+.aud-song-artist{font-size:11px;color:rgba(255,200,120,.45);letter-spacing:.1em;text-transform:uppercase;text-align:center;}
+.aud-song-ready{font-size:10px;color:rgba(0,232,122,.6);letter-spacing:.12em;text-transform:uppercase;margin-top:4px;}
 #toast{
   position:fixed;top:54px;left:50%;transform:translateX(-50%);
   background:rgba(0,0,0,.88);border:1px solid rgba(255,200,80,.25);
@@ -157,7 +183,7 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
   <div id="song-title">Elsewhere</div>
   <div id="room-indicator" onclick="changeRoom()" style="display:none;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.4);cursor:pointer;padding:2px 6px;border:1px solid rgba(255,200,80,.15);border-radius:4px;font-family:'DM Mono',monospace;" title="Tap to change room">Room: <span id="room-display">––––––</span></div>
   <div class="bi" id="wcount"></div>
-  <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;white-space:nowrap;">v0.72</div>
+  <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;white-space:nowrap;">v0.73</div>
 </div>
 <div id="prog"><div id="pf"></div></div>
 
@@ -178,6 +204,21 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 
 <div id="toast"></div>
 <div id="ap"><div id="apt">Bravo!</div></div>
+
+<!-- SEARCH OVERLAY -->
+<div id="aud-search">
+  <div id="aud-search-label">Searching for</div>
+  <div id="aud-search-query"></div>
+  <div id="aud-results-grid"></div>
+</div>
+
+<!-- SONG SELECTED CARD -->
+<div id="aud-song-card">
+  <img class="aud-song-thumb" id="aud-song-thumb" src="" onerror="this.style.display='none'">
+  <div class="aud-song-title" id="aud-song-title-big"></div>
+  <div class="aud-song-artist" id="aud-song-artist-big"></div>
+  <div class="aud-song-ready">Song selected — starting soon</div>
+</div>
 
 <div id="unmute-banner">
   <p>Tap below to hear the singer<br><small style="color:rgba(255,200,120,.4);font-size:10px">Browsers require a tap before playing audio</small></p>
@@ -419,19 +460,29 @@ function handleMsg(msg) {
       }catch(e){}
     }
   }
+  if (msg.type === 'tv-search') {
+    showAudSearch(msg.query, msg.results||[]);
+  }
+  if (msg.type === 'tv-search-clear') {
+    hideAudSearch();
+  }
+  if (msg.type === 'song-select') {
+    hideAudSearch();
+    showAudSongCard(msg.title, msg.artist, msg.thumb||'');
+  }
   if (msg.type === 'song-announce') {
     const title  = msg.title || '';
     const artist = msg.artist || '';
     document.getElementById('song-title').textContent = artist ? `${title} — ${artist}` : title;
-    // Preload the YouTube video so it's ready when play-start arrives
     if(msg.videoId && !msg.isDemo) ytLoad(msg.videoId);
     showToast(`🎵 ${title}`);
   }
   if (msg.type === 'play-start') {
+    hideAudSearch(); hideAudSongCard();
+    pauseVideoChat(); // hide video chat while song plays
     const title  = msg.song || msg.title || '';
     const artist = msg.artist || '';
     if(title) document.getElementById('song-title').textContent = artist ? `${title} — ${artist}` : title;
-    // Start playback — small delay to account for network latency
     setTimeout(()=> ytPlay(0), 400);
     showToast(`▶ ${title}`);
   }
@@ -441,6 +492,7 @@ function handleMsg(msg) {
     document.getElementById('lm').textContent = '';
     document.getElementById('ln').textContent = '';
     document.getElementById('pf').style.width = '0%';
+    resumeVideoChat(); // bring video chat back after song ends
     setTimeout(()=> showVideoChatOffer(), 3000);
   }
   if (msg.type === 'pause') {
@@ -545,20 +597,77 @@ function addComment(text) {
   while (feed.children.length > 5) feed.removeChild(feed.lastChild);
 }
 
-// Synthesised crowd cheer (no audio file needed)
+function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── AUDIENCE SEARCH + SONG CARD ──
+function showAudSearch(query, results){
+  const el = document.getElementById('aud-search');
+  document.getElementById('aud-search-label').textContent = results.length ? 'Results for' : 'Searching for';
+  document.getElementById('aud-search-query').textContent = `"${query}"`;
+  const grid = document.getElementById('aud-results-grid');
+  if(!results.length){
+    grid.innerHTML = '<div style="color:rgba(255,220,150,.4);font-size:13px;letter-spacing:.08em;padding:10px;grid-column:1/-1;text-align:center;">Searching...</div>';
+  } else {
+    grid.innerHTML = '';
+    results.slice(0,6).forEach((r,i)=>{
+      const d = document.createElement('div');
+      d.className = 'aud-result';
+      d.innerHTML = `<div class="aud-result-num">${i+1}</div>
+        <img class="aud-result-thumb" src="${r.thumb||''}" onerror="this.style.display='none'">
+        <div class="aud-result-info"><div class="aud-result-title">${escH(r.title||'')}</div><div class="aud-result-meta">${escH(r.artist||'')}</div></div>`;
+      grid.appendChild(d);
+    });
+  }
+  el.style.display = 'flex';
+  document.getElementById('aud-song-card').style.display = 'none';
+}
+function hideAudSearch(){ document.getElementById('aud-search').style.display = 'none'; }
+
+function showAudSongCard(title, artist, thumb){
+  document.getElementById('aud-song-thumb').src = thumb;
+  document.getElementById('aud-song-title-big').textContent = title;
+  document.getElementById('aud-song-artist-big').textContent = artist;
+  document.getElementById('aud-song-card').style.display = 'flex';
+  document.getElementById('aud-search').style.display = 'none';
+}
+function hideAudSongCard(){ document.getElementById('aud-song-card').style.display = 'none'; }
+
+// ── VIDEO CHAT PAUSE / RESUME ──
+let vcPreviewTrack = null; // stored so we can pause/resume
+function pauseVideoChat(){
+  const p = document.getElementById('vc-preview');
+  if(p) p.style.display = 'none';
+}
+function resumeVideoChat(){
+  const p = document.getElementById('vc-preview');
+  if(p) p.style.display = 'block';
+}
+
+// ── BETTER CHEER SOUND ──
 function playCheerSound() {
   try {
-    const c   = new (window.AudioContext || window.webkitAudioContext)();
-    const dur = 0.7;
-    const buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
-    const dat = buf.getChannelData(0);
-    for (let i = 0; i < dat.length; i++) {
-      dat[i] = (Math.random()*2-1) * Math.pow(1 - i/(dat.length), 1.5) * 0.6;
+    const c = new (window.AudioContext || window.webkitAudioContext)();
+    const sr = c.sampleRate;
+    const dur = 2.5;
+    const buf = c.createBuffer(2, sr * dur, sr);
+    for(let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for(let i = 0; i < d.length; i++){
+        const t = i / sr;
+        const env = Math.min(t * 4, 1) * Math.pow(1 - t / dur, 0.8);
+        // Layered noise bands to simulate crowd
+        const noise = (Math.random() * 2 - 1);
+        const rumble = Math.sin(2 * Math.PI * 180 * t) * 0.15;
+        const hi = Math.sin(2 * Math.PI * 2400 * t) * 0.05 * Math.random();
+        d[i] = (noise * 0.5 + rumble + hi) * env * 0.7;
+      }
     }
     const src = c.createBufferSource(); src.buffer = buf;
-    const g   = c.createGain(); g.gain.value = 0.3;
-    src.connect(g); g.connect(c.destination); src.start();
-    setTimeout(() => c.close(), 1000);
+    const g = c.createGain(); g.gain.value = 0.5;
+    const comp = c.createDynamicsCompressor();
+    src.connect(comp); comp.connect(g); g.connect(c.destination);
+    src.start();
+    setTimeout(() => c.close(), (dur + 0.5) * 1000);
   } catch(e) {}
 }
 
