@@ -191,7 +191,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <div id="home-body">
 
     <!-- Version — centered at top -->
-    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.60</div>
+    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.61</div>
 
     <!-- Now Selected — top of screen -->
     <div id="song-card">
@@ -486,6 +486,8 @@ async function doJoin(){
       document.getElementById('aud-cnt').textContent=n+' watching';
     },3000);
     await initMic();
+    await publishMic();  // publish immediately so mic is live from home screen
+    unmuteMic();         // start unmuted — mic is live
     sendToStage({type:'mic-connected',roomCode});
     showScreen('screen-home');
     showToast('Connected to stage ✓');
@@ -645,7 +647,12 @@ function startLevelMeter(){
   (function f(){requestAnimationFrame(f);analyser.getByteFrequencyData(data);let s=0;for(let i=0;i<data.length;i++) s+=data[i]*data[i];const rms=Math.sqrt(s/data.length),pct=Math.min(100,(rms/128)*100);fill.style.width=pct+'%';fill.className=pct>88?'clip':pct>65?'loud':'';db.textContent=(rms>0?Math.round(20*Math.log10(rms/128)):-60)+' dB';})();
 }
 function getVol(){return parseInt(document.getElementById('vol-sl').value)/100;}
-function setVolume(v){if(gainNode&&!muted) gainNode.gain.setTargetAtTime(v/100,audioCtx.currentTime,0.05);}
+function setVolume(v){
+  if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+  const vol = parseInt(v)/100;
+  if(gainNode && !muted) gainNode.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.05);
+  if(micAudioTrack && !muted) micAudioTrack.setVolume(parseInt(v));
+}
 function toggleFx(n){FX[n]=!FX[n];document.getElementById('fx-'+n).classList.toggle('on',FX[n]);buildChain();}
 
 // ── SEARCH ──
@@ -822,7 +829,6 @@ function goToCountdown(){
   cdCount=3; cdPaused=false;
   document.getElementById('cd-num').textContent='3';
   document.getElementById('cd-num').style.opacity='1';
-  document.getElementById('cd-pause').textContent='⏸ Pause';
   showScreen('screen-countdown');
   sendToStage({type:'start-countdown'});
   clearInterval(cdInterval);
@@ -858,7 +864,6 @@ function goToCountdown(){
 
 function toggleCdPause(){
   cdPaused=!cdPaused;
-  document.getElementById('cd-pause').textContent=cdPaused?'▶ Resume':'⏸ Pause';
   document.getElementById('cd-num').style.opacity=cdPaused?'0.4':'1';
   sendToStage({type:cdPaused?'countdown-pause':'countdown-resume'});
   showToast(cdPaused?'Paused — tap Resume when ready':'Resuming...');
