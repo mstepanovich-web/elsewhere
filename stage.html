@@ -1278,7 +1278,8 @@ window.onYouTubeIframeAPIReady = function(){
     playerVars:{
       autoplay:0, controls:0, disablekb:1,
       fs:0, modestbranding:1, playsinline:1,
-      iv_load_policy:3, rel:0
+      iv_load_policy:3, rel:0,
+      origin: 'https://mstepanovich-web.github.io'
     },
     events:{
       onReady: ()=>{
@@ -1423,6 +1424,18 @@ function doPlayWithYT(){
     // When phone-controlled, YouTube's ENDED event handles doEnd()
     // Only use timer-based end for fallback local songs
     if(!phoneControlled && elapsed > songDuration) doEnd();
+    // If YouTube is stuck in unstarted/cued for >8s, video is likely not embeddable
+    if(phoneControlled && elapsed > 8){
+      try{
+        const state=ytPlayer.getPlayerState();
+        if(state===-1 || state===5){ // unstarted or cued = failed to play
+          log('YT stuck in state '+YT_STATES[state]+' after 8s — video may not be embeddable','err');
+          doPause();
+          showToast('⚠️ This video cannot be played here — try a different result');
+          return;
+        }
+      }catch(ex){}
+    }
   },100);
 }
 
