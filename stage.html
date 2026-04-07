@@ -672,26 +672,45 @@ async function publishCamToAgora(){ await publishCanvasToAgora(); }
 
 function startSegmentation(vid){
   if(typeof SelfieSegmentation === 'undefined'){
-    // No segmentation — render raw video
     segOk = false; return;
   }
-  const seg = new SelfieSegmentation({ locateFile: f=>`https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}` });
+  const seg = new SelfieSegmentation({
+    locateFile: f=>`https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`
+  });
   seg.setOptions({ modelSelection:1, selfieMode:false });
   seg.onResults(res=>{
-    if(!segOk){ segOk=true; document.getElementById('sdot').className='dot ok'; document.getElementById('slbl').textContent='Compositing'; }
+    if(!segOk){
+      segOk=true;
+      document.getElementById('sdot').className='dot ok';
+      document.getElementById('slbl').textContent='Compositing';
+    }
     segPending=res;
   });
-  const cam = new Camera(vid, { onFrame:async()=>{ await seg.send({image:vid}); }, width:640, height:480 });
+
+  // Single Camera loop drives segmentation — pose listens to the same frames
+  const cam = new Camera(vid, {
+    onFrame: async()=>{
+      await seg.send({image:vid});
+      // Pose only runs during guide to save CPU
+      if(guideActive && poseInst){
+        try{ await poseInst.send({image:vid}); }catch(e){}
+      }
+    },
+    width:640, height:480
+  });
   cam.start();
 }
 
 function startPoseDetection(vid){
   if(typeof Pose === 'undefined'){ return; }
-  poseInst = new Pose({ locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
-  // modelComplexity:0 = fastest, good enough for hand raise detection
-  poseInst.setOptions({ modelComplexity:0, smoothLandmarks:true, minDetectionConfidence:.5, minTrackingConfidence:.4 });
+  poseInst = new Pose({
+    locateFile: f=>`https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}`
+  });
+  poseInst.setOptions({
+    modelComplexity:0, smoothLandmarks:true,
+    minDetectionConfidence:.5, minTrackingConfidence:.4
+  });
   poseInst.onResults(res=>{
-    // Only process when guide is active — stop wasting CPU otherwise
     if(!guideActive) return;
     if(!res.poseLandmarks) return;
     const ls=res.poseLandmarks[11], rs=res.poseLandmarks[12];
@@ -700,12 +719,7 @@ function startPoseDetection(vid){
     const shoulderY=Math.min(ls.y,rs.y), wristY=Math.min(lw.y,rw.y);
     onHandRaise(wristY < shoulderY - 0.10);
   });
-  // Use a lower resolution Camera for pose — reduces CPU load significantly
-  const poseCam = new Camera(vid, {
-    onFrame: async()=>{ if(guideActive && poseInst) await poseInst.send({image:vid}); },
-    width:256, height:192
-  });
-  poseCam.start();
+  // No separate Camera — driven by segmentation's Camera loop above
 }
 
 // ═══════════════════════════════════════
@@ -1052,7 +1066,12 @@ async function initAgora(){
         if(localAudioTrack) localAudioTrack.setVolume(100);
         showToast('📹 Audience video chat started');
       }
-      if(mediaType==='audio') user.audioTrack.play();
+      // DO NOT play remote audio on stage — phone mic would feedback through laptop speakers
+      // The phone mic audio goes directly to Agora → audience only
+      if(mediaType==='audio'){
+        // Don't call user.audioTrack.play() here — that would cause feedback
+        // The audio track is still in the channel for audience to receive
+      }
     });
     await agoraClient.join(AGORA_APP_ID,CHANNEL,null,null);
     agoraReady=true;
@@ -1124,7 +1143,6 @@ function handleAudienceMsg(msg){
   if(msg.type==='stop-song'){ doEnd(); }
 
   if(msg.type==='restart-song'){
-    // Restart from beginning — stop current playback, reset elapsed, restart
     doPause();
     elapsed=0; lIdx=-1;
     document.getElementById('pf').style.width='0%';
@@ -1134,11 +1152,12 @@ function handleAudienceMsg(msg){
       try{ ytPlayer.seekTo(0); ytPlayer.playVideo(); }catch(e){}
     }
     doPlay();
+    sendMsg({type:'restart-song'});
     showToast('↩ Restarting song');
   }
 
   if(msg.type==='resume'){
-    if(!playing) doPlay();
+    if(!playing){ doPlay(); sendMsg({type:'resume', elapsed}); }
   }
 
   if(msg.type==='countdown-pause'){
@@ -1204,15 +1223,24 @@ window.onYouTubeIframeAPIReady = function(){
     height:'1', width:'1',
     playerVars:{
       autoplay:0, controls:0, disablekb:1, fs:0,
-      modestbranding:1, playsinline:1
+      modestbranding:1, playsinline:1, mute:0
     },
     events:{
-      onReady: ()=>{
+      onReady: (e)=>{
         ytReady=true;
         console.log('YT player ready');
+        // Warm up — mute, play 1 frame, pause, unmute
+        // This unlocks autoplay for future playVideo() calls
+        try{
+          e.target.mute();
+          e.target.playVideo();
+          setTimeout(()=>{ try{ e.target.pauseVideo(); e.target.unMute(); }catch(ex){} }, 200);
+        }catch(ex){}
         if(ytPendingId){
-          ytPlayer.loadVideoById(ytPendingId);
-          ytPendingId=null;
+          setTimeout(()=>{
+            ytPlayer.loadVideoById(ytPendingId);
+            ytPendingId=null;
+          }, 300);
         }
       },
       onStateChange: e=>{
@@ -1225,9 +1253,8 @@ window.onYouTubeIframeAPIReady = function(){
 };
 
 function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
-  // Update song state
   song = {
-    title, artist,
+    videoId, title, artist,
     lyrics: lyrics.length>0
       ? lyrics.map((l,i)=>({t:l.time, m:l.text, n:lyrics[i+1]?.text||''}))
       : [{t:0,m:title,n:artist}]
@@ -1245,8 +1272,8 @@ function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
     else ytPendingId = videoId;
   }
 
-  // Tell audience what's coming
-  sendMsg({type:'song-announce', title, artist});
+  // Tell audience what's coming — include videoId so they can load it too
+  sendMsg({type:'song-announce', title, artist, videoId, isDemo});
   showToast(`🎵 ${title} — ${artist}`);
 }
 
@@ -1254,7 +1281,7 @@ function doPlayWithYT(){
   playing=true;
   elapsed=0;
   document.getElementById('pbtn').textContent='⏸ Pause';
-  sendMsg({type:'play-start', song:song.title, artist:song.artist, ts:Date.now()});
+  sendMsg({type:'play-start', song:song.title, artist:song.artist, videoId:song.videoId||'', ts:Date.now()});
   const songDuration = song.lyrics.length>0 ? song.lyrics[song.lyrics.length-1].t + 10 : 240;
   scheduleZoomsForSong(songDuration);
 
@@ -1391,17 +1418,12 @@ function renderLoop(){
 // ENTER STAGE — single entry point
 // ═══════════════════════════════════════
 function enterStage(){
-  // 1. Hide start screen
   document.getElementById('start').style.display='none';
-  // 2. Position guide is first — user positions themselves before anything else
+  // Guide first — QR only shows after guide closes via closeGuide()
   showGuide();
-  // 3. Start camera, Agora, render loop in background
   startEverything();
   initAgora();
   renderLoop();
-  // 4. QR widget appears after guide closes (via closeGuide → startCountdown → doPlay)
-  //    We show it now at low visibility so it's ready
-  showWaitingScreen();
 }
 
 // ═══════════════════════════════════════
