@@ -277,7 +277,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   <div id="rcode-wrap" title="Click to copy"><small>Room Code</small><span id="rcode">––––––</span></div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.43</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.44</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -340,7 +340,7 @@ if (typeof AgoraRTC === 'undefined') {
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-<script src="https://www.youtube.com/iframe_api"></script>
+<!-- YouTube IFrame API loaded dynamically after page ready -->
 
 <script>
 'use strict';
@@ -1218,7 +1218,10 @@ function handleAudienceMsg(msg){
     startCountdown();
   }
 
-  if(msg.type==='stop-song'){ doEnd(); }
+  if(msg.type==='stop-song'){
+    if(playing) doEnd();
+    else { resetPlay(); resetLyrics(); phoneControlled=false; }
+  }
 
   if(msg.type==='restart-song'){
     doPause();
@@ -1376,7 +1379,6 @@ const YT_STATES = {'-1':'unstarted','0':'ended','1':'playing','2':'paused','3':'
 let ytSongStartTime = 0; // wall-clock ms when ytPlaySong was called
 
 window.onYouTubeIframeAPIReady = function(){
-  log('YT API loaded — creating player', 'ok');
   log('YT API loaded — creating player', 'ok');
   ytPlayer = new YT.Player('yt-player',{
     width:'320', height:'180',
@@ -1785,11 +1787,20 @@ function renderLoop(){
 // ═══════════════════════════════════════
 function enterStage(){
   document.getElementById('start').style.display='none';
-  // Guide first — QR only shows after guide closes via closeGuide()
   showGuide();
   startEverything();
   initAgora();
+  loadYouTubeAPI();
   renderLoop();
+}
+
+function loadYouTubeAPI(){
+  // Load YouTube IFrame API dynamically — more reliable than static script tag
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  tag.onerror = ()=> log('⚠️ Failed to load YouTube API script — check network', 'err');
+  document.head.appendChild(tag);
+  log('Loading YouTube API...');
 }
 
 // ═══════════════════════════════════════
