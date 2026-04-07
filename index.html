@@ -164,8 +164,8 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
   </div>
   <div id="action-row">
     <div class="abt cheer" onclick="sendCheer()"><span class="abt-icon">🔥</span>Cheer</div>
+    <div class="abt" onclick="sendZoom()"><span class="abt-icon">🔍</span>Close-up</div>
     <div class="abt" onclick="sendReact('⭐')"><span class="abt-icon">⭐</span>Star</div>
-    <div class="abt" onclick="sendReact('💫')"><span class="abt-icon">💫</span>Vibe</div>
     <div class="abt" onclick="sendReact('❤️')"><span class="abt-icon">❤️</span>Love</div>
     <div class="abt" onclick="toggleFullscreen()" id="fs-btn"><span class="abt-icon">⛶</span>Full</div>
   </div>
@@ -415,12 +415,16 @@ function handleMsg(msg) {
     document.getElementById('lm').textContent = '';
     document.getElementById('ln').textContent = '';
     document.getElementById('pf').style.width = '0%';
+    // Show video chat button after song ends
+    setTimeout(()=> showVideoChatOffer(), 3000);
   }
   if (msg.type === 'pause') {
     document.getElementById('clbl').textContent = 'Paused';
   }
+  if (msg.type === 'video-chat-available') {
+    showVideoChatOffer();
+  }
   if (msg.type === 'cheer-bounce') {
-    // Someone else cheered — show it to all
     spawnRx('🔥', Math.random()*80+10);
     playCheerSound();
   }
@@ -434,6 +438,13 @@ async function sendToSinger(obj) {
   try {
     await client.sendStreamMessage(new TextEncoder().encode(JSON.stringify(obj)), true);
   } catch(e) {}
+}
+
+function sendZoom() {
+  sendToSinger({ type:'zoom' });
+  // Brief visual feedback on the button
+  const btn = document.querySelector('.abt:nth-child(2)');
+  if(btn){ btn.style.borderColor='rgba(100,200,255,.6)'; btn.style.color='rgba(150,220,255,.9)'; setTimeout(()=>{ btn.style.borderColor=''; btn.style.color=''; }, 1500); }
 }
 
 function sendCheer() {
@@ -585,7 +596,40 @@ document.addEventListener('touchmove', e => {
   }
 })();
 
-// Detect file:// protocol — warn immediately
+// ═══════════════════════════════════════
+// VIDEO CHAT
+// ═══════════════════════════════════════
+function showVideoChatOffer(){
+  let b=document.getElementById('vc-banner');
+  if(b){ b.style.display='block'; return; }
+  b=document.createElement('div'); b.id='vc-banner';
+  b.style.cssText='position:fixed;bottom:140px;left:50%;transform:translateX(-50%);background:rgba(4,2,6,.95);border:1px solid rgba(0,232,122,.3);border-radius:10px;padding:14px 20px;z-index:300;text-align:center;backdrop-filter:blur(8px);font-family:"DM Mono",monospace;min-width:240px;';
+  b.innerHTML=`
+    <div style="font-size:11px;color:rgba(255,220,150,.7);letter-spacing:.08em;margin-bottom:10px;">📹 Video chat is now open</div>
+    <div onclick="joinVideoChat()" style="padding:10px 20px;background:rgba(0,232,122,.15);border:1px solid rgba(0,232,122,.4);border-radius:6px;font-size:12px;color:rgba(0,232,122,.9);cursor:pointer;letter-spacing:.08em;margin-bottom:8px;">Join Video Chat</div>
+    <div onclick="this.parentElement.style.display='none'" style="font-size:10px;color:rgba(255,200,120,.3);cursor:pointer;">Not now</div>
+  `;
+  document.body.appendChild(b);
+}
+
+async function joinVideoChat(){
+  const b=document.getElementById('vc-banner');
+  if(b) b.style.display='none';
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});
+    sendToSinger({type:'video-chat-join',name:'Audience'});
+    let p=document.getElementById('vc-preview');
+    if(!p){
+      p=document.createElement('div'); p.id='vc-preview';
+      p.style.cssText='position:fixed;bottom:140px;right:12px;width:100px;height:75px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,232,122,.4);z-index:300;';
+      const v=document.createElement('video'); v.autoplay=true; v.playsInline=true; v.muted=true;
+      v.srcObject=new MediaStream(stream.getVideoTracks()); v.style.cssText='width:100%;height:100%;object-fit:cover;';
+      p.appendChild(v); document.body.appendChild(p);
+    }
+    showToast('📹 You joined video chat');
+  }catch(e){ showToast('Could not access camera/mic'); }
+}
+
 if (window.location.protocol === 'file:') {
   document.getElementById('https-notice').style.display = 'block';
   document.getElementById('join-err').textContent =
