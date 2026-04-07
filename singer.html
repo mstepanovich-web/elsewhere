@@ -352,15 +352,60 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <div id="perf-prog-track"><div id="perf-prog-fill"></div></div>
   </div>
 
-  <!-- Start Lyrics — full width prominent button -->
-  <div id="perf-lyrics-btn" onclick="startLyrics()"
-    style="margin:0 18px;padding:16px;background:rgba(0,232,122,.15);border:2px solid rgba(0,232,122,.5);border-radius:12px;text-align:center;font-size:17px;color:rgba(0,232,122,.95);cursor:pointer;letter-spacing:.06em;font-family:'DM Mono',monospace;-webkit-user-select:none;touch-action:manipulation;">
-    ▶ Start Lyrics
-  </div>
+  <!-- Lyrics controls -->
+  <div style="margin:0 18px;display:flex;flex-direction:column;gap:8px;">
 
-  <!-- Upcoming first lyric preview -->
-  <div id="perf-lyric-preview"
-    style="padding:6px 24px;text-align:center;font-family:'Cormorant Garamond',serif;font-size:15px;font-style:italic;color:rgba(255,220,150,.45);min-height:22px;">
+    <!-- Upcoming lyric preview — large -->
+    <div id="perf-lyric-preview"
+      style="text-align:center;font-family:'Cormorant Garamond',serif;font-size:22px;font-style:italic;
+             color:rgba(255,220,150,.7);min-height:30px;line-height:1.3;padding:4px 8px;">
+    </div>
+
+    <!-- Start button -->
+    <div id="perf-lyrics-btn" onclick="startLyrics()"
+      style="padding:14px;background:rgba(0,232,122,.15);border:2px solid rgba(0,232,122,.5);
+             border-radius:10px;text-align:center;font-size:16px;color:rgba(0,232,122,.95);
+             cursor:pointer;letter-spacing:.06em;font-family:'DM Mono',monospace;
+             -webkit-user-select:none;touch-action:manipulation;">
+      ▶ Start Lyrics
+    </div>
+
+    <!-- Lyrics transport controls — shown after lyrics start -->
+    <div id="lyric-transport" style="display:none;align-items:center;justify-content:space-between;gap:8px;">
+
+      <!-- Back one line -->
+      <div onclick="lyricSeek(-1)"
+        style="flex:1;padding:12px 8px;background:rgba(255,200,80,.08);border:1px solid rgba(255,200,80,.2);
+               border-radius:8px;text-align:center;font-size:22px;cursor:pointer;
+               -webkit-user-select:none;touch-action:manipulation;">
+        ←
+      </div>
+
+      <!-- Pause/Play toggle -->
+      <div id="lyric-pause-btn" onclick="toggleLyricPause()"
+        style="flex:1;padding:12px 8px;background:rgba(255,200,80,.08);border:1px solid rgba(255,200,80,.2);
+               border-radius:8px;text-align:center;font-size:20px;cursor:pointer;
+               -webkit-user-select:none;touch-action:manipulation;">
+        ⏸
+      </div>
+
+      <!-- Restart lyrics -->
+      <div onclick="lyricRestart()"
+        style="flex:1;padding:12px 8px;background:rgba(255,200,80,.08);border:1px solid rgba(255,200,80,.2);
+               border-radius:8px;text-align:center;font-size:20px;cursor:pointer;
+               -webkit-user-select:none;touch-action:manipulation;">
+        ↺
+      </div>
+
+      <!-- Forward one line -->
+      <div onclick="lyricSeek(1)"
+        style="flex:1;padding:12px 8px;background:rgba(255,200,80,.08);border:1px solid rgba(255,200,80,.2);
+               border-radius:8px;text-align:center;font-size:22px;cursor:pointer;
+               -webkit-user-select:none;touch-action:manipulation;">
+        →
+      </div>
+
+    </div>
   </div>
 
   <div id="perf-actions">
@@ -524,7 +569,13 @@ async function initMic(){
 async function publishMic(){
   if(micPublished||!micStream||!agoraClient||!agoraReady) return;
   try{
-    micAudioTrack=AgoraRTC.createCustomAudioTrack({mediaStreamTrack:micStream.getAudioTracks()[0]});
+    // Route the processed Web Audio chain (with FX) to Agora
+    // This means reverb/echo/boost actually reach the audience
+    const dest = audioCtx.createMediaStreamDestination();
+    gainNode.connect(dest);
+    micAudioTrack=AgoraRTC.createCustomAudioTrack({
+      mediaStreamTrack: dest.stream.getAudioTracks()[0]
+    });
     await agoraClient.publish([micAudioTrack]);
     micPublished=true;
   }catch(e){console.warn('Mic publish:',e);}
@@ -589,7 +640,10 @@ function buildChain(){
   const dry=audioCtx.createGain();dry.gain.value=1;ch.connect(dry);
   if(FX.reverb){const rg=audioCtx.createGain();rg.gain.value=0.4;ch.connect(reverbNode);reverbNode.connect(rg);rg.connect(gainNode);}
   if(FX.echo){echoFeedback.gain.value=0.45;ch.connect(echoDelay);echoDelay.connect(echoFeedback);echoFeedback.connect(echoDelay);echoFeedback.connect(gainNode);}else echoFeedback.gain.value=0;
-  dry.connect(gainNode);gainNode.connect(analyser);analyser.connect(audioCtx.destination);
+  dry.connect(gainNode);
+  gainNode.connect(analyser);
+  // DO NOT connect to audioCtx.destination — no audio playback on singer's phone
+  // Audio goes to Agora via the micAudioTrack (MediaStreamTrack), not through Web Audio output
 }
 function startLevelMeter(){
   const data=new Uint8Array(analyser.frequencyBinCount);
@@ -785,9 +839,11 @@ function goToCountdown(){
         document.getElementById('perf-mute-btn').classList.remove('muted');
         document.getElementById('perf-mute-icon').textContent='🎤';
         document.getElementById('perf-mute-txt').textContent='Tap to mute';
-        // Reset lyrics button
+        // Reset lyrics button and transport
         const lb=document.getElementById('perf-lyrics-btn');
         if(lb){ lb.textContent='▶ Start Lyrics'; lb.style.opacity='1'; lb.style.pointerEvents='auto'; }
+        document.getElementById('lyric-transport').style.display='none';
+        document.getElementById('lyric-pause-btn').textContent='⏸';
         // Show first lyric as preview
         showLyricPreview();
         showScreen('screen-performing');
@@ -815,15 +871,34 @@ function cancelCd(){
 // ── PERFORMANCE ──
 function startLyrics(){
   sendToStage({type:'lyrics-start'});
-  // Hide the button after tapping — lyrics are now running
   const btn = document.getElementById('perf-lyrics-btn');
-  if(btn){
-    btn.textContent = '✓ Lyrics Running';
-    btn.style.opacity = '0.4';
-    btn.style.pointerEvents = 'none';
-  }
+  if(btn){ btn.textContent='✓ Lyrics Running'; btn.style.opacity='0.35'; btn.style.pointerEvents='none'; }
   document.getElementById('perf-lyric-preview').textContent = '';
+  document.getElementById('lyric-transport').style.display = 'flex';
   showToast('▶ Lyrics started');
+}
+
+function toggleLyricPause(){
+  const btn = document.getElementById('lyric-pause-btn');
+  const paused = btn.textContent === '▶';
+  if(paused){
+    btn.textContent = '⏸';
+    sendToStage({type:'lyrics-resume'});
+  } else {
+    btn.textContent = '▶';
+    sendToStage({type:'lyrics-pause'});
+  }
+}
+
+function lyricRestart(){
+  sendToStage({type:'lyrics-restart'});
+  document.getElementById('lyric-pause-btn').textContent = '⏸';
+  showToast('↺ Lyrics restarted');
+}
+
+function lyricSeek(dir){
+  // dir: -1 = back one line, +1 = forward one line
+  sendToStage({type:'lyrics-seek', dir});
 }
 
 function showLyricPreview(){
@@ -845,9 +920,11 @@ function perfPauseToggle(){
 function perfRestart(){
   perfPaused=false;
   document.getElementById('perf-pause').textContent='⏸ Pause';
-  // Reset lyrics button so singer can re-trigger
+  // Reset lyrics controls
   const lb=document.getElementById('perf-lyrics-btn');
   if(lb){ lb.textContent='▶ Start Lyrics'; lb.style.opacity='1'; lb.style.pointerEvents='auto'; }
+  document.getElementById('lyric-transport').style.display='none';
+  document.getElementById('lyric-pause-btn').textContent='⏸';
   showLyricPreview();
   sendToStage({type:'restart-song'});
   showToast('Restarting from beginning');
