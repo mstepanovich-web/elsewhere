@@ -1266,9 +1266,10 @@ let ytPlayer        = null;
 let ytReady         = false;
 let ytPendingId     = null;
 let phoneControlled = false;
-let ytIsAd          = false;  // track when an ad is playing
 
 const YT_STATES = {'-1':'unstarted','0':'ended','1':'playing','2':'paused','3':'buffering','5':'cued'};
+
+let ytSongStartTime = 0; // wall-clock ms when ytPlaySong was called
 
 window.onYouTubeIframeAPIReady = function(){
   log('YT API loaded — creating player', 'ok');
@@ -1277,7 +1278,6 @@ window.onYouTubeIframeAPIReady = function(){
     playerVars:{
       autoplay:0, controls:0, disablekb:1,
       fs:0, modestbranding:1, playsinline:1,
-      // These params skip ads where possible
       iv_load_policy:3, rel:0
     },
     events:{
@@ -1292,16 +1292,16 @@ window.onYouTubeIframeAPIReady = function(){
       },
       onStateChange: e=>{
         const s=YT_STATES[e.data]||e.data;
-        log('YT state → '+s+(ytIsAd?' [AD]':''));
-
-        // Detect ad via getAdState if available
-        if(ytPlayer.getAdState) ytIsAd = ytPlayer.getAdState()===1;
+        log('YT state → '+s);
 
         if(e.data===YT.PlayerState.ENDED){
-          if(ytIsAd){
-            log('YT: ad ended — song should start now');
-            ytIsAd=false;
-            // Don't call doEnd — wait for actual song to end
+          const secsPlayed = (Date.now() - ytSongStartTime) / 1000;
+          log('YT ended — seconds since start: '+Math.round(secsPlayed));
+          // Ignore ENDED events in first 30 seconds — those are ads ending
+          // Real songs are at least 2-3 minutes
+          if(secsPlayed < 30){
+            log('YT: ignoring early ENDED (likely ad) — resuming playback');
+            setTimeout(()=>{ try{ ytPlayer.playVideo(); }catch(ex){} }, 500);
           } else {
             log('YT: song ended → doEnd()');
             doEnd();
@@ -1327,7 +1327,9 @@ function ytPlaySong(videoId){
     ytPendingId=videoId;
     return;
   }
-  ytIsAd=false;
+  
+  ytSongStartTime = Date.now();
+  log('ytPlaySong: start time recorded');
 
   // cueVideoById first (doesn't require gesture), then playVideo (does)
   // This is the most reliable sequence for embedded players
@@ -1491,7 +1493,7 @@ function resetPlay(){doPause();elapsed=0;lIdx=-1;document.getElementById('pbtn')
 function updL(){let i=-1;for(let j=0;j<song.lyrics.length;j++){if(elapsed>=song.lyrics[j].t)i=j;}if(i!==lIdx){lIdx=i;const m=i>=0?song.lyrics[i].m:'',n=i>=0?(song.lyrics[i].n||''):'';document.getElementById('lm').textContent=m;document.getElementById('ln').textContent=n;sendMsg({type:'lyric',main:m,next:n});}}
 function updP(){const last=song.lyrics[song.lyrics.length-1];const pct=Math.min(100,(elapsed/(last.t+5))*100);document.getElementById('pf').style.width=pct+'%';sendMsg({type:'progress',pct,elapsed});}
 function doEnd(){
-  log('doEnd() called — elapsed:'+Math.round(elapsed)+'s ytIsAd:'+ytIsAd, 'warn');
+  log('doEnd() called — elapsed:'+Math.round(elapsed)+'s', 'warn');
   doPause();
   if(phoneControlled && ytReady && ytPlayer) try{ ytPlayer.stopVideo(); }catch(e){}
   const msgs=['Bravo!','Amazing!','Encore!','Take a bow!'];
