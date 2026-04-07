@@ -21,6 +21,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
 /* Top bar */
 #bar{position:fixed;top:0;left:0;right:0;height:44px;background:rgba(0,0,0,.82);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:space-between;padding:0 14px;z-index:300;gap:10px;border-bottom:1px solid rgba(255,200,80,.12);}
+#bar-center{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;}
 .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
 .ok{background:#00e87a;box-shadow:0 0 5px #00e87a;}
 .ld{background:#f5c842;animation:blink 1s infinite;}
@@ -273,7 +274,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
 <div id="bar">
   <div class="bi"><div class="dot of" id="sdot"></div><span id="slbl">Camera off</span></div>
-  <div style="display:flex;align-items:center;gap:6px;">
+  <div id="bar-center">
     <div id="rcode-wrap" title="Click to copy"><small>Room Code</small><span id="rcode">––––––</span></div>
     <div id="qr-toggle" onclick="showSongs()" title="Show QR code"
       style="font-size:10px;letter-spacing:.08em;cursor:pointer;padding:4px 8px;opacity:0.6;-webkit-user-select:none;font-family:'DM Mono',monospace;border:1px solid rgba(255,200,80,.2);border-radius:3px;color:rgba(255,220,150,.7);"
@@ -281,7 +282,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.73</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.76</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -315,10 +316,10 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
 <!-- POSITIONING GUIDE — z-index 500 so it's above everything except start -->
 <div id="guide">
-  <div id="gtitle">Your Position Guide<span>Fill the oval · head at top · feet at bottom · then raise one hand</span></div>
+  <div id="gtitle">Your Position Guide<span>Fill the outline · head at top · feet at bottom · then raise one hand</span></div>
   <canvas id="gcanvas"></canvas>
   <div id="ginstr">
-    <span id="gmain">Move until your head and feet touch the oval edges</span>
+    <span id="gmain">Move until your head and feet touch the outline edges</span>
     <small id="gsub">Step closer if too small · step back if too large</small>
   </div>
   <div id="gpwrap">
@@ -341,7 +342,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.73</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.76</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -800,7 +801,7 @@ function onHandRaise(raised){
       handStart = null; handProgress = 0;
       document.getElementById('gpfill').style.width = '0%';
       document.getElementById('gpwrap').style.display = 'none';
-      document.getElementById('gmain').textContent = 'Move until your head and feet touch the oval edges';
+      document.getElementById('gmain').textContent = 'Move until your head and feet touch the outline edges';
       document.getElementById('gsub').textContent  = 'Step closer if too small · step back if too large';
     }, 400);
   }
@@ -832,7 +833,25 @@ function closeGuide(){
 
 function runGuideLoop(gc, W, H){
   const gctx = gc.getContext('2d');
-  const cx=W/2, cy=H/2, rx=W*.46, ry=H*.48;
+  const cx=W/2, cy=H/2, rw=W*.72, rh=H*.88, cr=rw*0.45; // rounded rect params
+
+  // Helper — draws a rounded rectangle path
+  function rrect(x,y,w,h,r){
+    gctx.beginPath();
+    gctx.moveTo(x+r,y);
+    gctx.lineTo(x+w-r,y);
+    gctx.quadraticCurveTo(x+w,y,x+w,y+r);
+    gctx.lineTo(x+w,y+h-r);
+    gctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    gctx.lineTo(x+r,y+h);
+    gctx.quadraticCurveTo(x,y+h,x,y+h-r);
+    gctx.lineTo(x,y+r);
+    gctx.quadraticCurveTo(x,y,x+r,y);
+    gctx.closePath();
+  }
+
+  const rx=cx-rw/2, ry=cy-rh/2; // top-left of rect
+
   function frame(){
     if(!guideActive) return;
     requestAnimationFrame(frame);
@@ -844,50 +863,50 @@ function runGuideLoop(gc, W, H){
     } else {
       gctx.fillStyle='#0e0810'; gctx.fillRect(0,0,W,H);
     }
-    // --- Dark overlay, punch oval out ---
+    // --- Dark overlay, punch rounded rect out ---
     gctx.save();
     gctx.fillStyle='rgba(0,0,0,.65)'; gctx.fillRect(0,0,W,H);
     gctx.globalCompositeOperation='destination-out';
-    gctx.beginPath(); gctx.ellipse(cx,cy,rx,ry,0,0,Math.PI*2); gctx.fill();
+    rrect(rx,ry,rw,rh,cr); gctx.fill();
     gctx.restore();
-    // --- Camera clipped inside oval ---
+    // --- Camera clipped inside rounded rect ---
     if(vid && vid.readyState >= 2){
       gctx.save();
-      gctx.beginPath(); gctx.ellipse(cx,cy,rx,ry,0,0,Math.PI*2); gctx.clip();
+      rrect(rx,ry,rw,rh,cr); gctx.clip();
       gctx.translate(W,0); gctx.scale(-1,1); gctx.drawImage(vid,0,0,W,H);
       gctx.restore();
     }
-    // --- Oval border ---
+    // --- Rounded rect border ---
     const locked = handRaised && handProgress > 0;
     gctx.save();
-    gctx.beginPath(); gctx.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);
+    rrect(rx,ry,rw,rh,cr);
     gctx.strokeStyle = locked ? `rgba(0,232,122,${.7+handProgress*.3})` : 'rgba(255,200,80,.8)';
     gctx.lineWidth = 3;
     gctx.shadowColor = locked ? 'rgba(0,232,122,.5)' : 'rgba(255,200,80,.3)';
     gctx.shadowBlur = 10;
     gctx.stroke(); gctx.restore();
-    // --- Tick marks ---
+    // --- Tick marks top & bottom ---
     gctx.save(); gctx.lineWidth=2;
     gctx.strokeStyle = locked ? 'rgba(0,232,122,.8)' : 'rgba(255,200,80,.65)';
-    gctx.beginPath(); gctx.moveTo(cx-14,cy-ry); gctx.lineTo(cx+14,cy-ry); gctx.stroke();
-    gctx.beginPath(); gctx.moveTo(cx-14,cy+ry); gctx.lineTo(cx+14,cy+ry); gctx.stroke();
+    gctx.beginPath(); gctx.moveTo(cx-14,ry); gctx.lineTo(cx+14,ry); gctx.stroke();
+    gctx.beginPath(); gctx.moveTo(cx-14,ry+rh); gctx.lineTo(cx+14,ry+rh); gctx.stroke();
     gctx.restore();
     // --- Labels ---
     gctx.save(); gctx.textAlign='center'; gctx.font='bold 11px "DM Mono",monospace';
     gctx.fillStyle = locked ? 'rgba(0,232,122,.9)' : 'rgba(255,200,120,.7)';
-    gctx.fillText('HEAD',cx,cy-ry-10); gctx.fillText('FEET',cx,cy+ry+20); gctx.restore();
+    gctx.fillText('HEAD',cx,ry-10); gctx.fillText('FEET',cx,ry+rh+20); gctx.restore();
     // --- Hand icon ---
     gctx.save(); gctx.textAlign='center'; gctx.font='28px serif';
     if(!handRaised){ gctx.globalAlpha=.5+Math.sin(Date.now()*.004)*.35; }
-    gctx.fillText(handRaised?'✅':'✋', cx, cy-ry-42); gctx.restore();
+    gctx.fillText(handRaised?'✅':'✋', cx, ry-42); gctx.restore();
     // --- Progress fill ---
     if(handProgress > 0){
       gctx.save();
-      gctx.beginPath(); gctx.ellipse(cx,cy,rx,ry,0,0,Math.PI*2); gctx.clip();
-      const ft=(cy+ry)-(ry*2*handProgress);
-      const fg=gctx.createLinearGradient(0,ft,0,cy+ry);
+      rrect(rx,ry,rw,rh,cr); gctx.clip();
+      const ft=(ry+rh)-(rh*handProgress);
+      const fg=gctx.createLinearGradient(0,ft,0,ry+rh);
       fg.addColorStop(0,'rgba(0,232,122,.22)'); fg.addColorStop(1,'rgba(0,232,122,.08)');
-      gctx.fillStyle=fg; gctx.fillRect(0,ft,W,cy+ry-ft); gctx.restore();
+      gctx.fillStyle=fg; gctx.fillRect(0,ft,W,ry+rh-ft); gctx.restore();
     }
   }
   frame();
@@ -1294,6 +1313,14 @@ function handleAudienceMsg(msg){
     sendMsg({type:'video-chat-available'});
   }
 
+  if(msg.type==='video-chat-close'){
+    showToast('📹 Video chat ended');
+    sendMsg({type:'video-chat-ended'});
+    // Remove all video chat tiles
+    Object.keys(vcStreams).forEach(uid => removeVideoChatTile(uid));
+    vcCounter = 0;
+  }
+
   if(msg.type==='lyrics-start'){
     startLyricsTicker();
   }
@@ -1418,13 +1445,21 @@ window.onYouTubeIframeAPIReady = function(){
       onReady: ()=>{
         ytReady=true;
         log('YT player ready ✓', 'ok');
-        // No warmup video needed — autoplay is handled by loadVideoById
+        // Play a short silent warmup to unlock browser autoplay for both YT and Agora audio
+        ytPlayer.mute();
+        ytPlayer.loadVideoById('_OBlgSz8sSM'); // short public domain clip
+        setTimeout(()=>{
+          ytPlayer.stopVideo();
+          ytPlayer.unMute();
+          ytPlayer.setVolume(100);
+          log('YT: autoplay unlocked ✓', 'ok');
+          if(ytPendingId){
+            log('YT: loading pending video: '+ytPendingId);
+            ytPlayer.loadVideoById(ytPendingId);
+            ytPendingId=null;
+          }
+        }, 1500);
         log('YT ready — waiting for song selection', 'ok');
-        if(ytPendingId){
-          log('YT: loading pending video: '+ytPendingId);
-          ytPlayer.loadVideoById(ytPendingId);
-          ytPendingId=null;
-        }
       },
       onStateChange: e=>{
         const s=YT_STATES[e.data]||e.data;
@@ -1834,15 +1869,11 @@ function showQRFallback(canvas, text){
 let tvSearchResults = [];
 
 function showTVSearch(query, results){
-  // Hide idle panel so TV search is visible
   document.getElementById('idle-panel').style.display = 'none';
-
   tvSearchResults = results;
   document.getElementById('tv-search-query').textContent = `"${query}"`;
   const grid = document.getElementById('tv-results-grid');
-
   if(!results.length){
-    // Empty = still searching — show spinner text not "no results"
     document.getElementById('tv-search-title').textContent = 'Searching for';
     grid.innerHTML = '<div style="color:rgba(255,220,150,.4);font-size:14px;letter-spacing:.08em;padding:20px 0;">Searching...</div>';
   } else {
@@ -1863,6 +1894,8 @@ function showTVSearch(query, results){
   document.getElementById('tv-search').style.display = 'flex';
   document.getElementById('tv-song-card').style.display = 'none';
   log('TV search: '+results.length+' results for "'+query+'"');
+  // Broadcast to audience
+  sendMsg({type:'tv-search', query, results: results.slice(0,6)});
 }
 
 function highlightTVResult(index){
@@ -1873,11 +1906,9 @@ function highlightTVResult(index){
 
 function hideTVSearch(){
   document.getElementById('tv-search').style.display = 'none';
+  sendMsg({type:'tv-search-clear'});
 }
 
-// ═══════════════════════════════════════
-// SELECTED SONG CARD ON TV
-// ═══════════════════════════════════════
 function showTVSongCard(title, artist, thumb){
   hideTVSearch();
   document.getElementById('tv-song-title').textContent = title;
@@ -1886,10 +1917,13 @@ function showTVSongCard(title, artist, thumb){
   if(thumb){ img.src=thumb; img.style.display='block'; } else { img.style.display='none'; }
   document.getElementById('tv-song-card').style.display = 'flex';
   log('TV song card: '+title);
+  // Broadcast to audience
+  sendMsg({type:'tv-song-card', title, artist, thumb});
 }
 
 function hideTVSongCard(){
   document.getElementById('tv-song-card').style.display = 'none';
+  sendMsg({type:'tv-song-card-clear'});
 }
 
 // ═══════════════════════════════════════
