@@ -112,8 +112,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 #tv-song-title{font-family:'Cormorant Garamond',serif;font-size:clamp(22px,3vw,42px);color:rgba(255,220,150,.95);font-style:italic;line-height:1.2;}
 #tv-song-artist{font-size:12px;color:rgba(255,200,120,.5);letter-spacing:.1em;text-transform:uppercase;}
 /* ── SONG LOADING STATUS ── */
-#tv-load-status{font-size:12px;color:rgba(255,200,120,.5);letter-spacing:.1em;text-transform:uppercase;margin-top:8px;text-align:center;}
-#tv-load-bar-track{width:200px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;margin-top:6px;}
+#tv-load-status{font-size:13px;color:rgba(255,220,150,.85);letter-spacing:.06em;text-transform:uppercase;margin-top:10px;text-align:center;min-height:18px;}
+#tv-load-bar-track{width:220px;height:4px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden;margin-top:8px;}
 #tv-load-bar{height:100%;width:0%;border-radius:2px;background:linear-gradient(90deg,#ffd96e,#ff8c42);transition:width .5s ease;}
 
 /* ── COMMENT BAR ── */
@@ -277,7 +277,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   <div id="rcode-wrap" title="Click to copy"><small>Room Code</small><span id="rcode">––––––</span></div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div class="bi" style="color:rgba(255,200,80,.25);font-size:8px;">v0.42</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.43</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -1470,27 +1470,26 @@ function setLoadStatus(status){
   const bar = document.getElementById('tv-load-bar-track');
   if(!el) return;
   if(status === 'loading'){
-    el.textContent = 'Song loading...';
-    el.style.color = 'rgba(255,200,120,.5)';
+    el.textContent = '⏳ Song loading...';
+    el.style.color = 'rgba(255,220,150,.9)';
     if(bar) bar.style.display = 'block';
   } else if(status === 'starting'){
-    el.textContent = 'Song will start shortly';
-    el.style.color = 'rgba(0,232,122,.6)';
+    el.textContent = '🎵 Song will start shortly';
+    el.style.color = 'rgba(255,220,150,.9)';
     if(bar) bar.style.display = 'block';
-    // Full bar during ad wait
     document.getElementById('tv-load-bar').style.width = '100%';
   } else if(status === 'playing'){
     el.textContent = '';
     if(bar) bar.style.display = 'none';
     stopLoadPoller();
   } else if(status === 'error'){
-    el.textContent = 'Song did not load — try a different result';
-    el.style.color = 'rgba(196,122,107,.8)';
+    el.textContent = '❌ Song did not load — try a different result';
+    el.style.color = 'rgba(255,100,80,1)';
     if(bar) bar.style.display = 'none';
     stopLoadPoller();
   } else if(status === 'ready'){
     el.textContent = 'Ready · tap Start on your phone';
-    el.style.color = 'rgba(255,200,120,.6)';
+    el.style.color = 'rgba(255,220,150,.75)';
     if(bar) bar.style.display = 'none';
   }
 }
