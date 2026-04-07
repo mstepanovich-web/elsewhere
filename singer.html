@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -491,15 +492,18 @@ async function publishMic(){
 }
 
 function unmuteMic(){
-  // iOS suspends AudioContext until user gesture — resume it
-  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
   muted=false;
   if(gainNode) gainNode.gain.setTargetAtTime(getVol(),audioCtx.currentTime,0.05);
+  // Also unmute the Agora track
+  if(micAudioTrack) micAudioTrack.setVolume(100);
   updateMicUI();
 }
 function muteMic(){
   muted=true;
   if(gainNode) gainNode.gain.setTargetAtTime(0,audioCtx.currentTime,0.05);
+  // Also mute the Agora track — this is what actually silences what audience hears
+  if(micAudioTrack) micAudioTrack.setVolume(0);
   updateMicUI();
 }
 function toggleMute(){ muted?unmuteMic():muteMic(); }
