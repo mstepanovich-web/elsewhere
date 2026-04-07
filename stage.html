@@ -280,7 +280,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.54</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.58</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -587,24 +587,16 @@ function updateZoom(){
 
   if(zoomPhase === 'in' && Math.abs(zoomFactor - zoomTarget) < 0.015){
     zoomPhase = 'held';
-    // Hold close-up for 3.5–5s then pull back
-    zoomHoldTmr = setTimeout(releaseZoom, 3500 + Math.random() * 1500);
+    // No auto-release — held until singer taps zoom-out
   }
   if(zoomPhase === 'returning' && Math.abs(zoomFactor - 1.0) < 0.008){
     zoomFactor = 1.0; zoomOffset = 0.0; zoomPhase = 'out';
   }
 }
 
-// Schedule zooms at 1/3 and 2/3 through the song duration
+// Schedule zooms removed — zoom is now manually controlled from singer app
 function scheduleZoomsForSong(durationSec){
-  // Clear any existing zoom timers
-  if(zoomHoldTmr){ clearTimeout(zoomHoldTmr); zoomHoldTmr=null; }
-  releaseZoom(); // reset to full shot immediately
-
-  const z1 = (durationSec / 3) * 1000;
-  const z2 = (durationSec / 3 * 2) * 1000;
-  setTimeout(()=>triggerZoom(), z1);
-  setTimeout(()=>triggerZoom(), z2);
+  // No-op — auto zoom removed
 }
 
 function drawSinger(image, mask){
@@ -1200,6 +1192,9 @@ function handleAudienceMsg(msg){
     addCommentToBar(msg.text, msg.name||'Guest');
   }
   if(msg.type==='zoom'){ triggerZoom(); }
+  if(msg.type==='zoom-in'){ triggerZoom(); }
+  if(msg.type==='zoom-out'){ releaseZoom(); }
+  if(msg.type==='toggle-comments'){ toggleCommentBar(); }
 
   // ── Singer phone remote control ──
   if(msg.type==='mic-connected'){
