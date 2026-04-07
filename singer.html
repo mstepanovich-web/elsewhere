@@ -235,9 +235,16 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   </div>
   <div id="srch-body">
     <div id="srch-bar">
-      <input id="srch-in" class="input" type="text" placeholder="Song or artist..."
-        autocomplete="off" inputmode="search"
-        onkeydown="if(event.key==='Enter')doSearch()">
+      <div style="flex:1;position:relative;display:flex;align-items:center;">
+        <input id="srch-in" class="input" type="search" placeholder="Song or artist..."
+          autocomplete="off" inputmode="search" list="srch-suggestions"
+          style="padding-right:36px;"
+          onkeydown="if(event.key==='Enter')doSearch()"
+          oninput="onSearchInput(this.value)">
+        <datalist id="srch-suggestions"></datalist>
+        <div id="srch-clear" onclick="clearSearch()"
+          style="position:absolute;right:10px;font-size:16px;color:rgba(255,200,120,.4);cursor:pointer;display:none;-webkit-user-select:none;padding:4px;">✕</div>
+      </div>
       <div id="voice-btn"
         onmousedown="startVoice(event)" ontouchstart="startVoice(event)"
         onmouseup="stopVoice(event)"   ontouchend="stopVoice(event)"
@@ -660,14 +667,40 @@ async function confirmSong(){
 }
 
 // ── LRCLIB LYRICS ──
-async function fetchLyrics(title,artist){
-  try{
-    const res=await fetch(`${LRCLIB_URL}/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}&album_name=&duration=0`);
-    if(res.ok){const d=await res.json();if(d.syncedLyrics) return parseLRC(d.syncedLyrics);if(d.plainLyrics) return d.plainLyrics.split('\n').filter(l=>l.trim()).map((t,i)=>({time:i*3,text:t}));}
-    const sr=await fetch(`${LRCLIB_URL}/search?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`);
-    if(sr.ok){const rs=await sr.json();const m=rs.find(r=>r.syncedLyrics)||rs[0];if(m?.syncedLyrics) return parseLRC(m.syncedLyrics);if(m?.plainLyrics) return m.plainLyrics.split('\n').filter(l=>l.trim()).map((t,i)=>({time:i*3,text:t}));}
-  }catch(e){console.warn('LRCLIB:',e);}
-  return [{time:0,text:selectedVideo?.title||'♪'},{time:4,text:'(Lyrics unavailable)'}];
+// Strips karaoke junk from YouTube titles to find the real song
+function cleanTitle(t){
+  return t
+    .replace(/\(karaoke[^)]*\)/gi,'').replace(/\[karaoke[^\]]*\]/gi,'')
+    .replace(/karaoke version/gi,'').replace(/\bkaraoke\b/gi,'')
+    .replace(/\|.*$/,'').replace(/-\s*instrumental/gi,'').replace(/\(instrumental\)/gi,'')
+    .replace(/\s{2,}/g,' ').trim();
+}
+function extractArtist(rawTitle, channel){
+  const pipe = rawTitle.match(/\|\s*([^|(\[]+)/);  if(pipe) return pipe[1].trim();
+  const dash = rawTitle.match(/^.+?[-–]\s*(.+?)\s*[\(\[]/); if(dash) return dash[1].trim();
+  return channel.replace(/karaoke/gi,'').replace(/official/gi,'').trim() || channel;
+}
+async function fetchLyrics(rawTitle, channel){
+  const title  = cleanTitle(rawTitle);
+  const artist = extractArtist(rawTitle, channel);
+  console.log('LRCLIB search — title:', title, 'artist:', artist);
+  const tries = [
+    `${LRCLIB_URL}/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}&album_name=&duration=0`,
+    `${LRCLIB_URL}/search?track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist)}`,
+    `${LRCLIB_URL}/search?q=${encodeURIComponent(title)}`,
+  ];
+  for(const url of tries){
+    try{
+      const res=await fetch(url); if(!res.ok) continue;
+      const data=await res.json();
+      const items=Array.isArray(data)?data:(data.id?[data]:[]);
+      const match=items.find(r=>r.syncedLyrics)||items.find(r=>r.plainLyrics);
+      if(!match) continue;
+      if(match.syncedLyrics) return parseLRC(match.syncedLyrics);
+      if(match.plainLyrics) return match.plainLyrics.split('\n').filter(l=>l.trim()).map((t,i)=>({time:i*4,text:t}));
+    }catch(e){ continue; }
+  }
+  return []; // empty — stage will handle gracefully
 }
 function parseLRC(lrc){
   const lines=[];
@@ -675,7 +708,45 @@ function parseLRC(lrc){
   return lines.sort((a,b)=>a.time-b.time);
 }
 
-// ── VOICE SEARCH (push-to-talk) ──
+// ── SEARCH CLEAR + AUTOCOMPLETE ──
+const POPULAR_SONGS = [
+  'Bohemian Rhapsody Queen','Don\'t Stop Believin Journey','Sweet Caroline Neil Diamond',
+  'Livin on a Prayer Bon Jovi','Mr Brightside The Killers','With or Without You U2',
+  'Total Eclipse of the Heart Bonnie Tyler','Africa Toto','Don\'t You Want Me Human League',
+  'I Will Survive Gloria Gaynor','Dancing Queen ABBA','Take on Me A-ha',
+  'Roxanne The Police','Summer Nights Grease','Piano Man Billy Joel',
+  'American Pie Don McLean','Hotel California Eagles','Africa Toto',
+  'Shallow Lady Gaga','Someone Like You Adele','Rolling in the Deep Adele',
+  'Wonderwall Oasis','Living on a Prayer','Here Comes the Sun Beatles',
+  'Twist and Shout Beatles','Purple Rain Prince','Born to Run Springsteen',
+];
+
+function onSearchInput(val){
+  const clear = document.getElementById('srch-clear');
+  clear.style.display = val.length > 0 ? 'block' : 'none';
+  // Populate datalist with matching suggestions
+  const dl = document.getElementById('srch-suggestions');
+  dl.innerHTML = '';
+  if(val.length >= 2){
+    const v = val.toLowerCase();
+    POPULAR_SONGS.filter(s=>s.toLowerCase().includes(v)).slice(0,8).forEach(s=>{
+      const opt = document.createElement('option');
+      opt.value = s; dl.appendChild(opt);
+    });
+  }
+}
+
+function clearSearch(){
+  const inp = document.getElementById('srch-in');
+  inp.value = '';
+  document.getElementById('srch-clear').style.display = 'none';
+  document.getElementById('srch-results').innerHTML = '<div class="empty">🎵<br>Search for any song<br>Results appear here and on the TV</div>';
+  document.getElementById('srch-status').textContent = 'Hold 🎙 to search by voice · or type and search';
+  document.getElementById('srch-suggestions').innerHTML = '';
+  inp.focus();
+  // Clear TV search overlay too
+  sendToStage({type:'tv-search-clear'});
+}
 function startVoice(e){
   if(e) e.preventDefault();
   if(voiceActive) return;
