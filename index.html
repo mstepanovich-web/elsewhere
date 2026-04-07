@@ -155,8 +155,9 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 <div id="topbar">
   <div class="bi"><div class="dot of" id="cdot"></div><span id="clbl">Not connected</span></div>
   <div id="song-title">Elsewhere</div>
+  <div id="room-indicator" onclick="changeRoom()" style="display:none;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.4);cursor:pointer;padding:2px 6px;border:1px solid rgba(255,200,80,.15);border-radius:4px;font-family:'DM Mono',monospace;" title="Tap to change room">Room: <span id="room-display">––––––</span></div>
   <div class="bi" id="wcount"></div>
-  <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;white-space:nowrap;">v0.48</div>
+  <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;white-space:nowrap;">v0.72</div>
 </div>
 <div id="prog"><div id="pf"></div></div>
 
@@ -166,7 +167,8 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
     <div id="cmt-send" onclick="sendComment()">Send</div>
   </div>
   <div id="action-row">
-    <div class="abt cheer" onclick="sendCheer()"><span class="abt-icon">🔥</span>Cheer</div>
+    <div class="abt cheer" onclick="sendCheer()"><span class="abt-icon">🔥</span>Fire</div>
+    <div class="abt" onclick="sendApplause()"><span class="abt-icon">👏</span>Applause</div>
     <div class="abt" onclick="sendZoom()"><span class="abt-icon">🔍</span>Close-up</div>
     <div class="abt" onclick="sendReact('⭐')"><span class="abt-icon">⭐</span>Star</div>
     <div class="abt" onclick="sendReact('❤️')"><span class="abt-icon">❤️</span>Love</div>
@@ -347,8 +349,10 @@ async function joinRoom() {
 
     await client.join(AGORA_APP_ID, channel, null, null);
 
-    // Joined! Hide the join screen
+    // Joined! Hide the join screen, show room indicator
     document.getElementById('join').style.display = 'none';
+    document.getElementById('room-display').textContent = raw;
+    document.getElementById('room-indicator').style.display = 'block';
     document.getElementById('cdot').className = 'dot ld';
     document.getElementById('clbl').textContent = 'Waiting for singer...';
 
@@ -482,9 +486,28 @@ function sendCheer() {
   sendToSinger({ type:'cheer' });
 }
 
+function sendApplause() {
+  spawnRx('👏', Math.random()*75+12);
+  sendToSinger({ type:'applause' });
+}
+
 function sendReact(emoji) {
   spawnRx(emoji, Math.random()*75+12);
   sendToSinger({ type:'react', emoji });
+}
+
+function changeRoom(){
+  const newCode = prompt('Enter new room code:');
+  if(!newCode) return;
+  const clean = newCode.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(clean.length < 4){ showToast('Invalid room code'); return; }
+  if(client){ client.leave().catch(()=>{}); client=null; }
+  document.getElementById('code-in').value = clean;
+  document.getElementById('room-indicator').style.display = 'none';
+  document.getElementById('join').style.display = 'flex';
+  document.getElementById('cdot').className = 'dot of';
+  document.getElementById('clbl').textContent = 'Not connected';
+  joinRoom();
 }
 
 function sendComment() {
@@ -713,18 +736,32 @@ async function joinVideoChat(){
   const b=document.getElementById('vc-banner');
   if(b) b.style.display='none';
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});
-    sendToSinger({type:'video-chat-join',name:'Audience'});
-    let p=document.getElementById('vc-preview');
-    if(!p){
-      p=document.createElement('div'); p.id='vc-preview';
-      p.style.cssText='position:fixed;bottom:140px;right:12px;width:100px;height:75px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,232,122,.4);z-index:300;';
-      const v=document.createElement('video'); v.autoplay=true; v.playsInline=true; v.muted=true;
-      v.srcObject=new MediaStream(stream.getVideoTracks()); v.style.cssText='width:100%;height:100%;object-fit:cover;';
-      p.appendChild(v); document.body.appendChild(p);
+    await client.setClientRole('host');
+    const [videoTrack, audioTrack] = await Promise.all([
+      AgoraRTC.createCameraVideoTrack(),
+      AgoraRTC.createMicrophoneAudioTrack()
+    ]);
+    await client.publish([videoTrack, audioTrack]);
+
+    // Show small local preview so audience knows their camera is live
+    let preview = document.getElementById('vc-preview');
+    if(!preview){
+      preview = document.createElement('div');
+      preview.id = 'vc-preview';
+      preview.style.cssText = 'position:fixed;bottom:80px;right:14px;width:120px;height:90px;border-radius:8px;overflow:hidden;border:2px solid rgba(0,232,122,.5);background:#0a0508;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.6);';
+      const vidWrap = document.createElement('div');
+      vidWrap.style.cssText = 'width:100%;height:100%;transform:scaleX(-1);';
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'position:absolute;bottom:0;left:0;right:0;padding:3px 6px;font-size:9px;color:rgba(0,232,122,.9);background:rgba(0,0,0,.6);text-align:center;letter-spacing:.06em;';
+      lbl.textContent = '● LIVE';
+      preview.appendChild(vidWrap); preview.appendChild(lbl);
+      document.body.appendChild(preview);
+      videoTrack.play(vidWrap);
     }
-    showToast('📹 You joined video chat');
-  }catch(e){ showToast('Could not access camera/mic'); }
+
+    sendToSinger({type:'video-chat-join', name:'Audience'});
+    showToast('📹 You are live on stage');
+  }catch(e){ showToast('Could not access camera/mic'); console.warn(e); }
 }
 
 if (window.location.protocol === 'file:') {
