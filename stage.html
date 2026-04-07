@@ -1152,6 +1152,10 @@ function handleAudienceMsg(msg){
     showTVSearch(msg.query, msg.results||[]);
   }
 
+  if(msg.type==='tv-search-clear'){
+    hideTVSearch();
+  }
+
   if(msg.type==='tv-result-highlight'){
     highlightTVResult(msg.index);
   }
@@ -1361,25 +1365,20 @@ function ytPlaySong(videoId){
 }
 
 function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
-  console.log('loadYouTubeSong:', {videoId, title, lyricsCount: lyrics.length, firstLyric: lyrics[0]});
   song = {
     videoId, title, artist,
     lyrics: lyrics.length>0
       ? lyrics.map((l,i)=>({t: l.time ?? l.t ?? 0, m: l.text ?? l.m ?? '', n: lyrics[i+1]?.text ?? lyrics[i+1]?.m ?? ''}))
-      : [{t:0, m:title, n:artist}]
+      : []
   };
-  console.log('song.lyrics[0]:', song.lyrics[0]);
   phoneControlled = true;
+  log('Song loaded: "'+title+'" — '+song.lyrics.length+' lyric lines', song.lyrics.length>0?'ok':'warn');
+  if(song.lyrics.length>0) log('  first lyric t='+song.lyrics[0].t+': "'+song.lyrics[0].m+'"');
 
-  // Update UI
   document.getElementById('lm').textContent='';
   document.getElementById('ln').textContent='';
   document.getElementById('sp').style.display='none';
 
-  // videoId stored on song object — ytPlaySong called at countdown GO
-  log('Song loaded: '+title+' ['+videoId+']', 'ok');
-
-  // Tell audience what's coming — include videoId so they can load it too
   sendMsg({type:'song-announce', title, artist, videoId, isDemo});
   showToast(`🎵 ${title} — ${artist}`);
 }
@@ -1389,7 +1388,7 @@ function doPlayWithYT(){
   elapsed=0;
   document.getElementById('pbtn').textContent='⏸ Pause';
   sendMsg({type:'play-start', song:song.title, artist:song.artist, videoId:song.videoId||'', ts:Date.now()});
-  const songDuration = song.lyrics.length>0 ? song.lyrics[song.lyrics.length-1].t + 10 : 240;
+  const songDuration = song.lyrics.length>0 ? song.lyrics[song.lyrics.length-1].t + 10 : 600;
   scheduleZoomsForSong(songDuration);
 
   // Start YouTube audio
@@ -1503,8 +1502,8 @@ function doPause(){
   if(phoneControlled && ytReady && ytPlayer) try{ ytPlayer.pauseVideo(); }catch(e){}
 }
 function resetPlay(){doPause();elapsed=0;lIdx=-1;document.getElementById('pbtn').textContent='▶ Start';document.getElementById('pf').style.width='0%';document.getElementById('lm').textContent='';document.getElementById('ln').textContent='';}
-function updL(){let i=-1;for(let j=0;j<song.lyrics.length;j++){if(elapsed>=song.lyrics[j].t)i=j;}if(i!==lIdx){lIdx=i;const m=i>=0?song.lyrics[i].m:'',n=i>=0?(song.lyrics[i].n||''):'';document.getElementById('lm').textContent=m;document.getElementById('ln').textContent=n;sendMsg({type:'lyric',main:m,next:n});}}
-function updP(){const last=song.lyrics[song.lyrics.length-1];const pct=Math.min(100,(elapsed/(last.t+5))*100);document.getElementById('pf').style.width=pct+'%';sendMsg({type:'progress',pct,elapsed});}
+function updL(){if(!song.lyrics.length)return;let i=-1;for(let j=0;j<song.lyrics.length;j++){if(elapsed>=song.lyrics[j].t)i=j;}if(i!==lIdx){lIdx=i;const m=i>=0?song.lyrics[i].m:'',n=i>=0?(song.lyrics[i].n||''):'';document.getElementById('lm').textContent=m;document.getElementById('ln').textContent=n;sendMsg({type:'lyric',main:m,next:n});}}
+function updP(){const pct=Math.min(100,(elapsed/600)*100);document.getElementById('pf').style.width=pct+'%';sendMsg({type:'progress',pct,elapsed});}
 function doEnd(){
   log('doEnd() called — elapsed:'+Math.round(elapsed)+'s', 'warn');
   doPause();
@@ -1647,24 +1646,35 @@ function showQRFallback(canvas, text){
 let tvSearchResults = [];
 
 function showTVSearch(query, results){
+  // Hide idle panel so TV search is visible
+  document.getElementById('idle-panel').style.display = 'none';
+
   tvSearchResults = results;
   document.getElementById('tv-search-query').textContent = `"${query}"`;
-  document.getElementById('tv-search-title').textContent = results.length ? 'Results for' : 'No results for';
   const grid = document.getElementById('tv-results-grid');
-  grid.innerHTML = '';
-  results.slice(0,6).forEach((r,i)=>{
-    const el = document.createElement('div');
-    el.className = 'tv-result';
-    el.innerHTML = `
-      <div class="tv-result-num">${i+1}</div>
-      <img class="tv-result-thumb" src="${r.thumb||''}" loading="lazy" onerror="this.style.display='none'">
-      <div class="tv-result-title">${escTv(r.title)}</div>
-      <div class="tv-result-meta">${escTv(r.artist||'')}</div>
-    `;
-    grid.appendChild(el);
-  });
+
+  if(!results.length){
+    // Empty = still searching — show spinner text not "no results"
+    document.getElementById('tv-search-title').textContent = 'Searching for';
+    grid.innerHTML = '<div style="color:rgba(255,220,150,.4);font-size:14px;letter-spacing:.08em;padding:20px 0;">Searching...</div>';
+  } else {
+    document.getElementById('tv-search-title').textContent = 'Results for';
+    grid.innerHTML = '';
+    results.slice(0,6).forEach((r,i)=>{
+      const el = document.createElement('div');
+      el.className = 'tv-result';
+      el.innerHTML = `
+        <div class="tv-result-num">${i+1}</div>
+        <img class="tv-result-thumb" src="${r.thumb||''}" loading="lazy" onerror="this.style.display='none'">
+        <div class="tv-result-title">${escTv(r.title)}</div>
+        <div class="tv-result-meta">${escTv(r.artist||'')}</div>
+      `;
+      grid.appendChild(el);
+    });
+  }
   document.getElementById('tv-search').style.display = 'flex';
   document.getElementById('tv-song-card').style.display = 'none';
+  log('TV search: '+results.length+' results for "'+query+'"');
 }
 
 function highlightTVResult(index){
