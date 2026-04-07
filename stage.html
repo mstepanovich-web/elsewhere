@@ -1074,13 +1074,28 @@ async function initAgora(){
     agoraClient.setClientRole('host');
     agoraClient.on('user-joined',()=>{ document.getElementById('adot').className='dot ok'; updateWatchers(1); });
     agoraClient.on('user-left', uid=>{ updateWatchers(-1); removeVideoChatTile(uid); });
+    const chunkBuf = {};
     agoraClient.on('stream-message',(uid,data)=>{
       try{
         const msg = JSON.parse(new TextDecoder().decode(data));
-        // Track the singer phone's UID
-        if(msg.type==='mic-connected') singerUID = uid;
+        // Reassemble chunked messages
+        if(msg._chunk){
+          const {_id:id,_i:i,_n:n,_d:d} = msg;
+          if(!chunkBuf[id]) chunkBuf[id]={parts:new Array(n),received:0};
+          chunkBuf[id].parts[i]=d;
+          chunkBuf[id].received++;
+          if(chunkBuf[id].received===n){
+            const full = JSON.parse(chunkBuf[id].parts.join(''));
+            delete chunkBuf[id];
+            if(full.type==='mic-connected') singerUID=uid;
+            log('Chunked msg: '+full.type,'ok');
+            handleAudienceMsg(full);
+          }
+          return;
+        }
+        if(msg.type==='mic-connected') singerUID=uid;
         handleAudienceMsg(msg);
-      }catch(e){}
+      }catch(e){ log('stream-message parse error: '+e.message,'err'); }
     });
     agoraClient.on('user-published', async(user, mediaType)=>{
       await agoraClient.subscribe(user, mediaType);
@@ -1471,6 +1486,7 @@ function togglePlay(){playing?doPause():startCountdown();}
 function startCountdown(){
   if(guideActive) hideGuide();
   hideWaitingScreen();
+  hideTVSearch(); // make sure search results don't show over performance
   const cd=document.getElementById('cd'),n=document.getElementById('cdn');
   cd.style.display='flex'; let c=3; n.textContent=c;
   sendMsg({type:'countdown-start'});
@@ -1479,6 +1495,7 @@ function startCountdown(){
     if(c===0){ n.textContent='Go!'; }
     else if(c<0){
       clearInterval(iv); cd.style.display='none';
+      log('GO — phoneControlled:'+phoneControlled+' song:"'+song.title+'"');
       phoneControlled ? doPlayWithYT() : doPlay();
     } else { n.textContent=c; }
   },1000);
