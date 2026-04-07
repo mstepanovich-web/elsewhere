@@ -191,7 +191,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <div id="home-body">
 
     <!-- Version — centered at top -->
-    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.61</div>
+    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.63</div>
 
     <!-- Now Selected — top of screen -->
     <div id="song-card">
@@ -563,9 +563,9 @@ async function initMic(){
 async function publishMic(){
   if(micPublished||!micStream||!agoraClient||!agoraReady) return;
   try{
-    // Create persistent Agora destination from Web Audio chain
+    // Create persistent Agora destination — buildChain connects gainNode→agoraDest
     agoraDest = audioCtx.createMediaStreamDestination();
-    gainNode.connect(agoraDest);
+    buildChain(); // reconnects everything including gainNode→agoraDest
     micAudioTrack=AgoraRTC.createCustomAudioTrack({
       mediaStreamTrack: agoraDest.stream.getAudioTracks()[0]
     });
@@ -577,9 +577,9 @@ async function publishMic(){
 function unmuteMic(){
   if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
   muted=false;
-  if(gainNode) gainNode.gain.setTargetAtTime(getVol(),audioCtx.currentTime,0.05);
-  // Also unmute the Agora track
-  if(micAudioTrack) micAudioTrack.setVolume(100);
+  const vol = getVol();
+  if(gainNode) gainNode.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.05);
+  if(micAudioTrack) micAudioTrack.setVolume(Math.round(vol*100));
   updateMicUI();
 }
 function muteMic(){
@@ -649,7 +649,7 @@ function startLevelMeter(){
 function getVol(){return parseInt(document.getElementById('vol-sl').value)/100;}
 function setVolume(v){
   if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
-  const vol = parseInt(v)/100;
+  const vol = parseInt(v) / 100;
   if(gainNode && !muted) gainNode.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.05);
   if(micAudioTrack && !muted) micAudioTrack.setVolume(parseInt(v));
 }
@@ -1007,10 +1007,8 @@ function perfStop(){
   clearInterval(cdInterval);
   sendToStage({type:'stop-song'});
   muteMic();
-  // Reset zoom/comments state
   zoomActive = false;
   perfCommentsOn = true;
-  // Go straight to home — keep last song in Now Selected
   showScreen('screen-home');
 }
 
