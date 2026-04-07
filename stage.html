@@ -135,7 +135,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
 /* ── VIDEO CHAT OVERLAYS ── */
 #videochat-wrap{
-  position:fixed;bottom:60px;right:14px;z-index:200;
+  position:fixed;top:54px;right:14px;z-index:200;
   display:flex;gap:12px;flex-wrap:wrap;max-width:calc(100vw - 28px);
   justify-content:flex-end;
   pointer-events:none;
@@ -281,7 +281,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.72</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.73</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -341,7 +341,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.72</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.73</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -590,7 +590,9 @@ function updateZoom(){
 
   if(zoomPhase === 'in' && Math.abs(zoomFactor - zoomTarget) < 0.015){
     zoomPhase = 'held';
-    // No auto-release — held until singer taps zoom-out
+    // Auto-release after 3.5s
+    if(zoomHoldTmr) clearTimeout(zoomHoldTmr);
+    zoomHoldTmr = setTimeout(()=>{ releaseZoom(); }, 3500);
   }
   if(zoomPhase === 'returning' && Math.abs(zoomFactor - 1.0) < 0.008){
     zoomFactor = 1.0; zoomOffset = 0.0; zoomPhase = 'out';
@@ -1525,6 +1527,7 @@ function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
 let ytSongDuration = 600; // set by doPlayWithYT, used by onStateChange ticker
 
 function doPlayWithYT(){
+  document.getElementById('videochat-wrap').style.display='none'; // hide during song
   playing=true;
   elapsed=0;
   lIdx=-1;
@@ -1676,6 +1679,7 @@ function updL(le){
 }
 function updP(){const pct=Math.min(100,(elapsed/600)*100);document.getElementById('pf').style.width=pct+'%';sendMsg({type:'progress',pct,elapsed});}
 function doEnd(){
+  document.getElementById('videochat-wrap').style.display='flex'; // restore after song
   const stack = new Error().stack.split('\n').slice(1,4).join(' | ');
   log('doEnd() called — elapsed:'+Math.round(elapsed)+'s | '+stack, 'warn');
   doPause();
@@ -1916,15 +1920,16 @@ function addCommentToBar(text, name){
 // ═══════════════════════════════════════
 const vcStreams = {};
 
+let vcCounter = 0;
 function addVideoChatTile(uid, videoTrack, name){
   if(vcStreams[uid]) return;
+  vcCounter++;
   const wrap = document.getElementById('videochat-wrap');
   const tile = document.createElement('div'); tile.className='vc-tile'; tile.id=`vc-${uid}`;
   const vidWrap = document.createElement('div');
   vidWrap.style.cssText='width:100%;height:100%;';
-  const lbl = document.createElement('div'); lbl.className='vc-name'; lbl.textContent=name||'Guest';
+  const lbl = document.createElement('div'); lbl.className='vc-name'; lbl.textContent=name||`Audience ${vcCounter}`;
   tile.appendChild(vidWrap); tile.appendChild(lbl); wrap.appendChild(tile);
-  // Use Agora's native play() — more reliable than manual srcObject
   videoTrack.play(vidWrap);
   vcStreams[uid] = {track:videoTrack, tile};
 }
