@@ -352,6 +352,17 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <div id="perf-prog-track"><div id="perf-prog-fill"></div></div>
   </div>
 
+  <!-- Start Lyrics — full width prominent button -->
+  <div id="perf-lyrics-btn" onclick="startLyrics()"
+    style="margin:0 18px;padding:16px;background:rgba(0,232,122,.15);border:2px solid rgba(0,232,122,.5);border-radius:12px;text-align:center;font-size:17px;color:rgba(0,232,122,.95);cursor:pointer;letter-spacing:.06em;font-family:'DM Mono',monospace;-webkit-user-select:none;touch-action:manipulation;">
+    ▶ Start Lyrics
+  </div>
+
+  <!-- Upcoming first lyric preview -->
+  <div id="perf-lyric-preview"
+    style="padding:6px 24px;text-align:center;font-family:'Cormorant Garamond',serif;font-size:15px;font-style:italic;color:rgba(255,220,150,.45);min-height:22px;">
+  </div>
+
   <div id="perf-actions">
     <div class="perf-btn" id="perf-pause" onclick="perfPauseToggle()">⏸ Pause</div>
     <div class="perf-btn" onclick="doInvite()">📨 Invite</div>
@@ -667,25 +678,16 @@ function renderResults(items){
   });
 }
 
-function selectResult(r){
+async function selectResult(r){
   selectedVideo=r;
-  const ti=document.getElementById('conf-thumb');
-  if(r.thumb){ti.src=r.thumb;ti.style.display='block';}else ti.style.display='none';
-  document.getElementById('conf-title').textContent=r.title;
-  document.getElementById('conf-artist').textContent=r.artist||'';
-  showScreen('screen-confirm');
-}
-
-async function confirmSong(){
-  if(!selectedVideo) return;
-  showToast('Fetching lyrics...');
-  syncedLyrics=await fetchLyrics(selectedVideo.title,selectedVideo.artist);
-  sendToStage({type:'song-select',videoId:selectedVideo.videoId,title:selectedVideo.title,artist:selectedVideo.artist,thumb:selectedVideo.thumb||'',lyrics:syncedLyrics,isDemo:selectedVideo.videoId.startsWith('d')});
-  document.getElementById('song-title').textContent=selectedVideo.title;
-  document.getElementById('song-artist').textContent=selectedVideo.artist||'';
+  showToast('Loading lyrics...');
+  syncedLyrics=await fetchLyrics(r.title, r.artist);
+  sendToStage({type:'song-select',videoId:r.videoId,title:r.title,artist:r.artist,thumb:r.thumb||'',lyrics:syncedLyrics,isDemo:r.videoId.startsWith('d')});
+  document.getElementById('song-title').textContent=r.title;
+  document.getElementById('song-artist').textContent=r.artist||'';
   document.getElementById('start-btn').style.display='block';
   showScreen('screen-home');
-  showToast('Song selected — tap Start when ready');
+  showToast('✓ Song selected — tap Start when ready');
 }
 
 // ── LRCLIB LYRICS ──
@@ -783,6 +785,11 @@ function goToCountdown(){
         document.getElementById('perf-mute-btn').classList.remove('muted');
         document.getElementById('perf-mute-icon').textContent='🎤';
         document.getElementById('perf-mute-txt').textContent='Tap to mute';
+        // Reset lyrics button
+        const lb=document.getElementById('perf-lyrics-btn');
+        if(lb){ lb.textContent='▶ Start Lyrics'; lb.style.opacity='1'; lb.style.pointerEvents='auto'; }
+        // Show first lyric as preview
+        showLyricPreview();
         showScreen('screen-performing');
       });
     } else {
@@ -806,6 +813,29 @@ function cancelCd(){
 }
 
 // ── PERFORMANCE ──
+function startLyrics(){
+  sendToStage({type:'lyrics-start'});
+  // Hide the button after tapping — lyrics are now running
+  const btn = document.getElementById('perf-lyrics-btn');
+  if(btn){
+    btn.textContent = '✓ Lyrics Running';
+    btn.style.opacity = '0.4';
+    btn.style.pointerEvents = 'none';
+  }
+  document.getElementById('perf-lyric-preview').textContent = '';
+  showToast('▶ Lyrics started');
+}
+
+function showLyricPreview(){
+  // Show first lyric line so singer knows what's coming
+  if(!syncedLyrics || !syncedLyrics.length) return;
+  // Find first non-empty line after trimming
+  const first = syncedLyrics.find(l=>(l.text||l.m||'').trim());
+  if(first){
+    const text = first.text || first.m || '';
+    document.getElementById('perf-lyric-preview').textContent = '↓ ' + text;
+  }
+}
 function perfPauseToggle(){
   perfPaused=!perfPaused;
   sendToStage({type:perfPaused?'pause':'resume'});
@@ -815,6 +845,10 @@ function perfPauseToggle(){
 function perfRestart(){
   perfPaused=false;
   document.getElementById('perf-pause').textContent='⏸ Pause';
+  // Reset lyrics button so singer can re-trigger
+  const lb=document.getElementById('perf-lyrics-btn');
+  if(lb){ lb.textContent='▶ Start Lyrics'; lb.style.opacity='1'; lb.style.pointerEvents='auto'; }
+  showLyricPreview();
   sendToStage({type:'restart-song'});
   showToast('Restarting from beginning');
 }
