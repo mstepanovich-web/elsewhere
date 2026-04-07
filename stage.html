@@ -111,7 +111,10 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 #tv-song-thumb{width:180px;height:120px;object-fit:cover;border-radius:6px;background:rgba(255,200,80,.06);}
 #tv-song-title{font-family:'Cormorant Garamond',serif;font-size:clamp(22px,3vw,42px);color:rgba(255,220,150,.95);font-style:italic;line-height:1.2;}
 #tv-song-artist{font-size:12px;color:rgba(255,200,120,.5);letter-spacing:.1em;text-transform:uppercase;}
-#tv-song-hint{font-size:11px;color:rgba(255,200,120,.25);letter-spacing:.1em;text-transform:uppercase;margin-top:4px;}
+/* ── SONG LOADING STATUS ── */
+#tv-load-status{font-size:12px;color:rgba(255,200,120,.5);letter-spacing:.1em;text-transform:uppercase;margin-top:8px;text-align:center;}
+#tv-load-bar-track{width:200px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;margin-top:6px;}
+#tv-load-bar{height:100%;width:0%;border-radius:2px;background:linear-gradient(90deg,#ffd96e,#ff8c42);transition:width .5s ease;}
 
 /* ── COMMENT BAR ── */
 #comment-bar{
@@ -251,6 +254,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   <div id="tv-song-title"></div>
   <div id="tv-song-artist"></div>
   <div id="tv-song-hint">Ready when you are · tap Start on your phone</div>
+  <div id="tv-load-status"></div>
+  <div id="tv-load-bar-track" style="display:none;"><div id="tv-load-bar"></div></div>
 </div>
 
 <!-- COMMENT BAR -->
@@ -1384,16 +1389,17 @@ window.onYouTubeIframeAPIReady = function(){
       onStateChange: e=>{
         const s=YT_STATES[e.data]||e.data;
         log('YT state → '+s);
-        // Stop ticker on pause
         if(e.data===YT.PlayerState.PAUSED && phoneControlled) clearAllTickers();
+
+        if(e.data===YT.PlayerState.BUFFERING){
+          setLoadStatus('starting');
+        }
 
         if(e.data===YT.PlayerState.ENDED){
           const secsPlayed = (Date.now() - ytSongStartTime) / 1000;
           log('YT ended — seconds since start: '+Math.round(secsPlayed));
-          // Ignore ENDED events in first 30 seconds — those are ads ending
-          // Real songs are at least 2-3 minutes
           if(secsPlayed < 30){
-            log('YT: ignoring early ENDED (likely ad) — resuming playback');
+            log('YT: ignoring early ENDED (likely ad) — resuming');
             setTimeout(()=>{ try{ ytPlayer.playVideo(); }catch(ex){} }, 500);
           } else {
             log('YT: song ended → doEnd()');
@@ -1401,23 +1407,101 @@ window.onYouTubeIframeAPIReady = function(){
           }
         }
         if(e.data===YT.PlayerState.PLAYING){
+          const secsPlayed = (Date.now() - ytSongStartTime) / 1000;
           const ct = ytPlayer.getCurrentTime();
-          log('YT: playing — getCurrentTime: '+Math.round(ct)+'s');
-          // DON'T auto-start lyrics ticker here
-          // Singer manually triggers lyrics via lyrics-start message
-          log('Song playing — waiting for singer to tap Start Lyrics', 'ok');
+          log('YT: playing — wallSecs:'+Math.round(secsPlayed)+' ytTime:'+Math.round(ct)+'s');
+          if(secsPlayed > 30){
+            // Actual song is playing
+            setLoadStatus('playing');
+            startSongProgressBar();
+          } else {
+            setLoadStatus('starting');
+          }
+          log('Waiting for singer to tap Start Lyrics', 'ok');
         }
       },
       onError: e=>{
         const errs={2:'invalid videoId',5:'HTML5 error',100:'not found',101:'embed disabled',150:'embed disabled'};
-        log('YT error: '+(errs[e.data]||e.data), 'err');
+        const errMsg = errs[e.data]||('error '+e.data);
+        log('YT error: '+errMsg, 'err');
+        setLoadStatus('error');
+        stopLoadPoller();
       }
     }
   });
 };
 
+let ytLoadPoller = null;
+
+function startLoadPoller(){
+  clearInterval(ytLoadPoller);
+  setLoadStatus('loading');
+  ytLoadPoller = setInterval(()=>{
+    if(!ytPlayer || !ytReady) return;
+    try{
+      const frac = ytPlayer.getVideoLoadedFraction() || 0;
+      document.getElementById('tv-load-bar').style.width = (frac*100)+'%';
+      const state = ytPlayer.getPlayerState();
+      // States 1=playing, 3=buffering mean something is happening
+      if(state === 1 || state === 3){
+        setLoadStatus('starting');
+      }
+    }catch(e){}
+  }, 500);
+}
+
+function stopLoadPoller(){
+  clearInterval(ytLoadPoller);
+  ytLoadPoller = null;
+}
+
+function setLoadStatus(status){
+  const el = document.getElementById('tv-load-status');
+  const bar = document.getElementById('tv-load-bar-track');
+  if(!el) return;
+  if(status === 'loading'){
+    el.textContent = 'Song loading...';
+    el.style.color = 'rgba(255,200,120,.5)';
+    if(bar) bar.style.display = 'block';
+  } else if(status === 'starting'){
+    el.textContent = 'Song will start shortly';
+    el.style.color = 'rgba(0,232,122,.6)';
+    if(bar) bar.style.display = 'block';
+    // Full bar during ad wait
+    document.getElementById('tv-load-bar').style.width = '100%';
+  } else if(status === 'playing'){
+    el.textContent = '';
+    if(bar) bar.style.display = 'none';
+    stopLoadPoller();
+  } else if(status === 'error'){
+    el.textContent = 'Song did not load — try a different result';
+    el.style.color = 'rgba(196,122,107,.8)';
+    if(bar) bar.style.display = 'none';
+    stopLoadPoller();
+  } else if(status === 'ready'){
+    el.textContent = 'Ready when you are';
+    el.style.color = 'rgba(255,200,120,.35)';
+    if(bar) bar.style.display = 'none';
+  }
+}
+
+let songProgressPoller = null;
+function startSongProgressBar(){
+  clearInterval(songProgressPoller);
+  songProgressPoller = setInterval(()=>{
+    if(!ytPlayer||!ytReady||!playing) return;
+    try{
+      const ct=ytPlayer.getCurrentTime(), dur=ytPlayer.getDuration();
+      if(dur>0){
+        const pct=Math.min(100,(ct/dur)*100);
+        document.getElementById('pf').style.width=pct+'%';
+        sendMsg({type:'progress',pct,elapsed:ct});
+      }
+    }catch(e){}
+  },500);
+}
+
 function ytPlaySong(videoId){
-  if(!videoId){ log('ytPlaySong: no videoId!', 'err'); return; }
   log('ytPlaySong: '+videoId);
   if(!ytReady || !ytPlayer){
     log('YT not ready — storing pending: '+videoId, 'warn');
@@ -1427,6 +1511,7 @@ function ytPlaySong(videoId){
   
   ytSongStartTime = Date.now();
   log('ytPlaySong: start time recorded');
+  startLoadPoller(); // show loading status on TV song card
 
   // cueVideoById first (doesn't require gesture), then playVideo (does)
   // This is the most reliable sequence for embedded players
@@ -1615,7 +1700,16 @@ function doPause(){
   sendMsg({type:'pause'});
   if(phoneControlled && ytReady && ytPlayer) try{ ytPlayer.pauseVideo(); }catch(e){}
 }
-function resetPlay(){doPause();elapsed=0;lIdx=-1;document.getElementById('pbtn').textContent='▶ Start';document.getElementById('pf').style.width='0%';document.getElementById('lm').textContent='';document.getElementById('ln').textContent='';}
+function resetPlay(){
+  doPause();
+  elapsed=0; lIdx=-1;
+  stopLoadPoller();
+  clearInterval(songProgressPoller); songProgressPoller=null;
+  document.getElementById('pbtn').textContent='▶ Start';
+  document.getElementById('pf').style.width='0%';
+  document.getElementById('lm').textContent='';
+  document.getElementById('ln').textContent='';
+}
 function updL(le){
   if(!song.lyrics.length) return;
   const t = (le !== undefined) ? le : elapsed;
@@ -1633,6 +1727,8 @@ function updP(){const pct=Math.min(100,(elapsed/600)*100);document.getElementByI
 function doEnd(){
   log('doEnd() called — elapsed:'+Math.round(elapsed)+'s', 'warn');
   doPause();
+  stopLoadPoller();
+  clearInterval(songProgressPoller); songProgressPoller=null;
   resetLyrics();
   if(phoneControlled && ytReady && ytPlayer) try{ ytPlayer.stopVideo(); }catch(e){}
   const msgs=['Bravo!','Amazing!','Encore!','Take a bow!'];
@@ -1824,6 +1920,8 @@ function showTVSongCard(title, artist, thumb){
   const img = document.getElementById('tv-song-thumb');
   if(thumb){ img.src=thumb; img.style.display='block'; } else { img.style.display='none'; }
   document.getElementById('tv-song-card').style.display = 'flex';
+  log('TV song card: '+title);
+  setLoadStatus('ready');
 }
 
 function hideTVSongCard(){
