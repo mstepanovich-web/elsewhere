@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.73</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.76</div>
 </div>
 
 <!-- HOME -->
@@ -192,7 +192,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <div id="home-body">
 
     <!-- Version — centered at top -->
-    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.73</div>
+    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.76</div>
 
     <!-- Now Selected — top of screen -->
     <div id="song-card">
@@ -245,7 +245,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
         <span style="font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.4);display:block;margin-bottom:1px;">Room</span>
         <span id="stat-r">––––––</span>
       </div>
-      <div class="btn" onclick="openVideoChat()" style="font-size:11px;padding:7px 12px;border:none;background:transparent;color:rgba(255,200,120,.55);">📹 Video with Audience</div>
+      <div id="video-chat-btn" onclick="toggleVideoChat()" style="font-size:11px;padding:7px 12px;border:none;background:transparent;color:rgba(255,200,120,.55);">📹 Video with Audience</div>
     </div>
 
     <!-- In the Audience -->
@@ -1024,10 +1024,22 @@ function perfStop(){
 }
 
 // ── POST-SONG ──
-function openVideoChat(){
-  sendToStage({type:'video-chat-open'});
-  showToast('Video chat opened for audience');
-  showScreen('screen-home');
+// ── VIDEO CHAT TOGGLE ──
+let videoChatActive = false;
+function toggleVideoChat(){
+  videoChatActive = !videoChatActive;
+  const btn = document.getElementById('video-chat-btn');
+  if(videoChatActive){
+    sendToStage({type:'video-chat-open'});
+    btn.textContent = '📹 Video On — Tap to Stop';
+    btn.style.color = 'rgba(0,232,122,.7)';
+    showToast('Video chat opened for audience');
+  } else {
+    sendToStage({type:'video-chat-close'});
+    btn.textContent = '📹 Video with Audience';
+    btn.style.color = 'rgba(255,200,120,.55)';
+    showToast('Video chat closed');
+  }
 }
 
 // ── INVITE ──
