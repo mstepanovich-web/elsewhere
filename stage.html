@@ -43,6 +43,9 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 #ctrl{position:fixed;bottom:16px;right:14px;display:flex;gap:8px;z-index:200;}
 .btn{padding:7px 14px;background:rgba(0,0,0,.7);border:1px solid rgba(255,200,80,.35);border-radius:4px;font-size:10px;letter-spacing:.1em;color:rgba(255,220,150,.92);cursor:pointer;text-transform:uppercase;transition:all .15s;font-family:'DM Mono',monospace;backdrop-filter:blur(4px);}
 .btn:hover{background:rgba(255,200,80,.2);border-color:rgba(255,200,80,.6);color:#fff;}
+.input{width:100%;padding:10px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:rgba(255,220,150,.9);font-size:14px;font-family:'DM Mono',monospace;outline:none;}
+.input::placeholder{color:rgba(255,200,120,.25);}
+.input:focus{border-color:rgba(255,200,80,.35);}
 
 /* Progress */
 #prog{position:fixed;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,.04);z-index:200;}
@@ -146,8 +149,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 .vc-name{position:absolute;bottom:0;left:0;right:0;padding:4px 7px;font-size:10px;color:rgba(255,220,150,.9);background:rgba(0,0,0,.6);letter-spacing:.04em;}
 
 /* Song panel */
-.panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(4,2,6,.97);border:1px solid rgba(255,200,80,.18);border-radius:8px;padding:28px;z-index:800;display:none;min-width:340px;}
-.panel h2{font-family:'Cormorant Garamond',serif;font-size:20px;color:rgba(255,220,150,.85);font-style:italic;text-align:center;margin-bottom:14px;}
+.panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(4,2,6,.97);border:1px solid rgba(255,200,80,.18);border-radius:8px;padding:22px;z-index:800;display:none;min-width:340px;}
+.panel h2{font-family:'Cormorant Garamond',serif;font-size:20px;color:rgba(255,220,150,.85);font-style:italic;margin-bottom:14px;}
 .so{padding:10px 14px;border:1px solid rgba(255,200,80,.1);border-radius:3px;margin-bottom:7px;cursor:pointer;transition:all .15s;}
 .so:hover{background:rgba(255,200,80,.07);border-color:rgba(255,200,80,.28);}
 .so-t{font-family:'Cormorant Garamond',serif;font-size:15px;color:rgba(255,220,150,.75);margin-bottom:2px;}
@@ -236,7 +239,6 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div id="idle-msg">
     <strong>Scan to select a song &amp; use your phone as the mic 🎤</strong>
-    Or use the Song button below
   </div>
   <div id="idle-room">Room · <span id="idle-room-code"></span></div>
 </div>
@@ -271,9 +273,12 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <div id="bar">
   <div class="bi"><div class="dot of" id="sdot"></div><span id="slbl">Camera off</span></div>
   <div id="rcode-wrap" title="Click to copy"><small>Room Code</small><span id="rcode">––––––</span></div>
+  <div id="qr-toggle" onclick="toggleQR()" title="Show QR code"
+    style="font-size:16px;cursor:pointer;padding:4px 6px;opacity:0.6;line-height:1;-webkit-user-select:none;"
+    >⬛</div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.48</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.50</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -285,14 +290,23 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   <div class="btn" onclick="shareInvite()">📨 Invite</div>
   <div class="btn" onclick="showSongs()">🎵 Song</div>
   <div class="btn" onclick="toggleCommentBar()">💬 Comments</div>
-  <div class="btn" id="pbtn" onclick="togglePlay()">▶ Start</div>
 </div>
 <div id="prog"><div id="pf"></div></div>
 
-<div class="panel" id="sp">
-  <h2>Choose Song</h2>
-  <div id="slist"></div>
-  <div style="text-align:center;margin-top:10px"><div class="btn" onclick="hideSongs()">Close</div></div>
+<div class="panel" id="sp" style="min-width:min(400px,90vw);display:none;flex-direction:column;align-items:center;gap:20px;padding:32px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+    <h2 style="margin:0;">Select a Song</h2>
+    <div class="btn" onclick="hideSongs()" style="padding:6px 12px;font-size:10px;">✕ Close</div>
+  </div>
+  <div style="background:#fff;padding:14px;border-radius:8px;">
+    <canvas id="songs-qr-canvas" width="200" height="200"></canvas>
+  </div>
+  <div style="text-align:center;font-size:13px;color:rgba(255,220,150,.7);line-height:1.8;letter-spacing:.04em;">
+    Scan with your phone to search<br>and select a song
+  </div>
+  <div style="font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.12em;text-transform:uppercase;">
+    Room · <span id="songs-room-code"></span>
+  </div>
 </div>
 
 <!-- POSITIONING GUIDE — z-index 500 so it's above everything except start -->
@@ -1514,7 +1528,7 @@ function doPlayWithYT(){
   elapsed=0;
   lIdx=-1;
   clearAllTickers();
-  document.getElementById('pbtn').textContent='⏸ Pause';
+  
   sendMsg({type:'play-start', song:song.title, artist:song.artist, videoId:song.videoId||'', ts:Date.now()});
   ytSongDuration = song.lyrics.length>0 ? song.lyrics[song.lyrics.length-1].t + 10 : 600;
   scheduleZoomsForSong(ytSongDuration);
@@ -1585,25 +1599,23 @@ function resetLyrics(){
   clearAllTickers();
 }
 
+// ── STAGE SONG SEARCH ──
 function showSongs(){
-  const sl=document.getElementById('slist');
-  sl.innerHTML='';
-  SONGS.forEach((s,i)=>{
-    const d=document.createElement('div'); d.className='so';
-    d.innerHTML=`<div class="so-t">${s.title}</div><div class="so-a">${s.artist}</div>`;
-    d.onclick=()=>{
-      song=SONGS[i]; resetPlay(); hideSongs();
-      sendMsg({type:'song-announce',title:s.title});
-      // Pulse QR to prompt singer to use phone as mic
-      pulseQRWidget();
-      showTVSongCard(s.title, s.artist, '');
-    };
-    sl.appendChild(d);
-  });
-  document.getElementById('sp').style.display='block';
+  const singerLink = `${SINGER_URL}?code=${ROOM_CODE}`;
+  document.getElementById('songs-room-code').textContent = ROOM_CODE;
+  const canvas = document.getElementById('songs-qr-canvas');
+  if(canvas) generateQR(singerLink, canvas, 200);
+  document.getElementById('sp').style.display='flex';
 }
-function hideSongs(){document.getElementById('sp').style.display='none';}
-function togglePlay(){playing?doPause():startCountdown();}
+function hideSongs(){ document.getElementById('sp').style.display='none'; }
+
+// ── QR TOGGLE ──
+function toggleQR(){
+  const panel = document.getElementById('idle-panel');
+  const isVisible = panel.style.display === 'flex';
+  if(isVisible){ hideWaitingScreen(); }
+  else{ showWaitingScreen(); }
+}
 function startCountdown(){
   if(guideActive) hideGuide();
   hideWaitingScreen();
@@ -1622,7 +1634,7 @@ function startCountdown(){
   },1000);
 }
 function doPlay(){
-  playing=true; document.getElementById('pbtn').textContent='⏸ Pause';
+  playing=true; 
   sendMsg({type:'play-start',song:song.title,artist:song.artist,ts:Date.now()});
   const songDuration = song.lyrics.length>0 ? song.lyrics[song.lyrics.length-1].t + 5 : 300;
   scheduleZoomsForSong(songDuration);
@@ -1635,14 +1647,14 @@ function doPlay(){
 function doPause(){
   playing=false;
   clearAllTickers();
-  document.getElementById('pbtn').textContent='▶ Resume';
+  
   sendMsg({type:'pause'});
   if(phoneControlled && ytReady && ytPlayer) try{ ytPlayer.pauseVideo(); }catch(e){}
 }
 function resetPlay(){
   doPause();
   elapsed=0; lIdx=-1;
-  document.getElementById('pbtn').textContent='▶ Start';
+  
   document.getElementById('pf').style.width='0%';
   document.getElementById('lm').textContent='';
   document.getElementById('ln').textContent='';
@@ -1922,7 +1934,6 @@ function escTv(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;
 // KEYBOARD
 // ═══════════════════════════════════════
 document.addEventListener('keydown',e=>{
-  if(e.key===' '){e.preventDefault();togglePlay();}
   if(e.key==='f'||e.key==='F'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();}
   if(e.key==='s'||e.key==='S')showSongs();
   if(e.key==='Escape')hideSongs();
