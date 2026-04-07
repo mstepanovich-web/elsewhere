@@ -141,6 +141,8 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 
 <!-- Animated stage background (shown while waiting) -->
 <canvas id="stage-bg"></canvas>
+<!-- YouTube player — 1x1 on-screen so browser allows autoplay -->
+<div id="yt-player" style="position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.01;z-index:1;pointer-events:none;"></div>
 
 <!-- Singer's composited stream — fills screen when connected -->
 <video id="stream" autoplay playsinline></video>
@@ -206,6 +208,7 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 <!-- Agora SDK — try primary CDN, fallback to jsDelivr -->
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
 <script>if(typeof AgoraRTC==='undefined'){document.write('<script src="https://cdn.jsdelivr.net/npm/agora-rtc-sdk-ng@4.20.0/AgoraRTC_N-4.20.0.js"><\/script>');}</script>
+<script src="https://www.youtube.com/iframe_api"></script>
 <script>
 // If primary CDN failed, try fallback
 if (typeof AgoraRTC === 'undefined') {
@@ -403,23 +406,48 @@ function handleMsg(msg) {
   }
   if (msg.type === 'progress') {
     document.getElementById('pf').style.width = (msg.pct||0) + '%';
+    // Keep YouTube in sync — if we drift more than 2 seconds, correct
+    if(ytLoaded && ytReady && msg.elapsed > 0){
+      try{
+        const yt = ytPlayer.getCurrentTime();
+        if(Math.abs(yt - msg.elapsed) > 2) ytPlayer.seekTo(msg.elapsed, true);
+      }catch(e){}
+    }
   }
-  if (msg.type === 'song-announce' || msg.type === 'play-start') {
-    const title = msg.title || msg.song || '';
-    const artist= msg.artist || '';
+  if (msg.type === 'song-announce') {
+    const title  = msg.title || '';
+    const artist = msg.artist || '';
     document.getElementById('song-title').textContent = artist ? `${title} — ${artist}` : title;
-    showToast(`🎵 Now playing: ${title}`);
+    // Preload the YouTube video so it's ready when play-start arrives
+    if(msg.videoId && !msg.isDemo) ytLoad(msg.videoId);
+    showToast(`🎵 ${title}`);
+  }
+  if (msg.type === 'play-start') {
+    const title  = msg.song || msg.title || '';
+    const artist = msg.artist || '';
+    if(title) document.getElementById('song-title').textContent = artist ? `${title} — ${artist}` : title;
+    // Start playback — small delay to account for network latency
+    setTimeout(()=> ytPlay(0), 400);
+    showToast(`▶ ${title}`);
   }
   if (msg.type === 'end') {
+    ytStop();
     showApplause();
     document.getElementById('lm').textContent = '';
     document.getElementById('ln').textContent = '';
     document.getElementById('pf').style.width = '0%';
-    // Show video chat button after song ends
     setTimeout(()=> showVideoChatOffer(), 3000);
   }
   if (msg.type === 'pause') {
+    ytPauseVideo();
     document.getElementById('clbl').textContent = 'Paused';
+  }
+  if (msg.type === 'resume') {
+    ytPlay(msg.elapsed || 0);
+    document.getElementById('clbl').textContent = '';
+  }
+  if (msg.type === 'restart-song') {
+    ytRestart();
   }
   if (msg.type === 'video-chat-available') {
     showVideoChatOffer();
@@ -595,6 +623,74 @@ document.addEventListener('touchmove', e => {
     document.getElementById('code-in').focus();
   }
 })();
+
+// ═══════════════════════════════════════
+// YOUTUBE PLAYER — synced backing track
+// ═══════════════════════════════════════
+let ytPlayer  = null;
+let ytReady   = false;
+let ytPending = null;
+let ytLoaded  = false;
+
+window.onYouTubeIframeAPIReady = function(){
+  ytPlayer = new YT.Player('yt-player', {
+    height:'1', width:'1',
+    playerVars:{ autoplay:0, controls:0, disablekb:1, fs:0, playsinline:1 },
+    events:{
+      onReady: (e)=>{
+        ytReady = true;
+        // Warm up — unlocks autoplay on iOS/Chrome for future calls
+        try{
+          e.target.mute();
+          e.target.playVideo();
+          setTimeout(()=>{ try{ e.target.pauseVideo(); e.target.unMute(); }catch(ex){} }, 200);
+        }catch(ex){}
+        if(ytPending){
+          setTimeout(()=>{
+            ytPlayer.loadVideoById({ videoId:ytPending.videoId, startSeconds:ytPending.seekTo||0 });
+            ytPending = null;
+          }, 300);
+        }
+      },
+      onError: e=>{ console.warn('Audience YT error:', e.data); }
+    }
+  });
+};
+
+function ytLoad(videoId){
+  if(!videoId || videoId.startsWith('d')) return; // skip demo IDs
+  ytLoaded = true;
+  if(ytReady){
+    ytPlayer.loadVideoById(videoId);
+    ytPlayer.pauseVideo(); // preload but wait for play-start signal
+  } else {
+    ytPending = { videoId, seekTo:0 };
+  }
+}
+
+function ytPlay(seekTo){
+  if(!ytLoaded) return;
+  if(!ytReady){ if(ytPending) ytPending.seekTo = seekTo||0; return; }
+  try{
+    if(seekTo > 1) ytPlayer.seekTo(seekTo, true);
+    ytPlayer.playVideo();
+  }catch(e){ console.warn('YT play:', e); }
+}
+
+function ytPauseVideo(){
+  if(!ytReady || !ytLoaded) return;
+  try{ ytPlayer.pauseVideo(); }catch(e){}
+}
+
+function ytRestart(){
+  if(!ytReady || !ytLoaded) return;
+  try{ ytPlayer.seekTo(0, true); ytPlayer.playVideo(); }catch(e){}
+}
+
+function ytStop(){
+  if(!ytReady || !ytLoaded) return;
+  try{ ytPlayer.stopVideo(); ytLoaded=false; }catch(e){}
+}
 
 // ═══════════════════════════════════════
 // VIDEO CHAT
