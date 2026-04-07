@@ -219,9 +219,9 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <video id="webcam" autoplay playsinline muted></video>
 <canvas id="proc"></canvas>
 <canvas id="maskc"></canvas>
-<!-- YouTube player — must be on-screen for IFrame API to initialize -->
-<div style="position:fixed;bottom:0;left:0;width:320px;height:180px;z-index:1;opacity:0;pointer-events:none;overflow:hidden;">
-  <div id="yt-player"></div>
+<!-- YouTube player — visibility:hidden keeps it in layout but invisible -->
+<div id="yt-container" style="position:fixed;bottom:0;left:0;width:320px;height:180px;z-index:1;visibility:hidden;pointer-events:none;">
+  <div id="yt-player" style="width:320px;height:180px;"></div>
 </div>
 
 <!-- On-screen debug log -->
@@ -277,6 +277,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   <div id="rcode-wrap" title="Click to copy"><small>Room Code</small><span id="rcode">––––––</span></div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
+    <div class="bi" style="color:rgba(255,200,80,.25);font-size:8px;">v0.42</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -1132,6 +1133,12 @@ async function initAgora(){
     document.getElementById('albl').textContent='0 watching';
     log('Agora joined channel: '+CHANNEL, 'ok');
 
+    // Watchdog — YT API should have fired by now
+    setTimeout(()=>{
+      if(!ytReady) log('⚠️ YT player never initialized — YouTube may be blocked', 'err');
+      else log('YT ready confirmed ✓', 'ok');
+    }, 5000);
+
     // Poll remote users — catches audio tracks that were published before we joined
     // or that user-published missed in live host-to-host mode
     setInterval(async()=>{
@@ -1369,6 +1376,7 @@ const YT_STATES = {'-1':'unstarted','0':'ended','1':'playing','2':'paused','3':'
 let ytSongStartTime = 0; // wall-clock ms when ytPlaySong was called
 
 window.onYouTubeIframeAPIReady = function(){
+  log('YT API loaded — creating player', 'ok');
   log('YT API loaded — creating player', 'ok');
   ytPlayer = new YT.Player('yt-player',{
     width:'320', height:'180',
