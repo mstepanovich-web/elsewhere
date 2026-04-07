@@ -280,7 +280,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.60</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.63</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -1228,7 +1228,8 @@ function handleAudienceMsg(msg){
 
   if(msg.type==='stop-song'){
     if(playing) doEnd();
-    else { resetPlay(); resetLyrics(); phoneControlled=false; }
+    else { resetPlay(); resetLyrics(); }
+    // Keep phoneControlled=true and song intact so singer can restart
   }
 
   if(msg.type==='restart-song'){
@@ -1400,26 +1401,12 @@ window.onYouTubeIframeAPIReady = function(){
       onReady: ()=>{
         ytReady=true;
         log('YT player ready ✓', 'ok');
-        // Warm up autoplay — play a very short silent video to unlock
-        // browser autoplay policy while we still have gesture context
-        try{
-          // Use a known very short YouTube video as a warmup
-          ytPlayer.mute();
-          ytPlayer.loadVideoById('HgzGwKwLmgM'); // 1-second silent video
-          setTimeout(()=>{
-            try{
-              ytPlayer.stopVideo();
-              ytPlayer.unMute();
-              log('YT: autoplay unlocked ✓', 'ok');
-            }catch(e){}
-          }, 1500);
-        }catch(e){}
+        // No warmup video needed — autoplay is handled by loadVideoById
+        log('YT ready — waiting for song selection', 'ok');
         if(ytPendingId){
-          setTimeout(()=>{
-            log('YT: loading pending video: '+ytPendingId);
-            ytPlayer.loadVideoById(ytPendingId);
-            ytPendingId=null;
-          }, 2000);
+          log('YT: loading pending video: '+ytPendingId);
+          ytPlayer.loadVideoById(ytPendingId);
+          ytPendingId=null;
         }
       },
       onStateChange: e=>{
@@ -1508,6 +1495,7 @@ function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
   }
   song = { videoId, title, artist, lyrics: mapped };
   phoneControlled = true;
+  resetLyrics(); // clear any previous lyrics from display
   log('Song loaded: "'+title+'" — '+song.lyrics.length+' lyric lines', song.lyrics.length>0?'ok':'warn');
   if(song.lyrics.length>0) log('  first lyric t='+song.lyrics[0].t+': "'+song.lyrics[0].m+'"');
 
@@ -1525,6 +1513,7 @@ function doPlayWithYT(){
   playing=true;
   elapsed=0;
   lIdx=-1;
+  resetLyrics(); // ensure clean lyrics state on every new performance
   clearAllTickers();
   document.getElementById('stage-stop-btn').style.display='block';
   sendMsg({type:'play-start', song:song.title, artist:song.artist, videoId:song.videoId||'', ts:Date.now()});
@@ -1679,15 +1668,13 @@ function doEnd(){
   if(phoneControlled && ytReady && ytPlayer) try{ ytPlayer.stopVideo(); }catch(e){}
   sendMsg({type:'end'});
   sendMsg({type:'song-ended'});
-  // Spawn a few reactions
   for(let i=0;i<6;i++) setTimeout(()=>spawnRx(['🔥','⭐','💫','👏'][Math.floor(Math.random()*4)],Math.random()*90+5),i*150);
-  // Immediately clear all overlays — just show singer on stage
   hideTVSongCard();
   hideTVSearch();
   document.getElementById('lm').textContent='';
   document.getElementById('ln').textContent='';
   resetPlay();
-  phoneControlled=false;
+  // Keep phoneControlled=true and song intact — singer can start same song again
 }
 
 // ═══════════════════════════════════════
