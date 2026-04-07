@@ -1190,7 +1190,8 @@ function handleAudienceMsg(msg){
 
   if(msg.type==='restart-song'){
     doPause();
-    elapsed=0; lIdx=-1;
+    resetLyrics();
+    elapsed=0;
     document.getElementById('pf').style.width='0%';
     document.getElementById('lm').textContent='';
     document.getElementById('ln').textContent='';
@@ -1232,7 +1233,9 @@ function handleAudienceMsg(msg){
     sendMsg({type:'video-chat-available'});
   }
 
-  if(msg.type==='toggle-comments'){ toggleCommentBar(); }
+  if(msg.type==='lyrics-start'){
+    startLyricsTicker();
+  }
 
   // ── Audience video chat ──
   if(msg.type==='video-chat-join'){
@@ -1332,15 +1335,9 @@ window.onYouTubeIframeAPIReady = function(){
         if(e.data===YT.PlayerState.PLAYING){
           const ct = ytPlayer.getCurrentTime();
           log('YT: playing — getCurrentTime: '+Math.round(ct)+'s');
-          // Start lyrics ticker now — synced to actual audio start
-          if(playing && phoneControlled){
-            clearAllTickers();
-            ticker=setInterval(()=>{
-              try{ elapsed = ytPlayer.getCurrentTime(); }catch(ex){ elapsed+=0.1; }
-              updL(); updP();
-            },100);
-            log('Lyrics ticker started at YT time '+Math.round(ct)+'s', 'ok');
-          }
+          // DON'T auto-start lyrics ticker here
+          // Singer manually triggers lyrics via lyrics-start message
+          log('Song playing — waiting for singer to tap Start Lyrics', 'ok');
         }
       },
       onError: e=>{
@@ -1392,12 +1389,20 @@ function ytPlaySong(videoId){
 }
 
 function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
-  song = {
-    videoId, title, artist,
-    lyrics: lyrics.length>0
-      ? lyrics.map((l,i)=>({t: l.time ?? l.t ?? 0, m: l.text ?? l.m ?? '', n: lyrics[i+1]?.text ?? lyrics[i+1]?.m ?? ''}))
-      : []
-  };
+  // Map and trim leading silence from LRC timestamps
+  let mapped = lyrics.length>0
+    ? lyrics.map((l,i)=>({t: l.time ?? l.t ?? 0, m: (l.text ?? l.m ?? '').trim(), n: (lyrics[i+1]?.text ?? lyrics[i+1]?.m ?? '').trim()}))
+    : [];
+  // Remove leading blank lines
+  while(mapped.length && !mapped[0].m) mapped.shift();
+  // Subtract the offset so first lyric is at t=0
+  // Singer taps Start Lyrics right as they want the first line to appear
+  if(mapped.length > 0){
+    const offset = mapped[0].t;
+    mapped = mapped.map(l=>({...l, t: Math.max(0, l.t - offset)}));
+    log('Lyrics trimmed — offset was '+Math.round(offset)+'s, '+mapped.length+' lines remain', 'ok');
+  }
+  song = { videoId, title, artist, lyrics: mapped };
   phoneControlled = true;
   log('Song loaded: "'+title+'" — '+song.lyrics.length+' lyric lines', song.lyrics.length>0?'ok':'warn');
   if(song.lyrics.length>0) log('  first lyric t='+song.lyrics[0].t+': "'+song.lyrics[0].m+'"');
@@ -1456,7 +1461,31 @@ function clearAllTickers(){
   if(ticker2){ clearInterval(ticker2); ticker2=null; }
 }
 
-let song=SONGS[0],playing=false,elapsed=0,lIdx=-1;
+let lyricsRunning = false;
+let lyricsStartTime = 0;
+
+function startLyricsTicker(){
+  if(lyricsRunning) return;
+  lyricsRunning = true;
+  lyricsStartTime = Date.now();
+  lIdx = -1;
+  log('Lyrics started ✓', 'ok');
+  clearAllTickers();
+  ticker = setInterval(()=>{
+    const le = (Date.now() - lyricsStartTime) / 1000;
+    updL(le);
+    updP();
+  }, 100);
+}
+
+function resetLyrics(){
+  lyricsRunning = false;
+  lyricsStartTime = 0;
+  lIdx = -1;
+  document.getElementById('lm').textContent = '';
+  document.getElementById('ln').textContent = '';
+  clearAllTickers();
+}
 
 function showSongs(){
   const sl=document.getElementById('slist');
@@ -1513,11 +1542,24 @@ function doPause(){
   if(phoneControlled && ytReady && ytPlayer) try{ ytPlayer.pauseVideo(); }catch(e){}
 }
 function resetPlay(){doPause();elapsed=0;lIdx=-1;document.getElementById('pbtn').textContent='▶ Start';document.getElementById('pf').style.width='0%';document.getElementById('lm').textContent='';document.getElementById('ln').textContent='';}
-function updL(){if(!song.lyrics.length)return;let i=-1;for(let j=0;j<song.lyrics.length;j++){if(elapsed>=song.lyrics[j].t)i=j;}if(i!==lIdx){lIdx=i;const m=i>=0?song.lyrics[i].m:'',n=i>=0?(song.lyrics[i].n||''):'';document.getElementById('lm').textContent=m;document.getElementById('ln').textContent=n;sendMsg({type:'lyric',main:m,next:n});}}
+function updL(le){
+  if(!song.lyrics.length) return;
+  const t = (le !== undefined) ? le : elapsed;
+  let i=-1;
+  for(let j=0;j<song.lyrics.length;j++){ if(t>=song.lyrics[j].t) i=j; }
+  if(i!==lIdx){
+    lIdx=i;
+    const m=i>=0?song.lyrics[i].m:'', n=i>=0?(song.lyrics[i].n||''):'';
+    document.getElementById('lm').textContent=m;
+    document.getElementById('ln').textContent=n;
+    sendMsg({type:'lyric',main:m,next:n});
+  }
+}
 function updP(){const pct=Math.min(100,(elapsed/600)*100);document.getElementById('pf').style.width=pct+'%';sendMsg({type:'progress',pct,elapsed});}
 function doEnd(){
   log('doEnd() called — elapsed:'+Math.round(elapsed)+'s', 'warn');
   doPause();
+  resetLyrics();
   if(phoneControlled && ytReady && ytPlayer) try{ ytPlayer.stopVideo(); }catch(e){}
   const msgs=['Bravo!','Amazing!','Encore!','Take a bow!'];
   document.getElementById('apt').textContent=msgs[Math.floor(Math.random()*msgs.length)];
