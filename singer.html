@@ -491,6 +491,8 @@ async function publishMic(){
 }
 
 function unmuteMic(){
+  // iOS suspends AudioContext until user gesture — resume it
+  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   muted=false;
   if(gainNode) gainNode.gain.setTargetAtTime(getVol(),audioCtx.currentTime,0.05);
   updateMicUI();
@@ -503,10 +505,13 @@ function muteMic(){
 function toggleMute(){ muted?unmuteMic():muteMic(); }
 
 function toggleMutePerf(){
+  // toggleMute handles everything including updateMicUI
   toggleMute();
+  // Also sync the perf screen button which updateMicUI doesn't touch
   const btn=document.getElementById('perf-mute-btn');
   const icon=document.getElementById('perf-mute-icon');
   const txt=document.getElementById('perf-mute-txt');
+  // muted is already updated by toggleMute
   if(muted){
     btn.classList.add('muted'); icon.textContent='🔇'; txt.textContent='Tap to unmute';
   } else {
@@ -519,6 +524,13 @@ function updateMicUI(){
   const pill=document.getElementById('mic-pill'),ptxt=document.getElementById('mic-pill-txt');
   if(muted){ btn.classList.add('muted');icon.textContent='🔇';txt.textContent='Tap to go live';pill.classList.remove('ok');ptxt.textContent='Muted'; }
   else { btn.classList.remove('muted');icon.textContent='🎤';txt.textContent='Live — tap to mute';pill.classList.add('ok');ptxt.textContent='Live 🔴'; }
+  // Also sync perf screen if visible
+  const pb=document.getElementById('perf-mute-btn');
+  if(pb){ 
+    const pi=document.getElementById('perf-mute-icon'), pt=document.getElementById('perf-mute-txt');
+    if(muted){pb.classList.add('muted');if(pi)pi.textContent='🔇';if(pt)pt.textContent='Tap to unmute';}
+    else{pb.classList.remove('muted');if(pi)pi.textContent='🎤';if(pt)pt.textContent='Tap to mute';}
+  }
 }
 
 function buildReverb(d){
