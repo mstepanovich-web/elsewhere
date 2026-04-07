@@ -135,18 +135,19 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
 /* ── VIDEO CHAT OVERLAYS ── */
 #videochat-wrap{
-  position:fixed;bottom:60px;left:14px;z-index:200;
-  display:flex;gap:10px;flex-wrap:wrap;max-width:400px;
+  position:fixed;bottom:60px;right:14px;z-index:200;
+  display:flex;gap:12px;flex-wrap:wrap;max-width:calc(100vw - 28px);
+  justify-content:flex-end;
   pointer-events:none;
 }
 .vc-tile{
-  width:140px;height:105px;border-radius:8px;overflow:hidden;
-  border:1px solid rgba(255,200,80,.25);
+  width:320px;height:240px;border-radius:12px;overflow:hidden;
+  border:2px solid rgba(255,200,80,.35);
   background:#0a0508;position:relative;
-  box-shadow:0 4px 20px rgba(0,0,0,.5);
+  box-shadow:0 8px 32px rgba(0,0,0,.7);
 }
 .vc-tile video{width:100%;height:100%;object-fit:cover;}
-.vc-name{position:absolute;bottom:0;left:0;right:0;padding:4px 7px;font-size:10px;color:rgba(255,220,150,.9);background:rgba(0,0,0,.6);letter-spacing:.04em;}
+.vc-name{position:absolute;bottom:0;left:0;right:0;padding:6px 10px;font-size:12px;color:rgba(255,220,150,.9);background:rgba(0,0,0,.6);letter-spacing:.04em;}
 
 /* Song panel */
 .panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(4,2,6,.97);border:1px solid rgba(255,200,80,.18);border-radius:8px;padding:22px;z-index:800;display:none;min-width:340px;}
@@ -280,7 +281,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.71</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.72</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -340,7 +341,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.71</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.72</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1188,6 +1189,8 @@ async function sendMsg(obj){
 function handleAudienceMsg(msg){
   // ── Audience reactions ──
   if(msg.type==='cheer'){ spawnRx('🔥',Math.random()*80+10); playCheer(); sendMsg({type:'cheer-bounce'}); }
+  if(msg.type==='applause'){ spawnRx('👏',Math.random()*80+10); playCheer(); sendMsg({type:'cheer-bounce'}); }
+  if(msg.type==='react'){ spawnRx(msg.emoji||'⭐',Math.random()*80+10); }
   if(msg.type==='comment'){
     spawnComment(msg.text);
     addCommentToBar(msg.text, msg.name||'Guest');
@@ -1917,10 +1920,12 @@ function addVideoChatTile(uid, videoTrack, name){
   if(vcStreams[uid]) return;
   const wrap = document.getElementById('videochat-wrap');
   const tile = document.createElement('div'); tile.className='vc-tile'; tile.id=`vc-${uid}`;
-  const vid = document.createElement('video'); vid.autoplay=true; vid.playsInline=true; vid.muted=true;
-  vid.srcObject = new MediaStream([videoTrack.getMediaStreamTrack()]);
+  const vidWrap = document.createElement('div');
+  vidWrap.style.cssText='width:100%;height:100%;';
   const lbl = document.createElement('div'); lbl.className='vc-name'; lbl.textContent=name||'Guest';
-  tile.appendChild(vid); tile.appendChild(lbl); wrap.appendChild(tile);
+  tile.appendChild(vidWrap); tile.appendChild(lbl); wrap.appendChild(tile);
+  // Use Agora's native play() — more reliable than manual srcObject
+  videoTrack.play(vidWrap);
   vcStreams[uid] = {track:videoTrack, tile};
 }
 
