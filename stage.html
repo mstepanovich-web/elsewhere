@@ -272,13 +272,15 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
 <div id="bar">
   <div class="bi"><div class="dot of" id="sdot"></div><span id="slbl">Camera off</span></div>
-  <div id="rcode-wrap" title="Click to copy"><small>Room Code</small><span id="rcode">––––––</span></div>
-  <div id="qr-toggle" onclick="toggleQR()" title="Show QR code"
-    style="font-size:16px;cursor:pointer;padding:4px 6px;opacity:0.6;line-height:1;-webkit-user-select:none;"
-    >⬛</div>
+  <div style="display:flex;align-items:center;gap:6px;">
+    <div id="rcode-wrap" title="Click to copy"><small>Room Code</small><span id="rcode">––––––</span></div>
+    <div id="qr-toggle" onclick="toggleQR()" title="Show QR code"
+      style="font-size:16px;cursor:pointer;padding:4px 6px;opacity:0.6;line-height:1;-webkit-user-select:none;"
+      >⬛</div>
+  </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.50</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.51</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -1604,7 +1606,7 @@ function showSongs(){
   const singerLink = `${SINGER_URL}?code=${ROOM_CODE}`;
   document.getElementById('songs-room-code').textContent = ROOM_CODE;
   const canvas = document.getElementById('songs-qr-canvas');
-  if(canvas) generateQR(singerLink, canvas, 200);
+  if(canvas) drawQRToCanvas(canvas, singerLink);
   document.getElementById('sp').style.display='flex';
 }
 function hideSongs(){ document.getElementById('sp').style.display='none'; }
