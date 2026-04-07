@@ -53,6 +53,88 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 .rx{position:absolute;font-size:clamp(20px,3vw,42px);animation:rxup 2.8s ease-out forwards;}
 @keyframes rxup{0%{transform:translateY(0);opacity:1}100%{transform:translateY(-110px);opacity:0}}
 
+/* ── WAITING SCREEN ── */
+#waiting{
+  position:fixed;inset:0;z-index:450;
+  background:rgba(0,0,0,.92);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+}
+#waiting h2{font-family:'Cormorant Garamond',serif;font-size:clamp(28px,4vw,52px);color:rgba(255,220,150,.9);font-style:italic;text-align:center;}
+#qr-wrap{
+  background:#fff;padding:18px;border-radius:12px;
+  box-shadow:0 0 60px rgba(255,200,80,.2);
+}
+#qr-canvas{display:block;}
+#waiting-code{font-size:clamp(28px,4vw,52px);letter-spacing:.32em;font-weight:500;color:rgba(255,200,80,.95);text-shadow:0 0 20px rgba(255,200,80,.4);}
+#waiting-hint{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);text-align:center;line-height:2;}
+#waiting-sub{font-size:11px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;}
+
+/* ── SEARCH RESULTS OVERLAY ON TV ── */
+#tv-search{
+  position:fixed;inset:0;z-index:460;
+  background:rgba(0,0,0,.88);
+  display:none;flex-direction:column;
+  padding:40px 5%;
+}
+#tv-search-title{font-family:'Cormorant Garamond',serif;font-size:clamp(18px,2.5vw,36px);color:rgba(255,220,150,.6);font-style:italic;margin-bottom:20px;letter-spacing:.04em;}
+#tv-search-query{font-family:'Cormorant Garamond',serif;font-size:clamp(28px,4vw,58px);color:rgba(255,220,150,.95);font-style:italic;margin-bottom:28px;text-shadow:0 0 30px rgba(255,180,60,.3);}
+#tv-results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;overflow:hidden;}
+.tv-result{
+  background:rgba(255,200,80,.05);border:1px solid rgba(255,200,80,.12);border-radius:8px;
+  padding:14px;cursor:pointer;transition:all .2s;position:relative;
+}
+.tv-result.selected{border-color:rgba(255,200,80,.6);background:rgba(255,200,80,.12);box-shadow:0 0 20px rgba(255,200,80,.15);}
+.tv-result-num{position:absolute;top:10px;left:12px;font-size:11px;color:rgba(255,200,120,.4);letter-spacing:.08em;}
+.tv-result-thumb{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:4px;background:rgba(255,200,80,.06);margin-bottom:8px;}
+.tv-result-title{font-size:clamp(11px,1.2vw,16px);color:rgba(255,220,150,.85);line-height:1.3;margin-bottom:4px;}
+.tv-result-meta{font-size:clamp(9px,0.9vw,12px);color:rgba(255,200,120,.4);letter-spacing:.04em;}
+
+/* ── SELECTED SONG CARD ON TV ── */
+#tv-song-card{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:455;display:none;
+  flex-direction:column;align-items:center;gap:16px;
+  background:rgba(4,2,6,.95);border:1px solid rgba(255,200,80,.2);
+  border-radius:12px;padding:32px 40px;text-align:center;
+  box-shadow:0 0 80px rgba(255,180,60,.1);
+  min-width:340px;
+}
+#tv-song-thumb{width:180px;height:120px;object-fit:cover;border-radius:6px;background:rgba(255,200,80,.06);}
+#tv-song-title{font-family:'Cormorant Garamond',serif;font-size:clamp(22px,3vw,42px);color:rgba(255,220,150,.95);font-style:italic;line-height:1.2;}
+#tv-song-artist{font-size:12px;color:rgba(255,200,120,.5);letter-spacing:.1em;text-transform:uppercase;}
+#tv-song-hint{font-size:11px;color:rgba(255,200,120,.25);letter-spacing:.1em;text-transform:uppercase;margin-top:4px;}
+
+/* ── COMMENT BAR ── */
+#comment-bar{
+  position:fixed;right:0;top:42px;bottom:3px;
+  width:280px;z-index:200;
+  background:rgba(4,2,6,.85);backdrop-filter:blur(8px);
+  border-left:1px solid rgba(255,200,80,.1);
+  display:none;flex-direction:column;
+  transform:translateX(100%);transition:transform .3s ease;
+}
+#comment-bar.open{transform:translateX(0);}
+#cb-header{padding:12px 14px;border-bottom:1px solid rgba(255,200,80,.08);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.4);display:flex;justify-content:space-between;align-items:center;}
+#cb-close{cursor:pointer;color:rgba(255,200,120,.4);font-size:14px;}
+#cb-feed{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:8px;}
+.cb-item{font-size:12px;color:rgba(255,220,150,.8);padding:7px 10px;background:rgba(255,200,80,.04);border-radius:6px;border-left:2px solid rgba(255,200,80,.2);line-height:1.5;}
+.cb-item .cb-name{font-size:10px;color:rgba(255,200,120,.4);margin-bottom:2px;letter-spacing:.06em;}
+
+/* ── VIDEO CHAT OVERLAYS ── */
+#videochat-wrap{
+  position:fixed;bottom:60px;left:14px;z-index:200;
+  display:flex;gap:10px;flex-wrap:wrap;max-width:400px;
+  pointer-events:none;
+}
+.vc-tile{
+  width:140px;height:105px;border-radius:8px;overflow:hidden;
+  border:1px solid rgba(255,200,80,.25);
+  background:#0a0508;position:relative;
+  box-shadow:0 4px 20px rgba(0,0,0,.5);
+}
+.vc-tile video{width:100%;height:100%;object-fit:cover;}
+.vc-name{position:absolute;bottom:0;left:0;right:0;padding:4px 7px;font-size:10px;color:rgba(255,220,150,.9);background:rgba(0,0,0,.6);letter-spacing:.04em;}
+
 /* Song panel */
 .panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(4,2,6,.97);border:1px solid rgba(255,200,80,.18);border-radius:8px;padding:28px;z-index:800;display:none;min-width:340px;}
 .panel h2{font-family:'Cormorant Garamond',serif;font-size:20px;color:rgba(255,220,150,.85);font-style:italic;text-align:center;margin-bottom:14px;}
@@ -116,6 +198,45 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <div id="rx"></div>
 <div id="lw"><div id="lm"></div><div id="ln"></div></div>
 
+<!-- WAITING SCREEN — shown before singer connects -->
+<div id="waiting">
+  <h2>Step on Stage</h2>
+  <div id="qr-wrap"><canvas id="qr-canvas" width="200" height="200"></canvas></div>
+  <div id="waiting-code"></div>
+  <div id="waiting-hint">
+    Scan to open the Singer App on your phone<br>
+    Or go to <span id="waiting-url" style="color:rgba(255,200,80,.6);"></span>
+  </div>
+  <div id="waiting-sub">Room code: <span id="waiting-room"></span></div>
+</div>
+
+<!-- TV SEARCH RESULTS OVERLAY -->
+<div id="tv-search">
+  <div id="tv-search-title">Searching for</div>
+  <div id="tv-search-query"></div>
+  <div id="tv-results-grid"></div>
+</div>
+
+<!-- SELECTED SONG CARD -->
+<div id="tv-song-card">
+  <img id="tv-song-thumb" src="" alt="">
+  <div id="tv-song-title"></div>
+  <div id="tv-song-artist"></div>
+  <div id="tv-song-hint">Ready when you are · tap Start on your phone</div>
+</div>
+
+<!-- COMMENT BAR -->
+<div id="comment-bar">
+  <div id="cb-header">
+    <span>Live Comments</span>
+    <span id="cb-close" onclick="toggleCommentBar()">✕</span>
+  </div>
+  <div id="cb-feed"></div>
+</div>
+
+<!-- VIDEO CHAT TILES -->
+<div id="videochat-wrap"></div>
+
 <div id="bar">
   <div class="bi"><div class="dot of" id="sdot"></div><span id="slbl">Camera off</span></div>
   <div id="rcode-wrap" title="Click to copy"><small>Room Code</small><span id="rcode">––––––</span></div>
@@ -131,6 +252,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <div id="ctrl">
   <div class="btn" onclick="shareInvite()">📨 Invite</div>
   <div class="btn" onclick="showSongs()">🎵 Song</div>
+  <div class="btn" onclick="toggleCommentBar()">💬 Comments</div>
   <div class="btn" id="pbtn" onclick="togglePlay()">▶ Start</div>
 </div>
 <div id="prog"><div id="pf"></div></div>
@@ -183,6 +305,7 @@ if (typeof AgoraRTC === 'undefined') {
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 <script src="https://www.youtube.com/iframe_api"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
 <script>
 'use strict';
@@ -893,8 +1016,20 @@ async function initAgora(){
     agoraClient=AgoraRTC.createClient({mode:'live',codec:'vp8'});
     agoraClient.setClientRole('host');
     agoraClient.on('user-joined',()=>{ document.getElementById('adot').className='dot ok'; updateWatchers(1); });
-    agoraClient.on('user-left', ()=>updateWatchers(-1));
+    agoraClient.on('user-left', uid=>{ updateWatchers(-1); removeVideoChatTile(uid); });
     agoraClient.on('stream-message',(uid,data)=>{ try{ handleAudienceMsg(JSON.parse(new TextDecoder().decode(data))); }catch(e){} });
+    // Subscribe to audience video chat streams
+    agoraClient.on('user-published', async(user, mediaType)=>{
+      await agoraClient.subscribe(user, mediaType);
+      if(mediaType==='video'){
+        // Only show video tile if this is a video chat participant (not the singer phone)
+        addVideoChatTile(user.uid, user.videoTrack, `Guest`);
+        // Also activate singer mic for conversation
+        if(localAudioTrack) localAudioTrack.setVolume(100);
+        showToast('📹 Audience video chat started');
+      }
+      if(mediaType==='audio') user.audioTrack.play();
+    });
     await agoraClient.join(AGORA_APP_ID,CHANNEL,null,null);
     agoraReady=true;
     document.getElementById('adot').className='dot ok';
@@ -949,27 +1084,87 @@ async function sendMsg(obj){
 function handleAudienceMsg(msg){
   // ── Audience reactions ──
   if(msg.type==='cheer'){ spawnRx('🔥',Math.random()*80+10); playCheer(); sendMsg({type:'cheer-bounce'}); }
-  if(msg.type==='comment'){ spawnComment(msg.text); }
+  if(msg.type==='comment'){
+    spawnComment(msg.text);
+    addCommentToBar(msg.text, msg.name||'Guest');
+  }
   if(msg.type==='zoom'){ triggerZoom(); }
 
   // ── Singer phone remote control ──
   if(msg.type==='mic-connected'){
-    // Phone mic is now live — mute the laptop mic audio track
     if(localAudioTrack){ localAudioTrack.setVolume(0); }
     showToast('📱 Phone mic connected');
+    hideWaitingScreen();
+  }
+
+  if(msg.type==='tv-search'){
+    showTVSearch(msg.query, msg.results||[]);
+  }
+
+  if(msg.type==='tv-result-highlight'){
+    highlightTVResult(msg.index);
   }
 
   if(msg.type==='song-select'){
-    // Singer picked a song from the phone
+    hideTVSearch();
+    showTVSongCard(msg.title, msg.artist, msg.thumb||'');
     loadYouTubeSong(msg.videoId, msg.title, msg.artist, msg.lyrics||[], msg.isDemo||false);
   }
 
   if(msg.type==='start-countdown'){
+    hideTVSongCard();
     startCountdown();
   }
 
-  if(msg.type==='stop-song'){
-    doEnd();
+  if(msg.type==='stop-song'){ doEnd(); }
+
+  if(msg.type==='restart-song'){
+    // Restart from beginning — stop current playback, reset elapsed, restart
+    doPause();
+    elapsed=0; lIdx=-1;
+    document.getElementById('pf').style.width='0%';
+    document.getElementById('lm').textContent='';
+    document.getElementById('ln').textContent='';
+    if(phoneControlled && ytReady && ytPlayer){
+      try{ ytPlayer.seekTo(0); ytPlayer.playVideo(); }catch(e){}
+    }
+    doPlay();
+    showToast('↩ Restarting song');
+  }
+
+  if(msg.type==='resume'){
+    if(!playing) doPlay();
+  }
+
+  if(msg.type==='countdown-pause'){
+    // Freeze the stage countdown display
+    const n=document.getElementById('cdn');
+    if(n) n.style.opacity='0.4';
+  }
+
+  if(msg.type==='countdown-resume'){
+    const n=document.getElementById('cdn');
+    if(n) n.style.opacity='1';
+  }
+
+  if(msg.type==='countdown-cancel'){
+    // Hide countdown, reset
+    document.getElementById('cd').style.display='none';
+    hideTVSongCard();
+    showWaitingScreen();
+  }
+
+  if(msg.type==='video-chat-open'){
+    showToast('📹 Audience can now join video chat');
+    sendMsg({type:'video-chat-available'});
+  }
+
+  if(msg.type==='toggle-comments'){ toggleCommentBar(); }
+
+  // ── Audience video chat ──
+  if(msg.type==='video-chat-join'){
+    // Handled via user-published event below
+    showToast(`📹 ${msg.name||'Guest'} joined video chat`);
   }
 }
 
@@ -1153,17 +1348,135 @@ function renderLoop(){
 // ENTER STAGE — single entry point
 // ═══════════════════════════════════════
 function enterStage(){
-  // 1. Hide start screen
   document.getElementById('start').style.display='none';
-  // 2. Show guide immediately (before camera — guide shows dark oval until camera arrives)
+  // Show waiting screen with QR code while singer connects
+  showWaitingScreen();
   showGuide();
-  // 3. Start camera (single stream, shared by guide + compositor + pose)
   startEverything();
-  // 4. Connect to Agora
   initAgora();
-  // 5. Begin render loop
   renderLoop();
 }
+
+// ═══════════════════════════════════════
+// WAITING SCREEN + QR CODE
+// ═══════════════════════════════════════
+const SINGER_URL = 'https://mstepanovich-web.github.io/elsewhere/singer.html';
+
+function showWaitingScreen(){
+  const singerLink = `${SINGER_URL}?code=${ROOM_CODE}`;
+  document.getElementById('waiting-code').textContent = ROOM_CODE;
+  document.getElementById('waiting-room').textContent = ROOM_CODE;
+  document.getElementById('waiting-url').textContent = 'elsewhere/singer.html';
+  document.getElementById('waiting').style.display = 'flex';
+  // Generate QR code using canvas
+  if(typeof QRCode !== 'undefined'){
+    QRCode.toCanvas(document.getElementById('qr-canvas'), singerLink, {
+      width:200, margin:1, color:{dark:'#000000',light:'#ffffff'}
+    }, err=>{ if(err) console.warn('QR error:',err); });
+  }
+}
+
+function hideWaitingScreen(){
+  document.getElementById('waiting').style.display = 'none';
+}
+
+// ═══════════════════════════════════════
+// TV SEARCH OVERLAY
+// ═══════════════════════════════════════
+let tvSearchResults = [];
+
+function showTVSearch(query, results){
+  tvSearchResults = results;
+  document.getElementById('tv-search-query').textContent = `"${query}"`;
+  document.getElementById('tv-search-title').textContent = results.length ? 'Results for' : 'No results for';
+  const grid = document.getElementById('tv-results-grid');
+  grid.innerHTML = '';
+  results.slice(0,6).forEach((r,i)=>{
+    const el = document.createElement('div');
+    el.className = 'tv-result';
+    el.innerHTML = `
+      <div class="tv-result-num">${i+1}</div>
+      <img class="tv-result-thumb" src="${r.thumb||''}" loading="lazy" onerror="this.style.display='none'">
+      <div class="tv-result-title">${escTv(r.title)}</div>
+      <div class="tv-result-meta">${escTv(r.artist||'')}</div>
+    `;
+    grid.appendChild(el);
+  });
+  document.getElementById('tv-search').style.display = 'flex';
+  document.getElementById('tv-song-card').style.display = 'none';
+}
+
+function highlightTVResult(index){
+  document.querySelectorAll('.tv-result').forEach((el,i)=>{
+    el.classList.toggle('selected', i===index);
+  });
+}
+
+function hideTVSearch(){
+  document.getElementById('tv-search').style.display = 'none';
+}
+
+// ═══════════════════════════════════════
+// SELECTED SONG CARD ON TV
+// ═══════════════════════════════════════
+function showTVSongCard(title, artist, thumb){
+  hideTVSearch();
+  document.getElementById('tv-song-title').textContent = title;
+  document.getElementById('tv-song-artist').textContent = artist;
+  const img = document.getElementById('tv-song-thumb');
+  if(thumb){ img.src=thumb; img.style.display='block'; } else { img.style.display='none'; }
+  document.getElementById('tv-song-card').style.display = 'flex';
+}
+
+function hideTVSongCard(){
+  document.getElementById('tv-song-card').style.display = 'none';
+}
+
+// ═══════════════════════════════════════
+// COMMENT BAR
+// ═══════════════════════════════════════
+let commentBarOpen = false;
+
+function toggleCommentBar(){
+  commentBarOpen = !commentBarOpen;
+  const bar = document.getElementById('comment-bar');
+  bar.style.display = 'flex';
+  setTimeout(()=> bar.classList.toggle('open', commentBarOpen), 10);
+  if(!commentBarOpen) setTimeout(()=>{ bar.style.display='none'; }, 320);
+}
+
+function addCommentToBar(text, name){
+  const feed = document.getElementById('cb-feed');
+  const el = document.createElement('div');
+  el.className = 'cb-item';
+  const time = new Date().toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'});
+  el.innerHTML = `<div class="cb-name">${escTv(name||'Guest')} · ${time}</div>${escTv(text)}`;
+  feed.appendChild(el);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+// ═══════════════════════════════════════
+// AUDIENCE VIDEO CHAT TILES
+// ═══════════════════════════════════════
+const vcStreams = {};
+
+function addVideoChatTile(uid, videoTrack, name){
+  if(vcStreams[uid]) return;
+  const wrap = document.getElementById('videochat-wrap');
+  const tile = document.createElement('div'); tile.className='vc-tile'; tile.id=`vc-${uid}`;
+  const vid = document.createElement('video'); vid.autoplay=true; vid.playsInline=true; vid.muted=true;
+  vid.srcObject = new MediaStream([videoTrack.getMediaStreamTrack()]);
+  const lbl = document.createElement('div'); lbl.className='vc-name'; lbl.textContent=name||'Guest';
+  tile.appendChild(vid); tile.appendChild(lbl); wrap.appendChild(tile);
+  vcStreams[uid] = {track:videoTrack, tile};
+}
+
+function removeVideoChatTile(uid){
+  if(!vcStreams[uid]) return;
+  vcStreams[uid].tile.remove(); delete vcStreams[uid];
+}
+
+function escTv(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ═══════════════════════════════════════
 // KEYBOARD
@@ -1189,4 +1502,3 @@ drawStage();
 </script>
 </body>
 </html>
-
