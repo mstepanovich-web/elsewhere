@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.72</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.73</div>
 </div>
 
 <!-- HOME -->
@@ -192,7 +192,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <div id="home-body">
 
     <!-- Version — centered at top -->
-    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.72</div>
+    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.73</div>
 
     <!-- Now Selected — top of screen -->
     <div id="song-card">
@@ -475,10 +475,14 @@ async function doJoin(){
     agoraClient=AgoraRTC.createClient({mode:'live',codec:'vp8'});
     await agoraClient.setClientRole('host');
     agoraClient.on('stream-message',(uid,data)=>{try{handleStageMsg(JSON.parse(new TextDecoder().decode(data)));}catch(e){}});
-    agoraClient.on('user-joined',u=>addAudMember(u.uid,null));
-    agoraClient.on('user-left',  u=>removeAudMember(u.uid));
     await agoraClient.join(AGORA_APP_ID,CHAN_PREFIX+raw,null,null);
+    const selfUID = agoraClient.uid; // singer's own UID
     agoraReady=true;
+    agoraClient.on('user-joined',u=>{
+      if(u.uid===selfUID) return; // skip self
+      addAudMember(u.uid,null);
+    });
+    agoraClient.on('user-left',u=>removeAudMember(u.uid));
     setInterval(()=>{
       if(!agoraClient) return;
       const n=agoraClient.remoteUsers.length;
@@ -532,8 +536,10 @@ function handleStageMsg(msg){
 }
 
 // ── AUDIENCE ──
+let audCounter = 0;
 function addAudMember(uid,name){
-  audienceMembers[uid]=name||`Guest ${Object.keys(audienceMembers).length+1}`;
+  audCounter++;
+  audienceMembers[uid]=name||`Audience ${audCounter}`;
   refreshAudList();
 }
 function removeAudMember(uid){ delete audienceMembers[uid]; refreshAudList(); }
