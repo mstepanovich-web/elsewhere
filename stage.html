@@ -201,8 +201,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <video id="webcam" autoplay playsinline muted></video>
 <canvas id="proc"></canvas>
 <canvas id="maskc"></canvas>
-<!-- YouTube player — 1x1px bottom corner, must be on-screen for autoplay -->
-<div id="yt-player" style="position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.01;z-index:1;"></div>
+<!-- YouTube player — tiny but visible, required for autoplay permission -->
+<div id="yt-player" style="position:fixed;bottom:3px;left:3px;width:2px;height:2px;z-index:1;"></div>
 
 <div id="rx"></div>
 <div id="lw"><div id="lm"></div><div id="ln"></div></div>
@@ -1041,8 +1041,8 @@ function buildPanoramaIfNeeded(){
 // AGORA
 // ═══════════════════════════════════════
 let agoraClient=null, localAudioTrack=null, localVideoTrack=null;
-let agoraReady=false;
-let pendingStream=null;
+let agoraReady=false, pendingStream=null;
+let singerUID = null; // UID of the singer phone — set on mic-connected
 
 async function initAgora(){
   if(typeof AgoraRTC === 'undefined'){
@@ -1055,22 +1055,30 @@ async function initAgora(){
     agoraClient.setClientRole('host');
     agoraClient.on('user-joined',()=>{ document.getElementById('adot').className='dot ok'; updateWatchers(1); });
     agoraClient.on('user-left', uid=>{ updateWatchers(-1); removeVideoChatTile(uid); });
-    agoraClient.on('stream-message',(uid,data)=>{ try{ handleAudienceMsg(JSON.parse(new TextDecoder().decode(data))); }catch(e){} });
-    // Subscribe to audience video chat streams
+    agoraClient.on('stream-message',(uid,data)=>{
+      try{
+        const msg = JSON.parse(new TextDecoder().decode(data));
+        // Track the singer phone's UID
+        if(msg.type==='mic-connected') singerUID = uid;
+        handleAudienceMsg(msg);
+      }catch(e){}
+    });
     agoraClient.on('user-published', async(user, mediaType)=>{
       await agoraClient.subscribe(user, mediaType);
       if(mediaType==='video'){
-        // Only show video tile if this is a video chat participant (not the singer phone)
-        addVideoChatTile(user.uid, user.videoTrack, `Guest`);
-        // Also activate singer mic for conversation
-        if(localAudioTrack) localAudioTrack.setVolume(100);
-        showToast('📹 Audience video chat started');
+        // Audience video chat tile
+        if(user.uid !== singerUID){
+          addVideoChatTile(user.uid, user.videoTrack, 'Guest');
+          showToast('📹 Audience video chat started');
+        }
       }
-      // DO NOT play remote audio on stage — phone mic would feedback through laptop speakers
-      // The phone mic audio goes directly to Agora → audience only
       if(mediaType==='audio'){
-        // Don't call user.audioTrack.play() here — that would cause feedback
-        // The audio track is still in the channel for audience to receive
+        // Play audience video chat audio through stage speakers
+        // But NOT the singer phone mic — that would cause feedback
+        if(user.uid !== singerUID){
+          user.audioTrack.play();
+        }
+        // Singer mic goes to audience only — stage does not play it back
       }
     });
     await agoraClient.join(AGORA_APP_ID,CHANNEL,null,null);
@@ -1149,15 +1157,18 @@ function handleAudienceMsg(msg){
     document.getElementById('lm').textContent='';
     document.getElementById('ln').textContent='';
     if(phoneControlled && ytReady && ytPlayer){
-      try{ ytPlayer.seekTo(0); ytPlayer.playVideo(); }catch(e){}
+      try{ ytPlayer.seekTo(0, true); }catch(e){}
     }
-    doPlay();
+    phoneControlled ? doPlayWithYT() : doPlay();
     sendMsg({type:'restart-song'});
     showToast('↩ Restarting song');
   }
 
   if(msg.type==='resume'){
-    if(!playing){ doPlay(); sendMsg({type:'resume', elapsed}); }
+    if(!playing){
+      phoneControlled ? doPlayWithYT() : doPlay();
+      sendMsg({type:'resume', elapsed});
+    }
   }
 
   if(msg.type==='countdown-pause'){
@@ -1221,26 +1232,14 @@ let phoneControlled = false; // true when singer phone has taken over
 window.onYouTubeIframeAPIReady = function(){
   ytPlayer = new YT.Player('yt-player',{
     height:'1', width:'1',
-    playerVars:{
-      autoplay:0, controls:0, disablekb:1, fs:0,
-      modestbranding:1, playsinline:1, mute:0
-    },
+    playerVars:{ autoplay:0, controls:0, disablekb:1, fs:0, modestbranding:1, playsinline:1 },
     events:{
-      onReady: (e)=>{
+      onReady: ()=>{
         ytReady=true;
         console.log('YT player ready');
-        // Warm up — mute, play 1 frame, pause, unmute
-        // This unlocks autoplay for future playVideo() calls
-        try{
-          e.target.mute();
-          e.target.playVideo();
-          setTimeout(()=>{ try{ e.target.pauseVideo(); e.target.unMute(); }catch(ex){} }, 200);
-        }catch(ex){}
         if(ytPendingId){
-          setTimeout(()=>{
-            ytPlayer.loadVideoById(ytPendingId);
-            ytPendingId=null;
-          }, 300);
+          loadAndPlay(ytPendingId, false);
+          ytPendingId=null;
         }
       },
       onStateChange: e=>{
@@ -1252,13 +1251,32 @@ window.onYouTubeIframeAPIReady = function(){
   });
 };
 
+// Load a video, warm up autoplay, then pause ready for playVideo()
+function loadAndPlay(videoId, autoplay){
+  if(!ytReady || !ytPlayer) return;
+  ytPlayer.loadVideoById(videoId);
+  // After load, do the warm-up gesture then pause
+  setTimeout(()=>{
+    try{
+      ytPlayer.playVideo(); // triggers browser autoplay unlock
+      setTimeout(()=>{
+        try{
+          if(!autoplay) ytPlayer.pauseVideo(); // pause if not ready to play yet
+        }catch(e){}
+      }, 500);
+    }catch(e){}
+  }, 800);
+}
+
 function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
+  console.log('loadYouTubeSong:', {videoId, title, lyricsCount: lyrics.length, firstLyric: lyrics[0]});
   song = {
     videoId, title, artist,
     lyrics: lyrics.length>0
-      ? lyrics.map((l,i)=>({t:l.time, m:l.text, n:lyrics[i+1]?.text||''}))
-      : [{t:0,m:title,n:artist}]
+      ? lyrics.map((l,i)=>({t: l.time ?? l.t ?? 0, m: l.text ?? l.m ?? '', n: lyrics[i+1]?.text ?? lyrics[i+1]?.m ?? ''}))
+      : [{t:0, m:title, n:artist}]
   };
+  console.log('song.lyrics[0]:', song.lyrics[0]);
   phoneControlled = true;
 
   // Update UI
@@ -1266,9 +1284,9 @@ function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
   document.getElementById('ln').textContent='';
   document.getElementById('sp').style.display='none';
 
-  // Load YouTube video (audio only — player is off-screen)
+  // Load YouTube video — warm up autoplay, pause until countdown GO
   if(!isDemo){
-    if(ytReady) ytPlayer.loadVideoById(videoId);
+    if(ytReady) loadAndPlay(videoId, false);
     else ytPendingId = videoId;
   }
 
@@ -1285,12 +1303,26 @@ function doPlayWithYT(){
   const songDuration = song.lyrics.length>0 ? song.lyrics[song.lyrics.length-1].t + 10 : 240;
   scheduleZoomsForSong(songDuration);
 
-  // Tell YouTube to play
+  // Tell YouTube to play from the beginning
   if(phoneControlled && ytReady && ytPlayer){
     try{
+      ytPlayer.seekTo(0, true);
       ytPlayer.playVideo();
-      console.log('YT: playVideo() called');
+      console.log('YT: playVideo() called at GO');
+      // Retry after 2s in case first call didn't stick (buffering)
+      setTimeout(()=>{
+        try{
+          const state = ytPlayer.getPlayerState();
+          // state 1 = playing, 3 = buffering — both are fine
+          if(state !== 1 && state !== 3){
+            console.log('YT: retrying playVideo, state was', state);
+            ytPlayer.playVideo();
+          }
+        }catch(e){}
+      }, 2000);
     }catch(e){ console.warn('YT playVideo error:', e); }
+  } else {
+    console.warn('YT not ready at GO — phoneControlled:', phoneControlled, 'ytReady:', ytReady, 'ytPlayer:', !!ytPlayer);
   }
 
   const startTime = Date.now();
