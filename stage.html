@@ -20,18 +20,18 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 #ln{font-family:'Cormorant Garamond',serif;font-size:clamp(13px,1.8vw,28px);font-weight:300;color:rgba(255,220,150,.38);padding:5px 8% 0;text-shadow:0 0 10px rgba(255,180,60,.3),0 1px 4px #000;}
 
 /* Top bar */
-#bar{position:fixed;top:0;left:0;right:0;height:42px;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:space-between;padding:0 14px;z-index:300;gap:10px;}
+#bar{position:fixed;top:0;left:0;right:0;height:44px;background:rgba(0,0,0,.82);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:space-between;padding:0 14px;z-index:300;gap:10px;border-bottom:1px solid rgba(255,200,80,.12);}
 .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
 .ok{background:#00e87a;box-shadow:0 0 5px #00e87a;}
 .ld{background:#f5c842;animation:blink 1s infinite;}
-.of{background:rgba(255,200,80,.22);}
+.of{background:rgba(255,200,80,.35);}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
-.bi{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,200,120,.4);white-space:nowrap;}
-#rcode-wrap{font-size:15px;letter-spacing:.22em;font-weight:500;color:rgba(255,200,80,.95);text-align:center;cursor:pointer;flex-shrink:0;}
-#rcode-wrap small{display:block;font-size:8px;letter-spacing:.1em;color:rgba(255,200,120,.3);margin-bottom:1px;font-weight:300;}
-#vtoggle{padding:5px 11px;background:rgba(255,200,80,.07);border:1px solid rgba(255,200,80,.18);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.5);cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;}
-#vtoggle:hover{background:rgba(255,200,80,.14);color:rgba(255,220,150,.9);}
-#vtoggle.pano{border-color:rgba(100,200,255,.4);color:rgba(150,220,255,.8);background:rgba(100,200,255,.07);}
+.bi{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,220,150,.65);white-space:nowrap;}
+#rcode-wrap{font-size:15px;letter-spacing:.22em;font-weight:500;color:rgba(255,200,80,.98);text-align:center;cursor:pointer;flex-shrink:0;text-shadow:0 0 10px rgba(255,200,80,.4);}
+#rcode-wrap small{display:block;font-size:8px;letter-spacing:.1em;color:rgba(255,200,120,.5);margin-bottom:1px;font-weight:300;}
+#vtoggle{padding:5px 11px;background:rgba(255,200,80,.12);border:1px solid rgba(255,200,80,.3);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.85);cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;}
+#vtoggle:hover{background:rgba(255,200,80,.22);color:#fff;}
+#vtoggle.pano{border-color:rgba(100,200,255,.5);color:rgba(180,230,255,.9);background:rgba(100,200,255,.12);}
 
 /* Compass */
 #compass{position:fixed;top:50px;right:14px;z-index:200;text-align:center;display:none;}
@@ -41,8 +41,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
 /* Controls */
 #ctrl{position:fixed;bottom:16px;right:14px;display:flex;gap:8px;z-index:200;}
-.btn{padding:6px 12px;background:rgba(255,200,80,.07);border:1px solid rgba(255,200,80,.14);border-radius:3px;font-size:10px;letter-spacing:.1em;color:rgba(255,220,150,.5);cursor:pointer;text-transform:uppercase;transition:all .15s;font-family:'DM Mono',monospace;}
-.btn:hover{background:rgba(255,200,80,.14);color:rgba(255,220,150,.9);}
+.btn{padding:7px 14px;background:rgba(0,0,0,.7);border:1px solid rgba(255,200,80,.35);border-radius:4px;font-size:10px;letter-spacing:.1em;color:rgba(255,220,150,.92);cursor:pointer;text-transform:uppercase;transition:all .15s;font-family:'DM Mono',monospace;backdrop-filter:blur(4px);}
+.btn:hover{background:rgba(255,200,80,.2);border-color:rgba(255,200,80,.6);color:#fff;}
 
 /* Progress */
 #prog{position:fixed;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,.04);z-index:200;}
@@ -53,21 +53,30 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 .rx{position:absolute;font-size:clamp(20px,3vw,42px);animation:rxup 2.8s ease-out forwards;}
 @keyframes rxup{0%{transform:translateY(0);opacity:1}100%{transform:translateY(-110px);opacity:0}}
 
-/* ── WAITING SCREEN ── */
-#waiting{
-  position:fixed;inset:0;z-index:450;
-  background:rgba(0,0,0,.92);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+/* ── IDLE PANEL — centre stage, shown when no song selected ── */
+#idle-panel{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:200;display:none;
+  flex-direction:column;align-items:center;gap:14px;
+  text-align:center;
+  background:rgba(4,2,6,.82);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,200,80,.18);border-radius:14px;
+  padding:28px 32px;
 }
-#waiting h2{font-family:'Cormorant Garamond',serif;font-size:clamp(28px,4vw,52px);color:rgba(255,220,150,.9);font-style:italic;text-align:center;}
-#qr-wrap{
-  background:#fff;padding:18px;border-radius:12px;
-  box-shadow:0 0 60px rgba(255,200,80,.2);
+#idle-panel.pulse{
+  border-color:rgba(255,200,80,.7);
+  animation:qr-pulse 1.2s infinite;
 }
-#qr-canvas{display:block;}
-#waiting-code{font-size:clamp(28px,4vw,52px);letter-spacing:.32em;font-weight:500;color:rgba(255,200,80,.95);text-shadow:0 0 20px rgba(255,200,80,.4);}
-#waiting-hint{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);text-align:center;line-height:2;}
-#waiting-sub{font-size:11px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;}
+@keyframes qr-pulse{
+  0%{box-shadow:0 0 0 0 rgba(255,200,80,.5);}
+  70%{box-shadow:0 0 0 16px rgba(255,200,80,0);}
+  100%{box-shadow:0 0 0 0 rgba(255,200,80,0);}
+}
+#idle-qr-wrap{background:#fff;padding:12px;border-radius:8px;}
+#idle-qr-canvas{display:block;}
+#idle-msg{font-size:13px;color:rgba(255,220,150,.85);letter-spacing:.06em;line-height:1.8;max-width:240px;}
+#idle-msg strong{color:rgba(255,220,150,.95);display:block;font-size:15px;margin-bottom:4px;font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:300;}
+#idle-room{font-size:11px;color:rgba(255,200,120,.4);letter-spacing:.16em;text-transform:uppercase;margin-top:4px;}
 
 /* ── SEARCH RESULTS OVERLAY ON TV ── */
 #tv-search{
@@ -192,22 +201,22 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <video id="webcam" autoplay playsinline muted></video>
 <canvas id="proc"></canvas>
 <canvas id="maskc"></canvas>
-<!-- Hidden YouTube player — audio source only, not visible to audience -->
-<div id="yt-player" style="position:fixed;left:-9999px;width:1px;height:1px;"></div>
+<!-- YouTube player — 1x1px bottom corner, must be on-screen for autoplay -->
+<div id="yt-player" style="position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.01;z-index:1;"></div>
 
 <div id="rx"></div>
 <div id="lw"><div id="lm"></div><div id="ln"></div></div>
 
-<!-- WAITING SCREEN — shown before singer connects -->
-<div id="waiting">
-  <h2>Step on Stage</h2>
-  <div id="qr-wrap"><canvas id="qr-canvas" width="200" height="200"></canvas></div>
-  <div id="waiting-code"></div>
-  <div id="waiting-hint">
-    Scan to open the Singer App on your phone<br>
-    Or go to <span id="waiting-url" style="color:rgba(255,200,80,.6);"></span>
+<!-- IDLE PANEL — centre stage, shown after guide until song selected -->
+<div id="idle-panel">
+  <div style="background:#fff;padding:14px;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+    <canvas id="idle-qr-canvas" width="160" height="160"></canvas>
   </div>
-  <div id="waiting-sub">Room code: <span id="waiting-room"></span></div>
+  <div id="idle-msg">
+    <strong>Scan to select a song &amp; use your phone as the mic 🎤</strong>
+    Or use the Song button below
+  </div>
+  <div id="idle-room">Room · <span id="idle-room-code"></span></div>
 </div>
 
 <!-- TV SEARCH RESULTS OVERLAY -->
@@ -305,7 +314,6 @@ if (typeof AgoraRTC === 'undefined') {
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
 <script>
 'use strict';
@@ -621,48 +629,46 @@ let segOk      = false;
 let poseInst   = null;   // MediaPipe Pose instance for hand detection
 
 function startEverything(){
-  // Request camera AND mic in one call
+  // VIDEO ONLY — no laptop mic. Phone is the mic. No feedback possible.
   navigator.mediaDevices.getUserMedia({
     video: { width:640, height:480, facingMode:'user' },
-    audio: true
+    audio: false
   })
   .then(stream => {
     camStream = stream;
     camVideo  = document.getElementById('webcam');
-    // Video-only stream for the video element (muted to avoid echo)
-    const videoOnly = new MediaStream(stream.getVideoTracks());
-    camVideo.srcObject = videoOnly;
+    camVideo.srcObject = stream;
     camVideo.onloadedmetadata = () => {
       camVideo.play();
       startSegmentation(camVideo);
       startPoseDetection(camVideo);
-      // Publish full stream (video + audio) to Agora
-      publishCamToAgora(stream);
+      publishCanvasToAgora();
       document.getElementById('sdot').className = 'dot ld';
       document.getElementById('slbl').textContent = 'Camera active';
     };
   })
-  .catch(err => {
-    console.warn('Camera/mic denied:', err);
-    // Try video only as fallback
-    navigator.mediaDevices.getUserMedia({ video:{ width:640, height:480, facingMode:'user' } })
-      .then(stream => {
-        camStream = stream;
-        camVideo  = document.getElementById('webcam');
-        camVideo.srcObject = stream;
-        camVideo.onloadedmetadata = () => {
-          camVideo.play();
-          startSegmentation(camVideo);
-          startPoseDetection(camVideo);
-          publishCamToAgora(stream);
-        };
-      })
-      .catch(() => {
-        document.getElementById('sdot').className = 'dot of';
-        document.getElementById('slbl').textContent = 'Camera denied';
-      });
+  .catch(() => {
+    document.getElementById('sdot').className = 'dot of';
+    document.getElementById('slbl').textContent = 'Camera denied';
   });
 }
+
+// ── Publish canvas video to Agora (no laptop mic — phone handles audio) ──
+async function publishCanvasToAgora(){
+  if(!agoraClient || !agoraReady){ return; }
+  if(localVideoTrack) return; // already published
+  try{
+    const canvasStream = AC.captureStream(30);
+    const vt = canvasStream.getVideoTracks();
+    if(vt.length){
+      localVideoTrack = AgoraRTC.createCustomVideoTrack({ mediaStreamTrack: vt[0] });
+      await agoraClient.publish([localVideoTrack]);
+      console.log('Agora: published canvas video track');
+    }
+  }catch(e){ console.warn('Canvas publish:', e); }
+}
+
+async function publishCamToAgora(){ await publishCanvasToAgora(); }
 
 function startSegmentation(vid){
   if(typeof SelfieSegmentation === 'undefined'){
@@ -682,19 +688,24 @@ function startSegmentation(vid){
 function startPoseDetection(vid){
   if(typeof Pose === 'undefined'){ return; }
   poseInst = new Pose({ locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
-  poseInst.setOptions({ modelComplexity:0, smoothLandmarks:true, minDetectionConfidence:.6, minTrackingConfidence:.5 });
+  // modelComplexity:0 = fastest, good enough for hand raise detection
+  poseInst.setOptions({ modelComplexity:0, smoothLandmarks:true, minDetectionConfidence:.5, minTrackingConfidence:.4 });
   poseInst.onResults(res=>{
+    // Only process when guide is active — stop wasting CPU otherwise
+    if(!guideActive) return;
     if(!res.poseLandmarks) return;
     const ls=res.poseLandmarks[11], rs=res.poseLandmarks[12];
     const lw=res.poseLandmarks[15], rw=res.poseLandmarks[16];
     if(!ls||!rs||!lw||!rw) return;
     const shoulderY=Math.min(ls.y,rs.y), wristY=Math.min(lw.y,rw.y);
-    onHandRaise(wristY < shoulderY - 0.08);
+    onHandRaise(wristY < shoulderY - 0.10);
   });
-  // Share the same Camera instance from segmentation isn't possible cleanly,
-  // so we create another Camera reader for pose — both work on the same video element
-  const cam = new Camera(vid, { onFrame:async()=>{ if(poseInst) await poseInst.send({image:vid}); }, width:320, height:240 });
-  cam.start();
+  // Use a lower resolution Camera for pose — reduces CPU load significantly
+  const poseCam = new Camera(vid, {
+    onFrame: async()=>{ if(guideActive && poseInst) await poseInst.send({image:vid}); },
+    width:256, height:192
+  });
+  poseCam.start();
 }
 
 // ═══════════════════════════════════════
@@ -704,19 +715,56 @@ let guideActive  = false;
 let handRaised   = false;
 let handProgress = 0;
 let handStart    = null;
+let guideClosed  = false;  // prevent double-close
 const HOLD_MS    = 3000;
 
+function runHoldTimer(){
+  if(!handRaised || !handStart || guideClosed) return;
+  handProgress = Math.min(1,(Date.now()-handStart)/HOLD_MS);
+  document.getElementById('gpfill').style.width = (handProgress*100)+'%';
+  if(handProgress >= 1){ closeGuide(); return; }
+  requestAnimationFrame(runHoldTimer);
+}
+
+// Debounce only hand-LOWER — raising is immediate
+// This prevents brief arm dips from resetting the 3-second progress
+let handDebounceTimer = null;
+function onHandRaise(raised){
+  if(raised){
+    // Hand up — act immediately
+    clearTimeout(handDebounceTimer);
+    if(handRaised) return;
+    handRaised = true;
+    handStart = Date.now();
+    document.getElementById('gpwrap').style.display = 'block';
+    document.getElementById('gmain').textContent = '✋ Keep your hand raised!';
+    document.getElementById('gsub').textContent  = 'Hold for 3 seconds to start';
+    runHoldTimer();
+  } else {
+    // Hand down — debounce 400ms before resetting progress
+    // This tolerates brief arm dips during the hold
+    clearTimeout(handDebounceTimer);
+    handDebounceTimer = setTimeout(()=>{
+      if(!handRaised) return;
+      handRaised = false;
+      handStart = null; handProgress = 0;
+      document.getElementById('gpfill').style.width = '0%';
+      document.getElementById('gpwrap').style.display = 'none';
+      document.getElementById('gmain').textContent = 'Move until your head and feet touch the oval edges';
+      document.getElementById('gsub').textContent  = 'Step closer if too small · step back if too large';
+    }, 400);
+  }
+}
+
 function showGuide(){
-  // Size canvas
   const gc = document.getElementById('gcanvas');
   const gH = Math.min(window.innerHeight * 0.65, 480);
   const gW = Math.round(gH * 0.68);
-  gc.width  = gW;
-  gc.height = gH;
-  // Show the overlay
+  gc.width = gW; gc.height = gH;
   document.getElementById('guide').style.display = 'flex';
   guideActive = true;
-  // Start drawing loop
+  guideClosed = false;  // reset guard
+  handRaised = false; handProgress = 0; handStart = null;
   runGuideLoop(gc, gW, gH);
 }
 
@@ -726,8 +774,10 @@ function hideGuide(){
 }
 
 function closeGuide(){
+  if(guideClosed) return;  // prevent double-close
+  guideClosed = true;
   hideGuide();
-  startCountdown();
+  showWaitingScreen();
 }
 
 function runGuideLoop(gc, W, H){
@@ -791,32 +841,6 @@ function runGuideLoop(gc, W, H){
     }
   }
   frame();
-}
-
-function onHandRaise(raised){
-  if(raised === handRaised) return;
-  handRaised = raised;
-  if(raised){
-    handStart = Date.now();
-    document.getElementById('gpwrap').style.display = 'block';
-    document.getElementById('gmain').textContent = '✋ Keep your hand raised!';
-    document.getElementById('gsub').textContent  = 'Hold for 3 seconds to start';
-    runHoldTimer();
-  } else {
-    handStart = null; handProgress = 0;
-    document.getElementById('gpfill').style.width = '0%';
-    document.getElementById('gpwrap').style.display = 'none';
-    document.getElementById('gmain').textContent = 'Move until your head and feet touch the oval edges';
-    document.getElementById('gsub').textContent  = 'Step closer if too small · step back if too large';
-  }
-}
-
-function runHoldTimer(){
-  if(!handRaised || !handStart) return;
-  handProgress = Math.min(1,(Date.now()-handStart)/HOLD_MS);
-  document.getElementById('gpfill').style.width = (handProgress*100)+'%';
-  if(handProgress >= 1){ closeGuide(); return; }
-  requestAnimationFrame(runHoldTimer);
 }
 
 // ═══════════════════════════════════════
@@ -1035,15 +1059,15 @@ async function initAgora(){
     document.getElementById('adot').className='dot ok';
     document.getElementById('albl').textContent='0 watching';
     console.log('Agora: joined', CHANNEL);
-    // Poll remoteUsers every 3s — audience members don't fire user-joined in live mode
+    // Poll remoteUsers — audience members don't fire user-joined in live mode
     setInterval(()=>{
       if(!agoraClient) return;
       const count = agoraClient.remoteUsers.length;
       document.getElementById('albl').textContent = count===0 ? '0 watching' : `${count} watching 👀`;
       document.getElementById('adot').className = count>0 ? 'dot ok' : 'dot of';
     }, 3000);
-    // Camera may have resolved before Agora joined — publish now
-    if(pendingStream){ await publishCamToAgora(pendingStream); pendingStream=null; }
+    // Publish canvas video immediately
+    await publishCanvasToAgora();
   }catch(e){
     console.warn('Agora join failed:', e);
     document.getElementById('albl').textContent='Streaming offline';
@@ -1054,26 +1078,8 @@ let watcherCount=0;
 function updateWatchers(delta){ watcherCount=Math.max(0,watcherCount+delta); document.getElementById('albl').textContent=watcherCount+' watching'+(watcherCount>0?' 👀':''); }
 
 async function publishCamToAgora(rawStream){
-  if(!agoraClient || !agoraReady){ pendingStream=rawStream; return; }
-  try{
-    // Publish the composited canvas — audience receives the finished stage view
-    // with background removal already applied. No processing needed on their end.
-    const canvasStream = AC.captureStream(30);
-    const vt = canvasStream.getVideoTracks();
-    const at = rawStream.getAudioTracks();
-    console.log('Publishing: canvas video tracks=', vt.length, 'audio tracks=', at.length);
-    if(at.length) localAudioTrack = AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: at[0] });
-    if(vt.length) localVideoTrack = AgoraRTC.createCustomVideoTrack({ mediaStreamTrack: vt[0] });
-    const pub = [localAudioTrack, localVideoTrack].filter(Boolean);
-    if(pub.length){
-      await agoraClient.publish(pub);
-      console.log('Agora: published composited canvas stream');
-    } else {
-      console.warn('Agora: nothing to publish');
-    }
-  }catch(e){
-    console.warn('Publish failed:', e);
-  }
+  // Legacy call path — just publish canvas
+  await publishCanvasToAgora();
 }
 
 async function sendMsg(obj){
@@ -1092,7 +1098,6 @@ function handleAudienceMsg(msg){
 
   // ── Singer phone remote control ──
   if(msg.type==='mic-connected'){
-    if(localAudioTrack){ localAudioTrack.setVolume(0); }
     showToast('📱 Phone mic connected');
     hideWaitingScreen();
   }
@@ -1197,16 +1202,24 @@ let phoneControlled = false; // true when singer phone has taken over
 window.onYouTubeIframeAPIReady = function(){
   ytPlayer = new YT.Player('yt-player',{
     height:'1', width:'1',
-    playerVars:{ autoplay:0, controls:0, disablekb:1, fs:0, modestbranding:1 },
+    playerVars:{
+      autoplay:0, controls:0, disablekb:1, fs:0,
+      modestbranding:1, playsinline:1
+    },
     events:{
       onReady: ()=>{
         ytReady=true;
-        if(ytPendingId){ ytPlayer.loadVideoById(ytPendingId); ytPendingId=null; }
+        console.log('YT player ready');
+        if(ytPendingId){
+          ytPlayer.loadVideoById(ytPendingId);
+          ytPendingId=null;
+        }
       },
       onStateChange: e=>{
-        // YT.PlayerState.ENDED = 0
-        if(e.data===0) doEnd();
-      }
+        console.log('YT state:', e.data);
+        if(e.data===YT.PlayerState.ENDED) doEnd();
+      },
+      onError: e=>{ console.warn('YT error:', e.data); }
     }
   });
 };
@@ -1239,23 +1252,36 @@ function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
 
 function doPlayWithYT(){
   playing=true;
+  elapsed=0;
   document.getElementById('pbtn').textContent='⏸ Pause';
   sendMsg({type:'play-start', song:song.title, artist:song.artist, ts:Date.now()});
-  const songDuration = song.lyrics[song.lyrics.length-1].t + 5;
+  const songDuration = song.lyrics.length>0 ? song.lyrics[song.lyrics.length-1].t + 10 : 240;
   scheduleZoomsForSong(songDuration);
 
-  // Start YouTube audio if phone-controlled
-  if(phoneControlled && ytReady && ytPlayer) ytPlayer.playVideo();
+  // Tell YouTube to play
+  if(phoneControlled && ytReady && ytPlayer){
+    try{
+      ytPlayer.playVideo();
+      console.log('YT: playVideo() called');
+    }catch(e){ console.warn('YT playVideo error:', e); }
+  }
 
+  const startTime = Date.now();
+  clearInterval(ticker);
   ticker=setInterval(()=>{
-    elapsed+=0.1;
-    // Sync elapsed to YouTube player time if available
-    if(phoneControlled && ytReady && ytPlayer && ytPlayer.getCurrentTime){
-      try{ elapsed = ytPlayer.getCurrentTime(); }catch(e){}
+    // Drive elapsed by real wall clock — reliable even if YT time query fails
+    elapsed = (Date.now() - startTime) / 1000;
+
+    // Try to sync to actual YouTube time if available (corrects for buffering)
+    if(phoneControlled && ytReady && ytPlayer){
+      try{
+        const yt = ytPlayer.getCurrentTime();
+        if(yt > 0) elapsed = yt; // only trust YT time if it's nonzero
+      }catch(e){}
     }
+
     updL(); updP();
-    const dur = song.lyrics[song.lyrics.length-1].t+5;
-    if(elapsed>dur) doEnd();
+    if(elapsed > songDuration) doEnd();
   },100);
 }
 
@@ -1270,11 +1296,28 @@ const SONGS=[
 ];
 let song=SONGS[0],playing=false,elapsed=0,ticker=null,lIdx=-1;
 
-function showSongs(){const sl=document.getElementById('slist');sl.innerHTML='';SONGS.forEach((s,i)=>{const d=document.createElement('div');d.className='so';d.innerHTML=`<div class="so-t">${s.title}</div><div class="so-a">${s.artist}</div>`;d.onclick=()=>{song=SONGS[i];resetPlay();hideSongs();sendMsg({type:'song-announce',title:s.title});};sl.appendChild(d);});document.getElementById('sp').style.display='block';}
+function showSongs(){
+  const sl=document.getElementById('slist');
+  sl.innerHTML='';
+  SONGS.forEach((s,i)=>{
+    const d=document.createElement('div'); d.className='so';
+    d.innerHTML=`<div class="so-t">${s.title}</div><div class="so-a">${s.artist}</div>`;
+    d.onclick=()=>{
+      song=SONGS[i]; resetPlay(); hideSongs();
+      sendMsg({type:'song-announce',title:s.title});
+      // Pulse QR to prompt singer to use phone as mic
+      pulseQRWidget();
+      showTVSongCard(s.title, s.artist, '');
+    };
+    sl.appendChild(d);
+  });
+  document.getElementById('sp').style.display='block';
+}
 function hideSongs(){document.getElementById('sp').style.display='none';}
 function togglePlay(){playing?doPause():startCountdown();}
 function startCountdown(){
   if(guideActive) hideGuide();
+  hideWaitingScreen();
   const cd=document.getElementById('cd'),n=document.getElementById('cdn');
   cd.style.display='flex'; let c=3; n.textContent=c;
   sendMsg({type:'countdown-start'});
@@ -1348,36 +1391,98 @@ function renderLoop(){
 // ENTER STAGE — single entry point
 // ═══════════════════════════════════════
 function enterStage(){
+  // 1. Hide start screen
   document.getElementById('start').style.display='none';
-  // Show waiting screen with QR code while singer connects
-  showWaitingScreen();
+  // 2. Position guide is first — user positions themselves before anything else
   showGuide();
+  // 3. Start camera, Agora, render loop in background
   startEverything();
   initAgora();
   renderLoop();
+  // 4. QR widget appears after guide closes (via closeGuide → startCountdown → doPlay)
+  //    We show it now at low visibility so it's ready
+  showWaitingScreen();
 }
 
 // ═══════════════════════════════════════
-// WAITING SCREEN + QR CODE
+// QR IDLE PANEL — self-contained, no external library
 // ═══════════════════════════════════════
 const SINGER_URL = 'https://mstepanovich-web.github.io/elsewhere/singer.html';
 
 function showWaitingScreen(){
   const singerLink = `${SINGER_URL}?code=${ROOM_CODE}`;
-  document.getElementById('waiting-code').textContent = ROOM_CODE;
-  document.getElementById('waiting-room').textContent = ROOM_CODE;
-  document.getElementById('waiting-url').textContent = 'elsewhere/singer.html';
-  document.getElementById('waiting').style.display = 'flex';
-  // Generate QR code using canvas
-  if(typeof QRCode !== 'undefined'){
-    QRCode.toCanvas(document.getElementById('qr-canvas'), singerLink, {
-      width:200, margin:1, color:{dark:'#000000',light:'#ffffff'}
-    }, err=>{ if(err) console.warn('QR error:',err); });
-  }
+  document.getElementById('idle-room-code').textContent = ROOM_CODE;
+  document.getElementById('idle-panel').style.display = 'flex';
+  drawQRToCanvas(document.getElementById('idle-qr-canvas'), singerLink);
 }
 
 function hideWaitingScreen(){
-  document.getElementById('waiting').style.display = 'none';
+  document.getElementById('idle-panel').style.display = 'none';
+}
+
+function pulseQRWidget(){
+  const p = document.getElementById('idle-panel');
+  p.style.display = 'flex';
+  p.classList.add('pulse');
+  setTimeout(()=> p.classList.remove('pulse'), 8000);
+}
+
+// Minimal QR code renderer using the qrcode-generator approach
+// Loads qrcode-generator from CDN — most reliable pure-JS QR library
+function drawQRToCanvas(canvas, text){
+  // Try loading qrcode-generator (most reliable, no async issues)
+  if(typeof qrcode !== 'undefined'){
+    renderQR(canvas, text);
+    return;
+  }
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.onload = ()=>{
+    if(typeof QRCode !== 'undefined'){
+      // qrcodejs — use DOM-based rendering into a temp div, then copy to canvas
+      const tmp = document.createElement('div');
+      tmp.style.cssText = 'position:fixed;left:-9999px;';
+      document.body.appendChild(tmp);
+      new QRCode(tmp, {
+        text, width:160, height:160,
+        colorDark:'#000000', colorLight:'#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      // Copy the generated canvas to our canvas
+      setTimeout(()=>{
+        const srcCanvas = tmp.querySelector('canvas');
+        if(srcCanvas){
+          const ctx = canvas.getContext('2d');
+          canvas.width=160; canvas.height=160;
+          ctx.drawImage(srcCanvas, 0, 0, 160, 160);
+        } else {
+          // fallback — show room code as text in canvas
+          showQRFallback(canvas, text);
+        }
+        document.body.removeChild(tmp);
+      }, 300);
+    } else {
+      showQRFallback(canvas, text);
+    }
+  };
+  s.onerror = ()=> showQRFallback(canvas, text);
+  document.head.appendChild(s);
+}
+
+function showQRFallback(canvas, text){
+  // Draw room code text on canvas as fallback
+  const ctx = canvas.getContext('2d');
+  canvas.width=160; canvas.height=160;
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,160,160);
+  ctx.fillStyle='#000000';
+  ctx.font='bold 14px monospace'; ctx.textAlign='center';
+  ctx.fillText('Open:', 80, 50);
+  ctx.font='11px monospace';
+  ctx.fillText('elsewhere/singer.html', 80, 72);
+  ctx.font='bold 20px monospace';
+  ctx.fillText(ROOM_CODE, 80, 110);
+  ctx.font='11px monospace';
+  ctx.fillText('Enter code above', 80, 135);
 }
 
 // ═══════════════════════════════════════
