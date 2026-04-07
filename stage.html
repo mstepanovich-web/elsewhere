@@ -273,7 +273,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   <div id="rcode-wrap" title="Click to copy"><small>Room Code</small><span id="rcode">––––––</span></div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.46</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.48</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -1388,10 +1388,26 @@ window.onYouTubeIframeAPIReady = function(){
       onReady: ()=>{
         ytReady=true;
         log('YT player ready ✓', 'ok');
+        // Warm up autoplay — play a very short silent video to unlock
+        // browser autoplay policy while we still have gesture context
+        try{
+          // Use a known very short YouTube video as a warmup
+          ytPlayer.mute();
+          ytPlayer.loadVideoById('HgzGwKwLmgM'); // 1-second silent video
+          setTimeout(()=>{
+            try{
+              ytPlayer.stopVideo();
+              ytPlayer.unMute();
+              log('YT: autoplay unlocked ✓', 'ok');
+            }catch(e){}
+          }, 1500);
+        }catch(e){}
         if(ytPendingId){
-          log('YT: loading pending video: '+ytPendingId);
-          ytPlayer.loadVideoById(ytPendingId);
-          ytPendingId=null;
+          setTimeout(()=>{
+            log('YT: loading pending video: '+ytPendingId);
+            ytPlayer.loadVideoById(ytPendingId);
+            ytPendingId=null;
+          }, 2000);
         }
       },
       onStateChange: e=>{
@@ -1440,36 +1456,28 @@ function ytPlaySong(videoId){
     ytPendingId=videoId;
     return;
   }
-  
+
   ytSongStartTime = Date.now();
   log('ytPlaySong: start time recorded');
 
-  // cueVideoById first (doesn't require gesture), then playVideo (does)
-  // This is the most reliable sequence for embedded players
+  // loadVideoById auto-plays — more reliable than cueVideoById+playVideo
+  // Autoplay is unlocked because we warmed up in onReady
   try{
-    ytPlayer.cueVideoById(videoId);
-    log('YT: cueVideoById done');
-  }catch(e){ log('YT cue err: '+e.message, 'err'); }
+    ytPlayer.loadVideoById(videoId);
+    log('YT: loadVideoById called');
+  }catch(e){ log('YT load err: '+e.message, 'err'); }
 
-  // Play after brief pause — gives player time to cue
-  setTimeout(()=>{
-    try{
-      ytPlayer.playVideo();
-      log('YT: playVideo called');
-    }catch(e){ log('YT play err: '+e.message, 'err'); }
-  }, 800);
-
-  // Safety retry at 3s
+  // Safety retry at 4s if still not playing
   setTimeout(()=>{
     try{
       const state = ytPlayer.getPlayerState();
-      log('YT state check at 3s: '+YT_STATES[state]);
+      log('YT state check at 4s: '+YT_STATES[state]);
       if(state !== 1 && state !== 3){
-        log('YT: retry playVideo at 3s');
+        log('YT: retry playVideo at 4s');
         ytPlayer.playVideo();
       }
     }catch(e){}
-  }, 3000);
+  }, 4000);
 }
 
 function loadYouTubeSong(videoId, title, artist, lyrics, isDemo){
