@@ -191,7 +191,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <div id="home-body">
 
     <!-- Version — centered at top -->
-    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.63</div>
+    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.64</div>
 
     <!-- Now Selected — top of screen -->
     <div id="song-card">
@@ -217,9 +217,9 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 
       <!-- Mic Live toggle -->
       <div class="action-card" id="home-mute-btn" onclick="toggleHomeMute()">
-        <div class="ac-icon" id="home-mute-icon">🎤</div>
-        <div class="ac-label" id="home-mute-label">Mic Live</div>
-        <div class="ac-sub" id="home-mute-sub">Tap to mute</div>
+        <div class="ac-icon" id="home-mute-icon">🔇</div>
+        <div class="ac-label" id="home-mute-label">Mic Muted</div>
+        <div class="ac-sub" id="home-mute-sub">Tap to unmute</div>
       </div>
 
       <!-- Invite -->
@@ -486,8 +486,8 @@ async function doJoin(){
       document.getElementById('aud-cnt').textContent=n+' watching';
     },3000);
     await initMic();
-    await publishMic();  // publish immediately so mic is live from home screen
-    unmuteMic();         // start unmuted — mic is live
+    await publishMic();  // publish to Agora immediately but stay muted
+    // Do NOT unmuteMic() here — mic stays muted until Start Performance
     sendToStage({type:'mic-connected',roomCode});
     showScreen('screen-home');
     showToast('Connected to stage ✓');
@@ -650,7 +650,8 @@ function getVol(){return parseInt(document.getElementById('vol-sl').value)/100;}
 function setVolume(v){
   if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
   const vol = parseInt(v) / 100;
-  if(gainNode && !muted) gainNode.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.05);
+  // Always update gainNode — takes effect when unmuted
+  if(gainNode) gainNode.gain.setTargetAtTime(muted ? 0 : vol, audioCtx.currentTime, 0.05);
   if(micAudioTrack && !muted) micAudioTrack.setVolume(parseInt(v));
 }
 function toggleFx(n){FX[n]=!FX[n];document.getElementById('fx-'+n).classList.toggle('on',FX[n]);buildChain();}
@@ -943,7 +944,7 @@ function showLyricPreview(){
   }
 }
 // ── HOME MIC MUTE TOGGLE ──
-let homeMuted = false;
+let homeMuted = true; // starts muted — unmutes only when performance starts
 function toggleHomeMute(){
   homeMuted = !homeMuted;
   const card = document.getElementById('home-mute-btn');
