@@ -190,7 +190,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 <div id="screen-home" class="screen">
   <div class="nav">
     <div class="brand">Elsewhere</div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.46</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.48</div>
     <div class="pill ok"><div class="pdot"></div><span id="home-status">Connected</span></div>
   </div>
   <div id="home-body">
@@ -570,12 +570,11 @@ async function initMic(){
 async function publishMic(){
   if(micPublished||!micStream||!agoraClient||!agoraReady) return;
   try{
-    // Route the processed Web Audio chain (with FX) to Agora
-    // This means reverb/echo/boost actually reach the audience
-    const dest = audioCtx.createMediaStreamDestination();
-    gainNode.connect(dest);
+    // Create persistent Agora destination from Web Audio chain
+    agoraDest = audioCtx.createMediaStreamDestination();
+    gainNode.connect(agoraDest);
     micAudioTrack=AgoraRTC.createCustomAudioTrack({
-      mediaStreamTrack: dest.stream.getAudioTracks()[0]
+      mediaStreamTrack: agoraDest.stream.getAudioTracks()[0]
     });
     await agoraClient.publish([micAudioTrack]);
     micPublished=true;
@@ -633,6 +632,8 @@ function buildReverb(d){
   for(let c=0;c<2;c++){const dt=ir.getChannelData(c);for(let i=0;i<len;i++) dt[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.5);}
   reverbNode.buffer=ir;
 }
+let agoraDest = null; // MediaStreamDestination for Agora — persists across buildChain calls
+
 function buildChain(){
   try{micSource.disconnect();gainNode.disconnect();reverbNode.disconnect();echoDelay.disconnect();echoFeedback.disconnect();}catch(e){}
   let ch=micSource;
@@ -643,8 +644,9 @@ function buildChain(){
   if(FX.echo){echoFeedback.gain.value=0.45;ch.connect(echoDelay);echoDelay.connect(echoFeedback);echoFeedback.connect(echoDelay);echoFeedback.connect(gainNode);}else echoFeedback.gain.value=0;
   dry.connect(gainNode);
   gainNode.connect(analyser);
+  // Reconnect to Agora destination if it exists
+  if(agoraDest) gainNode.connect(agoraDest);
   // DO NOT connect to audioCtx.destination — no audio playback on singer's phone
-  // Audio goes to Agora via the micAudioTrack (MediaStreamTrack), not through Web Audio output
 }
 function startLevelMeter(){
   const data=new Uint8Array(analyser.frequencyBinCount);
