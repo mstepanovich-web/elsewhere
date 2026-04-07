@@ -280,7 +280,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.58</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.60</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -292,6 +292,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   <div class="btn" onclick="shareInvite()">📨 Invite</div>
   <div class="btn" onclick="showSongs()">🎵 Song</div>
   <div class="btn" onclick="toggleCommentBar()">💬 Comments</div>
+  <div class="btn danger" id="stage-stop-btn" onclick="doEnd()" style="display:none;">■ Stop</div>
 </div>
 <div id="prog"><div id="pf"></div></div>
 
@@ -1525,7 +1526,7 @@ function doPlayWithYT(){
   elapsed=0;
   lIdx=-1;
   clearAllTickers();
-  
+  document.getElementById('stage-stop-btn').style.display='block';
   sendMsg({type:'play-start', song:song.title, artist:song.artist, videoId:song.videoId||'', ts:Date.now()});
   ytSongDuration = song.lyrics.length>0 ? song.lyrics[song.lyrics.length-1].t + 10 : 600;
   scheduleZoomsForSong(ytSongDuration);
@@ -1631,7 +1632,8 @@ function startCountdown(){
   },1000);
 }
 function doPlay(){
-  playing=true; 
+  playing=true;
+  document.getElementById('stage-stop-btn').style.display='block';
   sendMsg({type:'play-start',song:song.title,artist:song.artist,ts:Date.now()});
   const songDuration = song.lyrics.length>0 ? song.lyrics[song.lyrics.length-1].t + 5 : 300;
   scheduleZoomsForSong(songDuration);
@@ -1644,14 +1646,13 @@ function doPlay(){
 function doPause(){
   playing=false;
   clearAllTickers();
-  
   sendMsg({type:'pause'});
   if(phoneControlled && ytReady && ytPlayer) try{ ytPlayer.pauseVideo(); }catch(e){}
 }
 function resetPlay(){
   doPause();
   elapsed=0; lIdx=-1;
-  
+  document.getElementById('stage-stop-btn').style.display='none';
   document.getElementById('pf').style.width='0%';
   document.getElementById('lm').textContent='';
   document.getElementById('ln').textContent='';
@@ -1676,13 +1677,17 @@ function doEnd(){
   doPause();
   resetLyrics();
   if(phoneControlled && ytReady && ytPlayer) try{ ytPlayer.stopVideo(); }catch(e){}
-  const msgs=['Bravo!','Amazing!','Encore!','Take a bow!'];
-  document.getElementById('apt').textContent=msgs[Math.floor(Math.random()*msgs.length)];
-  document.getElementById('ap').style.display='flex';
   sendMsg({type:'end'});
   sendMsg({type:'song-ended'});
-  for(let i=0;i<10;i++) setTimeout(()=>spawnRx(['🔥','⭐','💫','👏'][Math.floor(Math.random()*4)],Math.random()*90+5),i*150);
-  setTimeout(()=>{ document.getElementById('ap').style.display='none'; resetPlay(); phoneControlled=false; },2800);
+  // Spawn a few reactions
+  for(let i=0;i<6;i++) setTimeout(()=>spawnRx(['🔥','⭐','💫','👏'][Math.floor(Math.random()*4)],Math.random()*90+5),i*150);
+  // Immediately clear all overlays — just show singer on stage
+  hideTVSongCard();
+  hideTVSearch();
+  document.getElementById('lm').textContent='';
+  document.getElementById('ln').textContent='';
+  resetPlay();
+  phoneControlled=false;
 }
 
 // ═══════════════════════════════════════
