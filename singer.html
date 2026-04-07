@@ -741,7 +741,13 @@ async function selectResult(r){
   document.getElementById('song-artist').textContent=r.artist||'';
   document.getElementById('start-btn').style.display='block';
   showScreen('screen-home');
-  showToast('✓ Song selected — tap Start when ready');
+  if(syncedLyrics.length > 0){
+    showToast('✓ Song selected · '+syncedLyrics.length+' lyric lines loaded');
+  } else {
+    showToast('⚠️ Song selected · No lyrics found');
+    // Update song card to show no lyrics
+    document.getElementById('song-artist').textContent = (r.artist||'') + ' · No lyrics';
+  }
 }
 
 // ── LRCLIB LYRICS ──
@@ -902,13 +908,18 @@ function lyricSeek(dir){
 }
 
 function showLyricPreview(){
-  // Show first lyric line so singer knows what's coming
-  if(!syncedLyrics || !syncedLyrics.length) return;
-  // Find first non-empty line after trimming
+  const preview = document.getElementById('perf-lyric-preview');
+  if(!syncedLyrics || !syncedLyrics.length){
+    preview.textContent = 'No lyrics available for this song';
+    preview.style.color = 'rgba(196,122,107,.5)';
+    preview.style.fontSize = '13px';
+    return;
+  }
   const first = syncedLyrics.find(l=>(l.text||l.m||'').trim());
   if(first){
-    const text = first.text || first.m || '';
-    document.getElementById('perf-lyric-preview').textContent = '↓ ' + text;
+    preview.textContent = '↓ ' + (first.text || first.m || '');
+    preview.style.color = 'rgba(255,220,150,.7)';
+    preview.style.fontSize = '22px';
   }
 }
 function perfPauseToggle(){
