@@ -237,11 +237,10 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <div id="srch-bar">
       <div style="flex:1;position:relative;display:flex;align-items:center;">
         <input id="srch-in" class="input" type="search" placeholder="Song or artist..."
-          autocomplete="off" inputmode="search" list="srch-suggestions"
+          autocomplete="off" inputmode="search"
           style="padding-right:36px;"
           onkeydown="if(event.key==='Enter')doSearch()"
           oninput="onSearchInput(this.value)">
-        <datalist id="srch-suggestions"></datalist>
         <div id="srch-clear" onclick="clearSearch()"
           style="position:absolute;right:10px;font-size:16px;color:rgba(255,200,120,.4);cursor:pointer;display:none;-webkit-user-select:none;padding:4px;">✕</div>
       </div>
@@ -452,7 +451,30 @@ async function doJoin(){
 // ── AGORA MSG ──
 async function sendToStage(obj){
   if(!agoraClient||!agoraReady) return;
-  try{await agoraClient.sendStreamMessage(new TextEncoder().encode(JSON.stringify(obj)),true);}catch(e){}
+  try{
+    const json = JSON.stringify(obj);
+    const bytes = new TextEncoder().encode(json);
+    // Agora sendStreamMessage limit is 1KB
+    if(bytes.length <= 900){
+      await agoraClient.sendStreamMessage(bytes, true);
+    } else {
+      // Split into chunks with a sequence header
+      const CHUNK = 800;
+      const str = json;
+      const total = Math.ceil(str.length / CHUNK);
+      const id = Date.now().toString(36); // unique message ID
+      for(let i=0;i<total;i++){
+        const chunk = {
+          _chunk:true, _id:id, _i:i, _n:total,
+          _d: str.slice(i*CHUNK, (i+1)*CHUNK)
+        };
+        const cb = new TextEncoder().encode(JSON.stringify(chunk));
+        await agoraClient.sendStreamMessage(cb, true);
+        // Small delay between chunks to avoid flooding
+        if(i < total-1) await new Promise(r=>setTimeout(r,50));
+      }
+    }
+  }catch(e){ console.warn('sendToStage error:', e); }
 }
 function handleStageMsg(msg){
   if(msg.type==='song-ended'){ muteMic(); showScreen('screen-postsong'); }
@@ -708,32 +730,9 @@ function parseLRC(lrc){
   return lines.sort((a,b)=>a.time-b.time);
 }
 
-// ── SEARCH CLEAR + AUTOCOMPLETE ──
-const POPULAR_SONGS = [
-  'Bohemian Rhapsody Queen','Don\'t Stop Believin Journey','Sweet Caroline Neil Diamond',
-  'Livin on a Prayer Bon Jovi','Mr Brightside The Killers','With or Without You U2',
-  'Total Eclipse of the Heart Bonnie Tyler','Africa Toto','Don\'t You Want Me Human League',
-  'I Will Survive Gloria Gaynor','Dancing Queen ABBA','Take on Me A-ha',
-  'Roxanne The Police','Summer Nights Grease','Piano Man Billy Joel',
-  'American Pie Don McLean','Hotel California Eagles','Africa Toto',
-  'Shallow Lady Gaga','Someone Like You Adele','Rolling in the Deep Adele',
-  'Wonderwall Oasis','Living on a Prayer','Here Comes the Sun Beatles',
-  'Twist and Shout Beatles','Purple Rain Prince','Born to Run Springsteen',
-];
-
+// ── SEARCH CLEAR ──
 function onSearchInput(val){
-  const clear = document.getElementById('srch-clear');
-  clear.style.display = val.length > 0 ? 'block' : 'none';
-  // Populate datalist with matching suggestions
-  const dl = document.getElementById('srch-suggestions');
-  dl.innerHTML = '';
-  if(val.length >= 2){
-    const v = val.toLowerCase();
-    POPULAR_SONGS.filter(s=>s.toLowerCase().includes(v)).slice(0,8).forEach(s=>{
-      const opt = document.createElement('option');
-      opt.value = s; dl.appendChild(opt);
-    });
-  }
+  document.getElementById('srch-clear').style.display = val.length > 0 ? 'block' : 'none';
 }
 
 function clearSearch(){
@@ -742,9 +741,7 @@ function clearSearch(){
   document.getElementById('srch-clear').style.display = 'none';
   document.getElementById('srch-results').innerHTML = '<div class="empty">🎵<br>Search for any song<br>Results appear here and on the TV</div>';
   document.getElementById('srch-status').textContent = 'Hold 🎙 to search by voice · or type and search';
-  document.getElementById('srch-suggestions').innerHTML = '';
   inp.focus();
-  // Clear TV search overlay too
   sendToStage({type:'tv-search-clear'});
 }
 function startVoice(e){
