@@ -577,14 +577,48 @@ async function doSearch(){
     return;
   }
   try{
-    const res=await fetch(`${YT_PROXY}/search?part=snippet&type=video&maxResults=6&q=${encodeURIComponent(q+' karaoke')}&key=${YT_API_KEY}`);
-    const data=await res.json();
-    if(data.error){status.textContent='API error: '+(data.error.message||'check key');return;}
-    if(!data.items||!data.items.length){status.textContent='No results — try different terms';results.innerHTML='<div class="empty">😕<br>Try a different search</div>';return;}
-    status.textContent=`${data.items.length} results · shown on TV`;
-    const mapped=data.items.map(it=>({videoId:it.id.videoId,title:it.snippet.title,artist:it.snippet.channelTitle,thumb:it.snippet.thumbnails.medium?.url||it.snippet.thumbnails.default?.url||''}));
-    renderResults(mapped);
-    sendToStage({type:'tv-search',query:q,results:mapped});
+    // Step 1: Search for karaoke videos — fetch more than we need since some will be non-embeddable
+    const searchRes=await fetch(`${YT_PROXY}/search?part=snippet&type=video&maxResults=20&q=${encodeURIComponent(q+' karaoke')}&key=${YT_API_KEY}`);
+    const searchData=await searchRes.json();
+    if(searchData.error){status.textContent='API error: '+(searchData.error.message||'check key');return;}
+    if(!searchData.items||!searchData.items.length){
+      status.textContent='No results — try different terms';
+      results.innerHTML='<div class="empty">😕<br>Try a different search</div>';
+      return;
+    }
+
+    // Step 2: Check which videos are embeddable using the videos endpoint
+    const ids=searchData.items.map(it=>it.id.videoId).join(',');
+    const videoRes=await fetch(`${YT_PROXY}/videos?part=status,snippet&id=${ids}&key=${YT_API_KEY}`);
+    const videoData=await videoRes.json();
+
+    // Build a map of videoId → embeddable
+    const embeddable={};
+    (videoData.items||[]).forEach(v=>{
+      embeddable[v.id]=v.status?.embeddable===true;
+    });
+
+    // Filter to only embeddable videos, preserve original snippet data
+    const filtered=searchData.items
+      .filter(it=>embeddable[it.id.videoId]===true)
+      .slice(0,6)
+      .map(it=>({
+        videoId:  it.id.videoId,
+        title:    it.snippet.title,
+        artist:   it.snippet.channelTitle,
+        thumb:    it.snippet.thumbnails.medium?.url||it.snippet.thumbnails.default?.url||''
+      }));
+
+    if(!filtered.length){
+      status.textContent='No embeddable karaoke videos found — try a different song';
+      results.innerHTML='<div class="empty">🚫<br>No playable results found<br>Try a different search</div>';
+      return;
+    }
+
+    status.textContent=`${filtered.length} playable results · shown on TV`;
+    renderResults(filtered);
+    sendToStage({type:'tv-search',query:q,results:filtered});
+
   }catch(e){console.warn('Search:',e);status.textContent='Search failed — check connection';}
 }
 
