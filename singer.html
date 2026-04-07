@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.65</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.66</div>
 </div>
 
 <!-- HOME -->
@@ -192,7 +192,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <div id="home-body">
 
     <!-- Version — centered at top -->
-    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.65</div>
+    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.66</div>
 
     <!-- Now Selected — top of screen -->
     <div id="song-card">
@@ -846,6 +846,9 @@ function goToCountdown(){
         document.getElementById('perf-mute-btn').classList.remove('muted');
         document.getElementById('perf-mute-icon').textContent='🎤';
         document.getElementById('perf-mute-txt').textContent='Tap to mute';
+        // Reset pause state — always start fresh
+        perfPaused = false;
+        document.getElementById('perf-pause').textContent = '⏸ Pause';
         // Reset zoom/comments
         zoomActive = false; perfCommentsOn = true;
         const zb=document.getElementById('perf-zoom-btn'); if(zb) zb.textContent='🔍 Zoom In';
@@ -1011,6 +1014,7 @@ function perfStop(){
   muteMic();
   zoomActive = false;
   perfCommentsOn = true;
+  perfPaused = false;
   showScreen('screen-home');
 }
 
