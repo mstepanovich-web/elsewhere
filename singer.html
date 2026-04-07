@@ -190,7 +190,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 <div id="screen-home" class="screen">
   <div class="nav">
     <div class="brand">Elsewhere</div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.48</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.50</div>
     <div class="pill ok"><div class="pdot"></div><span id="home-status">Connected</span></div>
   </div>
   <div id="home-body">
@@ -911,12 +911,31 @@ function lyricSeek(dir){
 }
 
 function showLyricPreview(){
+  const btn = document.getElementById('perf-lyrics-btn');
   const preview = document.getElementById('perf-lyric-preview');
   if(!syncedLyrics || !syncedLyrics.length){
-    preview.textContent = 'No lyrics available for this song';
-    preview.style.color = 'rgba(196,122,107,.5)';
-    preview.style.fontSize = '13px';
+    // No lyrics — red button, non-interactive
+    if(btn){
+      btn.textContent = 'No Lyrics';
+      btn.style.background = 'rgba(196,80,80,.15)';
+      btn.style.borderColor = 'rgba(196,80,80,.5)';
+      btn.style.color = 'rgba(196,122,107,.95)';
+      btn.style.pointerEvents = 'none';
+      btn.style.opacity = '1';
+      btn.onclick = null;
+    }
+    preview.textContent = '';
     return;
+  }
+  // Has lyrics — green Start Lyrics button
+  if(btn){
+    btn.textContent = '▶ Start Lyrics';
+    btn.style.background = 'rgba(0,232,122,.15)';
+    btn.style.borderColor = 'rgba(0,232,122,.5)';
+    btn.style.color = 'rgba(0,232,122,.95)';
+    btn.style.pointerEvents = 'auto';
+    btn.style.opacity = '1';
+    btn.onclick = startLyrics;
   }
   const first = syncedLyrics.find(l=>(l.text||l.m||'').trim());
   if(first){
