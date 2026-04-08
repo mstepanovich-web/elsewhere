@@ -294,7 +294,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.93</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.95</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -354,7 +354,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.93</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.95</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -370,6 +370,19 @@ if (typeof AgoraRTC === 'undefined') {
 
 <script>
 'use strict';
+
+// ═══════════════════════════════════════
+// GLOBALS (declared early to avoid temporal dead zone errors)
+// ═══════════════════════════════════════
+let fc = 0;           // frame counter for render loop
+let camStream = null; // raw MediaStream from getUserMedia
+let camVideo  = null; // <video> element
+let guideActive  = false;
+let guideClosed  = false;
+let handRaised   = false;
+let handProgress = 0;
+let handStart    = null;
+let venueImg     = null; // loaded HTMLImageElement for flat background
 
 // ═══════════════════════════════════════
 // CONFIG
@@ -440,7 +453,7 @@ resizeAC();
 // ═══════════════════════════════════════
 // VENUE BACKGROUND IMAGE
 // ═══════════════════════════════════════
-let venueImg = null; // loaded HTMLImageElement for flat background
+// venueImg declared at top of script
 
 function loadVenueImage(skyboxId){
   if(!skyboxId){ venueImg = null; return; }
@@ -450,9 +463,6 @@ function loadVenueImage(skyboxId){
   img.onerror = ()=>{ venueImg = null; log('Venue bg failed: '+skyboxId, 'warn'); };
   img.src = `${VENUE_BASE_URL}${skyboxId}.jpg`;
 }
-
-// Load default venue image on start
-loadVenueImage(VENUES.find(v=>v.id===selectedVenueId)?.skyboxId || null);
 
 // ═══════════════════════════════════════
 // STAGE DRAWING
@@ -698,8 +708,7 @@ function drawSinger(image, mask){
 // ═══════════════════════════════════════
 // SINGLE CAMERA STREAM — shared by guide + compositor
 // ═══════════════════════════════════════
-let camStream  = null;   // the raw MediaStream
-let camVideo   = null;   // the <video> element playing it
+// camStream, camVideo declared at top of script
 let segOk      = false;
 let poseInst   = null;   // MediaPipe Pose instance for hand detection
 
@@ -778,11 +787,7 @@ function startPoseDetection(vid){
 // ═══════════════════════════════════════
 // POSITIONING GUIDE
 // ═══════════════════════════════════════
-let guideActive  = false;
-let handRaised   = false;
-let handProgress = 0;
-let handStart    = null;
-let guideClosed  = false;  // prevent double-close
+// guideActive, handRaised, handProgress, handStart, guideClosed declared at top of script
 const HOLD_MS    = 3000;
 
 function runHoldTimer(){
@@ -947,6 +952,9 @@ const VENUES = [
 const VENUE_BASE_URL = 'https://mstepanovich-web.github.io/elsewhere/venues/';
 
 let selectedVenueId = 'default'; // starts with Classic Stage, singer can change via app
+
+// Load default venue image now that VENUES is defined
+loadVenueImage(VENUES.find(v=>v.id===selectedVenueId)?.skyboxId || null);
 
 // ═══════════════════════════════════════
 // PANORAMA (Three.js)
@@ -1823,7 +1831,7 @@ function doEnd(){
 // RENDER LOOP
 // ═══════════════════════════════════════
 const DIRS=[[-175,-130,'Behind'],[- 130,-90,'Far Left'],[-90,-55,'Stage Left — Guitar 🎸'],[-55,-20,'Left of Centre'],[-20,20,'Centre — Crowd 👥'],[20,55,'Right of Centre'],[55,90,'Stage Right — Bass 🎸'],[90,130,'Far Right'],[130,175,'Behind']];
-let fc=0;
+// fc declared at top of script
 
 function renderLoop(){
   requestAnimationFrame(renderLoop); fc++;
