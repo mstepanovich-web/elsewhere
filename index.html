@@ -118,7 +118,18 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 .aud-song-artist{font-size:11px;color:rgba(255,200,120,.45);letter-spacing:.1em;text-transform:uppercase;text-align:center;}
 .aud-song-ready{font-size:10px;color:rgba(0,232,122,.6);letter-spacing:.12em;text-transform:uppercase;margin-top:4px;}
 
-/* ── COUNTDOWN OVERLAY ── */
+/* ── AUDIENCE VIDEO CHAT TILES ── */
+#aud-vc-wrap{
+  position:fixed;top:54px;right:10px;z-index:200;
+  display:flex;flex-direction:column;gap:8px;
+  pointer-events:none;
+}
+.aud-vc-tile{
+  width:120px;height:90px;border-radius:8px;overflow:hidden;
+  border:2px solid rgba(0,232,122,.4);background:#0a0508;
+  box-shadow:0 4px 16px rgba(0,0,0,.6);
+}
+.aud-vc-tile video{width:100%;height:100%;object-fit:cover;}
 #aud-countdown{
   position:fixed;inset:0;z-index:260;background:rgba(4,2,6,.85);backdrop-filter:blur(8px);
   display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;
@@ -204,7 +215,7 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
   <div id="song-title">Elsewhere</div>
   <div id="room-indicator" onclick="changeRoom()" style="display:none;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.4);cursor:pointer;padding:2px 6px;border:1px solid rgba(255,200,80,.15);border-radius:4px;font-family:'DM Mono',monospace;" title="Tap to change room">Room: <span id="room-display">––––––</span></div>
   <div class="bi" id="wcount"></div>
-  <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;white-space:nowrap;">v0.77</div>
+  <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;white-space:nowrap;">v0.79</div>
 </div>
 <div id="prog"><div id="pf"></div></div>
 
@@ -225,6 +236,8 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 
 <div id="toast"></div>
 <div id="ap"><div id="apt">Bravo!</div></div>
+
+<div id="aud-vc-wrap"></div>
 
 <!-- SEARCH OVERLAY -->
 <div id="aud-search">
@@ -371,48 +384,78 @@ async function joinRoom() {
     // Low-latency audience mode (level 1 = ultra low latency)
     await client.setClientRole('audience', { level: 1 });
 
-    // ── Singer publishes ──
+    // ── User published ──
     client.on('user-published', async (user, mediaType) => {
       await client.subscribe(user, mediaType);
-      remoteUID = user.uid;
 
       if (mediaType === 'video') {
         const track = user.videoTrack;
-        // Put video into hidden element, composite it onto stage canvas
-        const ms = new MediaStream([track.getMediaStreamTrack()]);
-        streamEl.srcObject = ms;
-        streamEl.muted = true; // muted so autoplay works — audio handled separately
-        streamEl.play().catch(() => {});
-        streamEl.onloadedmetadata = () => {
-          // Start render loop once video dimensions are known
-          startRenderLoop();
-        };
-
-        document.getElementById('cdot').className = 'dot ok';
-        document.getElementById('clbl').textContent = 'Live 🔴';
-        showToast('🎤 Singer is performing!');
+        if(remoteUID === null || user.uid === remoteUID){
+          // This is the stage canvas feed
+          remoteUID = user.uid;
+          const ms = new MediaStream([track.getMediaStreamTrack()]);
+          streamEl.srcObject = ms;
+          streamEl.muted = true;
+          streamEl.play().catch(() => {});
+          streamEl.onloadedmetadata = () => { startRenderLoop(); };
+          document.getElementById('cdot').className = 'dot ok';
+          document.getElementById('clbl').textContent = 'Live 🔴';
+          showToast('🎤 Singer is performing!');
+        } else {
+          // Audience member video chat tile
+          addAudVideoChatTile(user.uid, track);
+        }
       }
 
       if (mediaType === 'audio') {
-        audioTrack = user.audioTrack;
-        // Don't autoplay audio — wait for user tap to avoid browser block
-        document.getElementById('unmute-banner').style.display = 'block';
+        if(user.uid === remoteUID){
+          // Stage audio (singer mic + YT) — wait for user tap
+          audioTrack = user.audioTrack;
+          document.getElementById('unmute-banner').style.display = 'block';
+        } else {
+          // Audience member mic — play directly
+          try{ user.audioTrack.play(); }catch(e){}
+        }
       }
     });
 
-    client.on('user-unpublished', () => {
-      document.getElementById('cdot').className = 'dot of';
-      document.getElementById('clbl').textContent = 'Singer paused';
+    client.on('user-unpublished', (user) => {
+      if(user.uid === remoteUID){
+        document.getElementById('cdot').className = 'dot of';
+        document.getElementById('clbl').textContent = 'Singer paused';
+      } else {
+        removeAudVideoChatTile(user.uid);
+      }
     });
 
-    client.on('user-left', () => {
-      document.getElementById('cdot').className = 'dot of';
-      document.getElementById('clbl').textContent = 'Singer left';
+    client.on('user-left', (user) => {
+      if(user.uid === remoteUID){
+        document.getElementById('cdot').className = 'dot of';
+        document.getElementById('clbl').textContent = 'Singer left';
+      } else {
+        removeAudVideoChatTile(user.uid);
+      }
     });
 
     // Data messages from singer
+    const audChunkBuf = {};
     client.on('stream-message', (uid, data) => {
-      try { handleMsg(JSON.parse(new TextDecoder().decode(data))); } catch(e) {}
+      try {
+        const msg = JSON.parse(new TextDecoder().decode(data));
+        if(msg._chunk){
+          const {id,i,n,d} = msg;
+          if(!audChunkBuf[id]) audChunkBuf[id]={parts:new Array(n),received:0};
+          audChunkBuf[id].parts[i]=d;
+          audChunkBuf[id].received++;
+          if(audChunkBuf[id].received===n){
+            const full = JSON.parse(audChunkBuf[id].parts.join(''));
+            delete audChunkBuf[id];
+            handleMsg(full);
+          }
+        } else {
+          handleMsg(msg);
+        }
+      } catch(e) {}
     });
 
     await client.join(AGORA_APP_ID, channel, null, null);
@@ -488,6 +531,7 @@ function handleMsg(msg) {
     }
   }
   if (msg.type === 'tv-search') {
+    console.log('tv-search received:', msg.query, msg.results?.length, 'results');
     showAudSearch(msg.query, msg.results||[]);
   }
   if (msg.type === 'tv-search-clear') {
@@ -729,7 +773,21 @@ function hideAudCountdown(){
   document.getElementById('aud-countdown').style.display = 'none';
 }
 
-// ── VIDEO CHAT PAUSE / RESUME ──
+// ── AUDIENCE VIDEO CHAT TILES ──
+const audVcTiles = {};
+function addAudVideoChatTile(uid, videoTrack){
+  if(audVcTiles[uid]) return;
+  const wrap = document.getElementById('aud-vc-wrap');
+  const tile = document.createElement('div'); tile.className='aud-vc-tile'; tile.id=`avc-${uid}`;
+  const vid = document.createElement('video'); vid.autoplay=true; vid.playsInline=true; vid.muted=true;
+  vid.srcObject = new MediaStream([videoTrack.getMediaStreamTrack()]);
+  tile.appendChild(vid); wrap.appendChild(tile);
+  audVcTiles[uid] = tile;
+}
+function removeAudVideoChatTile(uid){
+  if(!audVcTiles[uid]) return;
+  audVcTiles[uid].remove(); delete audVcTiles[uid];
+}
 let vcPreviewTrack = null; // stored so we can pause/resume
 function pauseVideoChat(){
   const p = document.getElementById('vc-preview');
