@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.99</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.02</div>
 </div>
 
 <!-- HOME -->
@@ -193,7 +193,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 
     <!-- Top bar: version left, settings icon right -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
-      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v0.99</div>
+      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.02</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -1131,7 +1131,7 @@ let toastTmr=null;
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';if(toastTmr) clearTimeout(toastTmr);toastTmr=setTimeout(()=>t.style.display='none',3000);}
 function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#home-body,#aud-list')) e.preventDefault();},{passive:false});
+document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#home-body,#aud-list,#singer-venue-grid')) e.preventDefault();},{passive:false});
 </script>
 </body>
 </html>
