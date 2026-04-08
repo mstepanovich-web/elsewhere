@@ -294,7 +294,9 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.98</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.99</div>
+    <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
+      style="padding:5px 10px;background:rgba(255,200,80,.12);border:1px solid rgba(255,200,80,.3);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.7);cursor:pointer;display:none;">Auto</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -354,7 +356,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.98</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.99</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -970,6 +972,10 @@ function buildPanorama(){
       const sGeo = new THREE.SphereGeometry(500,60,40); sGeo.scale(-1,1,1);
       panScene.add(new THREE.Mesh(sGeo, new THREE.MeshBasicMaterial({map:tex})));
       panReady = true;
+      // Apply venue start yaw so it opens centered
+      tYaw = venue.startYaw || 0;
+      cYaw = venue.startYaw || 0;
+      manualYaw = venue.startYaw || 0;
       log('Panorama loaded: '+venue.name, 'ok');
     }, undefined, ()=>{
       log('Panorama image failed to load — using fallback', 'warn');
@@ -1092,6 +1098,35 @@ function buildProgrammaticPanorama(){
 }
 
 // Head tracking (mouse fallback if FaceMesh unavailable)
+let headTrackingAuto = true; // true=head tracking, false=manual mouse/keyboard
+
+function toggleHeadTracking(){
+  headTrackingAuto = !headTrackingAuto;
+  const btn = document.getElementById('htoggle');
+  btn.textContent = headTrackingAuto ? 'Auto' : 'Manual';
+  btn.style.borderColor = headTrackingAuto ? 'rgba(255,200,80,.3)' : 'rgba(0,232,122,.4)';
+  btn.style.color = headTrackingAuto ? 'rgba(255,220,150,.7)' : 'rgba(0,232,122,.8)';
+  if(!headTrackingAuto){
+    // In manual mode, use mouse drag to look around
+    initMousePan();
+  }
+}
+
+let mousePanInit = false;
+let mouseDown = false, lastMouseX = 0;
+let manualYaw = 0;
+function initMousePan(){
+  if(mousePanInit) return; mousePanInit = true;
+  const canvas = document.getElementById('pan-layer');
+  canvas.style.pointerEvents = 'auto';
+  canvas.addEventListener('mousedown', e=>{ mouseDown=true; lastMouseX=e.clientX; });
+  canvas.addEventListener('mousemove', e=>{ if(!mouseDown) return; manualYaw += (e.clientX-lastMouseX)*0.15; lastMouseX=e.clientX; });
+  canvas.addEventListener('mouseup', ()=>mouseDown=false);
+  canvas.addEventListener('touchstart', e=>{ mouseDown=true; lastMouseX=e.touches[0].clientX; },{passive:true});
+  canvas.addEventListener('touchmove', e=>{ if(!mouseDown) return; manualYaw += (e.touches[0].clientX-lastMouseX)*0.15; lastMouseX=e.touches[0].clientX; },{passive:true});
+  canvas.addEventListener('touchend', ()=>mouseDown=false);
+}
+
 let headTrackInit=false;
 function initHeadTracking(){
   if(headTrackInit) return; headTrackInit=true;
@@ -1150,6 +1185,7 @@ function onToggleView(){
   document.getElementById('vtoggle').textContent = isAud ? '🎭 Panorama' : '🏟 Stage';
   document.getElementById('vtoggle').className   = isAud ? '' : 'pano';
   document.getElementById('compass').style.display = isAud ? 'none' : 'block';
+  document.getElementById('htoggle').style.display = isAud ? 'none' : 'block';
   if(!isAud){ buildPanoramaIfNeeded(); initHeadTracking(); }
 }
 
@@ -1848,7 +1884,7 @@ function renderLoop(){
   } else if(panReady && panRenderer){
     cYaw  =lerp(cYaw,  tYaw,  SMOOTH);
     cPitch=lerp(cPitch,tPitch,SMOOTH);
-    panCamera3.rotation.y=-cYaw  *D2R*YS;
+    panCamera3.rotation.y=-(headTrackingAuto ? cYaw : manualYaw)*D2R*YS;
     panCamera3.rotation.x=-clamp(cPitch,-MU,MD)*D2R*PS;
     panRenderer.render(panScene,panCamera3);
     if(fc%3===0){
