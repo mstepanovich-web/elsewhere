@@ -294,7 +294,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.88</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.89</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -360,7 +360,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.88</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.89</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -370,7 +370,9 @@ if (typeof AgoraRTC === 'undefined') {
 }
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<!-- MediaPipe loaded dynamically on user gesture in enterStage() -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 
 <script>
 'use strict';
@@ -707,33 +709,7 @@ let camVideo   = null;   // the <video> element playing it
 let segOk      = false;
 let poseInst   = null;   // MediaPipe Pose instance for hand detection
 
-function startEverything(){
-  // VIDEO ONLY — no laptop mic. Phone is the mic. No feedback possible.
-  navigator.mediaDevices.getUserMedia({
-    video: { width:640, height:480, facingMode:'user' },
-    audio: false
-  })
-  .then(stream => {
-    camStream = stream;
-    camVideo  = document.getElementById('webcam');
-    camVideo.srcObject = stream;
-    camVideo.onloadedmetadata = () => {
-      camVideo.play();
-      showGuide(); // show guide now that camera is ready
-      startSegmentation(camVideo);
-      startPoseDetection(camVideo);
-      publishCanvasToAgora();
-      document.getElementById('sdot').className = 'dot ld';
-      document.getElementById('slbl').textContent = 'Camera active';
-    };
-  })
-  .catch(() => {
-    document.getElementById('sdot').className = 'dot of';
-    document.getElementById('slbl').textContent = 'Camera denied';
-    // If camera denied, show guide anyway with manual bypass button
-    showGuide();
-  });
-}
+// startEverything removed — camera init moved to enterStage() for correct user gesture timing
 
 // ── Publish canvas video to Agora (no laptop mic — phone handles audio) ──
 async function publishCanvasToAgora(){
@@ -769,18 +745,19 @@ function startSegmentation(vid){
     segPending=res;
   });
 
-  // Single Camera loop drives segmentation — pose listens to the same frames
-  const cam = new Camera(vid, {
-    onFrame: async()=>{
-      await seg.send({image:vid});
-      // Pose only runs during guide to save CPU
+  // Drive segmentation manually using existing video stream — avoids second getUserMedia call
+  let segRunning = true;
+  async function segLoop(){
+    if(!segRunning) return;
+    if(vid.readyState >= 2){
+      try{ await seg.send({image:vid}); }catch(e){}
       if(guideActive && poseInst){
         try{ await poseInst.send({image:vid}); }catch(e){}
       }
-    },
-    width:640, height:480
-  });
-  cam.start();
+    }
+    requestAnimationFrame(segLoop);
+  }
+  segLoop();
 }
 
 function startPoseDetection(vid){
@@ -1901,27 +1878,31 @@ function renderLoop(){
 // ═══════════════════════════════════════
 function enterStage(){
   document.getElementById('start').style.display='none';
-
-  // Load MediaPipe scripts dynamically — must be after user gesture for camera permission
-  const mpScripts = [
-    'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js',
-    'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js',
-    'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js',
-    'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js',
-  ];
-  let loaded = 0;
-  mpScripts.forEach(src=>{
-    const s = document.createElement('script');
-    s.src = src; s.crossOrigin = 'anonymous';
-    s.onload = ()=>{ loaded++; if(loaded===mpScripts.length) onMediaPipeReady(); };
-    s.onerror = ()=>{ loaded++; if(loaded===mpScripts.length) onMediaPipeReady(); };
-    document.head.appendChild(s);
+  navigator.mediaDevices.getUserMedia({ video:{ width:640, height:480, facingMode:'user' }, audio:false })
+  .then(stream=>{
+    camStream = stream;
+    camVideo  = document.getElementById('webcam');
+    camVideo.srcObject = stream;
+    camVideo.onloadedmetadata = ()=>{
+      camVideo.play();
+      showGuide();
+      startSegmentation(camVideo);
+      startPoseDetection(camVideo);
+      publishCanvasToAgora();
+      document.getElementById('sdot').className = 'dot ld';
+      document.getElementById('slbl').textContent = 'Camera active';
+    };
+    initAgora();
+  })
+  .catch(err=>{
+    console.warn('Camera error:', err);
+    document.getElementById('sdot').className = 'dot of';
+    document.getElementById('slbl').textContent = 'Camera denied — check browser settings';
+    // Try to reset permission — may need browser refresh
+    alert('Camera access was denied. Please click the camera icon in your browser address bar to allow access, then refresh the page.');
+    showGuide();
+    initAgora();
   });
-}
-
-function onMediaPipeReady(){
-  startEverything();
-  initAgora();
   loadYouTubeAPI();
   renderLoop();
 }
