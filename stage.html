@@ -294,7 +294,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.96</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.97</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -354,7 +354,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.96</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.97</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -476,23 +476,6 @@ function singerRect(){
 
 function drawStage(){
   const W=AC.width, H=AC.height, r=V.r, g=V.g, b=V.b;
-
-  // If venue image is loaded, use it as background (crop center portion of equirectangular)
-  if(venueImg){
-    // Equirectangular center crop — use middle 50% width (forward-facing portion)
-    const iw=venueImg.naturalWidth, ih=venueImg.naturalHeight;
-    const cropX = iw * 0.25; // start at 25% (center of panorama = front of venue)
-    const cropW = iw * 0.50; // take 50% width
-    ctx.drawImage(venueImg, cropX, 0, cropW, ih, 0, 0, W, H);
-    // Subtle darkening vignette to help singer pop
-    const vg = ctx.createRadialGradient(W/2,H/2,H*.1,W/2,H/2,H*.85);
-    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.45)');
-    ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
-    return; // skip programmatic stage drawing
-  }
-
-  // Programmatic fallback
-  // BG
   const bg=ctx.createLinearGradient(0,0,0,H);
   bg.addColorStop(0,'#08020a'); bg.addColorStop(.45,'#0e0412'); bg.addColorStop(1,'#0c0608');
   ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
