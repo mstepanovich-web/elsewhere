@@ -294,7 +294,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.97</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.98</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -354,7 +354,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.97</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.98</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -920,17 +920,17 @@ function runGuideLoop(gc, W, H){
 // VENUES
 // ═══════════════════════════════════════
 const VENUES = [
-  { id:'stadium',   name:'Stadium',          icon:'🏟️', skyboxId:'stadium' },
-  { id:'jazz',      name:'Jazz Club',         icon:'🎷', skyboxId:null },
-  { id:'speakeasy', name:'Speakeasy',         icon:'🥃', skyboxId:'speakeasy' },
-  { id:'vegas',     name:'Las Vegas',         icon:'🎰', skyboxId:'vegas' },
-  { id:'broadway',  name:'Broadway',          icon:'🎭', skyboxId:null },
-  { id:'disco',     name:'Disco Club',        icon:'🪩', skyboxId:'disco' },
-  { id:'honkytonk', name:'Honky Tonk',        icon:'🤠', skyboxId:'honkytonk' },
-  { id:'festival',  name:'Festival',          icon:'🎪', skyboxId:'festival' },
-  { id:'space',     name:'Space Station',     icon:'🚀', skyboxId:null },
-  { id:'forest',    name:'Enchanted Forest',  icon:'🌲', skyboxId:null },
-  { id:'default',   name:'Classic Stage',     icon:'🎤', skyboxId:null },
+  { id:'stadium',   name:'Stadium',          icon:'🏟️', skyboxId:'stadium',   startYaw:0   },
+  { id:'jazz',      name:'Jazz Club',         icon:'🎷', skyboxId:null,        startYaw:0   },
+  { id:'speakeasy', name:'Speakeasy',         icon:'🥃', skyboxId:'speakeasy', startYaw:0   },
+  { id:'vegas',     name:'Las Vegas',         icon:'🎰', skyboxId:'vegas',     startYaw:0   },
+  { id:'broadway',  name:'Broadway',          icon:'🎭', skyboxId:null,        startYaw:0   },
+  { id:'disco',     name:'Disco Club',        icon:'🪩', skyboxId:'disco',     startYaw:0   },
+  { id:'honkytonk', name:'Honky Tonk',        icon:'🤠', skyboxId:'honkytonk', startYaw:0   },
+  { id:'festival',  name:'Festival',          icon:'🎪', skyboxId:'festival',  startYaw:0   },
+  { id:'space',     name:'Space Station',     icon:'🚀', skyboxId:null,        startYaw:0   },
+  { id:'forest',    name:'Enchanted Forest',  icon:'🌲', skyboxId:null,        startYaw:0   },
+  { id:'default',   name:'Classic Stage',     icon:'🎤', skyboxId:null,        startYaw:0   },
 ];
 
 const VENUE_BASE_URL = 'https://mstepanovich-web.github.io/elsewhere/venues/';
@@ -1095,10 +1095,30 @@ function buildProgrammaticPanorama(){
 let headTrackInit=false;
 function initHeadTracking(){
   if(headTrackInit) return; headTrackInit=true;
+
+  // Mouse drag on panorama canvas for manual panning
+  const panCanvas = document.getElementById('pan-layer');
+  let dragging=false, dragStartX=0, dragStartYaw=0;
+  panCanvas.style.cursor='grab';
+  panCanvas.addEventListener('mousedown',e=>{
+    dragging=true; dragStartX=e.clientX; dragStartYaw=tYaw;
+    panCanvas.style.cursor='grabbing';
+  });
+  window.addEventListener('mouseup',()=>{ dragging=false; panCanvas.style.cursor='grab'; });
+  window.addEventListener('mousemove',e=>{
+    if(dragging){
+      const dx = e.clientX - dragStartX;
+      tYaw = dragStartYaw - (dx/window.innerWidth)*180;
+      tYaw = Math.max(-175, Math.min(175, tYaw));
+    }
+  });
+
+  // FaceMesh head tracking (runs alongside drag — drag overrides when active)
   if(typeof FaceMesh!=='undefined' && camVideo && camVideo.srcObject){
     const fm=new FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
     fm.setOptions({maxNumFaces:1,refineLandmarks:false,minDetectionConfidence:.5,minTrackingConfidence:.5});
     fm.onResults(res=>{
+      if(dragging) return; // don't override drag
       if(!res.multiFaceLandmarks||!res.multiFaceLandmarks[0]) return;
       const lm=res.multiFaceLandmarks[0];
       const nose=lm[1],lE=lm[234],rE=lm[454],fh=lm[10],ch=lm[152];
@@ -1107,14 +1127,12 @@ function initHeadTracking(){
       const fH=Math.abs(ch.y-fh.y)||.001,fmy=(fh.y+ch.y)/2;
       tPitch= (nose.y-fmy)/(fH*.5)*55;
     });
-    const cam=new Camera(camVideo,{onFrame:async()=>{await fm.send({image:camVideo});},width:640,height:480});
-    cam.start();
-  } else {
-    // Mouse fallback
-    document.addEventListener('mousemove',e=>{
-      tYaw  =((e.clientX-window.innerWidth/2)/(window.innerWidth/2))*100;
-      tPitch=((e.clientY-window.innerHeight/2)/(window.innerHeight/2))*45;
-    });
+    // Use setInterval to send frames — avoids conflict with segmentation Camera loop
+    setInterval(async()=>{
+      if(viewMode==='panorama' && camVideo && camVideo.readyState>=2){
+        try{ await fm.send({image:camVideo}); }catch(e){}
+      }
+    }, 100); // 10fps is enough for head tracking
   }
 }
 
@@ -1390,12 +1408,12 @@ function handleAudienceMsg(msg){
     const v = VENUES.find(v=>v.id===msg.venueId);
     if(v){
       selectedVenueId = v.id;
-      // Load flat background image
       loadVenueImage(v.skyboxId);
-      // Rebuild panorama with new venue
       panReady = false;
       while(panScene.children.length) panScene.remove(panScene.children[0]);
       buildPanorama();
+      // Reset yaw to venue's start position
+      tYaw = v.startYaw || 0; cYaw = v.startYaw || 0;
       log('Venue changed to: '+v.name, 'ok');
       showToast('🎭 '+v.name);
     }
