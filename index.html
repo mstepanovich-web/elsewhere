@@ -94,6 +94,7 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
   width:100%;overflow-x:auto;padding:4px 0 12px;
   -webkit-overflow-scrolling:touch;
   scrollbar-width:none;
+  justify-content:center;
 }
 #aud-results-grid::-webkit-scrollbar{display:none;}
 .aud-result{
@@ -215,7 +216,7 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
   <div id="song-title">Elsewhere</div>
   <div id="room-indicator" onclick="changeRoom()" style="display:none;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.4);cursor:pointer;padding:2px 6px;border:1px solid rgba(255,200,80,.15);border-radius:4px;font-family:'DM Mono',monospace;" title="Tap to change room">Room: <span id="room-display">––––––</span></div>
   <div class="bi" id="wcount"></div>
-  <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;white-space:nowrap;">v0.79</div>
+  <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;white-space:nowrap;">v0.80</div>
 </div>
 <div id="prog"><div id="pf"></div></div>
 
@@ -572,7 +573,7 @@ function handleMsg(msg) {
     document.getElementById('ln').textContent = '';
     document.getElementById('pf').style.width = '0%';
     resumeVideoChat();
-    setTimeout(()=> showVideoChatOffer(), 3000);
+    // Do NOT auto-show video chat offer — only show when singer explicitly opens it
   }
   if (msg.type === 'pause') {
     ytPauseVideo();
