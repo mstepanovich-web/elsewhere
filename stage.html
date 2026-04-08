@@ -294,7 +294,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.89</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.90</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -360,7 +360,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.89</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.90</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -878,26 +878,25 @@ function runGuideLoop(gc, W, H){
     if(!guideActive) return;
     requestAnimationFrame(frame);
     gctx.clearRect(0,0,W,H);
-    // --- Camera feed ---
     const vid = camVideo;
-    if(vid && vid.readyState >= 2){
-      gctx.save(); gctx.translate(W,0); gctx.scale(-1,1); gctx.drawImage(vid,0,0,W,H); gctx.restore();
-    } else {
-      gctx.fillStyle='#0e0810'; gctx.fillRect(0,0,W,H);
-    }
-    // --- Dark overlay, punch rounded rect out ---
-    gctx.save();
-    gctx.fillStyle='rgba(0,0,0,.65)'; gctx.fillRect(0,0,W,H);
-    gctx.globalCompositeOperation='destination-out';
-    rrect(rx,ry,rw,rh,cr); gctx.fill();
-    gctx.restore();
-    // --- Camera clipped inside rounded rect ---
+
+    // --- Dark background ---
+    gctx.fillStyle='#0e0810'; gctx.fillRect(0,0,W,H);
+
+    // --- Camera clipped inside rounded rect only ---
     if(vid && vid.readyState >= 2){
       gctx.save();
       rrect(rx,ry,rw,rh,cr); gctx.clip();
       gctx.translate(W,0); gctx.scale(-1,1); gctx.drawImage(vid,0,0,W,H);
       gctx.restore();
     }
+
+    // --- Dark overlay OUTSIDE the rounded rect (4 rectangles) ---
+    gctx.fillStyle='rgba(0,0,0,.72)';
+    gctx.fillRect(0,   0,    W,      ry);          // top
+    gctx.fillRect(0,   ry+rh, W,     H-(ry+rh));   // bottom
+    gctx.fillRect(0,   ry,    rx,     rh);           // left
+    gctx.fillRect(rx+rw, ry,  W-(rx+rw), rh);       // right
     // --- Rounded rect border ---
     const locked = handRaised && handProgress > 0;
     gctx.save();
