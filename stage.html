@@ -282,7 +282,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.77</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.79</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -342,7 +342,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.77</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.79</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1204,7 +1204,22 @@ async function publishCamToAgora(rawStream){
 
 async function sendMsg(obj){
   if(!agoraClient) return;
-  try{ await agoraClient.sendStreamMessage(new TextEncoder().encode(JSON.stringify(obj)),true); }catch(e){}
+  const str = JSON.stringify(obj);
+  const enc = new TextEncoder();
+  const bytes = enc.encode(str);
+  const CHUNK = 800;
+  if(bytes.length <= CHUNK){
+    try{ await agoraClient.sendStreamMessage(bytes, true); }catch(e){}
+  } else {
+    const chunks = [];
+    for(let i=0;i<str.length;i+=CHUNK) chunks.push(str.slice(i,i+CHUNK));
+    const id = Date.now().toString(36);
+    for(let i=0;i<chunks.length;i++){
+      const pkt = enc.encode(JSON.stringify({_chunk:true,id,i,n:chunks.length,d:chunks[i]}));
+      try{ await agoraClient.sendStreamMessage(pkt,true); }catch(e){}
+      await new Promise(r=>setTimeout(r,30));
+    }
+  }
 }
 
 function handleAudienceMsg(msg){
@@ -1894,8 +1909,14 @@ function showTVSearch(query, results){
   document.getElementById('tv-search').style.display = 'flex';
   document.getElementById('tv-song-card').style.display = 'none';
   log('TV search: '+results.length+' results for "'+query+'"');
-  // Broadcast to audience
-  sendMsg({type:'tv-search', query, results: results.slice(0,6)});
+  // Broadcast to audience — strip to minimal fields to keep message under chunk limit
+  const slim = results.slice(0,6).map(r=>({
+    title: r.title,
+    artist: r.artist||'',
+    videoId: r.videoId||'',
+    thumb: r.thumb||''
+  }));
+  sendMsg({type:'tv-search', query, results: slim});
 }
 
 function highlightTVResult(index){
