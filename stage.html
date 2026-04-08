@@ -296,7 +296,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.04</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.06</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(255,200,80,.12);border:1px solid rgba(255,200,80,.3);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.7);cursor:pointer;display:none;">Auto</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
@@ -356,9 +356,18 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
     <div class="sf"><div class="fd"></div>Toggle to 360° head-tracked panorama at any time</div>
     <div class="sf"><div class="fd"></div>Audience joins from anywhere using your room code</div>
   </div>
+
+  <!-- Camera selector -->
+  <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin:10px 0;">
+    <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:'DM Mono',monospace;">Camera</div>
+    <select id="cam-select" style="background:rgba(255,200,80,.06);border:1px solid rgba(255,200,80,.25);border-radius:4px;color:rgba(255,220,150,.85);font-family:'DM Mono',monospace;font-size:12px;padding:7px 12px;cursor:pointer;outline:none;max-width:320px;width:100%;">
+      <option value="">Detecting cameras...</option>
+    </select>
+  </div>
+
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.04</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.06</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -403,6 +412,33 @@ document.getElementById('rcode-wrap').onclick = () => {
   document.getElementById('rcode').textContent = '✓ Copied';
   setTimeout(()=>document.getElementById('rcode').textContent=ROOM_CODE, 1500);
 };
+
+// ── CAMERA SELECTION ──
+let selectedCameraId = null;
+
+async function populateCameraList(){
+  try{
+    // Brief permission request to unlock device labels
+    const tmp = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
+    tmp.getTracks().forEach(t=>t.stop());
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cameras = devices.filter(d=>d.kind==='videoinput');
+    const sel = document.getElementById('cam-select');
+    sel.innerHTML = '';
+    cameras.forEach((cam,i)=>{
+      const opt = document.createElement('option');
+      opt.value = cam.deviceId;
+      opt.textContent = cam.label || `Camera ${i+1}`;
+      sel.appendChild(opt);
+    });
+    if(cameras.length > 0) selectedCameraId = cameras[0].deviceId;
+    sel.onchange = ()=>{ selectedCameraId = sel.value; };
+  }catch(e){
+    const sel = document.getElementById('cam-select');
+    if(sel) sel.innerHTML = '<option value="">Default camera</option>';
+  }
+}
+populateCameraList();
 
 // ── INVITE / SHARE ──────────────────────────────────────────
 const AUDIENCE_URL = 'https://mstepanovich-web.github.io/elsewhere';
@@ -480,32 +516,8 @@ function singerRect(){
 
 function drawStage(){
   const W=AC.width, H=AC.height, r=V.r, g=V.g, b=V.b;
-
-  // If venue image loaded, crop at staticYaw position for flat background
-  if(venueImg && venueImg.naturalWidth > 0){
-    const venue = VENUES.find(v=>v.id===selectedVenueId);
-    const staticYaw = venue?.staticYaw || 0;
-    const iw = venueImg.naturalWidth, ih = venueImg.naturalHeight;
-    // Convert yaw degrees to pixel offset in equirectangular image
-    // yaw=0 → center (50%), yaw=180 → edge
-    const centerFrac = ((staticYaw % 360) + 360) % 360 / 360;
-    const cropW = iw * 0.40; // show 40% of width
-    let cropX = (centerFrac * iw) - cropW / 2;
-    // Wrap around
-    if(cropX < 0) cropX += iw;
-    if(cropX + cropW > iw){
-      // Split draw — wraps around edge
-      const part1W = iw - cropX;
-      ctx.drawImage(venueImg, cropX, 0, part1W, ih, 0, 0, W * (part1W/cropW), H);
-      ctx.drawImage(venueImg, 0, 0, cropW-part1W, ih, W * (part1W/cropW), 0, W * ((cropW-part1W)/cropW), H);
-    } else {
-      ctx.drawImage(venueImg, cropX, 0, cropW, ih, 0, 0, W, H);
-    }
-    const vg = ctx.createRadialGradient(W/2,H/2,H*.1,W/2,H/2,H*.85);
-    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.45)');
-    ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
-    return;
-  }
+  // Flat venue images disabled — equirectangular crops look warped when displayed flat
+  // Venues only apply in panorama mode via Three.js sphere
   const bg=ctx.createLinearGradient(0,0,0,H);
   bg.addColorStop(0,'#08020a'); bg.addColorStop(.45,'#0e0412'); bg.addColorStop(1,'#0c0608');
   ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
@@ -960,7 +972,7 @@ const VENUES = [
   { id:'festival',  name:'Festival',          icon:'🎪', skyboxId:'festival',  startYaw:358,  staticYaw:145  },
   { id:'space',     name:'Space Station',     icon:'🚀', skyboxId:null,        startYaw:0,    staticYaw:0    },
   { id:'forest',    name:'Enchanted Forest',  icon:'🌲', skyboxId:null,        startYaw:0,    staticYaw:0    },
-  { id:'default',   name:'Classic Stage',     icon:'🎤', skyboxId:null,        startYaw:-119, staticYaw:0    },
+  { id:'default',   name:'Classic Stage',     icon:'🎤', skyboxId:null,        startYaw:363,  staticYaw:0    },
 ];
 
 const VENUE_BASE_URL = 'https://mstepanovich-web.github.io/elsewhere/venues/';
@@ -1940,7 +1952,10 @@ function renderLoop(){
 // ═══════════════════════════════════════
 function enterStage(){
   document.getElementById('start').style.display='none';
-  navigator.mediaDevices.getUserMedia({ video:{ width:640, height:480, facingMode:'user' }, audio:false })
+  const videoConstraints = selectedCameraId
+    ? { deviceId:{ exact:selectedCameraId }, width:640, height:480 }
+    : { width:640, height:480, facingMode:'user' };
+  navigator.mediaDevices.getUserMedia({ video:videoConstraints, audio:false })
   .then(stream=>{
     camStream = stream;
     camVideo  = document.getElementById('webcam');
