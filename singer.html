@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.83</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.86</div>
 </div>
 
 <!-- HOME -->
@@ -193,7 +193,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 
     <!-- Top bar: version left, settings icon right -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
-      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v0.83</div>
+      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v0.86</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -1038,15 +1038,17 @@ function perfStop(){
 // ── POST-SONG ──
 // ── STAGE VENUE OVERLAY ──
 const SINGER_VENUES = [
-  { id:'stadium',  name:'Stadium',       icon:'🏟️' },
-  { id:'jazz',     name:'Jazz Club',     icon:'🎷' },
-  { id:'speakeasy',name:'Speakeasy',     icon:'🥃' },
-  { id:'vegas',    name:'Las Vegas',     icon:'🎰' },
-  { id:'broadway', name:'Broadway',      icon:'🎭' },
-  { id:'disco',    name:'Disco Club',    icon:'🪩' },
-  { id:'space',    name:'Space Station', icon:'🚀' },
-  { id:'forest',   name:'Enchanted Forest',icon:'🌲' },
-  { id:'default',  name:'Classic Stage', icon:'🎤' },
+  { id:'stadium',   name:'Stadium',          icon:'🏟️' },
+  { id:'jazz',      name:'Jazz Club',         icon:'🎷' },
+  { id:'speakeasy', name:'Speakeasy',         icon:'🥃' },
+  { id:'vegas',     name:'Las Vegas',         icon:'🎰' },
+  { id:'broadway',  name:'Broadway',          icon:'🎭' },
+  { id:'disco',     name:'Disco Club',        icon:'🪩' },
+  { id:'honkytonk', name:'Honky Tonk',        icon:'🤠' },
+  { id:'festival',  name:'Festival',          icon:'🎪' },
+  { id:'space',     name:'Space Station',     icon:'🚀' },
+  { id:'forest',    name:'Enchanted Forest',  icon:'🌲' },
+  { id:'default',   name:'Classic Stage',     icon:'🎤' },
 ];
 
 let currentVenueId = 'stadium';
