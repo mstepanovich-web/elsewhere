@@ -294,7 +294,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.86</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v0.87</div>
     <div id="vtoggle" onclick="onToggleView()">🎭 Panorama</div>
   </div>
 </div>
@@ -360,7 +360,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.86</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.87</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -723,6 +723,7 @@ function startEverything(){
     camVideo.srcObject = stream;
     camVideo.onloadedmetadata = () => {
       camVideo.play();
+      showGuide(); // show guide now that camera is ready
       startSegmentation(camVideo);
       startPoseDetection(camVideo);
       publishCanvasToAgora();
@@ -733,6 +734,8 @@ function startEverything(){
   .catch(() => {
     document.getElementById('sdot').className = 'dot of';
     document.getElementById('slbl').textContent = 'Camera denied';
+    // If camera denied, show guide anyway with manual bypass button
+    showGuide();
   });
 }
 
@@ -1902,7 +1905,6 @@ function renderLoop(){
 // ═══════════════════════════════════════
 function enterStage(){
   document.getElementById('start').style.display='none';
-  showGuide();
   startEverything();
   initAgora();
   loadYouTubeAPI();
