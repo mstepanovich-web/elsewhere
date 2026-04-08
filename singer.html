@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.79</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v0.80</div>
 </div>
 
 <!-- HOME -->
@@ -192,7 +192,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <div id="home-body">
 
     <!-- Version — centered at top -->
-    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.79</div>
+    <div style="text-align:center;font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;margin-bottom:-4px;">v0.80</div>
 
     <!-- Now Selected — top of screen -->
     <div id="song-card">
@@ -1045,8 +1045,17 @@ function toggleVideoChat(){
 // ── INVITE ──
 function doInvite(){
   const url=`${AUDIENCE_URL}?code=${roomCode}`;
-  if(navigator.share){navigator.share({title:'Join my Elsewhere performance',text:`Join my Elsewhere performance! 🎤\n${url}`,url}).catch(()=>{});}
-  else{navigator.clipboard.writeText(url).catch(()=>{});showToast('Invite link copied!');}
+  const subject='You have been invited to watch a live Karaoke Event!';
+  const body=`Join my Elsewhere performance! 🎤\n\n${url}`;
+  if(navigator.share){
+    // Pass url separately — don't include in text to avoid duplication
+    navigator.share({title:subject, text:'Join my Elsewhere performance! 🎤', url}).catch(()=>{
+      // Fallback to mailto if share fails
+      window.location.href=`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    });
+  } else {
+    window.location.href=`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
 }
 
 function toggleComments(){
