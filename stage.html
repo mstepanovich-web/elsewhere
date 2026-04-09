@@ -296,7 +296,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.08</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.16</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(255,200,80,.12);border:1px solid rgba(255,200,80,.3);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.7);cursor:pointer;display:none;">Auto</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -367,7 +367,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.08</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.16</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -414,14 +414,16 @@ document.getElementById('rcode-wrap').onclick = () => {
 };
 
 // ── VENUE PANORAMA MODE (audience view with singer composited over Three.js) ──
-let venueMode = false;        // true when using panorama as background in compositing mode
-let venueFOV = 60;            // current camera FOV (narrow=zoomed in, wide=zoomed out)
-let venueFOVTarget = 60;      // target FOV for animation
-let venueYaw = 0;             // current audience yaw
-let venueYawTarget = 0;       // target audience yaw
-const FOV_NARROW = 55;        // tight performance view
-const FOV_WIDE   = 90;        // wide reveal view
-const FOV_SMOOTH = 0.03;      // FOV lerp speed
+let venueMode = false;
+let venueFOV = 60;
+let venueFOVTarget = 60;
+let venueYaw = 0;
+let venueYawTarget = 0;
+let venuePitch = 0;
+let venuePitchTarget = 0;
+const FOV_NARROW = 55;
+const FOV_WIDE   = 90;
+const FOV_SMOOTH = 0.03;
 
 function initVenueMode(){
   const venue = VENUES.find(v=>v.id===selectedVenueId);
@@ -432,6 +434,7 @@ function initVenueMode(){
   venueMode = true;
   venueYaw = venue.staticYaw || 0;
   venueYawTarget = venue.staticYaw || 0;
+  venuePitch = 0; venuePitchTarget = 0;
   venueFOV = FOV_NARROW;
   venueFOVTarget = FOV_NARROW;
   if(panCamera3) panCamera3.fov = FOV_NARROW;
@@ -1176,18 +1179,21 @@ function buildProgrammaticPanorama(){
 let headTrackingAuto = true; // true=head tracking, false=manual mouse/keyboard
 
 function logCurrentYaw(type){
-  let yaw;
-  if(type==='audience'){
-    yaw = Math.round(venueYaw);
-  } else {
-    yaw = headTrackingAuto ? Math.round(cYaw) : Math.round(manualYaw);
-  }
   const venue = VENUES.find(v=>v.id===selectedVenueId);
-  const label = type==='audience' ? 'staticYaw' : 'startYaw';
-  const msg = `${venue?.name||selectedVenueId} ${label}: ${yaw}`;
-  log(msg, 'ok');
-  navigator.clipboard.writeText(String(yaw)).catch(()=>{});
-  showToast((type==='audience' ? '👥 Audience view' : '🎤 Singer view')+' set: '+yaw);
+  if(type==='audience'){
+    const yaw   = Math.round(venueYaw);
+    const pitch = Math.round(venuePitch);
+    const msg = `${venue?.name||selectedVenueId} staticYaw: ${yaw}, pitch: ${pitch}`;
+    log(msg, 'ok');
+    navigator.clipboard.writeText(String(yaw)).catch(()=>{});
+    showToast('👥 Audience: yaw '+yaw+' pitch '+pitch);
+  } else {
+    const yaw = headTrackingAuto ? Math.round(cYaw) : Math.round(manualYaw);
+    const msg = `${venue?.name||selectedVenueId} startYaw: ${yaw}`;
+    log(msg, 'ok');
+    navigator.clipboard.writeText(String(yaw)).catch(()=>{});
+    showToast('🎤 Singer view set: '+yaw);
+  }
 }
 
 function toggleHeadTracking(){
@@ -1231,21 +1237,48 @@ let audienceDragInit = false;
 let audMouseDown=false, audLastX=0, audLastY=0;
 function initAudienceDrag(){
   if(audienceDragInit) return; audienceDragInit=true;
-  const canvas = document.getElementById('aud-layer');
-  canvas.style.cursor = 'grab';
-  canvas.addEventListener('mousedown', e=>{ audMouseDown=true; audLastX=e.clientX; audLastY=e.clientY; canvas.style.cursor='grabbing'; });
-  window.addEventListener('mouseup', ()=>{ audMouseDown=false; canvas.style.cursor='grab'; });
+
+  // Attach drag to both layers — pan-layer is visible in venue mode, aud-layer in classic mode
+  ['aud-layer','pan-layer'].forEach(id=>{
+    const canvas = document.getElementById(id);
+    canvas.addEventListener('mousedown', e=>{
+      if(!venueMode) return;
+      audMouseDown=true; audLastX=e.clientX; audLastY=e.clientY;
+      canvas.style.cursor='grabbing';
+    });
+  });
+
+  window.addEventListener('mouseup', ()=>{
+    audMouseDown=false;
+    document.getElementById('aud-layer').style.cursor='grab';
+    document.getElementById('pan-layer').style.cursor='grab';
+  });
+
   window.addEventListener('mousemove', e=>{
     if(!audMouseDown || !venueMode) return;
-    venueYawTarget   -= (e.clientX-audLastX)*0.15;
-    audLastX=e.clientX; audLastY=e.clientY;
+    venueYawTarget   -= (e.clientX - audLastX) * 0.15;
+    venuePitchTarget += (e.clientY - audLastY) * 0.08;
+    audLastX = e.clientX; audLastY = e.clientY;
   });
-  canvas.addEventListener('touchstart', e=>{ audMouseDown=true; audLastX=e.touches[0].clientX; audLastY=e.touches[0].clientY; },{passive:true});
+
+  // Touch support
+  ['aud-layer','pan-layer'].forEach(id=>{
+    const canvas = document.getElementById(id);
+    canvas.addEventListener('touchstart', e=>{
+      if(!venueMode) return;
+      audMouseDown=true;
+      audLastX=e.touches[0].clientX;
+      audLastY=e.touches[0].clientY;
+    },{passive:true});
+  });
+
   window.addEventListener('touchend', ()=>audMouseDown=false);
   window.addEventListener('touchmove', e=>{
     if(!audMouseDown || !venueMode) return;
-    venueYawTarget -= (e.touches[0].clientX-audLastX)*0.15;
-    audLastX=e.touches[0].clientX; audLastY=e.touches[0].clientY;
+    venueYawTarget   -= (e.touches[0].clientX - audLastX) * 0.15;
+    venuePitchTarget += (e.touches[0].clientY - audLastY) * 0.08;
+    audLastX = e.touches[0].clientX;
+    audLastY = e.touches[0].clientY;
   },{passive:true});
 }
 
@@ -2006,54 +2039,52 @@ const DIRS=[[-175,-130,'Behind'],[- 130,-90,'Far Left'],[-90,-55,'Stage Left —
 function renderLoop(){
   requestAnimationFrame(renderLoop); fc++;
 
-  if(venueMode && panReady && panRenderer){
-    // ── VENUE MODE — panorama background + singer composited on top ──
-    // Animate FOV zoom
-    venueFOV = lerp(venueFOV, venueFOVTarget, FOV_SMOOTH);
-    if(Math.abs(venueFOV - panCamera3.fov) > 0.05){
-      panCamera3.fov = venueFOV;
-      panCamera3.updateProjectionMatrix();
-    }
-    // Animate yaw pan
-    venueYaw = lerp(venueYaw, venueYawTarget, SMOOTH);
-    panCamera3.rotation.y = -venueYaw * D2R;
-    panCamera3.rotation.x = 0;
+  if(viewMode==='panorama'){
+    // ── SINGER VIEW — head-tracked / manual, no singer composite ──
+    if(!panReady || !panRenderer) return;
+    cYaw   = lerp(cYaw,   tYaw,   SMOOTH);
+    cPitch = lerp(cPitch, tPitch, SMOOTH);
+    panCamera3.fov = 80; panCamera3.updateProjectionMatrix();
+    panCamera3.rotation.y = -(headTrackingAuto ? cYaw   : manualYaw  ) * D2R * YS;
+    panCamera3.rotation.x = -(headTrackingAuto ? clamp(cPitch,-MU,MD) : clamp(manualPitch,-MU,MD)) * D2R * PS;
     panRenderer.render(panScene, panCamera3);
+    if(fc%3===0){
+      document.getElementById('cneedle').style.transform=`translateX(-50%) translateY(-100%) rotate(${cYaw*YS}deg)`;
+      const d=DIRS.find(rd=>cYaw>=rd[0]&&cYaw<rd[1]);
+      if(d) document.getElementById('cdir').textContent=d[2];
+    }
 
-    // Show pan-layer behind aud-layer
-    document.getElementById('pan-layer').style.opacity = '1';
-
-    // Draw singer onto transparent aud-layer canvas
-    ctx.clearRect(0, 0, AC.width, AC.height);
+  } else {
+    // ── AUDIENCE VIEW ──
+    if(venueMode && panReady && panRenderer){
+      // Venue panorama background + singer on top
+      venueFOV = lerp(venueFOV, venueFOVTarget, FOV_SMOOTH);
+      if(Math.abs(venueFOV - panCamera3.fov) > 0.05){
+        panCamera3.fov = venueFOV;
+        panCamera3.updateProjectionMatrix();
+      }
+      venueYaw   = lerp(venueYaw,   venueYawTarget,   SMOOTH);
+      venuePitch = lerp(venuePitch, venuePitchTarget, SMOOTH);
+      panCamera3.rotation.y = -venueYaw   * D2R;
+      panCamera3.rotation.x = -venuePitch * D2R;
+      panRenderer.render(panScene, panCamera3);
+      const pl = document.getElementById('pan-layer');
+      pl.style.opacity = '1';
+      pl.style.pointerEvents = 'auto'; // allow drag on pan-layer in venue mode
+      ctx.clearRect(0, 0, AC.width, AC.height);
+    } else {
+      // Classic Stage — 2D programmatic backdrop
+      const pl = document.getElementById('pan-layer');
+      pl.style.opacity = '0';
+      pl.style.pointerEvents = 'none';
+      drawStage();
+    }
+    // Singer composite (both venue and classic stage)
     if(segPending) drawSinger(segPending.image, segPending.segmentationMask);
     else if(camVideo && camVideo.readyState>=2 && !segOk){
       const rect=singerRect();
       ctx.save(); ctx.translate(rect.x+rect.w,rect.y); ctx.scale(-1,1);
       ctx.drawImage(camVideo,0,0,rect.w,rect.h); ctx.restore();
-    }
-
-  } else if(viewMode==='audience'){
-    // ── STANDARD MODE — 2D programmatic stage ──
-    document.getElementById('pan-layer').style.opacity = '0';
-    drawStage();
-    if(segPending) drawSinger(segPending.image,segPending.segmentationMask);
-    else if(camVideo&&camVideo.readyState>=2&&!segOk){
-      const rect=singerRect();
-      ctx.save(); ctx.translate(rect.x+rect.w,rect.y); ctx.scale(-1,1);
-      ctx.drawImage(camVideo,0,0,rect.w,rect.h); ctx.restore();
-    }
-  } else if(panReady && panRenderer){
-    // ── PANORAMA MODE — singer's head-tracked view ──
-    cYaw  =lerp(cYaw,  tYaw,  SMOOTH);
-    cPitch=lerp(cPitch,tPitch,SMOOTH);
-    panCamera3.fov = 80; panCamera3.updateProjectionMatrix();
-    panCamera3.rotation.y=-(headTrackingAuto ? cYaw : manualYaw)*D2R*YS;
-    panCamera3.rotation.x=headTrackingAuto ? -clamp(cPitch,-MU,MD)*D2R*PS : -clamp(manualPitch,-MU,MD)*D2R*PS;
-    panRenderer.render(panScene,panCamera3);
-    if(fc%3===0){
-      document.getElementById('cneedle').style.transform=`translateX(-50%) translateY(-100%) rotate(${cYaw*YS}deg)`;
-      const d=DIRS.find(rd=>cYaw>=rd[0]&&cYaw<rd[1]);
-      if(d) document.getElementById('cdir').textContent=d[2];
     }
   }
 }
@@ -2077,7 +2108,8 @@ function enterStage(){
       startSegmentation(camVideo);
       startPoseDetection(camVideo);
       publishCanvasToAgora();
-      initVenueMode(); // set up panorama audience view based on selected venue
+      initVenueMode();
+      initAudienceDrag(); // init drag on load so it's ready immediately
       document.getElementById('sdot').className = 'dot ld';
       document.getElementById('slbl').textContent = 'Camera active';
     };
