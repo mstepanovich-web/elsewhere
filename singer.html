@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.14</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.20</div>
 </div>
 
 <!-- HOME -->
@@ -193,7 +193,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 
     <!-- Top bar: version left, settings icon right -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
-      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.14</div>
+      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.20</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -262,9 +262,20 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 
 <!-- STAGE VENUE OVERLAY -->
 <div id="stage-overlay" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(4,2,6,.96);backdrop-filter:blur(8px);flex-direction:column;padding:max(50px,env(safe-area-inset-top)) 18px 24px;overflow:hidden;">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-shrink:0;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0;">
     <div style="font-family:'Cormorant Garamond',serif;font-size:24px;color:rgba(255,220,150,.9);font-style:italic;">Choose Your Stage</div>
     <div onclick="hideStageOverlay()" style="font-size:22px;cursor:pointer;color:rgba(255,200,120,.5);padding:4px 8px;-webkit-user-select:none;">✕</div>
+  </div>
+  <!-- View toggle pill -->
+  <div style="display:flex;gap:0;margin-bottom:14px;flex-shrink:0;border:1px solid rgba(255,200,80,.25);border-radius:6px;overflow:hidden;">
+    <div id="venue-singer-tab" onclick="setVenuePreviewView('singer')"
+      style="flex:1;padding:9px;text-align:center;font-size:11px;letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;background:rgba(255,200,80,.15);color:rgba(255,220,150,.95);-webkit-user-select:none;">
+      🎤 Singer View
+    </div>
+    <div id="venue-audience-tab" onclick="setVenuePreviewView('audience')"
+      style="flex:1;padding:9px;text-align:center;font-size:11px;letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;background:transparent;color:rgba(255,220,150,.4);-webkit-user-select:none;">
+      👥 Audience View
+    </div>
   </div>
   <div id="singer-venue-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;padding-bottom:16px;"></div>
 </div>
@@ -429,13 +440,14 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <div class="perf-btn" id="perf-pause" onclick="perfPauseToggle()">⏸ Pause</div>
     <div class="perf-btn danger" onclick="perfStop()">■ Stop</div>
     <div class="perf-btn" onclick="perfRestart()">↩ Restart</div>
-    <div class="perf-btn" id="perf-zoom-btn" onclick="toggleZoom()">🔍 Zoom In</div>
+    <div class="perf-btn" id="perf-view-btn" onclick="toggleStageView()">👥 Audience</div>
   </div>
 
-  <!-- Venue pan controls -->
+  <!-- Zoom + Pan row -->
   <div style="display:flex;gap:8px;padding:0 18px 4px;">
-    <div class="perf-btn" onclick="sendVenuePan(-15)" style="flex:1;padding:12px 8px;font-size:18px;">◀</div>
-    <div class="perf-btn" onclick="sendVenuePan(15)"  style="flex:1;padding:12px 8px;font-size:18px;">▶</div>
+    <div class="perf-btn" id="perf-zoom-btn" onclick="toggleZoom()" style="flex:2;">🔍 Zoom Out</div>
+    <div class="perf-btn" onclick="sendPanLeft()" style="flex:1;font-size:18px;">◀</div>
+    <div class="perf-btn" onclick="sendPanRight()" style="flex:1;font-size:18px;">▶</div>
   </div>
 
   <!-- Bottom row: watchers left, comments toggle right -->
@@ -470,7 +482,7 @@ const LRCLIB_URL   = 'https://lrclib.net/api';
 
 let roomCode='', agoraClient=null, agoraReady=false;
 let micStream=null, micAudioTrack=null, micPublished=false;
-let audioCtx=null, micSource=null, gainNode=null;
+let audioCtx=null, micSource=null, gainNode=null, inputBoostNode=null;
 let reverbNode=null, echoDelay=null, echoFeedback=null, analyser=null;
 let muted=true, FX={reverb:false,echo:false,boost:false,deep:false};
 let selectedVideo=null, syncedLyrics=[];
@@ -611,7 +623,7 @@ async function switchMicDevice(deviceId){
     if(micAudioTrack){ await agoraClient.unpublish([micAudioTrack]); micAudioTrack=null; micPublished=false; log('Agora audio unpublished', 'ok'); }
     if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; log('Old stream stopped', 'ok'); }
     if(audioCtx){ await audioCtx.close(); audioCtx=null; log('AudioCtx closed', 'ok'); }
-    micSource=null; gainNode=null; analyser=null; reverbNode=null;
+    micSource=null; gainNode=null; inputBoostNode=null; analyser=null; reverbNode=null;
     echoDelay=null; echoFeedback=null; agoraDest=null;
   }catch(e){ log('Teardown error: '+e.message, 'err'); }
 
@@ -647,7 +659,18 @@ async function initMic(){
 
     audioCtx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:44100});
     log('AudioCtx created, state: '+audioCtx.state, 'ok');
+    // iOS starts AudioContext suspended — resume immediately
+    if(audioCtx.state==='suspended'){
+      await audioCtx.resume();
+      log('AudioCtx resumed, state: '+audioCtx.state, 'ok');
+    }
     micSource=audioCtx.createMediaStreamSource(micStream);
+    inputBoostNode=audioCtx.createGain();
+    // External/USB mics on iOS come in lower — boost to match built-in level
+    const isExternal = !label.toLowerCase().includes('iphone') && !label.toLowerCase().includes('built-in');
+    inputBoostNode.gain.value = isExternal ? 3.0 : 1.0;
+    micSource.connect(inputBoostNode);
+    log((isExternal ? 'External mic — input boost 3x' : 'Built-in mic — no boost'), 'ok');
     gainNode=audioCtx.createGain(); gainNode.gain.value=0;
     analyser=audioCtx.createAnalyser(); analyser.fftSize=256; analyser.smoothingTimeConstant=0.7;
     reverbNode=audioCtx.createConvolver(); buildReverb(2.5);
@@ -656,6 +679,7 @@ async function initMic(){
     buildChain(); startLevelMeter();
     document.getElementById('mic-pill').classList.add('ok');
     document.getElementById('mic-pill-txt').textContent=`Mic: ${label.slice(0,30)}`;
+
     log('Mic chain ready', 'ok');
   }catch(e){
     log('initMic error: '+e.message, 'err');
@@ -732,8 +756,9 @@ function buildReverb(d){
 let agoraDest = null; // MediaStreamDestination for Agora — persists across buildChain calls
 
 function buildChain(){
-  try{micSource.disconnect();gainNode.disconnect();reverbNode.disconnect();echoDelay.disconnect();echoFeedback.disconnect();}catch(e){}
-  let ch=micSource;
+  try{micSource.disconnect();if(inputBoostNode)inputBoostNode.disconnect();gainNode.disconnect();reverbNode.disconnect();echoDelay.disconnect();echoFeedback.disconnect();}catch(e){}
+  micSource.connect(inputBoostNode||gainNode);
+  let ch=inputBoostNode||micSource;
   if(FX.boost){const c=audioCtx.createDynamicsCompressor();c.threshold.value=-18;c.ratio.value=4;c.attack.value=0.003;ch.connect(c);ch=c;}
   if(FX.deep){const s=audioCtx.createBiquadFilter();s.type='lowshelf';s.frequency.value=300;s.gain.value=8;ch.connect(s);ch=s;}
   const dry=audioCtx.createGain();dry.gain.value=1;ch.connect(dry);
@@ -954,7 +979,7 @@ function goToCountdown(){
         document.getElementById('perf-pause').textContent = '⏸ Pause';
         // Reset zoom/comments
         zoomActive = false; perfCommentsOn = true;
-        const zb=document.getElementById('perf-zoom-btn'); if(zb) zb.textContent='🔍 Zoom In';
+        const zb=document.getElementById('perf-zoom-btn'); if(zb) zb.textContent='🔍 Zoom Out';
         const cb=document.getElementById('perf-comments-btn'); if(cb) cb.textContent='Comments On';
         // Reset lyrics button
         const lb=document.getElementById('perf-lyrics-btn');
@@ -1076,12 +1101,13 @@ function toggleHomeMute(){
 }
 
 // ── ZOOM TOGGLE ──
-let zoomActive = false;
+let zoomActive = false; // false = zoomed in (normal), true = zoomed out
 function toggleZoom(){
   zoomActive = !zoomActive;
-  sendToStage({type: zoomActive ? 'zoom-in' : 'zoom-out'});
-  document.getElementById('perf-zoom-btn').textContent = zoomActive ? '🔍 Zoom Out' : '🔍 Zoom In';
-  showToast(zoomActive ? 'Zoomed in' : 'Zoomed out');
+  // zoomActive=true means we zoomed OUT from the default zoomed-in state
+  sendToStage({type: zoomActive ? 'zoom-out' : 'zoom-in'});
+  document.getElementById('perf-zoom-btn').textContent = zoomActive ? '🔍 Zoom In' : '🔍 Zoom Out';
+  showToast(zoomActive ? 'Zoomed out' : 'Zoomed in');
 }
 
 // ── COMMENTS TOGGLE ON PERF SCREEN ──
@@ -1170,6 +1196,49 @@ function selectVenue(v){
   log('Venue selected: '+v.name, 'ok');
   showToast('Stage changed to '+v.name);
 }
+// ── STAGE VIEW TOGGLE (singer app controls stage view) ──
+let currentStageView = 'audience'; // 'singer' or 'audience'
+
+function toggleStageView(){
+  currentStageView = currentStageView === 'audience' ? 'singer' : 'audience';
+  const btn = document.getElementById('perf-view-btn');
+  btn.textContent = currentStageView === 'audience' ? '👥 Audience' : '🎤 Singer';
+  sendToStage({type:'set-view', view: currentStageView});
+  log('Stage view: '+currentStageView, 'ok');
+}
+
+// ── PAN CONTROLS — work for both singer and audience views ──
+function sendPanLeft(){
+  sendToStage({type:'venue-pan', delta:-15});
+}
+function sendPanRight(){
+  sendToStage({type:'venue-pan', delta:15});
+}
+
+// ── VENUE PREVIEW VIEW TOGGLE ──
+let venuePreviewView = 'singer'; // 'singer' or 'audience'
+
+function setVenuePreviewView(view){
+  venuePreviewView = view;
+  // Update tab styles
+  const singerTab = document.getElementById('venue-singer-tab');
+  const audTab = document.getElementById('venue-audience-tab');
+  if(view==='singer'){
+    singerTab.style.background = 'rgba(255,200,80,.15)';
+    singerTab.style.color = 'rgba(255,220,150,.95)';
+    audTab.style.background = 'transparent';
+    audTab.style.color = 'rgba(255,220,150,.4)';
+  } else {
+    audTab.style.background = 'rgba(255,200,80,.15)';
+    audTab.style.color = 'rgba(255,220,150,.95)';
+    singerTab.style.background = 'transparent';
+    singerTab.style.color = 'rgba(255,220,150,.4)';
+  }
+  // Tell stage to switch view
+  sendToStage({type:'set-view', view});
+  log('Venue preview: '+view, 'info');
+}
+
 function sendVenuePan(delta){
   sendToStage({type:'venue-pan', delta});
 }
