@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.20</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.22</div>
 </div>
 
 <!-- HOME -->
@@ -193,7 +193,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 
     <!-- Top bar: version left, settings icon right -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
-      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.20</div>
+      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.22</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -294,7 +294,8 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
           autocomplete="off" inputmode="search"
           style="padding-right:36px;"
           onkeydown="if(event.key==='Enter')doSearch()"
-          oninput="onSearchInput(this.value)">
+          oninput="onSearchInput(this.value)"
+          onfocus="updateClearBtn()">
         <div id="srch-clear" onclick="clearSearch()"
           style="position:absolute;right:10px;font-size:16px;color:rgba(255,200,120,.4);cursor:pointer;display:none;-webkit-user-select:none;padding:4px;">✕</div>
       </div>
@@ -445,9 +446,9 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 
   <!-- Zoom + Pan row -->
   <div style="display:flex;gap:8px;padding:0 18px 4px;">
-    <div class="perf-btn" id="perf-zoom-btn" onclick="toggleZoom()" style="flex:2;">🔍 Zoom Out</div>
-    <div class="perf-btn" onclick="sendPanLeft()" style="flex:1;font-size:18px;">◀</div>
-    <div class="perf-btn" onclick="sendPanRight()" style="flex:1;font-size:18px;">▶</div>
+    <div class="perf-btn" id="perf-zoom-btn" onclick="toggleZoom()" style="flex:2;padding:18px 8px;">🔍 Zoom Out</div>
+    <div class="perf-btn" onclick="sendPanLeft()" style="flex:1;padding:18px 8px;font-size:18px;">◀</div>
+    <div class="perf-btn" onclick="sendPanRight()" style="flex:1;padding:18px 8px;font-size:18px;">▶</div>
   </div>
 
   <!-- Bottom row: watchers left, comments toggle right -->
@@ -865,18 +866,19 @@ function renderResults(items){
 
 async function selectResult(r){
   selectedVideo=r;
-  showToast('Loading lyrics...');
-  syncedLyrics=await fetchLyrics(r.title, r.artist);
-  sendToStage({type:'song-select',videoId:r.videoId,title:r.title,artist:r.artist,thumb:r.thumb||'',lyrics:syncedLyrics,isDemo:r.videoId.startsWith('d')});
+  // Show home screen immediately — don't wait for lyrics
   document.getElementById('song-title').textContent=r.title;
   document.getElementById('song-artist').textContent=r.artist||'';
   document.getElementById('start-btn').style.display='block';
   showScreen('screen-home');
+  showToast('Loading lyrics...');
+  // Fetch lyrics in background
+  syncedLyrics=await fetchLyrics(r.title, r.artist);
+  sendToStage({type:'song-select',videoId:r.videoId,title:r.title,artist:r.artist,thumb:r.thumb||'',lyrics:syncedLyrics,isDemo:r.videoId.startsWith('d')});
   if(syncedLyrics.length > 0){
-    showToast('✓ Song selected · '+syncedLyrics.length+' lyric lines loaded');
+    showToast('✓ '+syncedLyrics.length+' lyric lines loaded');
   } else {
-    showToast('⚠️ Song selected · No lyrics found');
-    // Update song card to show no lyrics
+    showToast('⚠️ No lyrics found');
     document.getElementById('song-artist').textContent = (r.artist||'') + ' · No lyrics';
   }
 }
@@ -924,14 +926,16 @@ function parseLRC(lrc){
 }
 
 // ── SEARCH CLEAR ──
-function onSearchInput(val){
+function updateClearBtn(){
+  const val = document.getElementById('srch-in').value;
   document.getElementById('srch-clear').style.display = val.length > 0 ? 'block' : 'none';
 }
+function onSearchInput(val){ updateClearBtn(); }
 
 function clearSearch(){
   const inp = document.getElementById('srch-in');
   inp.value = '';
-  document.getElementById('srch-clear').style.display = 'none';
+  updateClearBtn();
   document.getElementById('srch-results').innerHTML = '<div class="empty">🎵<br>Search for any song<br>Results appear here and on the TV</div>';
   document.getElementById('srch-status').textContent = 'Hold 🎙 to search by voice · or type and search';
   inp.focus();
@@ -945,7 +949,7 @@ function startVoice(e){
   recognition=new SR();
   recognition.lang='en-US'; recognition.interimResults=false; recognition.maxAlternatives=1;
   recognition.onstart=()=>{voiceActive=true;document.getElementById('voice-btn').classList.add('on');document.getElementById('voice-hint').style.display='block';};
-  recognition.onresult=e=>{document.getElementById('srch-in').value=e.results[0][0].transcript;doSearch();};
+  recognition.onresult=e=>{document.getElementById('srch-in').value=e.results[0][0].transcript;updateClearBtn();doSearch();};
   recognition.onerror=recognition.onend=()=>{voiceActive=false;document.getElementById('voice-btn').classList.remove('on');document.getElementById('voice-hint').style.display='none';};
   recognition.start();
 }
@@ -1209,10 +1213,12 @@ function toggleStageView(){
 
 // ── PAN CONTROLS — work for both singer and audience views ──
 function sendPanLeft(){
-  sendToStage({type:'venue-pan', delta:-15});
+  if(currentStageView==='singer') sendToStage({type:'singer-pan', delta:-15});
+  else sendToStage({type:'venue-pan', delta:-15});
 }
 function sendPanRight(){
-  sendToStage({type:'venue-pan', delta:15});
+  if(currentStageView==='singer') sendToStage({type:'singer-pan', delta:15});
+  else sendToStage({type:'venue-pan', delta:15});
 }
 
 // ── VENUE PREVIEW VIEW TOGGLE ──
@@ -1240,7 +1246,8 @@ function setVenuePreviewView(view){
 }
 
 function sendVenuePan(delta){
-  sendToStage({type:'venue-pan', delta});
+  if(venuePreviewView==='singer') sendToStage({type:'singer-pan', delta});
+  else sendToStage({type:'venue-pan', delta});
 }
 
 let videoChatActive = false;
