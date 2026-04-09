@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.11</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.13</div>
 </div>
 
 <!-- HOME -->
@@ -193,7 +193,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 
     <!-- Top bar: version left, settings icon right -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
-      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.11</div>
+      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.13</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -341,9 +341,12 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <!-- Mic device selector -->
   <div style="padding:10px 18px 0;display:flex;flex-direction:column;gap:6px;">
     <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:'DM Mono',monospace;">Input Device</div>
-    <select id="mic-select" onchange="switchMicDevice(this.value)" style="background:rgba(255,200,80,.06);border:1px solid rgba(255,200,80,.25);border-radius:4px;color:rgba(255,220,150,.85);font-family:'DM Mono',monospace;font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
-      <option value="">Detecting...</option>
-    </select>
+    <div style="display:flex;gap:8px;">
+      <select id="mic-select" onchange="switchMicDevice(this.value)" style="background:rgba(255,200,80,.06);border:1px solid rgba(255,200,80,.25);border-radius:4px;color:rgba(255,220,150,.85);font-family:'DM Mono',monospace;font-size:12px;padding:7px 12px;cursor:pointer;outline:none;flex:1;">
+        <option value="">Detecting...</option>
+      </select>
+      <div onclick="populateMicList()" style="padding:7px 12px;background:rgba(255,200,80,.08);border:1px solid rgba(255,200,80,.25);border-radius:4px;color:rgba(255,220,150,.7);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;white-space:nowrap;">↻ Refresh</div>
+    </div>
     <div id="mic-diag" style="display:none;font-size:10px;color:rgba(0,232,122,.7);font-family:'DM Mono',monospace;padding:2px 0;word-break:break-all;"></div>
   </div>
   <div id="mic-centre">
@@ -499,18 +502,17 @@ async function doJoin(){
   if(typeof AgoraRTC==='undefined'){err.textContent='SDK not loaded — needs HTTPS';return;}
   err.textContent=''; document.getElementById('join-go').textContent='…';
   roomCode=raw; document.getElementById('stat-r').textContent=raw;
+  log('Joining room: '+raw, 'info');
   try{
     agoraClient=AgoraRTC.createClient({mode:'live',codec:'vp8'});
     await agoraClient.setClientRole('host');
     agoraClient.on('stream-message',(uid,data)=>{try{handleStageMsg(JSON.parse(new TextDecoder().decode(data)));}catch(e){}});
     await agoraClient.join(AGORA_APP_ID,CHAN_PREFIX+raw,null,null);
-    const selfUID = agoraClient.uid; // singer's own UID
+    const selfUID = agoraClient.uid;
     agoraReady=true;
-    agoraClient.on('user-joined',u=>{
-      if(u.uid===selfUID) return; // skip self
-      addAudMember(u.uid,null);
-    });
-    agoraClient.on('user-left',u=>removeAudMember(u.uid));
+    log('Agora joined — UID: '+selfUID+' channel: '+CHAN_PREFIX+raw, 'ok');
+    agoraClient.on('user-joined',u=>{ if(u.uid===selfUID) return; addAudMember(u.uid,null); log('Audience joined UID:'+u.uid, 'info'); });
+    agoraClient.on('user-left',u=>{ removeAudMember(u.uid); log('Audience left UID:'+u.uid, 'info'); });
     setInterval(()=>{
       if(!agoraClient) return;
       const n=agoraClient.remoteUsers.length;
@@ -519,12 +521,13 @@ async function doJoin(){
       document.getElementById('aud-cnt').textContent=n+' watching';
     },3000);
     await initMic();
-    await publishMic();  // publish now so track is ready, but stays muted (gain=0)
+    await publishMic();
     sendToStage({type:'mic-connected',roomCode});
+    log('mic-connected sent to stage', 'ok');
     showScreen('screen-home');
     showToast('Connected to stage ✓');
   }catch(e){
-    console.warn('Join:',e);
+    log('Join error: '+e.message, 'err');
     err.textContent='Could not connect — check code and try again';
     document.getElementById('join-go').textContent='Go →';
   }
@@ -581,7 +584,6 @@ let selectedMicId = null;
 
 async function populateMicList(){
   try{
-    // Brief permission request to unlock labels
     const tmp = await navigator.mediaDevices.getUserMedia({audio:true});
     tmp.getTracks().forEach(t=>t.stop());
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -593,51 +595,53 @@ async function populateMicList(){
       const opt = document.createElement('option');
       opt.value = m.deviceId;
       opt.textContent = m.label || `Microphone ${i+1}`;
+      if(m.deviceId === selectedMicId) opt.selected = true;
       sel.appendChild(opt);
     });
-    if(mics.length > 0) selectedMicId = mics[0].deviceId;
-    console.log('Mic devices:', mics.map(m=>m.label).join(', '));
-  }catch(e){ console.warn('Mic enum error:', e); }
+    if(!selectedMicId && mics.length > 0) selectedMicId = mics[0].deviceId;
+    log(`${mics.length} mic(s): ${mics.map(m=>m.label||'unnamed').join(' | ')}`, 'ok');
+  }catch(e){ log('Mic enum error: '+e.message, 'err'); }
 }
 
 async function switchMicDevice(deviceId){
   selectedMicId = deviceId;
-  // Stop existing stream and reinit with new device
-  if(micStream) micStream.getTracks().forEach(t=>t.stop());
-  micPublished = false;
+  log('Switching mic to deviceId: '+deviceId.slice(0,16), 'info');
+  document.getElementById('mic-pill-txt').textContent = 'Switching mic...';
+  try{
+    if(micAudioTrack){ await agoraClient.unpublish([micAudioTrack]); micAudioTrack=null; micPublished=false; log('Agora audio unpublished', 'ok'); }
+    if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; log('Old stream stopped', 'ok'); }
+    if(audioCtx){ audioCtx.close(); audioCtx=null; log('AudioCtx closed', 'ok'); }
+    micSource=null; gainNode=null; analyser=null; reverbNode=null;
+    echoDelay=null; echoFeedback=null; agoraDest=null;
+  }catch(e){ log('Teardown error: '+e.message, 'err'); }
   await initMic();
-  if(agoraReady) await publishMic();
+  if(agoraReady && micStream) await publishMic();
 }
 
 // ── MIC ──
 async function initMic(){
   try{
-    // First enumerate available audio devices for diagnostics
     const allDevices = await navigator.mediaDevices.enumerateDevices();
     const audioInputs = allDevices.filter(d=>d.kind==='audioinput');
-    console.log('Available audio inputs:', audioInputs.map(d=>`${d.label} [${d.deviceId.slice(0,8)}]`).join(', '));
+    log('Audio inputs: '+audioInputs.map(d=>d.label||'unnamed').join(' | '), 'info');
 
     const audioConstraints = selectedMicId
       ? { deviceId:{ exact:selectedMicId }, echoCancellation:false, noiseSuppression:false, autoGainControl:false }
       : { echoCancellation:false, noiseSuppression:false, autoGainControl:false };
+    log('Requesting mic with'+(selectedMicId?' deviceId:'+selectedMicId.slice(0,12):' default'), 'info');
     micStream=await navigator.mediaDevices.getUserMedia({audio: audioConstraints});
 
-    // Log what we actually got
     const track = micStream.getAudioTracks()[0];
     const settings = track.getSettings();
     const label = track.label || 'unknown';
-    console.log('Mic track label:', label);
-    console.log('Mic settings:', JSON.stringify(settings));
-    console.log('Mic deviceId:', settings.deviceId);
+    log('Got mic: '+label, 'ok');
+    log('deviceId: '+(settings.deviceId||'?'), 'ok');
 
-    // Show on screen
     const diagEl = document.getElementById('mic-diag');
-    if(diagEl){
-      diagEl.textContent = `Using: ${label} | deviceId: ${(settings.deviceId||'?').slice(0,12)}`;
-      diagEl.style.display = 'block';
-    }
+    if(diagEl){ diagEl.textContent=`Using: ${label} | ${(settings.deviceId||'?').slice(0,16)}`; diagEl.style.display='block'; }
 
     audioCtx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:44100});
+    log('AudioCtx created, state: '+audioCtx.state, 'ok');
     micSource=audioCtx.createMediaStreamSource(micStream);
     gainNode=audioCtx.createGain(); gainNode.gain.value=0;
     analyser=audioCtx.createAnalyser(); analyser.fftSize=256; analyser.smoothingTimeConstant=0.7;
@@ -647,24 +651,25 @@ async function initMic(){
     buildChain(); startLevelMeter();
     document.getElementById('mic-pill').classList.add('ok');
     document.getElementById('mic-pill-txt').textContent=`Mic: ${label.slice(0,30)}`;
+    log('Mic chain ready', 'ok');
   }catch(e){
-    console.warn('Mic error:',e);
+    log('initMic error: '+e.message, 'err');
     document.getElementById('mic-pill-txt').textContent='Mic denied: '+e.message;
   }
 }
 
 async function publishMic(){
-  if(micPublished||!micStream||!agoraClient||!agoraReady) return;
+  if(micPublished||!micStream||!agoraClient||!agoraReady){ log('publishMic skipped — published:'+micPublished+' stream:'+!!micStream+' agora:'+agoraReady, 'warn'); return; }
   try{
-    // Create persistent Agora destination — buildChain connects gainNode→agoraDest
     agoraDest = audioCtx.createMediaStreamDestination();
-    buildChain(); // reconnects everything including gainNode→agoraDest
+    buildChain();
     micAudioTrack=AgoraRTC.createCustomAudioTrack({
       mediaStreamTrack: agoraDest.stream.getAudioTracks()[0]
     });
     await agoraClient.publish([micAudioTrack]);
     micPublished=true;
-  }catch(e){console.warn('Mic publish:',e);}
+    log('Mic published to Agora', 'ok');
+  }catch(e){ log('publishMic error: '+e.message, 'err'); }
 }
 
 function unmuteMic(){
@@ -673,13 +678,14 @@ function unmuteMic(){
   const vol = getVol();
   if(gainNode) gainNode.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.05);
   if(micAudioTrack) micAudioTrack.setVolume(Math.round(vol*100));
+  log('Mic unmuted — gain:'+vol.toFixed(2)+' agoraVol:'+Math.round(vol*100)+' ctx:'+audioCtx?.state, 'ok');
   updateMicUI();
 }
 function muteMic(){
   muted=true;
-  if(gainNode) gainNode.gain.setTargetAtTime(0,audioCtx.currentTime,0.05);
-  // Also mute the Agora track — this is what actually silences what audience hears
+  if(gainNode) gainNode.gain.setTargetAtTime(0,audioCtx?.currentTime||0,0.05);
   if(micAudioTrack) micAudioTrack.setVolume(0);
+  log('Mic muted', 'info');
   updateMicUI();
 }
 function toggleMute(){ muted?unmuteMic():muteMic(); }
@@ -1151,16 +1157,12 @@ function hideStageOverlay(){
 
 function selectVenue(v){
   currentVenueId = v.id;
-  // Update button highlight
-  document.querySelectorAll('#singer-venue-grid .action-card').forEach(c=>{
-    c.style.cssText = '';
-  });
+  document.querySelectorAll('#singer-venue-grid .action-card').forEach(c=>{ c.style.cssText = ''; });
   const card = document.getElementById('sv-'+v.id);
   if(card) card.style.cssText = 'border-color:rgba(255,200,80,.7);background:rgba(255,200,80,.12);';
-  // Update Stage button sub-label
   document.getElementById('stage-venue-sub').textContent = v.name;
-  // Tell stage to switch venue
   sendToStage({type:'set-venue', venueId:v.id});
+  log('Venue selected: '+v.name, 'ok');
   showToast('Stage changed to '+v.name);
 }
 function sendVenuePan(delta){
@@ -1210,7 +1212,49 @@ let toastTmr=null;
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';if(toastTmr) clearTimeout(toastTmr);toastTmr=setTimeout(()=>t.style.display='none',3000);}
 function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#home-body,#aud-list,#singer-venue-grid')) e.preventDefault();},{passive:false});
+// ── DEBUG LOG ──
+const LOG_MAX = 80;
+let logEntries = [];
+let dbgVisible = false;
+
+function log(msg, type='info'){
+  const ts = new Date().toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const colors = { ok:'#00e87a', err:'#ff5555', warn:'#ffb347', info:'rgba(255,220,150,.75)' };
+  logEntries.unshift({ ts, msg:String(msg), color: colors[type]||colors.info });
+  if(logEntries.length > LOG_MAX) logEntries.pop();
+  console.log(`[${type.toUpperCase()}] ${msg}`);
+  if(dbgVisible) renderLog();
+}
+
+function renderLog(){
+  const el = document.getElementById('singer-dbg');
+  if(!el) return;
+  el.innerHTML = logEntries.map(e=>
+    `<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04);color:${e.color};font-size:10px;"><span style="opacity:.45;">${e.ts}</span> ${escH(e.msg)}</div>`
+  ).join('');
+}
+
+function toggleSingerLog(){
+  dbgVisible = !dbgVisible;
+  const panel = document.getElementById('singer-dbg-panel');
+  panel.style.display = dbgVisible ? 'block' : 'none';
+  if(dbgVisible) renderLog();
+}
+
+document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#home-body,#aud-list,#singer-venue-grid,#singer-dbg')) e.preventDefault();},{passive:false});
 </script>
+
+<!-- Debug log panel -->
+<div id="singer-dbg-panel" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(4,2,8,.97);padding:max(50px,env(safe-area-inset-top)) 14px 14px;flex-direction:column;overflow:hidden;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0;">
+    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,200,120,.6);font-family:'DM Mono',monospace;">Debug Log</div>
+    <div onclick="toggleSingerLog()" style="font-size:18px;cursor:pointer;color:rgba(255,200,120,.5);padding:4px 8px;">✕</div>
+  </div>
+  <div id="singer-dbg" style="flex:1;overflow-y:auto;font-family:'DM Mono',monospace;-webkit-overflow-scrolling:touch;"></div>
+</div>
+
+<!-- Log button — fixed top left -->
+<div onclick="toggleSingerLog()" style="position:fixed;top:max(14px,env(safe-area-inset-top));left:14px;z-index:8000;padding:4px 8px;background:rgba(255,200,80,.08);border:1px solid rgba(255,200,80,.2);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.5);cursor:pointer;font-family:'DM Mono',monospace;">LOG</div>
+
 </body>
 </html>
