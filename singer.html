@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.02</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.07</div>
 </div>
 
 <!-- HOME -->
@@ -193,7 +193,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 
     <!-- Top bar: version left, settings icon right -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
-      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.02</div>
+      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.07</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -418,6 +418,12 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <div class="perf-btn danger" onclick="perfStop()">■ Stop</div>
     <div class="perf-btn" onclick="perfRestart()">↩ Restart</div>
     <div class="perf-btn" id="perf-zoom-btn" onclick="toggleZoom()">🔍 Zoom In</div>
+  </div>
+
+  <!-- Venue pan controls -->
+  <div style="display:flex;gap:8px;padding:0 18px 4px;">
+    <div class="perf-btn" onclick="sendVenuePan(-15)" style="flex:1;padding:12px 8px;font-size:18px;">◀</div>
+    <div class="perf-btn" onclick="sendVenuePan(15)"  style="flex:1;padding:12px 8px;font-size:18px;">▶</div>
   </div>
 
   <!-- Bottom row: watchers left, comments toggle right -->
@@ -1088,6 +1094,10 @@ function selectVenue(v){
   sendToStage({type:'set-venue', venueId:v.id});
   showToast('Stage changed to '+v.name);
 }
+function sendVenuePan(delta){
+  sendToStage({type:'venue-pan', delta});
+}
+
 let videoChatActive = false;
 function toggleVideoChat(){
   videoChatActive = !videoChatActive;
