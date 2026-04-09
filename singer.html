@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.10</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.11</div>
 </div>
 
 <!-- HOME -->
@@ -193,7 +193,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 
     <!-- Top bar: version left, settings icon right -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
-      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.10</div>
+      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.11</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -337,6 +337,15 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <div id="mic-info2">Mic Setup</div>
     <div class="pill" id="mic-pill"><div class="pdot"></div><span id="mic-pill-txt">Mic off</span></div>
   </div>
+
+  <!-- Mic device selector -->
+  <div style="padding:10px 18px 0;display:flex;flex-direction:column;gap:6px;">
+    <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:'DM Mono',monospace;">Input Device</div>
+    <select id="mic-select" onchange="switchMicDevice(this.value)" style="background:rgba(255,200,80,.06);border:1px solid rgba(255,200,80,.25);border-radius:4px;color:rgba(255,220,150,.85);font-family:'DM Mono',monospace;font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
+      <option value="">Detecting...</option>
+    </select>
+    <div id="mic-diag" style="display:none;font-size:10px;color:rgba(0,232,122,.7);font-family:'DM Mono',monospace;padding:2px 0;word-break:break-all;"></div>
+  </div>
   <div id="mic-centre">
     <div id="mute-btn" class="muted" onclick="toggleMute()">
       <div class="ring"></div><div class="ring"></div><div class="ring"></div>
@@ -471,6 +480,7 @@ let recognition=null, voiceActive=false;
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  if(id==='screen-mic') populateMicList();
 }
 
 // ── AUTO-JOIN FROM URL ──
@@ -567,14 +577,66 @@ function refreshAudList(){
   list.innerHTML=m.length?m.map(n=>`<div class="aud-row"><div class="aud-dot"></div>${escH(n)}</div>`).join(''):'<div style="font-size:11px;color:rgba(255,200,120,.25);">No one has joined yet</div>';
 }
 
+let selectedMicId = null;
+
+async function populateMicList(){
+  try{
+    // Brief permission request to unlock labels
+    const tmp = await navigator.mediaDevices.getUserMedia({audio:true});
+    tmp.getTracks().forEach(t=>t.stop());
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const mics = devices.filter(d=>d.kind==='audioinput');
+    const sel = document.getElementById('mic-select');
+    if(!sel) return;
+    sel.innerHTML = '';
+    mics.forEach((m,i)=>{
+      const opt = document.createElement('option');
+      opt.value = m.deviceId;
+      opt.textContent = m.label || `Microphone ${i+1}`;
+      sel.appendChild(opt);
+    });
+    if(mics.length > 0) selectedMicId = mics[0].deviceId;
+    console.log('Mic devices:', mics.map(m=>m.label).join(', '));
+  }catch(e){ console.warn('Mic enum error:', e); }
+}
+
+async function switchMicDevice(deviceId){
+  selectedMicId = deviceId;
+  // Stop existing stream and reinit with new device
+  if(micStream) micStream.getTracks().forEach(t=>t.stop());
+  micPublished = false;
+  await initMic();
+  if(agoraReady) await publishMic();
+}
+
 // ── MIC ──
 async function initMic(){
   try{
-    micStream=await navigator.mediaDevices.getUserMedia({audio:{
-      echoCancellation: false,
-      noiseSuppression: false,
-      autoGainControl:  false
-    }});
+    // First enumerate available audio devices for diagnostics
+    const allDevices = await navigator.mediaDevices.enumerateDevices();
+    const audioInputs = allDevices.filter(d=>d.kind==='audioinput');
+    console.log('Available audio inputs:', audioInputs.map(d=>`${d.label} [${d.deviceId.slice(0,8)}]`).join(', '));
+
+    const audioConstraints = selectedMicId
+      ? { deviceId:{ exact:selectedMicId }, echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+      : { echoCancellation:false, noiseSuppression:false, autoGainControl:false };
+    micStream=await navigator.mediaDevices.getUserMedia({audio: audioConstraints});
+
+    // Log what we actually got
+    const track = micStream.getAudioTracks()[0];
+    const settings = track.getSettings();
+    const label = track.label || 'unknown';
+    console.log('Mic track label:', label);
+    console.log('Mic settings:', JSON.stringify(settings));
+    console.log('Mic deviceId:', settings.deviceId);
+
+    // Show on screen
+    const diagEl = document.getElementById('mic-diag');
+    if(diagEl){
+      diagEl.textContent = `Using: ${label} | deviceId: ${(settings.deviceId||'?').slice(0,12)}`;
+      diagEl.style.display = 'block';
+    }
+
     audioCtx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:44100});
     micSource=audioCtx.createMediaStreamSource(micStream);
     gainNode=audioCtx.createGain(); gainNode.gain.value=0;
@@ -584,8 +646,11 @@ async function initMic(){
     echoFeedback=audioCtx.createGain(); echoFeedback.gain.value=0;
     buildChain(); startLevelMeter();
     document.getElementById('mic-pill').classList.add('ok');
-    document.getElementById('mic-pill-txt').textContent='Mic ready (muted)';
-  }catch(e){console.warn('Mic:',e); document.getElementById('mic-pill-txt').textContent='Mic denied';}
+    document.getElementById('mic-pill-txt').textContent=`Mic: ${label.slice(0,30)}`;
+  }catch(e){
+    console.warn('Mic error:',e);
+    document.getElementById('mic-pill-txt').textContent='Mic denied: '+e.message;
+  }
 }
 
 async function publishMic(){
