@@ -296,9 +296,9 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.19</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.20</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
-      style="padding:5px 10px;background:rgba(255,200,80,.12);border:1px solid rgba(255,200,80,.3);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.7);cursor:pointer;display:none;">Auto</div>
+      style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
   </div>
 </div>
@@ -377,7 +377,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.19</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.20</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1227,7 +1227,7 @@ function buildProgrammaticPanorama(){
 }
 
 // Head tracking (mouse fallback if FaceMesh unavailable)
-let headTrackingAuto = true; // true=head tracking, false=manual mouse/keyboard
+let headTrackingAuto = false; // default to manual — auto requires explicit toggle
 
 function logCurrentYaw(type){
   const venue = VENUES.find(v=>v.id===selectedVenueId);
@@ -1253,10 +1253,8 @@ function toggleHeadTracking(){
   btn.textContent = headTrackingAuto ? 'Auto' : 'Manual';
   btn.style.borderColor = headTrackingAuto ? 'rgba(255,200,80,.3)' : 'rgba(0,232,122,.4)';
   btn.style.color = headTrackingAuto ? 'rgba(255,220,150,.7)' : 'rgba(0,232,122,.8)';
-  if(!headTrackingAuto){
-    // In manual mode, use mouse drag to look around
-    initMousePan();
-  }
+  btn.style.background = headTrackingAuto ? 'rgba(255,200,80,.12)' : 'rgba(0,232,122,.12)';
+  if(!headTrackingAuto) initMousePan();
 }
 
 let mousePanInit = false;
@@ -1551,6 +1549,14 @@ function handleAudienceMsg(msg){
   if(msg.type==='zoom'){ triggerZoom(); }
   if(msg.type==='zoom-in'){ triggerZoom(); if(venueMode) zoomVenueIn(); }
   if(msg.type==='zoom-out'){ releaseZoom(); if(venueMode) zoomVenueOut(); }
+  if(msg.type==='venue-pan'){
+    if(venueMode) panVenue(msg.delta);          // audience view pan
+    else { tYaw += msg.delta; manualYaw += msg.delta; } // singer view pan
+  }
+  if(msg.type==='set-view'){
+    if(msg.view==='singer' && viewMode!=='panorama') onToggleView();
+    else if(msg.view==='audience' && viewMode==='panorama') onToggleView();
+  }
   if(msg.type==='venue-pan'){ if(venueMode) panVenue(msg.delta); }
   if(msg.type==='toggle-comments'){ toggleCommentBar(); }
 
@@ -1913,7 +1919,7 @@ let ytSongDuration = 600; // set by doPlayWithYT, used by onStateChange ticker
 
 function doPlayWithYT(){
   document.getElementById('videochat-wrap').style.display='none';
-  if(venueMode) setTimeout(zoomVenueOut, 2000); // zoom out 2s after song starts
+  if(venueMode) {} // zoom controlled by singer app only — starts zoomed in
   playing=true;
   elapsed=0;
   lIdx=-1;
@@ -2066,7 +2072,7 @@ function updL(le){
 function updP(){const pct=Math.min(100,(elapsed/600)*100);document.getElementById('pf').style.width=pct+'%';sendMsg({type:'progress',pct,elapsed});}
 function doEnd(){
   document.getElementById('videochat-wrap').style.display='flex';
-  if(venueMode) zoomVenueIn(); // zoom back in when song ends
+  // zoom stays wherever singer left it — no auto zoom on end
   const stack = new Error().stack.split('\n').slice(1,4).join(' | ');
   log('doEnd() called — elapsed:'+Math.round(elapsed)+'s | '+stack, 'warn');
   doPause();
