@@ -241,8 +241,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
 <!-- On-screen debug log -->
 <div id="dbg-toggle" onclick="toggleDbg()">LOG</div>
-<div id="set-center-btn" onclick="logCurrentYaw('panorama')" style="display:none;position:fixed;top:54px;right:120px;z-index:400;padding:4px 10px;background:rgba(0,232,122,.15);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;font-family:'DM Mono',monospace;">Set Singer View</div>
-<div id="set-static-btn" onclick="logCurrentYaw('static')" style="display:none;position:fixed;top:54px;right:240px;z-index:400;padding:4px 10px;background:rgba(255,200,80,.15);border:1px solid rgba(255,200,80,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,80,.8);cursor:pointer;font-family:'DM Mono',monospace;">Set Stage View</div>
+<div id="set-center-btn" onclick="logCurrentYaw('singer')" style="display:none;position:fixed;top:54px;right:120px;z-index:400;padding:4px 10px;background:rgba(0,232,122,.15);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;font-family:'DM Mono',monospace;">Set Singer View</div>
+<div id="set-aud-btn" onclick="logCurrentYaw('audience')" style="display:none;position:fixed;top:54px;right:240px;z-index:400;padding:4px 10px;background:rgba(255,200,80,.15);border:1px solid rgba(255,200,80,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,80,.8);cursor:pointer;font-family:'DM Mono',monospace;">Set Audience View</div>
 <div id="dbg"></div>
 
 <div id="rx"></div>
@@ -296,7 +296,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.07</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.08</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(255,200,80,.12);border:1px solid rgba(255,200,80,.3);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.7);cursor:pointer;display:none;">Auto</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -367,7 +367,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.07</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.08</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1176,13 +1176,18 @@ function buildProgrammaticPanorama(){
 let headTrackingAuto = true; // true=head tracking, false=manual mouse/keyboard
 
 function logCurrentYaw(type){
-  const yaw = headTrackingAuto ? Math.round(cYaw) : Math.round(manualYaw);
+  let yaw;
+  if(type==='audience'){
+    yaw = Math.round(venueYaw);
+  } else {
+    yaw = headTrackingAuto ? Math.round(cYaw) : Math.round(manualYaw);
+  }
   const venue = VENUES.find(v=>v.id===selectedVenueId);
-  const label = type==='static' ? 'staticYaw' : 'startYaw';
+  const label = type==='audience' ? 'staticYaw' : 'startYaw';
   const msg = `${venue?.name||selectedVenueId} ${label}: ${yaw}`;
   log(msg, 'ok');
-  navigator.clipboard.writeText(`${label}: ${yaw}`).catch(()=>{});
-  showToast((type==='static' ? '🎭 Stage view' : '🎤 Singer view')+' set: '+yaw);
+  navigator.clipboard.writeText(String(yaw)).catch(()=>{});
+  showToast((type==='audience' ? '👥 Audience view' : '🎤 Singer view')+' set: '+yaw);
 }
 
 function toggleHeadTracking(){
@@ -1198,18 +1203,50 @@ function toggleHeadTracking(){
 }
 
 let mousePanInit = false;
-let mouseDown = false, lastMouseX = 0;
-let manualYaw = 0;
+let mouseDown = false, lastMouseX = 0, lastMouseY = 0;
+let manualYaw = 0, manualPitch = 0;
 function initMousePan(){
   if(mousePanInit) return; mousePanInit = true;
   const canvas = document.getElementById('pan-layer');
   canvas.style.pointerEvents = 'auto';
-  canvas.addEventListener('mousedown', e=>{ mouseDown=true; lastMouseX=e.clientX; });
-  canvas.addEventListener('mousemove', e=>{ if(!mouseDown) return; manualYaw += (e.clientX-lastMouseX)*0.15; lastMouseX=e.clientX; });
+  canvas.addEventListener('mousedown', e=>{ mouseDown=true; lastMouseX=e.clientX; lastMouseY=e.clientY; });
+  canvas.addEventListener('mousemove', e=>{
+    if(!mouseDown) return;
+    manualYaw   += (e.clientX-lastMouseX)*0.15;
+    manualPitch += (e.clientY-lastMouseY)*0.15;
+    lastMouseX=e.clientX; lastMouseY=e.clientY;
+  });
   canvas.addEventListener('mouseup', ()=>mouseDown=false);
-  canvas.addEventListener('touchstart', e=>{ mouseDown=true; lastMouseX=e.touches[0].clientX; },{passive:true});
-  canvas.addEventListener('touchmove', e=>{ if(!mouseDown) return; manualYaw += (e.touches[0].clientX-lastMouseX)*0.15; lastMouseX=e.touches[0].clientX; },{passive:true});
+  canvas.addEventListener('touchstart', e=>{ mouseDown=true; lastMouseX=e.touches[0].clientX; lastMouseY=e.touches[0].clientY; },{passive:true});
+  canvas.addEventListener('touchmove', e=>{
+    if(!mouseDown) return;
+    manualYaw   += (e.touches[0].clientX-lastMouseX)*0.15;
+    manualPitch += (e.touches[0].clientY-lastMouseY)*0.15;
+    lastMouseX=e.touches[0].clientX; lastMouseY=e.touches[0].clientY;
+  },{passive:true});
   canvas.addEventListener('touchend', ()=>mouseDown=false);
+}
+
+let audienceDragInit = false;
+let audMouseDown=false, audLastX=0, audLastY=0;
+function initAudienceDrag(){
+  if(audienceDragInit) return; audienceDragInit=true;
+  const canvas = document.getElementById('aud-layer');
+  canvas.style.cursor = 'grab';
+  canvas.addEventListener('mousedown', e=>{ audMouseDown=true; audLastX=e.clientX; audLastY=e.clientY; canvas.style.cursor='grabbing'; });
+  window.addEventListener('mouseup', ()=>{ audMouseDown=false; canvas.style.cursor='grab'; });
+  window.addEventListener('mousemove', e=>{
+    if(!audMouseDown || !venueMode) return;
+    venueYawTarget   -= (e.clientX-audLastX)*0.15;
+    audLastX=e.clientX; audLastY=e.clientY;
+  });
+  canvas.addEventListener('touchstart', e=>{ audMouseDown=true; audLastX=e.touches[0].clientX; audLastY=e.touches[0].clientY; },{passive:true});
+  window.addEventListener('touchend', ()=>audMouseDown=false);
+  window.addEventListener('touchmove', e=>{
+    if(!audMouseDown || !venueMode) return;
+    venueYawTarget -= (e.touches[0].clientX-audLastX)*0.15;
+    audLastX=e.touches[0].clientX; audLastY=e.touches[0].clientY;
+  },{passive:true});
 }
 
 let headTrackInit=false;
@@ -1218,18 +1255,20 @@ function initHeadTracking(){
 
   // Mouse drag on panorama canvas for manual panning
   const panCanvas = document.getElementById('pan-layer');
-  let dragging=false, dragStartX=0, dragStartYaw=0;
+  let dragging=false, dragStartX=0, dragStartY=0, dragStartYaw=0, dragStartPitch=0;
   panCanvas.style.cursor='grab';
   panCanvas.addEventListener('mousedown',e=>{
-    dragging=true; dragStartX=e.clientX; dragStartYaw=tYaw;
+    dragging=true; dragStartX=e.clientX; dragStartY=e.clientY;
+    dragStartYaw=tYaw; dragStartPitch=tPitch;
     panCanvas.style.cursor='grabbing';
   });
   window.addEventListener('mouseup',()=>{ dragging=false; panCanvas.style.cursor='grab'; });
   window.addEventListener('mousemove',e=>{
     if(dragging){
-      const dx = e.clientX - dragStartX;
-      tYaw = dragStartYaw - (dx/window.innerWidth)*180;
-      tYaw = Math.max(-175, Math.min(175, tYaw));
+      tYaw   = dragStartYaw   - (e.clientX-dragStartX)/window.innerWidth*180;
+      tPitch = dragStartPitch + (e.clientY-dragStartY)/window.innerHeight*90;
+      tYaw   = Math.max(-175, Math.min(175, tYaw));
+      tPitch = Math.max(-MU, Math.min(MD, tPitch));
     }
   });
 
@@ -1249,10 +1288,10 @@ function initHeadTracking(){
     });
     // Use setInterval to send frames — avoids conflict with segmentation Camera loop
     setInterval(async()=>{
-      if(viewMode==='panorama' && camVideo && camVideo.readyState>=2){
+      if(viewMode!=='audience' && camVideo && camVideo.readyState>=2){
         try{ await fm.send({image:camVideo}); }catch(e){}
       }
-    }, 100); // 10fps is enough for head tracking
+    }, 100);
   }
 }
 
@@ -1269,11 +1308,14 @@ function onToggleView(){
   document.getElementById('pan-layer').style.pointerEvents = isAud ? 'none' : 'auto';
   document.getElementById('vtoggle').textContent = isAud ? '🎤 Singer View' : '👥 Audience View';
   document.getElementById('vtoggle').className   = isAud ? '' : 'pano';
-  document.getElementById('compass').style.display = isAud ? 'none' : 'block';
-  document.getElementById('htoggle').style.display = isAud ? 'none' : 'block';
+  document.getElementById('compass').style.display     = isAud ? 'none' : 'block';
+  document.getElementById('htoggle').style.display     = isAud ? 'none' : 'block';
+  // Singer View: show Set Singer View only
   document.getElementById('set-center-btn').style.display = isAud ? 'none' : 'block';
-  document.getElementById('set-static-btn').style.display = isAud ? 'none' : 'block';
+  // Audience View: show Set Audience View
+  document.getElementById('set-aud-btn').style.display = isAud ? 'block' : 'none';
   if(!isAud){ buildPanoramaIfNeeded(); initHeadTracking(); }
+  else { initAudienceDrag(); }
 }
 
 let panBuilt=false;
@@ -2006,7 +2048,7 @@ function renderLoop(){
     cPitch=lerp(cPitch,tPitch,SMOOTH);
     panCamera3.fov = 80; panCamera3.updateProjectionMatrix();
     panCamera3.rotation.y=-(headTrackingAuto ? cYaw : manualYaw)*D2R*YS;
-    panCamera3.rotation.x=headTrackingAuto ? -clamp(cPitch,-MU,MD)*D2R*PS : 0;
+    panCamera3.rotation.x=headTrackingAuto ? -clamp(cPitch,-MU,MD)*D2R*PS : -clamp(manualPitch,-MU,MD)*D2R*PS;
     panRenderer.render(panScene,panCamera3);
     if(fc%3===0){
       document.getElementById('cneedle').style.transform=`translateX(-50%) translateY(-100%) rotate(${cYaw*YS}deg)`;
