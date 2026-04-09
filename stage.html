@@ -296,7 +296,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.16</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.17</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(255,200,80,.12);border:1px solid rgba(255,200,80,.3);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.7);cursor:pointer;display:none;">Auto</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -310,6 +310,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   <div class="btn" onclick="shareInvite()">📨 Invite</div>
   <div class="btn" onclick="showSongs()">🎵 Song</div>
   <div class="btn" onclick="toggleCommentBar()">💬 Comments</div>
+  <div class="btn" onclick="showStageVenuePicker()">🎭 Venue</div>
   <div class="btn danger" id="stage-stop-btn" onclick="doEnd()" style="display:none;">■ Stop</div>
 </div>
 <div id="prog"><div id="pf"></div></div>
@@ -348,6 +349,15 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <div id="cd"><div id="cdn">3</div></div>
 <div id="ap"><div id="apt">Bravo!</div></div>
 
+<!-- Stage Venue Picker Overlay -->
+<div id="stage-venue-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(4,2,6,.96);backdrop-filter:blur(8px);flex-direction:column;padding:40px 20px 24px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-shrink:0;">
+    <div style="font-family:'Cormorant Garamond',serif;font-size:22px;color:rgba(255,220,150,.9);font-style:italic;">Choose Venue</div>
+    <div onclick="hideStageVenuePicker()" style="font-size:22px;cursor:pointer;color:rgba(255,200,120,.5);padding:4px 10px;">✕</div>
+  </div>
+  <div id="stage-venue-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;overflow-y:auto;flex:1;"></div>
+</div>
+
 <div id="start">
   <h1>Elsewhere</h1>
   <p>Singer Stage</p>
@@ -367,7 +377,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.16</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.17</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -425,6 +435,36 @@ const FOV_NARROW = 55;
 const FOV_WIDE   = 90;
 const FOV_SMOOTH = 0.03;
 
+function showStageVenuePicker(){
+  const grid = document.getElementById('stage-venue-grid');
+  grid.innerHTML = '';
+  VENUES.forEach(v=>{
+    const card = document.createElement('div');
+    card.style.cssText = `padding:12px 8px;text-align:center;cursor:pointer;border-radius:6px;border:1px solid ${v.id===selectedVenueId?'rgba(255,200,80,.7)':'rgba(255,255,255,.1)'};background:${v.id===selectedVenueId?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};`;
+    card.innerHTML = `<div style="font-size:22px;margin-bottom:4px;">${v.icon}</div><div style="font-size:10px;color:rgba(255,220,150,.8);font-family:'DM Mono',monospace;letter-spacing:.06em;">${v.name}</div>`;
+    card.onclick = ()=>{
+      // Trigger same venue change as singer app would
+      const msg = {type:'set-venue', venueId:v.id};
+      selectedVenueId = v.id;
+      loadVenueImage(v.skyboxId);
+      panReady = false;
+      while(panScene && panScene.children.length) panScene.remove(panScene.children[0]);
+      buildPanorama();
+      tYaw = v.startYaw || 0; cYaw = v.startYaw || 0;
+      initVenueMode();
+      log('Venue changed to: '+v.name, 'ok');
+      showToast('🎭 '+v.name);
+      hideStageVenuePicker();
+    };
+    grid.appendChild(card);
+  });
+  document.getElementById('stage-venue-overlay').style.display = 'flex';
+}
+
+function hideStageVenuePicker(){
+  document.getElementById('stage-venue-overlay').style.display = 'none';
+}
+
 function initVenueMode(){
   const venue = VENUES.find(v=>v.id===selectedVenueId);
   if(!venue || !venue.skyboxId){
@@ -434,7 +474,8 @@ function initVenueMode(){
   venueMode = true;
   venueYaw = venue.staticYaw || 0;
   venueYawTarget = venue.staticYaw || 0;
-  venuePitch = 0; venuePitchTarget = 0;
+  venuePitch = venue.staticPitch || 0;
+  venuePitchTarget = venue.staticPitch || 0;
   venueFOV = FOV_NARROW;
   venueFOVTarget = FOV_NARROW;
   if(panCamera3) panCamera3.fov = FOV_NARROW;
@@ -999,17 +1040,17 @@ function runGuideLoop(gc, W, H){
 // VENUES
 // ═══════════════════════════════════════
 const VENUES = [
-  { id:'stadium',   name:'Stadium',          icon:'🏟️', skyboxId:'stadium',   startYaw:-45,  staticYaw:195  },
-  { id:'jazz',      name:'Jazz Club',         icon:'🎷', skyboxId:null,        startYaw:0,    staticYaw:0    },
-  { id:'speakeasy', name:'Speakeasy',         icon:'🥃', skyboxId:'speakeasy', startYaw:66,   staticYaw:267  },
-  { id:'vegas',     name:'Las Vegas',         icon:'🎰', skyboxId:'vegas',     startYaw:79,   staticYaw:-204 },
-  { id:'broadway',  name:'Broadway',          icon:'🎭', skyboxId:null,        startYaw:0,    staticYaw:0    },
-  { id:'disco',     name:'Disco Club',        icon:'🪩', skyboxId:'disco',     startYaw:-200, staticYaw:35   },
-  { id:'honkytonk', name:'Honky Tonk',        icon:'🤠', skyboxId:'honkytonk', startYaw:168,  staticYaw:-92  },
-  { id:'festival',  name:'Festival',          icon:'🎪', skyboxId:'festival',  startYaw:358,  staticYaw:145  },
-  { id:'space',     name:'Space Station',     icon:'🚀', skyboxId:null,        startYaw:0,    staticYaw:0    },
-  { id:'forest',    name:'Enchanted Forest',  icon:'🌲', skyboxId:null,        startYaw:0,    staticYaw:0    },
-  { id:'default',   name:'Classic Stage',     icon:'🎤', skyboxId:null,        startYaw:363,  staticYaw:0    },
+  { id:'stadium',   name:'Stadium',          icon:'🏟️', skyboxId:'stadium',   startYaw:-45,  staticYaw:151,  staticPitch:-17 },
+  { id:'jazz',      name:'Jazz Club',         icon:'🎷', skyboxId:null,        startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'speakeasy', name:'Speakeasy',         icon:'🥃', skyboxId:'speakeasy', startYaw:66,   staticYaw:201,  staticPitch:-1  },
+  { id:'vegas',     name:'Las Vegas',         icon:'🎰', skyboxId:'vegas',     startYaw:79,   staticYaw:-150, staticPitch:2   },
+  { id:'broadway',  name:'Broadway',          icon:'🎭', skyboxId:null,        startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'disco',     name:'Disco Club',        icon:'🪩', skyboxId:'disco',     startYaw:-200, staticYaw:23,   staticPitch:0   },
+  { id:'honkytonk', name:'Honky Tonk',        icon:'🤠', skyboxId:'honkytonk', startYaw:168,  staticYaw:-71,  staticPitch:6   },
+  { id:'festival',  name:'Festival',          icon:'🎪', skyboxId:'festival',  startYaw:358,  staticYaw:109,  staticPitch:-6  },
+  { id:'space',     name:'Space Station',     icon:'🚀', skyboxId:null,        startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'forest',    name:'Enchanted Forest',  icon:'🌲', skyboxId:null,        startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'default',   name:'Classic Stage',     icon:'🎤', skyboxId:null,        startYaw:363,  staticYaw:0,    staticPitch:0   },
 ];
 
 const VENUE_BASE_URL = 'https://mstepanovich-web.github.io/elsewhere/venues/';
