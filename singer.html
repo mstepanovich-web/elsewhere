@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.13</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.14</div>
 </div>
 
 <!-- HOME -->
@@ -193,7 +193,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 
     <!-- Top bar: version left, settings icon right -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
-      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.13</div>
+      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.14</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -610,10 +610,15 @@ async function switchMicDevice(deviceId){
   try{
     if(micAudioTrack){ await agoraClient.unpublish([micAudioTrack]); micAudioTrack=null; micPublished=false; log('Agora audio unpublished', 'ok'); }
     if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; log('Old stream stopped', 'ok'); }
-    if(audioCtx){ audioCtx.close(); audioCtx=null; log('AudioCtx closed', 'ok'); }
+    if(audioCtx){ await audioCtx.close(); audioCtx=null; log('AudioCtx closed', 'ok'); }
     micSource=null; gainNode=null; analyser=null; reverbNode=null;
     echoDelay=null; echoFeedback=null; agoraDest=null;
   }catch(e){ log('Teardown error: '+e.message, 'err'); }
+
+  // iOS needs time to fully release the audio session before a new device can open
+  log('Waiting for iOS audio session release...', 'info');
+  await new Promise(r=>setTimeout(r, 800));
+
   await initMic();
   if(agoraReady && micStream) await publishMic();
 }
@@ -626,7 +631,7 @@ async function initMic(){
     log('Audio inputs: '+audioInputs.map(d=>d.label||'unnamed').join(' | '), 'info');
 
     const audioConstraints = selectedMicId
-      ? { deviceId:{ exact:selectedMicId }, echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+      ? { deviceId:{ ideal:selectedMicId }, echoCancellation:false, noiseSuppression:false, autoGainControl:false }
       : { echoCancellation:false, noiseSuppression:false, autoGainControl:false };
     log('Requesting mic with'+(selectedMicId?' deviceId:'+selectedMicId.slice(0,12):' default'), 'info');
     micStream=await navigator.mediaDevices.getUserMedia({audio: audioConstraints});
