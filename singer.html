@@ -184,16 +184,17 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.22</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.26</div>
 </div>
 
 <!-- HOME -->
 <div id="screen-home" class="screen">
   <div id="home-body">
 
-    <!-- Top bar: version left, settings icon right -->
+    <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
-      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.22</div>
+      <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;">← Search</div>
+      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.26</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -280,36 +281,47 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <div id="singer-venue-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;padding-bottom:16px;"></div>
 </div>
 
-<!-- SEARCH -->
+<!-- SEARCH MAIN — search bar + recent searches -->
 <div id="screen-search" class="screen">
-  <div class="nav">
-    <div class="nav-back" onclick="showScreen('screen-home')">← Back</div>
-    <div class="nav-title">Find a Song</div>
-    <div style="width:50px;"></div>
-  </div>
-  <div id="srch-body">
-    <div id="srch-bar">
-      <div style="flex:1;position:relative;display:flex;align-items:center;">
-        <input id="srch-in" class="input" type="search" placeholder="Song or artist..."
-          autocomplete="off" inputmode="search"
-          style="padding-right:36px;"
-          onkeydown="if(event.key==='Enter')doSearch()"
-          oninput="onSearchInput(this.value)"
-          onfocus="updateClearBtn()">
-        <div id="srch-clear" onclick="clearSearch()"
-          style="position:absolute;right:10px;font-size:16px;color:rgba(255,200,120,.4);cursor:pointer;display:none;-webkit-user-select:none;padding:4px;">✕</div>
+  <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
+    <!-- Search bar -->
+    <div style="padding:max(14px,env(safe-area-inset-top)) 18px 10px;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;position:relative;display:flex;align-items:center;">
+          <input id="srch-in" class="input" type="search" placeholder="Search songs or artists..."
+            autocomplete="off" inputmode="search"
+            style="padding-left:14px;padding-right:36px;width:100%;"
+            onkeydown="if(event.key==='Enter')doSearch()"
+            oninput="onSearchInput(this.value)"
+            onfocus="updateClearBtn()">
+          <div id="srch-clear" onclick="clearSearch()"
+            style="position:absolute;right:10px;font-size:16px;color:rgba(255,200,120,.4);cursor:pointer;display:none;-webkit-user-select:none;padding:4px;">✕</div>
+        </div>
+        <div id="voice-btn"
+          onclick="startVoiceFullscreen()"
+          style="width:44px;height:44px;border-radius:50%;flex-shrink:0;border:1px solid rgba(255,200,80,.25);background:rgba(255,200,80,.06);display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;">🎙</div>
       </div>
-      <div id="voice-btn"
-        onmousedown="startVoice(event)" ontouchstart="startVoice(event)"
-        onmouseup="stopVoice(event)"   ontouchend="stopVoice(event)"
-        title="Hold to speak">🎙</div>
-      <div id="srch-go" onclick="doSearch()">Search</div>
     </div>
-    <div id="voice-hint">🎙 Listening... speak now</div>
-    <div id="srch-status">Hold 🎙 to search by voice · or type and search</div>
-    <div id="srch-results">
-      <div class="empty">🎵<br>Search for any song<br>Results appear here and on the TV</div>
+
+    <!-- Results / Recent -->
+    <div id="srch-results" style="flex:1;overflow-y:auto;padding:0 18px 16px;-webkit-overflow-scrolling:touch;">
+      <div id="srch-recent-section">
+        <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:'DM Mono',monospace;padding:8px 0 10px;">Recent Searches</div>
+        <div id="srch-recent-list"></div>
+        <div id="srch-empty" class="empty" style="display:none;">🎵<br>Search for any song</div>
+      </div>
+      <div id="srch-result-list" style="display:none;"></div>
     </div>
+  </div>
+</div>
+
+<!-- VOICE LISTENING — full screen -->
+<div id="screen-voice" class="screen" style="background:#080508;">
+  <div onclick="stopVoiceFullscreen()" style="position:absolute;top:max(20px,env(safe-area-inset-top));left:18px;font-size:13px;color:rgba(255,200,120,.5);cursor:pointer;font-family:'DM Mono',monospace;letter-spacing:.08em;">✕ Cancel</div>
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:28px;">
+    <div id="voice-status-txt" style="font-family:'Cormorant Garamond',serif;font-size:38px;color:rgba(255,220,150,.85);font-style:italic;">Listening...</div>
+    <div style="font-size:13px;color:rgba(255,200,120,.4);letter-spacing:.08em;font-family:'DM Mono',monospace;">Say a song or artist</div>
+    <div id="voice-pulse" style="width:80px;height:80px;border-radius:50%;background:rgba(196,122,107,.15);border:2px solid rgba(196,122,107,.4);display:flex;align-items:center;justify-content:center;font-size:36px;animation:vpulse .8s infinite;">🎙</div>
   </div>
 </div>
 
@@ -497,6 +509,15 @@ function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   if(id==='screen-mic') populateMicList();
+  if(id==='screen-search'){
+    // Show recent, hide results unless we have some
+    if(!lastSearchResults.length){
+      document.getElementById('srch-recent-section').style.display='block';
+      document.getElementById('srch-result-list').style.display='none';
+      renderRecent();
+    }
+    setTimeout(()=>{ const inp=document.getElementById('srch-in'); if(inp&&!inp.value) inp.focus(); },100);
+  }
 }
 
 // ── AUTO-JOIN FROM URL ──
@@ -786,79 +807,152 @@ function setVolume(v){
 }
 function toggleFx(n){FX[n]=!FX[n];document.getElementById('fx-'+n).classList.toggle('on',FX[n]);buildChain();}
 
+// ── RECENT SEARCHES ──
+let recentSearches = JSON.parse(localStorage.getItem('elsewhere-recent') || '[]');
+let lastSearchResults = [];
+let cameFromSearch = false;
+
+function saveRecent(q){
+  recentSearches = [q, ...recentSearches.filter(r=>r!==q)].slice(0,8);
+  try{ localStorage.setItem('elsewhere-recent', JSON.stringify(recentSearches)); }catch(e){}
+  renderRecent();
+}
+
+function renderRecent(){
+  const list = document.getElementById('srch-recent-list');
+  const empty = document.getElementById('srch-empty');
+  if(!list) return;
+  if(!recentSearches.length){
+    list.innerHTML='';
+    if(empty) empty.style.display='block';
+    return;
+  }
+  if(empty) empty.style.display='none';
+  list.innerHTML = recentSearches.map(q=>`
+    <div onclick="useRecent('${escH(q)}')" style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05);display:flex;align-items:center;gap:10px;cursor:pointer;touch-action:manipulation;">
+      <div style="font-size:14px;color:rgba(255,200,120,.4);">↺</div>
+      <div style="flex:1;font-size:14px;color:rgba(255,220,150,.7);font-family:'DM Mono',monospace;">${escH(q)}</div>
+    </div>
+  `).join('');
+}
+
+function useRecent(q){
+  document.getElementById('srch-in').value = q;
+  updateClearBtn();
+  doSearch();
+}
+
+function goBackToSearch(){
+  cameFromSearch = false;
+  document.getElementById('back-to-search-btn').style.display = 'none';
+  showScreen('screen-search');
+  // Restore last results if any
+  if(lastSearchResults.length) renderResults(lastSearchResults);
+}
+
+// ── VOICE FULLSCREEN ──
+function startVoiceFullscreen(){
+  showScreen('screen-voice');
+  document.getElementById('voice-status-txt').textContent = 'Listening...';
+  if(!window.SpeechRecognition && !window.webkitSpeechRecognition){
+    document.getElementById('voice-status-txt').textContent = 'Not supported';
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const r = new SR();
+  r.lang = 'en-US'; r.continuous = false; r.interimResults = false;
+  r.onresult = e=>{
+    const q = e.results[0][0].transcript;
+    document.getElementById('srch-in').value = q;
+    updateClearBtn();
+    showScreen('screen-search');
+    doSearch();
+  };
+  r.onerror = ()=>{ document.getElementById('voice-status-txt').textContent = 'Could not hear you'; setTimeout(()=>showScreen('screen-search'),1200); };
+  r.onend = ()=>{ if(document.getElementById('screen-voice').classList.contains('active')) showScreen('screen-search'); };
+  r.start();
+  window._voiceRec = r;
+}
+
+function stopVoiceFullscreen(){
+  if(window._voiceRec) try{ window._voiceRec.stop(); }catch(e){}
+  showScreen('screen-search');
+}
+
 // ── SEARCH ──
 async function doSearch(){
   const q=document.getElementById('srch-in').value.trim();
   if(!q){showToast('Enter a song or artist name');return;}
-  const status=document.getElementById('srch-status');
-  const results=document.getElementById('srch-results');
-  status.textContent='Searching...'; results.innerHTML='';
+
+  // Show results section, hide recent
+  document.getElementById('srch-recent-section').style.display='none';
+  document.getElementById('srch-result-list').style.display='block';
+  document.getElementById('srch-result-list').innerHTML='<div class="empty">Searching...</div>';
+
+  saveRecent(q);
   sendToStage({type:'tv-search',query:q,results:[]});
 
   if(YT_API_KEY==='YOUR_YOUTUBE_API_KEY'){
-    status.textContent='Demo mode — add YouTube API key for real search';
     const demos=buildDemos();
+    lastSearchResults=demos;
     renderResults(demos);
     sendToStage({type:'tv-search',query:q,results:demos});
     return;
   }
   try{
-    // Step 1: Search for karaoke videos — fetch more than we need since some will be non-embeddable
     const searchRes=await fetch(`${YT_PROXY}/search?part=snippet&type=video&maxResults=20&q=${encodeURIComponent(q+' karaoke')}&key=${YT_API_KEY}`);
     const searchData=await searchRes.json();
-    if(searchData.error){status.textContent='API error: '+(searchData.error.message||'check key');return;}
+    if(searchData.error){document.getElementById('srch-result-list').innerHTML='<div class="empty">API error</div>';return;}
     if(!searchData.items||!searchData.items.length){
-      status.textContent='No results — try different terms';
-      results.innerHTML='<div class="empty">😕<br>Try a different search</div>';
+      document.getElementById('srch-result-list').innerHTML='<div class="empty">😕<br>Try different terms</div>';
       return;
     }
-
-    // Step 2: Check which videos are embeddable using the videos endpoint
     const ids=searchData.items.map(it=>it.id.videoId).join(',');
     const videoRes=await fetch(`${YT_PROXY}/videos?part=status,snippet&id=${ids}&key=${YT_API_KEY}`);
     const videoData=await videoRes.json();
-
-    // Build a map of videoId → embeddable
     const embeddable={};
-    (videoData.items||[]).forEach(v=>{
-      embeddable[v.id]=v.status?.embeddable===true;
-    });
-
-    // Filter to only embeddable videos, preserve original snippet data
+    (videoData.items||[]).forEach(v=>{ embeddable[v.id]=v.status?.embeddable===true; });
     const filtered=searchData.items
       .filter(it=>embeddable[it.id.videoId]===true)
       .slice(0,6)
       .map(it=>({
-        videoId:  it.id.videoId,
-        title:    it.snippet.title,
-        artist:   it.snippet.channelTitle,
-        thumb:    it.snippet.thumbnails.medium?.url||it.snippet.thumbnails.default?.url||''
+        videoId:it.id.videoId,
+        title:it.snippet.title,
+        artist:it.snippet.channelTitle,
+        thumb:it.snippet.thumbnails.medium?.url||it.snippet.thumbnails.default?.url||''
       }));
-
     if(!filtered.length){
-      status.textContent='No embeddable karaoke videos found — try a different song';
-      results.innerHTML='<div class="empty">🚫<br>No playable results found<br>Try a different search</div>';
+      document.getElementById('srch-result-list').innerHTML='<div class="empty">🚫<br>No playable results<br>Try a different search</div>';
       return;
     }
-
-    status.textContent=`${filtered.length} playable results · shown on TV`;
+    lastSearchResults=filtered;
     renderResults(filtered);
     sendToStage({type:'tv-search',query:q,results:filtered});
-
-  }catch(e){console.warn('Search:',e);status.textContent='Search failed — check connection';}
+  }catch(e){ document.getElementById('srch-result-list').innerHTML='<div class="empty">Search failed — check connection</div>'; }
 }
 
 function buildDemos(){
-  return [{videoId:'d1',title:"Don't Stop Believin' (Karaoke)",artist:'Journey Karaoke',thumb:''},{videoId:'d2',title:'Bohemian Rhapsody (Karaoke)',artist:'Queen Karaoke',thumb:''},{videoId:'d3',title:'Sweet Caroline (Karaoke)',artist:'Neil Diamond Karaoke',thumb:''},{videoId:'d4',title:"Livin' on a Prayer (Karaoke)",artist:'Bon Jovi Karaoke',thumb:''},{videoId:'d5',title:'Mr. Brightside (Karaoke)',artist:'The Killers Karaoke',thumb:''}];
+  return [{videoId:'d1',title:"Don't Stop Believin'",artist:'Journey Karaoke',thumb:''},{videoId:'d2',title:'Bohemian Rhapsody',artist:'Queen Karaoke',thumb:''},{videoId:'d3',title:'Sweet Caroline',artist:'Neil Diamond Karaoke',thumb:''},{videoId:'d4',title:"Livin' on a Prayer",artist:'Bon Jovi Karaoke',thumb:''},{videoId:'d5',title:'Mr. Brightside',artist:'The Killers Karaoke',thumb:''}];
 }
 
 function renderResults(items){
-  const c=document.getElementById('srch-results');
+  const c=document.getElementById('srch-result-list');
+  if(!c) return;
   if(!items||!items.length){c.innerHTML='<div class="empty">😕<br>No results found</div>';return;}
-  c.innerHTML='';
+  // Show count above results
+  c.innerHTML=`<div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:'DM Mono',monospace;padding:8px 0 10px;">${items.length} results · shown on TV</div>`;
   items.forEach((r,i)=>{
     const el=document.createElement('div'); el.className='res-row';
-    el.innerHTML=`<div class="res-num">${i+1}</div>${r.thumb?`<img class="res-thumb" src="${r.thumb}" loading="lazy" onerror="this.innerHTML='🎵'">`:' <div class="res-thumb">🎵</div>'}<div class="res-info"><div class="res-title">${escH(r.title)}</div><div class="res-meta">${escH(r.artist||'')}</div></div><div style="font-size:16px;color:rgba(255,200,80,.3);">›</div>`;
+    // Clean title — remove karaoke/channel junk
+    const cleanedTitle = r.title.replace(/\(karaoke[^)]*\)/gi,'').replace(/karaoke version/gi,'').replace(/\bkaraoke\b/gi,'').replace(/\s{2,}/g,' ').trim();
+    el.innerHTML=`
+      <div class="res-num">${i+1}</div>
+      ${r.thumb?`<img class="res-thumb" src="${r.thumb}" loading="lazy">`:' <div class="res-thumb">🎵</div>'}
+      <div class="res-info">
+        <div class="res-title">${escH(cleanedTitle)}</div>
+        <div class="res-meta">${escH(r.artist||'')}</div>
+      </div>
+      <div style="font-size:16px;color:rgba(255,200,80,.3);">›</div>`;
     el.onclick=()=>{ sendToStage({type:'tv-result-highlight',index:i}); selectResult(r); };
     c.appendChild(el);
   });
@@ -866,21 +960,19 @@ function renderResults(items){
 
 async function selectResult(r){
   selectedVideo=r;
-  // Show home screen immediately — don't wait for lyrics
-  document.getElementById('song-title').textContent=r.title;
+  // Show home screen immediately
+  document.getElementById('song-title').textContent=r.title.replace(/\(karaoke[^)]*\)/gi,'').replace(/\bkaraoke\b/gi,'').trim();
   document.getElementById('song-artist').textContent=r.artist||'';
   document.getElementById('start-btn').style.display='block';
+  // Show back-to-search button
+  cameFromSearch=true;
+  document.getElementById('back-to-search-btn').style.display='block';
   showScreen('screen-home');
   showToast('Loading lyrics...');
-  // Fetch lyrics in background
   syncedLyrics=await fetchLyrics(r.title, r.artist);
   sendToStage({type:'song-select',videoId:r.videoId,title:r.title,artist:r.artist,thumb:r.thumb||'',lyrics:syncedLyrics,isDemo:r.videoId.startsWith('d')});
-  if(syncedLyrics.length > 0){
-    showToast('✓ '+syncedLyrics.length+' lyric lines loaded');
-  } else {
-    showToast('⚠️ No lyrics found');
-    document.getElementById('song-artist').textContent = (r.artist||'') + ' · No lyrics';
-  }
+  if(syncedLyrics.length > 0) showToast('✓ '+syncedLyrics.length+' lyric lines loaded');
+  else { showToast('⚠️ No lyrics found'); document.getElementById('song-artist').textContent=(r.artist||'')+' · No lyrics'; }
 }
 
 // ── LRCLIB LYRICS ──
@@ -936,25 +1028,13 @@ function clearSearch(){
   const inp = document.getElementById('srch-in');
   inp.value = '';
   updateClearBtn();
-  document.getElementById('srch-results').innerHTML = '<div class="empty">🎵<br>Search for any song<br>Results appear here and on the TV</div>';
-  document.getElementById('srch-status').textContent = 'Hold 🎙 to search by voice · or type and search';
+  lastSearchResults = [];
+  document.getElementById('srch-recent-section').style.display='block';
+  document.getElementById('srch-result-list').style.display='none';
+  renderRecent();
   inp.focus();
   sendToStage({type:'tv-search-clear'});
 }
-function startVoice(e){
-  if(e) e.preventDefault();
-  if(voiceActive) return;
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){showToast('Voice not supported — use Chrome or Edge');return;}
-  recognition=new SR();
-  recognition.lang='en-US'; recognition.interimResults=false; recognition.maxAlternatives=1;
-  recognition.onstart=()=>{voiceActive=true;document.getElementById('voice-btn').classList.add('on');document.getElementById('voice-hint').style.display='block';};
-  recognition.onresult=e=>{document.getElementById('srch-in').value=e.results[0][0].transcript;updateClearBtn();doSearch();};
-  recognition.onerror=recognition.onend=()=>{voiceActive=false;document.getElementById('voice-btn').classList.remove('on');document.getElementById('voice-hint').style.display='none';};
-  recognition.start();
-}
-function stopVoice(e){if(e) e.preventDefault();if(recognition) recognition.stop();}
-
 // ── COUNTDOWN ──
 function goToCountdown(){
   if(!selectedVideo){showToast('Select a song first');return;}
