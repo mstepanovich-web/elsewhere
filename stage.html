@@ -299,7 +299,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.39</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.40</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -421,7 +421,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.39</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.40</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1744,18 +1744,25 @@ function onToggleView(){
   document.getElementById('vtoggle').className   = isAud ? '' : 'pano';
   document.getElementById('compass').style.display     = isAud ? 'none' : 'block';
   document.getElementById('htoggle').style.display     = isAud ? 'none' : 'block';
-  // Singer View: show Set Singer View only
   document.getElementById('set-center-btn').style.display = isAud ? 'none' : 'block';
-  // Audience View: show Set Audience View
   document.getElementById('set-aud-btn').style.display = isAud ? 'block' : 'none';
-  if(!isAud){ buildPanoramaIfNeeded(); initHeadTracking(); }
-  else { initAudienceDrag(); }
+  log('onToggleView → '+viewMode+' venueMode:'+venueMode+' panReady:'+panReady, 'info');
+  if(!isAud){
+    buildPanoramaIfNeeded();
+    initHeadTracking();
+  } else {
+    // Returning to audience view — re-apply venue state so pan-layer shows correctly
+    initVenueMode();
+    initAudienceDrag();
+  }
 }
 
-let panBuilt=false;
 function buildPanoramaIfNeeded(){
-  if(panBuilt) return; panBuilt=true;
-  // Build async so it doesn't block the UI
+  // Only build if renderer doesn't exist yet — don't clobber an already-loaded venue
+  if(panRenderer && panReady) {
+    log('buildPanoramaIfNeeded: skipping — already ready', 'info');
+    return;
+  }
   setTimeout(buildPanorama, 50);
 }
 
@@ -2026,6 +2033,7 @@ function handleAudienceMsg(msg){
   }
 
   if(msg.type==='set-venue'){
+    log('set-venue received: venueId='+msg.venueId, 'info');
     const v = VENUES.find(vn=>vn.id===msg.venueId);
     if(v){
       selectedVenueId = v.id;
@@ -2033,8 +2041,10 @@ function handleAudienceMsg(msg){
       if(panScene) while(panScene.children.length) panScene.remove(panScene.children[0]);
       buildPanorama();
       tYaw = v.startYaw || 0; cYaw = v.startYaw || 0;
-      log('set-venue: id='+v.id+' name='+v.name+' skyboxId='+v.skyboxId+' viewMode='+viewMode, 'ok');
+      log('set-venue: found id='+v.id+' skyboxId='+v.skyboxId+' viewMode='+viewMode, 'ok');
       showToast('🎭 '+v.name);
+    } else {
+      log('set-venue: VENUE NOT FOUND in VENUES array for id='+msg.venueId, 'err');
     }
   }
 
