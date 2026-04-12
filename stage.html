@@ -299,7 +299,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.38</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.39</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -421,7 +421,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.38</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.39</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -568,11 +568,12 @@ function hideStageVenuePicker(){
 
 function initVenueMode(){
   const venue = VENUES.find(v=>v.id===selectedVenueId);
+  log('initVenueMode — selectedVenueId:'+selectedVenueId+' venue:'+(venue?venue.name:'NOT FOUND')+' skyboxId:'+(venue?venue.skyboxId:'n/a')+' panReady:'+panReady+' viewMode:'+viewMode, 'info');
   if(!venue || !venue.skyboxId){
     venueMode = false;
-    // Ensure classic stage layers correct
     document.getElementById('pan-layer').style.opacity='0';
     document.getElementById('pan-layer').style.pointerEvents='none';
+    log('initVenueMode — no skyboxId, venueMode=false', 'warn');
     return;
   }
   venueMode = true;
@@ -586,12 +587,12 @@ function initVenueMode(){
     panCamera3.fov = FOV_NARROW;
     panCamera3.updateProjectionMatrix();
   }
-  // In audience view, ensure pan-layer is visible and aud-layer is on top for compositing
   if(viewMode === 'audience'){
     document.getElementById('pan-layer').style.opacity='1';
     document.getElementById('pan-layer').style.zIndex='1';
     document.getElementById('aud-layer').style.zIndex='2';
   }
+  log('initVenueMode — venueMode=true yaw:'+venueYaw+' pitch:'+venuePitch+' panReady:'+panReady, 'ok');
 }
 
 function zoomVenueOut(){
@@ -1415,12 +1416,15 @@ function buildPanorama(){
 
   // Only create renderer/scene/camera once
   if(!panRenderer){
+    log('buildPanorama: creating renderer', 'info');
     panRenderer = new THREE.WebGLRenderer({ canvas:panCanvas, antialias:true });
     panRenderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
     panRenderer.setSize(window.innerWidth, window.innerHeight);
     panScene   = new THREE.Scene();
     panCamera3 = new THREE.PerspectiveCamera(80, window.innerWidth/window.innerHeight, 0.01, 2000);
     panCamera3.rotation.order='YXZ';
+  } else {
+    log('buildPanorama: reusing renderer', 'info');
   }
 
   // Clear existing meshes
@@ -1428,10 +1432,11 @@ function buildPanorama(){
   panReady = false;
 
   const venue = VENUES.find(v=>v.id===selectedVenueId) || VENUES[VENUES.length-1];
+  log('buildPanorama: venue='+venue.id+' skyboxId='+venue.skyboxId+' selectedVenueId='+selectedVenueId, 'info');
 
   if(venue.skyboxId){
     const url = `${VENUE_BASE_URL}${venue.skyboxId}.jpg`;
-    log('Loading panorama: '+url, 'info');
+    log('buildPanorama: loading texture '+url, 'info');
     const loader = new THREE.TextureLoader();
     loader.crossOrigin = 'anonymous';
     loader.load(url, tex=>{
@@ -1442,17 +1447,19 @@ function buildPanorama(){
       tYaw = venue.startYaw || 0;
       cYaw = venue.startYaw || 0;
       manualYaw = venue.startYaw || 0;
+      log('buildPanorama: texture loaded ✓ panReady=true viewMode='+viewMode, 'ok');
       initVenueMode();
       if(panCamera3 && viewMode==='audience'){
         panCamera3.rotation.y = -(venue.staticYaw||0) * D2R;
         panCamera3.rotation.x = -(venue.staticPitch||0) * D2R;
+        log('buildPanorama: camera snapped yaw='+venue.staticYaw+' pitch='+venue.staticPitch, 'ok');
       }
-      log('Panorama loaded: '+venue.name, 'ok');
     }, undefined, (err)=>{
-      log('Panorama image failed: '+url+' — '+err, 'err');
+      log('buildPanorama: TEXTURE FAILED '+url, 'err');
       buildProgrammaticPanorama();
     });
   } else {
+    log('buildPanorama: no skyboxId — building programmatic', 'info');
     buildProgrammaticPanorama();
   }
 }
@@ -2023,13 +2030,10 @@ function handleAudienceMsg(msg){
     if(v){
       selectedVenueId = v.id;
       panReady = false;
-      // Clear existing scene
       if(panScene) while(panScene.children.length) panScene.remove(panScene.children[0]);
-      // Build or rebuild panorama — panReady=true fires inside texture callback
       buildPanorama();
       tYaw = v.startYaw || 0; cYaw = v.startYaw || 0;
-      // initVenueMode called inside buildPanorama once texture loads
-      log('Venue changed to: '+v.name, 'ok');
+      log('set-venue: id='+v.id+' name='+v.name+' skyboxId='+v.skyboxId+' viewMode='+viewMode, 'ok');
       showToast('🎭 '+v.name);
     }
   }
@@ -2474,6 +2478,7 @@ function renderLoop(){
 
   } else {
     // ── AUDIENCE VIEW ──
+    if(fc%300===0) log('renderLoop audience: venueMode='+venueMode+' panReady='+panReady+' panRenderer='+!!panRenderer+' viewMode='+viewMode, 'info');
     if(venueMode && panReady && panRenderer){
       // Venue panorama background + singer on top
       venueFOV = lerp(venueFOV, venueFOVTarget, FOV_SMOOTH);
