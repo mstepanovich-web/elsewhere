@@ -116,19 +116,20 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
 /* ── SELECTED SONG CARD ON TV ── */
 #tv-song-card{
-  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  position:fixed;bottom:14%;left:0;right:0;
   z-index:455;display:none;
-  flex-direction:column;align-items:center;gap:16px;
-  background:rgba(4,2,6,.95);border:1px solid rgba(255,200,80,.2);
-  border-radius:12px;padding:32px 40px;text-align:center;
-  box-shadow:0 0 80px rgba(255,180,60,.1);
-  min-width:340px;
+  flex-direction:row;align-items:center;gap:14px;
+  background:rgba(4,2,6,.88);
+  border-top:1px solid rgba(255,200,80,.15);
+  border-bottom:1px solid rgba(255,200,80,.1);
+  padding:12px 28px;
+  backdrop-filter:blur(12px);
 }
-#tv-song-thumb{width:180px;height:120px;object-fit:cover;border-radius:6px;background:rgba(255,200,80,.06);}
-#tv-song-title{font-family:'Cormorant Garamond',serif;font-size:clamp(22px,3vw,42px);color:rgba(255,220,150,.95);font-style:italic;line-height:1.2;}
-#tv-song-artist{font-size:12px;color:rgba(255,200,120,.5);letter-spacing:.1em;text-transform:uppercase;}
+#tv-song-thumb{width:52px;height:36px;object-fit:cover;border-radius:4px;background:rgba(255,200,80,.06);flex-shrink:0;}
+#tv-song-title{font-family:'Cormorant Garamond',serif;font-size:clamp(16px,2vw,28px);color:rgba(255,220,150,.95);font-style:italic;line-height:1.2;flex:1;}
+#tv-song-artist{font-size:11px;color:rgba(255,200,120,.5);letter-spacing:.1em;text-transform:uppercase;flex-shrink:0;}
 /* ── SONG LOADING STATUS ── */
-#tv-song-hint{font-size:11px;color:rgba(255,200,120,.25);letter-spacing:.1em;text-transform:uppercase;margin-top:4px;}
+#tv-song-hint{font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.1em;text-transform:uppercase;flex-shrink:0;}
 
 /* ── COMMENT BAR ── */
 #comment-bar{
@@ -271,8 +272,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <div id="tv-song-card">
   <img id="tv-song-thumb" src="" alt="">
   <div id="tv-song-title"></div>
-  <div id="tv-song-artist"></div>
-  <div id="tv-song-hint">Ready when you are · tap Start on your phone</div>
+  <div id="tv-song-hint">tap Start on your phone</div>
 </div>
 
 <!-- COMMENT BAR -->
@@ -297,7 +297,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.35</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.36</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -419,7 +419,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.35</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.36</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -566,7 +566,10 @@ function hideStageVenuePicker(){
 function initVenueMode(){
   const venue = VENUES.find(v=>v.id===selectedVenueId);
   if(!venue || !venue.skyboxId){
-    venueMode = false; // Classic Stage — use 2D programmatic backdrop
+    venueMode = false;
+    // Ensure classic stage layers correct
+    document.getElementById('pan-layer').style.opacity='0';
+    document.getElementById('pan-layer').style.pointerEvents='none';
     return;
   }
   venueMode = true;
@@ -576,10 +579,15 @@ function initVenueMode(){
   venuePitchTarget = venue.staticPitch || 0;
   venueFOV = FOV_NARROW;
   venueFOVTarget = FOV_NARROW;
-  // Immediately snap camera FOV — don't wait for lerp
   if(panCamera3){
     panCamera3.fov = FOV_NARROW;
     panCamera3.updateProjectionMatrix();
+  }
+  // In audience view, ensure pan-layer is visible and aud-layer is on top for compositing
+  if(viewMode === 'audience'){
+    document.getElementById('pan-layer').style.opacity='1';
+    document.getElementById('pan-layer').style.zIndex='1';
+    document.getElementById('aud-layer').style.zIndex='2';
   }
 }
 
@@ -715,70 +723,72 @@ function clearAllAccessories(){
 // Called every frame from the render loop — draws active accessories onto canvas
 function drawAccessories(){
   if(!activeAccessories.size) return;
-  if(!lastFaceLandmarks && !lastPoseLandmarks) return;
 
   const W = AC.width, H = AC.height;
   const rect = singerRect();
 
-  // Helper — convert normalized landmark coords to canvas coords within singerRect
+  // Compute zoomed rect (mirrors what drawSinger does)
+  const zW = rect.w * zoomFactor;
+  const zH = rect.h * zoomFactor;
+  const zX = rect.x + rect.w/2 - zW/2;
+  const zY = rect.y - (zH - rect.h) * (0.5 + zoomOffset);
+
+  // Convert normalized landmark (0-1 in video frame) to canvas coords
+  // Landmarks x=0 is left of video, but we draw mirrored so flip x
   function lmToCanvas(lm){
-    // Landmarks are normalized 0-1 relative to the video frame
-    // Mirror X since we draw mirrored
-    const x = rect.x + (1 - lm.x) * rect.w;
-    const y = rect.y + lm.y * rect.h;
+    const x = zX + lm.x * zW;       // mirrored — x=0 maps to left of drawn rect
+    const y = zY + lm.y * zH;
     return { x, y };
   }
 
-  // Compute anchor points from landmarks
   let anchors = {};
 
   if(lastFaceLandmarks){
     const lm = lastFaceLandmarks;
-    const nose    = lmToCanvas(lm[1]);
-    const leftEar = lmToCanvas(lm[234]);
-    const rightEar= lmToCanvas(lm[454]);
-    const forehead= lmToCanvas(lm[10]);
-    const chin    = lmToCanvas(lm[152]);
-    const leftEye = lmToCanvas(lm[33]);
-    const rightEye= lmToCanvas(lm[263]);
+    const leftEar  = lmToCanvas(lm[234]);
+    const rightEar = lmToCanvas(lm[454]);
+    const forehead = lmToCanvas(lm[10]);
+    const chin     = lmToCanvas(lm[152]);
+    const leftEye  = lmToCanvas(lm[33]);
+    const rightEye = lmToCanvas(lm[263]);
 
     const faceW = Math.abs(rightEar.x - leftEar.x);
-    const faceH = Math.abs(chin.y - forehead.y);
     const faceCx = (leftEar.x + rightEar.x) / 2;
 
-    anchors['head-top']  = { x: faceCx, y: forehead.y, size: faceW };
-    anchors['eyes']      = { x: faceCx, y: (leftEye.y + rightEye.y)/2, size: faceW };
-    anchors['head-center']={ x: faceCx, y: nose.y, size: faceW };
+    anchors['head-top']   = { x: faceCx, y: forehead.y, size: faceW };
+    anchors['eyes']       = { x: faceCx, y: (leftEye.y+rightEye.y)/2, size: faceW };
+    anchors['head-center']= { x: faceCx, y: (forehead.y+chin.y)/2, size: faceW };
   }
 
   if(lastPoseLandmarks){
     const lm = lastPoseLandmarks;
-    const ls = lmToCanvas(lm[11]);  // left shoulder
-    const rs = lmToCanvas(lm[12]);  // right shoulder
-    const lh = lmToCanvas(lm[23]);  // left hip
-    const rh = lmToCanvas(lm[24]);  // right hip
-    const rw = lmToCanvas(lm[16]);  // right wrist
+    const ls = lmToCanvas(lm[11]);
+    const rs = lmToCanvas(lm[12]);
+    const lh = lmToCanvas(lm[23]);
+    const rh = lmToCanvas(lm[24]);
+    const rw = lmToCanvas(lm[16]);
 
     const shoulderCx = (ls.x + rs.x) / 2;
     const shoulderW  = Math.abs(rs.x - ls.x);
     const hipCy      = (lh.y + rh.y) / 2;
     const torsoH     = Math.abs(hipCy - (ls.y+rs.y)/2);
 
-    anchors['shoulder']    = { x: ls.x, y: ls.y, size: shoulderW * 0.4 };
-    anchors['body-center'] = { x: shoulderCx, y: (ls.y+rs.y)/2 + torsoH*0.3, size: shoulderW * 1.1 };
-    anchors['hand-right']  = { x: rw.x, y: rw.y, size: shoulderW * 0.35 };
+    anchors['shoulder']    = { x: ls.x, y: ls.y, size: shoulderW*0.4 };
+    anchors['body-center'] = { x: shoulderCx, y: (ls.y+rs.y)/2 + torsoH*0.3, size: shoulderW*1.1 };
+    anchors['hand-right']  = { x: rw.x, y: rw.y, size: shoulderW*0.35 };
   }
 
-  // Fallback anchors from singerRect if no landmarks yet
+  // Fallback from singer rect if no landmarks
   if(!anchors['head-top']){
-    anchors['head-top']   = { x: rect.x+rect.w/2, y: rect.y+rect.h*0.08, size: rect.w*0.4 };
-    anchors['eyes']       = { x: rect.x+rect.w/2, y: rect.y+rect.h*0.14, size: rect.w*0.4 };
-    anchors['body-center']= { x: rect.x+rect.w/2, y: rect.y+rect.h*0.5,  size: rect.w*0.7 };
-    anchors['hand-right'] = { x: rect.x+rect.w*0.7, y: rect.y+rect.h*0.55, size: rect.w*0.25 };
-    anchors['shoulder']   = { x: rect.x+rect.w*0.3, y: rect.y+rect.h*0.28, size: rect.w*0.2 };
+    const faceW = zW * 0.38;
+    const cx = zX + zW/2;
+    anchors['head-top']   = { x: cx, y: zY + zH*0.06, size: faceW };
+    anchors['eyes']       = { x: cx, y: zY + zH*0.12, size: faceW };
+    anchors['body-center']= { x: cx, y: zY + zH*0.45, size: zW*0.65 };
+    anchors['hand-right'] = { x: zX + zW*0.72, y: zY + zH*0.52, size: zW*0.22 };
+    anchors['shoulder']   = { x: zX + zW*0.28, y: zY + zH*0.26, size: zW*0.18 };
   }
 
-  // Draw each active accessory
   activeAccessories.forEach(id=>{
     const acc = ACCESSORIES.find(a=>a.id===id);
     if(!acc) return;
