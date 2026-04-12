@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.39</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.40</div>
 </div>
 
 <!-- HOME -->
@@ -194,7 +194,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;">← Search</div>
-      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.39</div>
+      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.40</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -277,11 +277,11 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <!-- View toggle pill -->
   <div style="display:flex;gap:0;margin-bottom:14px;flex-shrink:0;border:1px solid rgba(255,200,80,.25);border-radius:6px;overflow:hidden;">
     <div id="venue-singer-tab" onclick="setVenuePreviewView('singer')"
-      style="flex:1;padding:9px;text-align:center;font-size:11px;letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;background:rgba(255,200,80,.15);color:rgba(255,220,150,.95);-webkit-user-select:none;">
+      style="flex:1;padding:9px;text-align:center;font-size:11px;letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;background:transparent;color:rgba(255,220,150,.4);-webkit-user-select:none;">
       🎤 Singer View
     </div>
     <div id="venue-audience-tab" onclick="setVenuePreviewView('audience')"
-      style="flex:1;padding:9px;text-align:center;font-size:11px;letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;background:transparent;color:rgba(255,220,150,.4);-webkit-user-select:none;">
+      style="flex:1;padding:9px;text-align:center;font-size:11px;letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;background:rgba(255,200,80,.15);color:rgba(255,220,150,.95);-webkit-user-select:none;">
       👥 Audience View
     </div>
   </div>
@@ -1382,6 +1382,9 @@ let currentVenueId = 'default';
 let expandedCategories = new Set(); // all collapsed by default
 
 function showStageOverlay(){
+  // Always open in audience view
+  if(venuePreviewView !== 'audience') setVenuePreviewView('audience');
+
   const grid = document.getElementById('singer-venue-grid');
   grid.innerHTML = '';
 
@@ -1465,7 +1468,7 @@ function sendPanRight(){
 }
 
 // ── VENUE PREVIEW VIEW TOGGLE ──
-let venuePreviewView = 'singer'; // 'singer' or 'audience'
+let venuePreviewView = 'audience'; // default to audience view
 
 function setVenuePreviewView(view){
   venuePreviewView = view;
