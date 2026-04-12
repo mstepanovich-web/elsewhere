@@ -231,6 +231,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
 <canvas id="aud-layer"></canvas>
 <canvas id="pan-layer"></canvas>
+<canvas id="ambient-layer" style="position:fixed;inset:0;z-index:3;pointer-events:none;"></canvas>
 <video id="webcam" autoplay playsinline muted></video>
 <canvas id="proc"></canvas>
 <canvas id="maskc"></canvas>
@@ -296,7 +297,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.27</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.35</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -311,6 +312,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   <div class="btn" onclick="showSongs()">🎵 Song</div>
   <div class="btn" onclick="toggleCommentBar()">💬 Comments</div>
   <div class="btn" onclick="showStageVenuePicker()">🎭 Venue</div>
+  <div class="btn" onclick="showCostumePicker()">🎭 Costume</div>
+  <div class="btn" onclick="showQualityPicker()">⚙️ Quality</div>
   <div class="btn danger" id="stage-stop-btn" onclick="doEnd()" style="display:none;">■ Stop</div>
 </div>
 <div id="prog"><div id="pf"></div></div>
@@ -355,7 +358,36 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
     <div style="font-family:'Cormorant Garamond',serif;font-size:22px;color:rgba(255,220,150,.9);font-style:italic;">Choose Venue</div>
     <div onclick="hideStageVenuePicker()" style="font-size:22px;cursor:pointer;color:rgba(255,200,120,.5);padding:4px 10px;">✕</div>
   </div>
-  <div id="stage-venue-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;overflow-y:auto;flex:1;"></div>
+  <div id="stage-venue-grid" style="overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;"></div>
+</div>
+
+<!-- Costume Picker Overlay -->
+<div id="costume-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(4,2,6,.96);backdrop-filter:blur(8px);flex-direction:column;padding:40px 20px 24px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-shrink:0;">
+    <div style="font-family:'Cormorant Garamond',serif;font-size:22px;color:rgba(255,220,150,.9);font-style:italic;">Accessories</div>
+    <div onclick="hideCostumePicker()" style="font-size:22px;cursor:pointer;color:rgba(255,200,120,.5);padding:4px 10px;">✕</div>
+  </div>
+  <div style="font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.08em;font-family:'DM Mono',monospace;margin-bottom:14px;flex-shrink:0;">Tap to toggle · multiple allowed</div>
+  <div id="costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;align-content:start;"></div>
+  <div onclick="clearAllAccessories()" style="margin-top:14px;padding:12px;text-align:center;font-size:12px;color:rgba(196,122,107,.7);font-family:'DM Mono',monospace;cursor:pointer;border:1px solid rgba(196,122,107,.2);border-radius:6px;flex-shrink:0;">✕ Remove All</div>
+</div>
+
+<!-- Quality Picker Overlay -->
+<div id="quality-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(4,2,6,.96);backdrop-filter:blur(8px);flex-direction:column;padding:40px 20px 24px;align-items:center;justify-content:center;gap:16px;">
+  <div style="font-family:'Cormorant Garamond',serif;font-size:22px;color:rgba(255,220,150,.9);font-style:italic;margin-bottom:8px;">Camera Quality</div>
+  <div class="quality-opt" data-res="standard" onclick="switchResolution('standard')" style="width:100%;max-width:360px;padding:16px 20px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);cursor:pointer;">
+    <div style="font-size:14px;color:rgba(255,220,150,.9);font-family:'DM Mono',monospace;">Standard</div>
+    <div style="font-size:11px;color:rgba(255,200,120,.45);margin-top:4px;">640×480 · Lower CPU usage · Faster</div>
+  </div>
+  <div class="quality-opt" data-res="hd" onclick="switchResolution('hd')" style="width:100%;max-width:360px;padding:16px 20px;border-radius:8px;border:1px solid rgba(255,200,80,.7);background:rgba(255,200,80,.12);cursor:pointer;">
+    <div style="font-size:14px;color:rgba(255,220,150,.9);font-family:'DM Mono',monospace;">HD ✓ Recommended</div>
+    <div style="font-size:11px;color:rgba(255,200,120,.45);margin-top:4px;">1280×720 · Good balance of quality and performance</div>
+  </div>
+  <div class="quality-opt" data-res="fhd" onclick="switchResolution('fhd')" style="width:100%;max-width:360px;padding:16px 20px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);cursor:pointer;">
+    <div style="font-size:14px;color:rgba(255,220,150,.9);font-family:'DM Mono',monospace;">Full HD</div>
+    <div style="font-size:11px;color:rgba(255,200,120,.45);margin-top:4px;">1920×1080 · Sharpest · Requires fast Mac</div>
+  </div>
+  <div onclick="hideQualityPicker()" style="margin-top:8px;font-size:13px;color:rgba(255,200,120,.4);cursor:pointer;font-family:'DM Mono',monospace;">Cancel</div>
 </div>
 
 <div id="start">
@@ -367,17 +399,27 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
     <div class="sf"><div class="fd"></div>Audience joins from anywhere using your room code</div>
   </div>
 
-  <!-- Camera selector -->
-  <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin:10px 0;">
-    <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:'DM Mono',monospace;">Camera</div>
-    <select id="cam-select" style="background:rgba(255,200,80,.06);border:1px solid rgba(255,200,80,.25);border-radius:4px;color:rgba(255,220,150,.85);font-family:'DM Mono',monospace;font-size:12px;padding:7px 12px;cursor:pointer;outline:none;max-width:320px;width:100%;">
-      <option value="">Detecting cameras...</option>
-    </select>
+  <!-- Camera + Resolution selectors -->
+  <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin:10px 0;width:100%;max-width:320px;">
+    <div style="display:flex;flex-direction:column;gap:6px;width:100%;">
+      <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:'DM Mono',monospace;">Camera</div>
+      <select id="cam-select" style="background:rgba(255,200,80,.06);border:1px solid rgba(255,200,80,.25);border-radius:4px;color:rgba(255,220,150,.85);font-family:'DM Mono',monospace;font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
+        <option value="">Detecting cameras...</option>
+      </select>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;width:100%;">
+      <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:'DM Mono',monospace;">Quality</div>
+      <select id="res-select" onchange="setResolution(this.value)" style="background:rgba(255,200,80,.06);border:1px solid rgba(255,200,80,.25);border-radius:4px;color:rgba(255,220,150,.85);font-family:'DM Mono',monospace;font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
+        <option value="hd">HD — 1280×720 (Recommended)</option>
+        <option value="standard">Standard — 640×480 (Lower CPU)</option>
+        <option value="fhd">Full HD — 1920×1080 (High CPU)</option>
+      </select>
+    </div>
   </div>
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.27</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.35</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -435,31 +477,86 @@ const FOV_NARROW = 55;
 const FOV_WIDE   = 90;
 const FOV_SMOOTH = 0.03;
 
+// Stage venue picker — uses same category structure as singer app
+const STAGE_VENUE_CATEGORIES = [
+  {
+    id:'big', label:'🎵 Big Venues', venues:['stadium','festival','hollywood','amphitheater','colosseum','drivein']
+  },
+  {
+    id:'party', label:'🎉 Party & Nightlife', venues:['disco','vegas','artdeco','rooftop','broadway']
+  },
+  {
+    id:'bars', label:'🍸 Bars & Lounges', venues:['speakeasy','honkytonk','divebar','supperclub','cabaret','bourbon','skiodge','tikibar','wildwest','jazz']
+  },
+  {
+    id:'fantasy', label:'🚀 Fantasy & Adventure', venues:['space','forest','dragonlair','underwater']
+  },
+  {
+    id:'kids', label:'👑 Kids', venues:['princess','candyland','icePalace','northpole','dino','circus']
+  },
+];
+
+let stageExpandedCats = new Set(['big']);
+
 function showStageVenuePicker(){
   const grid = document.getElementById('stage-venue-grid');
   grid.innerHTML = '';
-  VENUES.forEach(v=>{
-    const card = document.createElement('div');
-    card.style.cssText = `padding:12px 8px;text-align:center;cursor:pointer;border-radius:6px;border:1px solid ${v.id===selectedVenueId?'rgba(255,200,80,.7)':'rgba(255,255,255,.1)'};background:${v.id===selectedVenueId?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};`;
-    card.innerHTML = `<div style="font-size:22px;margin-bottom:4px;">${v.icon}</div><div style="font-size:10px;color:rgba(255,220,150,.8);font-family:'DM Mono',monospace;letter-spacing:.06em;">${v.name}</div>`;
-    card.onclick = ()=>{
-      // Trigger same venue change as singer app would
-      const msg = {type:'set-venue', venueId:v.id};
-      selectedVenueId = v.id;
-      loadVenueImage(v.skyboxId);
-      if(!panRenderer) buildPanorama();
-      panReady = false;
-      if(panScene) while(panScene.children.length) panScene.remove(panScene.children[0]);
-      buildPanorama();
-      tYaw = v.startYaw || 0; cYaw = v.startYaw || 0;
-      initVenueMode();
-      log('Venue changed to: '+v.name, 'ok');
-      showToast('🎭 '+v.name);
-      hideStageVenuePicker();
+
+  // Classic Stage at top
+  const classic = VENUES.find(v=>v.id==='default');
+  if(classic){
+    const el = document.createElement('div');
+    el.style.cssText = `padding:12px 14px;border-radius:10px;border:1px solid ${selectedVenueId==='default'?'rgba(255,200,80,.7)':'rgba(255,255,255,.08)'};background:${selectedVenueId==='default'?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:14px;`;
+    el.innerHTML = `<span style="font-size:26px;">🎤</span><div style="font-size:13px;color:rgba(255,220,150,.9);font-family:'DM Mono',monospace;">Classic Stage</div>`;
+    el.onclick = ()=>{ applyStageVenue(classic); };
+    grid.appendChild(el);
+  }
+
+  STAGE_VENUE_CATEGORIES.forEach(cat=>{
+    const isOpen = stageExpandedCats.has(cat.id);
+    const catVenues = cat.venues.map(id=>VENUES.find(v=>v.id===id)).filter(Boolean);
+    if(!catVenues.length) return;
+
+    // Header
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 4px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:4px;';
+    header.innerHTML = `<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.6);font-family:'DM Mono',monospace;">${cat.label}</div><div style="font-size:14px;color:rgba(255,200,120,.4);transform:rotate(${isOpen?'180deg':'0deg'})">▼</div>`;
+    header.onclick = ()=>{
+      if(stageExpandedCats.has(cat.id)) stageExpandedCats.delete(cat.id);
+      else stageExpandedCats.add(cat.id);
+      showStageVenuePicker();
     };
-    grid.appendChild(card);
+    grid.appendChild(header);
+
+    if(isOpen){
+      const venueGrid = document.createElement('div');
+      venueGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;';
+      catVenues.forEach(v=>{
+        const card = document.createElement('div');
+        card.style.cssText = `padding:10px 6px;text-align:center;cursor:pointer;border-radius:6px;border:1px solid ${v.id===selectedVenueId?'rgba(255,200,80,.7)':'rgba(255,255,255,.08)'};background:${v.id===selectedVenueId?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};`;
+        card.innerHTML = `<div style="font-size:20px;margin-bottom:3px;">${v.icon}</div><div style="font-size:9px;color:rgba(255,220,150,.8);font-family:'DM Mono',monospace;">${v.name}</div>`;
+        card.onclick = ()=>{ applyStageVenue(v); };
+        venueGrid.appendChild(card);
+      });
+      grid.appendChild(venueGrid);
+    }
   });
+
   document.getElementById('stage-venue-overlay').style.display = 'flex';
+}
+
+function applyStageVenue(v){
+  selectedVenueId = v.id;
+  loadVenueImage(v.skyboxId);
+  if(!panRenderer) buildPanorama();
+  panReady = false;
+  if(panScene) while(panScene.children.length) panScene.remove(panScene.children[0]);
+  buildPanorama();
+  tYaw = v.startYaw || 0; cYaw = v.startYaw || 0;
+  initVenueMode();
+  log('Venue changed to: '+v.name, 'ok');
+  showToast('🎭 '+v.name);
+  hideStageVenuePicker();
 }
 
 function hideStageVenuePicker(){
@@ -497,6 +594,212 @@ function panVenue(yawDelta){
 }
 
 
+// ── RESOLUTION / QUALITY ──
+const RESOLUTIONS = {
+  standard: { w:640,  h:480,  label:'Standard — 640×480' },
+  hd:       { w:1280, h:720,  label:'HD — 1280×720' },
+  fhd:      { w:1920, h:1080, label:'Full HD — 1920×1080' },
+};
+let currentResolution = 'hd';
+
+function setResolution(key){ currentResolution = key; }
+
+async function switchResolution(key){
+  currentResolution = key;
+  const res = RESOLUTIONS[key];
+  log('Switching to: '+res.label, 'info');
+  if(!camStream){ showToast('⚙️ '+res.label+' — takes effect on next start'); hideQualityPicker(); return; }
+  camStream.getTracks().forEach(t=>t.stop());
+  try{
+    const constraints = { video: selectedCameraId
+      ? { deviceId:{exact:selectedCameraId}, width:{ideal:res.w}, height:{ideal:res.h} }
+      : { width:{ideal:res.w}, height:{ideal:res.h}, facingMode:'user' }, audio:false };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    camStream=stream; camVideo.srcObject=stream;
+    await camVideo.play();
+    startSegmentation(camVideo);
+    const actual = stream.getVideoTracks()[0].getSettings();
+    log('Resolution active: '+actual.width+'×'+actual.height, 'ok');
+    showToast('⚙️ '+res.label);
+    hideQualityPicker();
+  }catch(e){ log('Resolution error: '+e.message,'err'); }
+}
+
+function showQualityPicker(){
+  document.querySelectorAll('.quality-opt').forEach(el=>{
+    const active = el.dataset.res===currentResolution;
+    el.style.borderColor = active ? 'rgba(255,200,80,.7)' : 'rgba(255,255,255,.08)';
+    el.style.background  = active ? 'rgba(255,200,80,.12)' : 'rgba(255,255,255,.03)';
+  });
+  document.getElementById('quality-overlay').style.display='flex';
+}
+function hideQualityPicker(){ document.getElementById('quality-overlay').style.display='none'; }
+
+// ═══════════════════════════════════════
+// ACCESSORIES SYSTEM
+// ═══════════════════════════════════════
+
+const ACCESSORIES = [
+  { id:'crown',      label:'Crown',       emoji:'👑', anchor:'head-top',    offsetY:-0.18, scale:0.55 },
+  { id:'tophat',     label:'Top Hat',     emoji:'🎩', anchor:'head-top',    offsetY:-0.22, scale:0.65 },
+  { id:'halo',       label:'Halo',        emoji:'😇', anchor:'head-top',    offsetY:-0.12, scale:0.55 },
+  { id:'devilhorns', label:'Devil Horns', emoji:'😈', anchor:'head-top',    offsetY:-0.18, scale:0.55 },
+  { id:'sunglasses', label:'Sunglasses',  emoji:'😎', anchor:'eyes',        offsetY: 0.0,  scale:0.60 },
+  { id:'bow',        label:'Bow',         emoji:'🎀', anchor:'head-top',    offsetY:-0.10, scale:0.45 },
+  { id:'bunnyears',  label:'Bunny Ears',  emoji:'🐰', anchor:'head-top',    offsetY:-0.28, scale:0.65 },
+  { id:'catears',    label:'Cat Ears',    emoji:'🐱', anchor:'head-top',    offsetY:-0.22, scale:0.60 },
+  { id:'fireHalo',   label:'Fire Halo',   emoji:'🔥', anchor:'head-top',    offsetY:-0.14, scale:0.70 },
+  { id:'icecrwon',   label:'Ice Crown',   emoji:'❄️', anchor:'head-top',    offsetY:-0.16, scale:0.55 },
+  { id:'stars',      label:'Star Burst',  emoji:'✨', anchor:'head-top',    offsetY:-0.05, scale:0.90 },
+  { id:'rainbow',    label:'Rainbow',     emoji:'🌈', anchor:'head-top',    offsetY:-0.35, scale:1.10 },
+  { id:'mic',        label:'Mic',         emoji:'🎤', anchor:'hand-right',  offsetY: 0.0,  scale:0.45 },
+  { id:'guitar',     label:'Air Guitar',  emoji:'🎸', anchor:'body-center', offsetY: 0.0,  scale:0.80 },
+  { id:'butterfly',  label:'Butterfly',   emoji:'🦋', anchor:'shoulder',    offsetY:-0.05, scale:0.50 },
+  { id:'sparkles',   label:'Sparkles',    emoji:'💫', anchor:'head-top',    offsetY:-0.08, scale:0.85 },
+];
+
+let activeAccessories = new Set();
+let lastFaceLandmarks = null;  // updated by FaceMesh
+let lastPoseLandmarks = null;  // updated by Pose
+
+// Preload emoji as canvas images for fast drawing
+const emojiCache = {};
+function getEmojiImage(emoji, size=120){
+  const key = emoji+'_'+size;
+  if(emojiCache[key]) return emojiCache[key];
+  const c = document.createElement('canvas'); c.width=size; c.height=size;
+  const x = c.getContext('2d');
+  x.font = (size*0.8)+'px serif';
+  x.textAlign='center'; x.textBaseline='middle';
+  x.fillText(emoji, size/2, size/2);
+  emojiCache[key] = c;
+  return c;
+}
+
+function showCostumePicker(){
+  const grid = document.getElementById('costume-grid');
+  grid.innerHTML = '';
+  ACCESSORIES.forEach(a=>{
+    const active = activeAccessories.has(a.id);
+    const card = document.createElement('div');
+    card.id = 'acc-'+a.id;
+    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'rgba(255,200,80,.7)':'rgba(255,255,255,.08)'};background:${active?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};-webkit-user-select:none;`;
+    card.innerHTML = `<div style="font-size:28px;margin-bottom:4px;">${a.emoji}</div><div style="font-size:9px;color:rgba(255,220,150,.7);font-family:'DM Mono',monospace;">${a.label}</div>`;
+    card.onclick = ()=>{ toggleAccessory(a.id); };
+    grid.appendChild(card);
+  });
+  document.getElementById('costume-overlay').style.display='flex';
+}
+
+function hideCostumePicker(){
+  document.getElementById('costume-overlay').style.display='none';
+}
+
+function toggleAccessory(id){
+  if(activeAccessories.has(id)) activeAccessories.delete(id);
+  else activeAccessories.add(id);
+  // Update card highlight
+  const card = document.getElementById('acc-'+id);
+  if(card){
+    const active = activeAccessories.has(id);
+    card.style.borderColor = active ? 'rgba(255,200,80,.7)' : 'rgba(255,255,255,.08)';
+    card.style.background  = active ? 'rgba(255,200,80,.12)' : 'rgba(255,255,255,.03)';
+  }
+}
+
+function clearAllAccessories(){
+  activeAccessories.clear();
+  showCostumePicker(); // re-render to clear highlights
+}
+
+// Called every frame from the render loop — draws active accessories onto canvas
+function drawAccessories(){
+  if(!activeAccessories.size) return;
+  if(!lastFaceLandmarks && !lastPoseLandmarks) return;
+
+  const W = AC.width, H = AC.height;
+  const rect = singerRect();
+
+  // Helper — convert normalized landmark coords to canvas coords within singerRect
+  function lmToCanvas(lm){
+    // Landmarks are normalized 0-1 relative to the video frame
+    // Mirror X since we draw mirrored
+    const x = rect.x + (1 - lm.x) * rect.w;
+    const y = rect.y + lm.y * rect.h;
+    return { x, y };
+  }
+
+  // Compute anchor points from landmarks
+  let anchors = {};
+
+  if(lastFaceLandmarks){
+    const lm = lastFaceLandmarks;
+    const nose    = lmToCanvas(lm[1]);
+    const leftEar = lmToCanvas(lm[234]);
+    const rightEar= lmToCanvas(lm[454]);
+    const forehead= lmToCanvas(lm[10]);
+    const chin    = lmToCanvas(lm[152]);
+    const leftEye = lmToCanvas(lm[33]);
+    const rightEye= lmToCanvas(lm[263]);
+
+    const faceW = Math.abs(rightEar.x - leftEar.x);
+    const faceH = Math.abs(chin.y - forehead.y);
+    const faceCx = (leftEar.x + rightEar.x) / 2;
+
+    anchors['head-top']  = { x: faceCx, y: forehead.y, size: faceW };
+    anchors['eyes']      = { x: faceCx, y: (leftEye.y + rightEye.y)/2, size: faceW };
+    anchors['head-center']={ x: faceCx, y: nose.y, size: faceW };
+  }
+
+  if(lastPoseLandmarks){
+    const lm = lastPoseLandmarks;
+    const ls = lmToCanvas(lm[11]);  // left shoulder
+    const rs = lmToCanvas(lm[12]);  // right shoulder
+    const lh = lmToCanvas(lm[23]);  // left hip
+    const rh = lmToCanvas(lm[24]);  // right hip
+    const rw = lmToCanvas(lm[16]);  // right wrist
+
+    const shoulderCx = (ls.x + rs.x) / 2;
+    const shoulderW  = Math.abs(rs.x - ls.x);
+    const hipCy      = (lh.y + rh.y) / 2;
+    const torsoH     = Math.abs(hipCy - (ls.y+rs.y)/2);
+
+    anchors['shoulder']    = { x: ls.x, y: ls.y, size: shoulderW * 0.4 };
+    anchors['body-center'] = { x: shoulderCx, y: (ls.y+rs.y)/2 + torsoH*0.3, size: shoulderW * 1.1 };
+    anchors['hand-right']  = { x: rw.x, y: rw.y, size: shoulderW * 0.35 };
+  }
+
+  // Fallback anchors from singerRect if no landmarks yet
+  if(!anchors['head-top']){
+    anchors['head-top']   = { x: rect.x+rect.w/2, y: rect.y+rect.h*0.08, size: rect.w*0.4 };
+    anchors['eyes']       = { x: rect.x+rect.w/2, y: rect.y+rect.h*0.14, size: rect.w*0.4 };
+    anchors['body-center']= { x: rect.x+rect.w/2, y: rect.y+rect.h*0.5,  size: rect.w*0.7 };
+    anchors['hand-right'] = { x: rect.x+rect.w*0.7, y: rect.y+rect.h*0.55, size: rect.w*0.25 };
+    anchors['shoulder']   = { x: rect.x+rect.w*0.3, y: rect.y+rect.h*0.28, size: rect.w*0.2 };
+  }
+
+  // Draw each active accessory
+  activeAccessories.forEach(id=>{
+    const acc = ACCESSORIES.find(a=>a.id===id);
+    if(!acc) return;
+    const anchor = anchors[acc.anchor] || anchors['head-top'];
+    if(!anchor) return;
+
+    const drawSize = anchor.size * acc.scale * 2.2;
+    const cx = anchor.x;
+    const cy = anchor.y + (acc.offsetY * anchor.size * 2);
+
+    const img = getEmojiImage(acc.emoji, 160);
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, cx - drawSize/2, cy - drawSize/2, drawSize, drawSize);
+    ctx.restore();
+  });
+}
+
+// ── Wire landmarks into global state ──
+// These get updated by the existing FaceMesh and Pose instances
 let selectedCameraId = null;
 
 async function populateCameraList(){
@@ -768,38 +1071,47 @@ function drawSinger(image, mask){
   if(PC.width!==pw){ PC.width=pw; PC.height=ph; }
   if(MC.width!==pw){ MC.width=pw; MC.height=ph; }
 
-  // Update zoom state this frame
   updateZoom();
 
-  // Hard-edge mask via GPU contrast filter
+  // ── Item 3: Improved edge quality — soft feather instead of hard contrast ──
   mctx.clearRect(0,0,pw,ph);
-  mctx.filter='contrast(30) brightness(2)';
+  // Step 1: draw mask with moderate contrast to clean up mid-tones
+  mctx.filter='contrast(8) brightness(1.4)';
   mctx.drawImage(mask,0,0,pw,ph);
   mctx.filter='none';
-  // Clip camera to mask
+  // Step 2: slight blur to feather the edges naturally
+  mctx.filter='blur(1.5px)';
+  mctx.globalCompositeOperation='source-in';
+  mctx.drawImage(mask,0,0,pw,ph);
+  mctx.filter='none';
+  mctx.globalCompositeOperation='source-over';
+
+  // Clip camera to feathered mask
   pctx.clearRect(0,0,pw,ph);
   pctx.drawImage(image,0,0,pw,ph);
   pctx.globalCompositeOperation='destination-in';
   pctx.drawImage(MC,0,0,pw,ph);
   pctx.globalCompositeOperation='source-over';
 
-  // Apply zoom — scale rect and shift upward to frame face
+  // Apply zoom
   const zW = rect.w * zoomFactor;
   const zH = rect.h * zoomFactor;
-  const zX = rect.x + rect.w/2 - zW/2;           // centred horizontally
-  const zY = rect.y - (zH - rect.h) * (0.5 + zoomOffset); // shifted up
+  const zX = rect.x + rect.w/2 - zW/2;
+  const zY = rect.y - (zH - rect.h) * (0.5 + zoomOffset);
 
-  // Draw mirrored at zoomed size
+  // Draw mirrored at zoomed size — use imageSmoothingQuality for sharpness
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.save(); ctx.translate(zX+zW, zY); ctx.scale(-1,1);
   ctx.drawImage(PC, 0, 0, zW, zH); ctx.restore();
 
-  // Spotlight — tighter when zoomed
+  // Spotlight
   const cx = rect.x + rect.w/2;
   const sg = ctx.createRadialGradient(cx, zY+zH*.1, 0, cx, zY+zH*.35, rect.w*1.4/zoomFactor);
   sg.addColorStop(0,`rgba(${V.r},${V.g},${V.b},.14)`); sg.addColorStop(1,'transparent');
   ctx.fillStyle=sg; ctx.fillRect(zX-zW, zY-zH*.1, zW*3, zH*1.2);
 
-  // Foot blend fades out as zoom increases
+  // Foot blend
   const footAlpha = Math.max(0, 1 - (zoomFactor-1) * 2);
   if(footAlpha > 0){
     ctx.save(); ctx.globalCompositeOperation='multiply'; ctx.globalAlpha=footAlpha;
@@ -808,7 +1120,7 @@ function drawSinger(image, mask){
     ctx.fillStyle=leg; ctx.fillRect(zX,zY,zW,zH); ctx.restore();
   }
 
-  // Shadow under feet
+  // Shadow
   const shg=ctx.createRadialGradient(cx,rect.y+rect.h,0,cx,rect.y+rect.h,rect.w*.65);
   shg.addColorStop(0,`rgba(0,0,0,${Math.max(0.1,0.55/zoomFactor)})`); shg.addColorStop(1,'transparent');
   ctx.fillStyle=shg; ctx.fillRect(rect.x-rect.w*.4, rect.y+rect.h-8, rect.w*1.8, 28);
@@ -831,7 +1143,16 @@ async function publishCanvasToAgora(){
     const canvasStream = AC.captureStream(30);
     const vt = canvasStream.getVideoTracks();
     if(vt.length){
-      localVideoTrack = AgoraRTC.createCustomVideoTrack({ mediaStreamTrack: vt[0] });
+      const res = RESOLUTIONS[currentResolution] || RESOLUTIONS.hd;
+      localVideoTrack = AgoraRTC.createCustomVideoTrack({
+        mediaStreamTrack: vt[0],
+        encoderConfig: {
+          width: res.w, height: res.h,
+          frameRate: 30,
+          bitrateMin: 600,
+          bitrateMax: res.w >= 1920 ? 4000 : res.w >= 1280 ? 2000 : 800
+        }
+      });
       await agoraClient.publish([localVideoTrack]);
       console.log('Agora: published canvas video track');
     }
@@ -863,7 +1184,7 @@ function startSegmentation(vid){
     if(!segRunning) return;
     if(vid.readyState >= 2){
       try{ await seg.send({image:vid}); }catch(e){}
-      if(guideActive && poseInst){
+      if((guideActive || activeAccessories.size > 0) && poseInst){
         try{ await poseInst.send({image:vid}); }catch(e){}
       }
     }
@@ -882,8 +1203,9 @@ function startPoseDetection(vid){
     minDetectionConfidence:.5, minTrackingConfidence:.4
   });
   poseInst.onResults(res=>{
-    if(!guideActive) return;
     if(!res.poseLandmarks) return;
+    lastPoseLandmarks = res.poseLandmarks; // store globally for accessories
+    if(!guideActive) return; // only use for hand-raise during guide
     const ls=res.poseLandmarks[11], rs=res.poseLandmarks[12];
     const lw=res.poseLandmarks[15], rw=res.poseLandmarks[16];
     if(!ls||!rs||!lw||!rw) return;
@@ -1362,6 +1684,7 @@ function initHeadTracking(){
       if(dragging) return; // don't override drag
       if(!res.multiFaceLandmarks||!res.multiFaceLandmarks[0]) return;
       const lm=res.multiFaceLandmarks[0];
+      lastFaceLandmarks = lm; // store globally for accessories
       const nose=lm[1],lE=lm[234],rE=lm[454],fh=lm[10],ch=lm[152];
       const emx=(lE.x+rE.x)/2,esp=Math.abs(rE.x-lE.x)||.001;
       tYaw  = -(nose.x-emx)/(esp*.5)*75;
@@ -1562,6 +1885,11 @@ function handleAudienceMsg(msg){
   }
   if(msg.type==='venue-pan'){ if(venueMode) panVenue(msg.delta); }
   if(msg.type==='toggle-comments'){ toggleCommentBar(); }
+  if(msg.type==='toggle-accessory'){
+    if(msg.active) activeAccessories.add(msg.id);
+    else activeAccessories.delete(msg.id);
+  }
+  if(msg.type==='clear-accessories'){ activeAccessories.clear(); }
 
   // ── Singer phone remote control ──
   if(msg.type==='mic-connected'){
@@ -2155,17 +2483,20 @@ function renderLoop(){
       ctx.save(); ctx.translate(rect.x+rect.w,rect.y); ctx.scale(-1,1);
       ctx.drawImage(camVideo,0,0,rect.w,rect.h); ctx.restore();
     }
-  }
-}
+    // Accessories overlay — drawn on top of singer
+    drawAccessories();
+  } // end audience view
+} // end renderLoop
 
 // ═══════════════════════════════════════
 // ENTER STAGE — single entry point
 // ═══════════════════════════════════════
 function enterStage(){
   document.getElementById('start').style.display='none';
+  const res = RESOLUTIONS[currentResolution] || RESOLUTIONS.hd;
   const videoConstraints = selectedCameraId
-    ? { deviceId:{ exact:selectedCameraId }, width:640, height:480 }
-    : { width:640, height:480, facingMode:'user' };
+    ? { deviceId:{ exact:selectedCameraId }, width:{ideal:res.w}, height:{ideal:res.h} }
+    : { width:{ideal:res.w}, height:{ideal:res.h}, facingMode:'user' };
   navigator.mediaDevices.getUserMedia({ video:videoConstraints, audio:false })
   .then(stream=>{
     camStream = stream;
@@ -2414,6 +2745,408 @@ document.addEventListener('keydown',e=>{
   if(e.key==='ArrowUp'){tPitch=Math.max(-MU,tPitch-12);}
   if(e.key==='ArrowDown'){tPitch=Math.min(MD,tPitch+12);}
 });
+
+// ═══════════════════════════════════════
+// AMBIENT ENGINE — audio + animation per venue
+// ═══════════════════════════════════════
+
+const ambientCtx = document.getElementById('ambient-layer').getContext('2d');
+let ambientW = window.innerWidth, ambientH = window.innerHeight;
+function resizeAmbient(){ ambientW=window.innerWidth; ambientH=window.innerHeight; document.getElementById('ambient-layer').width=ambientW; document.getElementById('ambient-layer').height=ambientH; }
+resizeAmbient();
+window.addEventListener('resize', resizeAmbient);
+
+// ── Audio Engine ──
+let ambientAudioCtx = null;
+let ambientGain = null;
+let ambientNodes = []; // active nodes to stop on venue change
+let ambientVolume = 0.35; // base volume
+let songPlaying = false;
+
+function getAmbientCtx(){
+  if(!ambientAudioCtx) ambientAudioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if(!ambientGain){ ambientGain = ambientAudioCtx.createGain(); ambientGain.gain.value = ambientVolume; ambientGain.connect(ambientAudioCtx.destination); }
+  return ambientAudioCtx;
+}
+
+function stopAmbientAudio(){
+  ambientNodes.forEach(n=>{ try{ n.stop(); }catch(e){} });
+  ambientNodes = [];
+}
+
+function setAmbientVolume(vol, fadeTime=2){
+  if(!ambientGain) return;
+  ambientGain.gain.cancelScheduledValues(ambientAudioCtx.currentTime);
+  ambientGain.gain.linearRampToValueAtTime(vol, ambientAudioCtx.currentTime + fadeTime);
+}
+
+// Create looping noise buffer
+function makeNoise(ac, duration=4, type='brown'){
+  const sr = ac.sampleRate, len = sr * duration;
+  const buf = ac.createBuffer(1, len, sr);
+  const d = buf.getChannelData(0);
+  let last = 0;
+  for(let i=0;i<len;i++){
+    if(type==='brown'){ last = (last + 0.02*(Math.random()*2-1))*0.99; d[i]=last*4; }
+    else if(type==='white'){ d[i]=Math.random()*2-1; }
+    else { d[i]=(Math.random()*2-1)*0.5; } // pink-ish
+  }
+  return buf;
+}
+
+function playLoop(buf, gain=0.3, detune=0){
+  const ac = getAmbientCtx();
+  const src = ac.createBufferSource();
+  src.buffer = buf; src.loop = true; src.detune.value = detune;
+  const g = ac.createGain(); g.gain.value = gain;
+  src.connect(g); g.connect(ambientGain);
+  src.start(); ambientNodes.push(src);
+  return src;
+}
+
+function playTone(freq, gain=0.05, type='sine', duration=null){
+  const ac = getAmbientCtx();
+  const osc = ac.createOscillator(); osc.type=type; osc.frequency.value=freq;
+  const g = ac.createGain(); g.gain.value=gain;
+  const bq = ac.createBiquadFilter(); bq.type='lowpass'; bq.frequency.value=800;
+  osc.connect(bq); bq.connect(g); g.connect(ambientGain);
+  osc.start();
+  if(duration){ osc.stop(ac.currentTime+duration); }
+  else { ambientNodes.push(osc); }
+  return osc;
+}
+
+function scheduleBeeps(freqs, interval, gain=0.04){
+  const ac = getAmbientCtx();
+  let t = ac.currentTime + 1;
+  function next(){
+    const f = freqs[Math.floor(Math.random()*freqs.length)];
+    const osc = ac.createOscillator(); osc.frequency.value=f; osc.type='sine';
+    const g = ac.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(gain,t+0.01); g.gain.linearRampToValueAtTime(0,t+0.1);
+    osc.connect(g); g.connect(ambientGain); osc.start(t); osc.stop(t+0.15);
+    t += interval + (Math.random()-0.5)*interval*0.3;
+    if(t < ac.currentTime + 60) setTimeout(next, (t - ac.currentTime - 1)*1000);
+  }
+  next();
+}
+
+// ── Particle System ──
+let particles = [];
+let ambientAnimId = null;
+
+function stopAmbientAnim(){
+  if(ambientAnimId){ cancelAnimationFrame(ambientAnimId); ambientAnimId=null; }
+  particles = [];
+  ambientCtx.clearRect(0,0,ambientW,ambientH);
+}
+
+function spawnParticles(config){ particles.push(...Array.from({length:config.count||20},()=>config.spawn())); }
+
+function runParticleLoop(){
+  ambientCtx.clearRect(0,0,ambientW,ambientH);
+  particles = particles.filter(p=>{
+    p.update();
+    p.draw(ambientCtx);
+    return p.alive();
+  });
+  ambientAnimId = requestAnimationFrame(runParticleLoop);
+}
+
+// ── Venue Profiles ──
+const AMBIENT_PROFILES = {
+
+  default: {
+    audio(){ const ac=getAmbientCtx(); playLoop(makeNoise(ac,4,'brown'),0.04); },
+    anim(){ spawnParticles({ count:8, spawn(){ return { x:Math.random()*ambientW, y:Math.random()*ambientH, r:Math.random()*1.5+0.5, o:Math.random()*0.3+0.05, life:1, update(){ this.y-=0.2; this.o-=0.0003; }, draw(c){ c.beginPath(); c.arc(this.x,this.y,this.r,0,Math.PI*2); c.fillStyle=`rgba(255,220,150,${this.o})`; c.fill(); }, alive(){ return this.o>0&&this.y>0; } }; } }); runParticleLoop(); }
+  },
+
+  stadium: {
+    audio(){
+      const ac=getAmbientCtx();
+      playLoop(makeNoise(ac,4,'brown'),0.18); // crowd roar
+      playLoop(makeNoise(ac,4,'white'),0.03); // air
+    },
+    anim(){
+      // Phone lights twinkling across seats
+      spawnParticles({ count:300, spawn(){ return {
+        x:Math.random()*ambientW, y:ambientH*0.1+Math.random()*ambientH*0.55,
+        o:Math.random(), phase:Math.random()*Math.PI*2, speed:Math.random()*0.02+0.01,
+        update(){ this.o=0.3+Math.sin(this.phase+=this.speed)*0.7; },
+        draw(c){ c.beginPath(); c.arc(this.x,this.y,1.2,0,Math.PI*2); c.fillStyle=`rgba(255,255,255,${this.o*0.6})`; c.fill(); },
+        alive(){ return true; }
+      }; } });
+      // Sweeping spotlights
+      let beamAngle=0;
+      spawnParticles({ count:2, spawn(){ const side=Math.random()<0.5?-1:1; return {
+        angle:side*Math.PI*0.3, speed:0.003*side,
+        update(){ this.angle+=this.speed; if(Math.abs(this.angle)>Math.PI*0.4) this.speed*=-1; },
+        draw(c){ c.save(); c.translate(ambientW/2,0); c.rotate(this.angle); const g=c.createLinearGradient(0,0,0,ambientH); g.addColorStop(0,'rgba(255,255,200,0.12)'); g.addColorStop(1,'rgba(255,255,200,0)'); c.fillStyle=g; c.beginPath(); c.moveTo(-10,0); c.lineTo(10,0); c.lineTo(ambientW*0.4,ambientH); c.lineTo(-ambientW*0.4,ambientH); c.closePath(); c.fill(); c.restore(); },
+        alive(){ return true; }
+      }; } });
+      runParticleLoop();
+    }
+  },
+
+  disco: {
+    audio(){
+      const ac=getAmbientCtx();
+      // Bass thump — 120bpm
+      const bpm=120, interval=60/bpm;
+      let t=ac.currentTime+0.5;
+      function thump(){ const o=ac.createOscillator(); o.frequency.value=60; o.type='sine'; const g=ac.createGain(); g.gain.setValueAtTime(0.5,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.3); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.35); t+=interval; if(t<ac.currentTime+60) setTimeout(thump,(t-ac.currentTime-0.1)*1000); } thump();
+      playLoop(makeNoise(ac,4,'brown'),0.06);
+    },
+    anim(){
+      // Mirror ball dots rotating
+      const dots=[];
+      for(let i=0;i<80;i++) dots.push({ angle:Math.random()*Math.PI*2, dist:Math.random()*Math.max(ambientW,ambientH)*0.6, color:`hsl(${Math.random()*360},100%,70%)`, size:Math.random()*3+1, speed:0.004+Math.random()*0.003 });
+      let rot=0;
+      spawnParticles({ count:1, spawn(){ return {
+        update(){ rot+=0.008; },
+        draw(c){ dots.forEach(d=>{ const a=d.angle+rot; const x=ambientW/2+Math.cos(a)*d.dist; const y=ambientH*0.3+Math.sin(a)*d.dist*0.4; if(x>0&&x<ambientW&&y>0&&y<ambientH){ c.beginPath(); c.arc(x,y,d.size,0,Math.PI*2); c.fillStyle=d.color; c.globalAlpha=0.7; c.fill(); c.globalAlpha=1; } }); },
+        alive(){ return true; }
+      }; } });
+      runParticleLoop();
+    }
+  },
+
+  space: {
+    audio(){
+      const ac=getAmbientCtx();
+      // Station hum
+      playTone(60,0.06,'sine');
+      playTone(120,0.03,'sine');
+      // Beeps
+      scheduleBeeps([880,1200,660,1760],2.5,0.05);
+      scheduleBeeps([440,550],5,0.03);
+    },
+    anim(){
+      // Drifting stars
+      spawnParticles({ count:150, spawn(){ return {
+        x:Math.random()*ambientW, y:Math.random()*ambientH,
+        speed:Math.random()*0.3+0.05, size:Math.random()*1.5+0.3,
+        o:Math.random()*0.5+0.1, phase:Math.random()*Math.PI*2,
+        update(){ this.x-=this.speed; this.phase+=0.02; this.o=0.2+Math.sin(this.phase)*0.2; if(this.x<0) this.x=ambientW; },
+        draw(c){ c.beginPath(); c.arc(this.x,this.y,this.size,0,Math.PI*2); c.fillStyle=`rgba(200,220,255,${this.o})`; c.fill(); },
+        alive(){ return true; }
+      }; } });
+      // Control panel blinks
+      const panels=Array.from({length:12},()=>({ x:Math.random()*ambientW*0.3, y:ambientH*0.6+Math.random()*ambientH*0.35, color:`hsl(${Math.random()*60+180},100%,60%)`, phase:Math.random()*Math.PI*2, speed:Math.random()*0.05+0.02 }));
+      spawnParticles({ count:1, spawn(){ return {
+        update(){}, draw(c){ panels.forEach(p=>{ p.phase+=p.speed; const o=0.4+Math.sin(p.phase)*0.6; c.beginPath(); c.arc(p.x,p.y,3,0,Math.PI*2); c.fillStyle=p.color; c.globalAlpha=o; c.fill(); c.globalAlpha=1; }); },
+        alive(){ return true; }
+      }; } });
+      runParticleLoop();
+    }
+  },
+
+  speakeasy: {
+    audio(){
+      const ac=getAmbientCtx();
+      playLoop(makeNoise(ac,4,'brown'),0.08); // crowd murmur
+      // Occasional glass clink
+      function clink(){ const t=ac.currentTime; const o=ac.createOscillator(); o.frequency.value=1200+Math.random()*400; o.type='sine'; const g=ac.createGain(); g.gain.setValueAtTime(0.1,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.8); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.9); setTimeout(clink, 4000+Math.random()*6000); }
+      setTimeout(clink,2000);
+    },
+    anim(){
+      // Smoke wisps
+      spawnParticles({ count:25, spawn(){ return {
+        x:Math.random()*ambientW, y:ambientH*0.7+Math.random()*ambientH*0.3,
+        vx:(Math.random()-0.5)*0.3, vy:-(Math.random()*0.5+0.2),
+        size:Math.random()*20+8, o:Math.random()*0.06+0.02, life:1,
+        update(){ this.x+=this.vx; this.y+=this.vy; this.size+=0.15; this.o-=0.0003; this.vx+=(Math.random()-0.5)*0.03; },
+        draw(c){ const g=c.createRadialGradient(this.x,this.y,0,this.x,this.y,this.size); g.addColorStop(0,`rgba(200,200,200,${this.o})`); g.addColorStop(1,'rgba(200,200,200,0)'); c.fillStyle=g; c.fillRect(this.x-this.size,this.y-this.size,this.size*2,this.size*2); },
+        alive(){ return this.o>0&&this.y>-50; }
+      }; } });
+      runParticleLoop();
+    }
+  },
+
+  honkytonk: {
+    audio(){
+      const ac=getAmbientCtx();
+      playLoop(makeNoise(ac,4,'brown'),0.07);
+      function whoop(){ const t=ac.currentTime; const o=ac.createOscillator(); o.frequency.setValueAtTime(300,t); o.frequency.linearRampToValueAtTime(600,t+0.3); o.type='sine'; const g=ac.createGain(); g.gain.setValueAtTime(0.08,t); g.gain.linearRampToValueAtTime(0,t+0.4); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.45); setTimeout(whoop,5000+Math.random()*8000); }
+      setTimeout(whoop,3000);
+    },
+    anim(){
+      // Neon sign flicker + dust
+      let neonAlpha=1, neonTimer=0;
+      spawnParticles({ count:30, spawn(){ return {
+        x:Math.random()*ambientW, y:ambientH*0.1+Math.random()*ambientH*0.3,
+        vy:Math.random()*0.2+0.05, o:Math.random()*0.15+0.05, size:Math.random()*2+0.5,
+        update(){ this.y+=this.vy; this.o-=0.0002; if(this.y>ambientH) this.y=0; },
+        draw(c){ c.beginPath(); c.arc(this.x,this.y,this.size,0,Math.PI*2); c.fillStyle=`rgba(255,230,180,${this.o})`; c.fill(); },
+        alive(){ return true; }
+      }; } });
+      // Neon flicker overlay
+      spawnParticles({ count:1, spawn(){ return {
+        update(){ neonTimer++; if(neonTimer>180&&Math.random()<0.02){ neonAlpha=Math.random()<0.3?0.3:1; neonTimer=0; } },
+        draw(c){ c.fillStyle=`rgba(255,100,50,${neonAlpha*0.04})`; c.fillRect(0,0,ambientW,ambientH); },
+        alive(){ return true; }
+      }; } });
+      runParticleLoop();
+    }
+  },
+
+  festival: {
+    audio(){
+      const ac=getAmbientCtx();
+      playLoop(makeNoise(ac,4,'brown'),0.15);
+      // Bass thump 128bpm
+      const interval=60/128; let t=ac.currentTime+0.5;
+      function thump(){ const o=ac.createOscillator(); o.frequency.value=55; const g=ac.createGain(); g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.25); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.3); t+=interval; if(t<ac.currentTime+60) setTimeout(thump,(t-ac.currentTime-0.1)*1000); } thump();
+    },
+    anim(){
+      // Lasers + confetti
+      const lasers=Array.from({length:4},(_,i)=>({ hue:i*90, angle:Math.PI*0.3-i*0.2, speed:(i%2?1:-1)*0.004 }));
+      spawnParticles({ count:1, spawn(){ return {
+        update(){ lasers.forEach(l=>{ l.angle+=l.speed; if(Math.abs(l.angle)>Math.PI*0.45) l.speed*=-1; }); },
+        draw(c){ lasers.forEach(l=>{ c.save(); c.translate(ambientW/2,ambientH); c.rotate(l.angle); const g=c.createLinearGradient(0,0,0,-ambientH); g.addColorStop(0,`hsla(${l.hue},100%,60%,0.4)`); g.addColorStop(1,`hsla(${l.hue},100%,60%,0)`); c.fillStyle=g; c.fillRect(-2,-ambientH,4,ambientH); c.restore(); }); },
+        alive(){ return true; }
+      }; } });
+      // Confetti
+      spawnParticles({ count:60, spawn(){ return {
+        x:Math.random()*ambientW, y:-10, vy:Math.random()*1+0.5, vx:(Math.random()-0.5)*1.5,
+        color:`hsl(${Math.random()*360},100%,65%)`, size:Math.random()*4+2, rot:Math.random()*Math.PI*2, rotV:Math.random()*0.1-0.05,
+        update(){ this.x+=this.vx; this.y+=this.vy; this.rot+=this.rotV; },
+        draw(c){ c.save(); c.translate(this.x,this.y); c.rotate(this.rot); c.fillStyle=this.color; c.fillRect(-this.size/2,-this.size/2,this.size,this.size); c.restore(); },
+        alive(){ return this.y<ambientH+20; }
+      }; } });
+      runParticleLoop();
+    }
+  },
+
+  forest: {
+    audio(){
+      const ac=getAmbientCtx();
+      playLoop(makeNoise(ac,4,'brown'),0.04);
+      scheduleBeeps([880,1100,660,1320],1.5,0.03); // bird/fairy chimes
+    },
+    anim(){
+      // Fireflies + falling leaves
+      spawnParticles({ count:40, spawn(){ return {
+        x:Math.random()*ambientW, y:Math.random()*ambientH,
+        phase:Math.random()*Math.PI*2, speed:Math.random()*0.02+0.01,
+        vx:(Math.random()-0.5)*0.3, vy:(Math.random()-0.5)*0.2,
+        update(){ this.phase+=this.speed; this.x+=this.vx; this.y+=this.vy; if(this.x<0)this.x=ambientW; if(this.x>ambientW)this.x=0; if(this.y<0)this.y=ambientH; if(this.y>ambientH)this.y=0; },
+        draw(c){ const o=0.4+Math.sin(this.phase)*0.6; c.beginPath(); c.arc(this.x,this.y,2,0,Math.PI*2); c.fillStyle=`rgba(180,255,100,${o*0.8})`; c.fill(); const g=c.createRadialGradient(this.x,this.y,0,this.x,this.y,8); g.addColorStop(0,`rgba(180,255,100,${o*0.3})`); g.addColorStop(1,'rgba(180,255,100,0)'); c.fillStyle=g; c.fillRect(this.x-8,this.y-8,16,16); },
+        alive(){ return true; }
+      }; } });
+      runParticleLoop();
+    }
+  },
+
+  dragonlair: {
+    audio(){
+      const ac=getAmbientCtx();
+      // Cave drip
+      function drip(){ const t=ac.currentTime; const o=ac.createOscillator(); o.frequency.value=400+Math.random()*200; const g=ac.createGain(); g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.3); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.35); setTimeout(drip,2000+Math.random()*4000); }
+      setTimeout(drip,1000);
+      // Fire crackle
+      playLoop(makeNoise(ac,4,'white'),0.04);
+      playLoop(makeNoise(ac,4,'brown'),0.06);
+    },
+    anim(){
+      // Ember particles rising
+      spawnParticles({ count:50, spawn(){ return {
+        x:Math.random()*ambientW, y:ambientH+10,
+        vx:(Math.random()-0.5)*0.8, vy:-(Math.random()*1.5+0.5),
+        size:Math.random()*3+1, hue:Math.random()*40+10, o:Math.random()*0.8+0.2,
+        update(){ this.x+=this.vx; this.y+=this.vy; this.vx+=(Math.random()-0.5)*0.1; this.o-=0.003; },
+        draw(c){ c.beginPath(); c.arc(this.x,this.y,this.size,0,Math.PI*2); c.fillStyle=`hsla(${this.hue},100%,60%,${this.o})`; c.fill(); },
+        alive(){ return this.o>0&&this.y>-10; }
+      }; } });
+      // Fire glow pulse
+      let glowPhase=0;
+      spawnParticles({ count:1, spawn(){ return {
+        update(){ glowPhase+=0.03; },
+        draw(c){ const o=0.04+Math.sin(glowPhase)*0.02; c.fillStyle=`rgba(255,80,0,${o})`; c.fillRect(0,ambientH*0.7,ambientW,ambientH*0.3); },
+        alive(){ return true; }
+      }; } });
+      runParticleLoop();
+    }
+  },
+
+  underwater: {
+    audio(){
+      const ac=getAmbientCtx();
+      playLoop(makeNoise(ac,4,'brown'),0.03);
+      // Bubble sounds
+      function bubble(){ const t=ac.currentTime; const o=ac.createOscillator(); o.frequency.value=600+Math.random()*400; o.frequency.linearRampToValueAtTime(o.frequency.value*1.3,t+0.1); const g=ac.createGain(); g.gain.setValueAtTime(0.04,t); g.gain.linearRampToValueAtTime(0,t+0.15); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.2); setTimeout(bubble,800+Math.random()*2000); }
+      setTimeout(bubble,500);
+    },
+    anim(){
+      // Rising bubbles
+      spawnParticles({ count:40, spawn(){ return {
+        x:Math.random()*ambientW, y:ambientH+10,
+        vy:-(Math.random()*0.8+0.3), vx:(Math.random()-0.5)*0.2,
+        size:Math.random()*6+2, o:Math.random()*0.3+0.1,
+        update(){ this.y+=this.vy; this.x+=this.vx; this.vx+=(Math.random()-0.5)*0.05; if(this.y<-10){ this.y=ambientH+10; this.x=Math.random()*ambientW; } },
+        draw(c){ c.beginPath(); c.arc(this.x,this.y,this.size,0,Math.PI*2); c.strokeStyle=`rgba(150,220,255,${this.o})`; c.lineWidth=1; c.stroke(); },
+        alive(){ return true; }
+      }; } });
+      // Caustic light shimmer
+      let causticPhase=0;
+      spawnParticles({ count:1, spawn(){ return {
+        update(){ causticPhase+=0.02; },
+        draw(c){ c.fillStyle=`rgba(50,150,255,${0.03+Math.sin(causticPhase)*0.015})`; c.fillRect(0,0,ambientW,ambientH); },
+        alive(){ return true; }
+      }; } });
+      runParticleLoop();
+    }
+  },
+};
+
+// Default fallback for venues without specific profiles
+function getProfile(venueId){
+  return AMBIENT_PROFILES[venueId] || AMBIENT_PROFILES.default;
+}
+
+// ── Start / Stop ambient for venue ──
+let currentAmbientVenue = null;
+
+function startAmbient(venueId){
+  if(currentAmbientVenue === venueId) return;
+  currentAmbientVenue = venueId;
+  stopAmbientAudio();
+  stopAmbientAnim();
+  if(!venueId || venueId==='default') return; // Classic Stage — minimal ambient only
+  const profile = getProfile(venueId);
+  try{
+    if(!ambientAudioCtx) getAmbientCtx();
+    if(ambientAudioCtx.state==='suspended') ambientAudioCtx.resume();
+    if(profile.audio) profile.audio();
+    if(profile.anim) profile.anim();
+    log('Ambient started: '+venueId, 'ok');
+  }catch(e){ log('Ambient error: '+e.message, 'warn'); }
+}
+
+function stopAmbient(){
+  stopAmbientAudio();
+  stopAmbientAnim();
+  currentAmbientVenue = null;
+}
+
+// Hook into venue changes
+const _origInitVenueMode = initVenueMode;
+function initVenueMode(){
+  _origInitVenueMode();
+  startAmbient(selectedVenueId);
+}
+
+// Lower ambient when song plays, restore when done
+const _origDoPlayWithYT = doPlayWithYT;
+function doPlayWithYT(){
+  _origDoPlayWithYT();
+  setAmbientVolume(0.08, 3); // fade down over 3s
+}
+
+const _origDoEnd = doEnd;
+function doEnd(){
+  _origDoEnd();
+  setAmbientVolume(ambientVolume, 2);
+}
 
 window.addEventListener('resize',()=>{
   resizeAC(); drawStage();
