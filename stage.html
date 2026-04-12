@@ -126,9 +126,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   backdrop-filter:blur(12px);
 }
 #tv-song-thumb{width:52px;height:36px;object-fit:cover;border-radius:4px;background:rgba(255,200,80,.06);flex-shrink:0;}
-#tv-song-title{font-family:'Cormorant Garamond',serif;font-size:clamp(16px,2vw,28px);color:rgba(255,220,150,.95);font-style:italic;line-height:1.2;flex:1;}
-#tv-song-artist{font-size:11px;color:rgba(255,200,120,.5);letter-spacing:.1em;text-transform:uppercase;flex-shrink:0;}
-/* ── SONG LOADING STATUS ── */
+#tv-song-artist{font-size:10px;color:rgba(255,200,120,.5);letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#tv-song-title{font-family:'Cormorant Garamond',serif;font-size:clamp(14px,1.8vw,24px);color:rgba(255,220,150,.95);font-style:italic;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #tv-song-hint{font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.1em;text-transform:uppercase;flex-shrink:0;}
 
 /* ── COMMENT BAR ── */
@@ -271,7 +270,10 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <!-- SELECTED SONG CARD -->
 <div id="tv-song-card">
   <img id="tv-song-thumb" src="" alt="">
-  <div id="tv-song-title"></div>
+  <div style="flex:1;min-width:0;">
+    <div id="tv-song-artist"></div>
+    <div id="tv-song-title"></div>
+  </div>
   <div id="tv-song-hint">tap Start on your phone</div>
 </div>
 
@@ -297,7 +299,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.36</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.37</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -419,7 +421,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.36</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.37</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -547,13 +549,10 @@ function showStageVenuePicker(){
 
 function applyStageVenue(v){
   selectedVenueId = v.id;
-  loadVenueImage(v.skyboxId);
-  if(!panRenderer) buildPanorama();
   panReady = false;
   if(panScene) while(panScene.children.length) panScene.remove(panScene.children[0]);
   buildPanorama();
   tYaw = v.startYaw || 0; cYaw = v.startYaw || 0;
-  initVenueMode();
   log('Venue changed to: '+v.name, 'ok');
   showToast('🎭 '+v.name);
   hideStageVenuePicker();
@@ -2007,17 +2006,16 @@ function handleAudienceMsg(msg){
   }
 
   if(msg.type==='set-venue'){
-    const v = VENUES.find(v=>v.id===msg.venueId);
+    const v = VENUES.find(vn=>vn.id===msg.venueId);
     if(v){
       selectedVenueId = v.id;
-      loadVenueImage(v.skyboxId);
-      // Ensure panorama is initialized before trying to rebuild it
-      if(!panRenderer) buildPanorama();
       panReady = false;
+      // Clear existing scene
       if(panScene) while(panScene.children.length) panScene.remove(panScene.children[0]);
+      // Build or rebuild panorama — panReady=true fires inside texture callback
       buildPanorama();
       tYaw = v.startYaw || 0; cYaw = v.startYaw || 0;
-      initVenueMode();
+      // initVenueMode called inside buildPanorama once texture loads
       log('Venue changed to: '+v.name, 'ok');
       showToast('🎭 '+v.name);
     }
