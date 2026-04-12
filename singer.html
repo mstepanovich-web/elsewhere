@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.27</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.35</div>
 </div>
 
 <!-- HOME -->
@@ -194,7 +194,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;">← Search</div>
-      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.27</div>
+      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.35</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -241,7 +241,14 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
         <div class="ac-sub" id="stage-venue-sub">Classic Stage</div>
       </div>
 
-    </div>
+      <!-- Costume -->
+      <div class="action-card" onclick="showSingerCostumePicker()">
+        <div class="ac-icon">👑</div>
+        <div class="ac-label">Costume</div>
+        <div class="ac-sub" id="costume-sub">No accessories</div>
+      </div>
+
+    </div><!-- end action-grid -->
 
     <!-- Room code + video chat -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px 0;">
@@ -278,27 +285,29 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
       👥 Audience View
     </div>
   </div>
-  <div id="singer-venue-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;padding-bottom:16px;"></div>
+  <div id="singer-venue-grid" style="overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;padding-bottom:16px;"></div>
 </div>
 
 <!-- SEARCH MAIN — search bar + recent searches -->
 <div id="screen-search" class="screen">
   <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
     <!-- Nav bar -->
-    <div style="display:flex;align-items:center;padding:max(14px,env(safe-area-inset-top)) 18px 0;flex-shrink:0;">
-      <div onclick="showScreen('screen-home')" style="font-size:13px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;margin-right:12px;">← Home</div>
-      <div style="flex:1;position:relative;display:flex;align-items:center;">
-        <input id="srch-in" class="input" type="search" placeholder="Search songs or artists..."
-          autocomplete="off" inputmode="search"
-          style="padding-left:14px;padding-right:36px;width:100%;"
-          onkeydown="if(event.key==='Enter')doSearch()"
-          oninput="onSearchInput(this.value)"
-          onfocus="updateClearBtn()">
-        <div id="srch-clear" onclick="clearSearch()"
-          style="position:absolute;right:10px;font-size:16px;color:rgba(255,200,120,.4);cursor:pointer;display:none;-webkit-user-select:none;padding:4px;">✕</div>
+    <div style="padding:max(14px,env(safe-area-inset-top)) 18px 0;flex-shrink:0;">
+      <div onclick="showScreen('screen-home')" style="font-size:13px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;margin-bottom:10px;">← Home</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;position:relative;display:flex;align-items:center;">
+          <input id="srch-in" class="input" type="search" placeholder="Search songs or artists..."
+            autocomplete="off" inputmode="search"
+            style="padding-left:14px;padding-right:36px;width:100%;"
+            onkeydown="if(event.key==='Enter')doSearch()"
+            oninput="onSearchInput(this.value)"
+            onfocus="updateClearBtn()">
+          <div id="srch-clear" onclick="clearSearch()"
+            style="position:absolute;right:10px;font-size:16px;color:rgba(255,200,120,.4);cursor:pointer;display:none;-webkit-user-select:none;padding:4px;">✕</div>
+        </div>
+        <div onclick="startVoiceFullscreen()"
+          style="width:44px;height:44px;border-radius:50%;flex-shrink:0;border:1px solid rgba(255,200,80,.25);background:rgba(255,200,80,.06);display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;">🎙</div>
       </div>
-      <div onclick="startVoiceFullscreen()"
-        style="width:44px;height:44px;border-radius:50%;flex-shrink:0;border:1px solid rgba(255,200,80,.25);background:rgba(255,200,80,.06);display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;margin-left:10px;">🎙</div>
     </div>
 
     <!-- Results / Recent -->
@@ -468,6 +477,19 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
              font-family:'DM Mono',monospace;-webkit-user-select:none;">
       Comments On
     </div>
+  </div>
+</div>
+
+<!-- COSTUME PICKER -->
+<div id="screen-costume" class="screen">
+  <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
+    <div style="padding:max(14px,env(safe-area-inset-top)) 18px 10px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <div onclick="hideSingerCostumePicker()" style="font-size:13px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;">← Back</div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:18px;color:rgba(255,220,150,.9);font-style:italic;">Accessories</div>
+      <div onclick="sendClearAllAccessories()" style="font-size:11px;color:rgba(196,122,107,.7);font-family:'DM Mono',monospace;cursor:pointer;">Clear All</div>
+    </div>
+    <div style="font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.08em;font-family:'DM Mono',monospace;padding:0 18px 10px;flex-shrink:0;">Tap to toggle · multiple allowed</div>
+    <div id="singer-costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;overflow-y:auto;flex:1;padding:0 18px 16px;-webkit-overflow-scrolling:touch;align-content:start;"></div>
   </div>
 </div>
 
@@ -875,6 +897,76 @@ function stopVoiceFullscreen(){
   showScreen('screen-search');
 }
 
+// ── ACCESSORIES / COSTUME ──
+const SINGER_ACCESSORIES = [
+  { id:'crown',      label:'Crown',       emoji:'👑' },
+  { id:'tophat',     label:'Top Hat',     emoji:'🎩' },
+  { id:'halo',       label:'Halo',        emoji:'😇' },
+  { id:'devilhorns', label:'Devil Horns', emoji:'😈' },
+  { id:'sunglasses', label:'Sunglasses',  emoji:'😎' },
+  { id:'bow',        label:'Bow',         emoji:'🎀' },
+  { id:'bunnyears',  label:'Bunny Ears',  emoji:'🐰' },
+  { id:'catears',    label:'Cat Ears',    emoji:'🐱' },
+  { id:'fireHalo',   label:'Fire Halo',   emoji:'🔥' },
+  { id:'icecrwon',   label:'Ice Crown',   emoji:'❄️' },
+  { id:'stars',      label:'Star Burst',  emoji:'✨' },
+  { id:'rainbow',    label:'Rainbow',     emoji:'🌈' },
+  { id:'mic',        label:'Mic',         emoji:'🎤' },
+  { id:'guitar',     label:'Air Guitar',  emoji:'🎸' },
+  { id:'butterfly',  label:'Butterfly',   emoji:'🦋' },
+  { id:'sparkles',   label:'Sparkles',    emoji:'💫' },
+];
+
+let singerActiveAccessories = new Set();
+
+function showSingerCostumePicker(){
+  const grid = document.getElementById('singer-costume-grid');
+  grid.innerHTML = '';
+  SINGER_ACCESSORIES.forEach(a=>{
+    const active = singerActiveAccessories.has(a.id);
+    const card = document.createElement('div');
+    card.id = 'sacc-'+a.id;
+    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'rgba(255,200,80,.7)':'rgba(255,255,255,.08)'};background:${active?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};-webkit-user-select:none;touch-action:manipulation;`;
+    card.innerHTML = `<div style="font-size:28px;margin-bottom:4px;">${a.emoji}</div><div style="font-size:9px;color:rgba(255,220,150,.7);font-family:'DM Mono',monospace;">${a.label}</div>`;
+    card.onclick = ()=>{ singerToggleAccessory(a.id); };
+    grid.appendChild(card);
+  });
+  showScreen('screen-costume');
+}
+
+function hideSingerCostumePicker(){
+  showScreen('screen-home');
+}
+
+function updateCostumeSub(){
+  const sub = document.getElementById('costume-sub');
+  if(!sub) return;
+  if(singerActiveAccessories.size === 0) sub.textContent = 'No accessories';
+  else if(singerActiveAccessories.size === 1) sub.textContent = '1 accessory on';
+  else sub.textContent = singerActiveAccessories.size+' accessories on';
+}
+
+function singerToggleAccessory(id){
+  if(singerActiveAccessories.has(id)) singerActiveAccessories.delete(id);
+  else singerActiveAccessories.add(id);
+  // Update card highlight
+  const card = document.getElementById('sacc-'+id);
+  if(card){
+    const active = singerActiveAccessories.has(id);
+    card.style.borderColor = active ? 'rgba(255,200,80,.7)' : 'rgba(255,255,255,.08)';
+    card.style.background  = active ? 'rgba(255,200,80,.12)' : 'rgba(255,255,255,.03)';
+  }
+  updateCostumeSub();
+  sendToStage({ type:'toggle-accessory', id, active: singerActiveAccessories.has(id) });
+}
+
+function sendClearAllAccessories(){
+  singerActiveAccessories.clear();
+  updateCostumeSub();
+  sendToStage({ type:'clear-accessories' });
+  showSingerCostumePicker(); // re-render to clear highlights
+}
+
 // ── SEARCH ──
 async function doSearch(){
   const q=document.getElementById('srch-in').value.trim();
@@ -1229,36 +1321,107 @@ function perfStop(){
 
 // ── POST-SONG ──
 // ── STAGE VENUE OVERLAY ──
-const SINGER_VENUES = [
-  { id:'stadium',   name:'Stadium',          icon:'🏟️' },
-  { id:'jazz',      name:'Jazz Club',         icon:'🎷' },
-  { id:'speakeasy', name:'Speakeasy',         icon:'🥃' },
-  { id:'vegas',     name:'Las Vegas',         icon:'🎰' },
-  { id:'broadway',  name:'Broadway',          icon:'🎭' },
-  { id:'disco',     name:'Disco Club',        icon:'🪩' },
-  { id:'honkytonk', name:'Honky Tonk',        icon:'🤠' },
-  { id:'festival',  name:'Festival',          icon:'🎪' },
-  { id:'space',     name:'Space Station',     icon:'🚀' },
-  { id:'forest',    name:'Enchanted Forest',  icon:'🌲' },
-  { id:'default',   name:'Classic Stage',     icon:'🎤' },
+const VENUE_CATEGORIES = [
+  {
+    id: 'big', label: '🎵 Big Venues', venues: [
+      { id:'stadium',    name:'Stadium',          icon:'🏟️' },
+      { id:'festival',   name:'Festival',         icon:'🎪' },
+      { id:'hollywood',  name:'Hollywood Bowl',   icon:'🎬' },
+      { id:'amphitheater',name:'Amphitheater',    icon:'🏛️' },
+      { id:'colosseum',  name:'Ancient Colosseum',icon:'⚔️' },
+      { id:'drivein',    name:'Retro Drive-In',   icon:'🚗' },
+    ]
+  },
+  {
+    id: 'party', label: '🎉 Party & Nightlife', venues: [
+      { id:'disco',      name:'Disco Club',       icon:'🪩' },
+      { id:'vegas',      name:'Las Vegas',        icon:'🎰' },
+      { id:'artdeco',    name:'Art Deco Ballroom',icon:'✨' },
+      { id:'rooftop',    name:'Rooftop Party',    icon:'🌃' },
+      { id:'broadway',   name:'Broadway',         icon:'🎭' },
+    ]
+  },
+  {
+    id: 'bars', label: '🍸 Bars & Lounges', venues: [
+      { id:'speakeasy',  name:'Speakeasy',        icon:'🥃' },
+      { id:'honkytonk',  name:'Honky Tonk',       icon:'🤠' },
+      { id:'divebar',    name:'Dive Bar',         icon:'🍺' },
+      { id:'supperclub', name:'Supper Club',      icon:'🍷' },
+      { id:'cabaret',    name:'Cabaret Lounge',   icon:'🎩' },
+      { id:'bourbon',    name:'Bourbon Street',   icon:'🎺' },
+      { id:'skiodge',    name:'Après-Ski Lodge',  icon:'⛷️' },
+      { id:'tikibar',    name:'Tropical Tiki Bar',icon:'🌺' },
+      { id:'wildwest',   name:'Wild West Saloon', icon:'🤠' },
+      { id:'jazz',       name:'Jazz Club',        icon:'🎷' },
+    ]
+  },
+  {
+    id: 'fantasy', label: '🚀 Fantasy & Adventure', venues: [
+      { id:'space',      name:'Space Station',    icon:'🚀' },
+      { id:'forest',     name:'Enchanted Forest', icon:'🌲' },
+      { id:'dragonlair', name:"Dragon's Lair",    icon:'🐉' },
+      { id:'underwater', name:'Underwater Kingdom',icon:'🐠' },
+    ]
+  },
+  {
+    id: 'kids', label: '👑 Kids', venues: [
+      { id:'princess',   name:'Princess Castle',  icon:'👸' },
+      { id:'candyland',  name:'Candy Land',       icon:'🍭' },
+      { id:'icePalace',  name:'Ice Palace',       icon:'❄️' },
+      { id:'northpole',  name:'North Pole',       icon:'🎅' },
+      { id:'dino',       name:'Dinosaur World',   icon:'🦕' },
+      { id:'circus',     name:'Circus Big Top',   icon:'🎪' },
+    ]
+  },
 ];
 
+// Flat list for lookup
+const SINGER_VENUES = VENUE_CATEGORIES.flatMap(c=>c.venues).concat([{id:'default',name:'Classic Stage',icon:'🎤'}]);
+
 let currentVenueId = 'default';
+let expandedCategories = new Set(['big']); // first category open by default
 
 function showStageOverlay(){
   const grid = document.getElementById('singer-venue-grid');
   grid.innerHTML = '';
-  SINGER_VENUES.forEach(v=>{
-    const card = document.createElement('div');
-    card.className = 'action-card';
-    card.id = 'sv-'+v.id;
-    card.style.cssText = v.id===currentVenueId
-      ? 'border-color:rgba(255,200,80,.7);background:rgba(255,200,80,.12);'
-      : '';
-    card.innerHTML = `<div class="ac-icon">${v.icon}</div><div class="ac-label">${v.name}</div>`;
-    card.onclick = ()=>{ selectVenue(v); };
-    grid.appendChild(card);
+
+  // Classic Stage at top — always visible
+  const classic = document.createElement('div');
+  classic.style.cssText = `padding:12px 14px;border-radius:10px;border:1px solid ${currentVenueId==='default'?'rgba(255,200,80,.7)':'rgba(255,255,255,.08)'};background:${currentVenueId==='default'?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:14px;-webkit-user-select:none;`;
+  classic.innerHTML = `<span style="font-size:26px;">🎤</span><div><div style="font-size:13px;color:rgba(255,220,150,.9);font-family:'DM Mono',monospace;">Classic Stage</div><div style="font-size:10px;color:rgba(255,200,120,.4);margin-top:2px;">Default venue</div></div>`;
+  classic.onclick = ()=>{ selectVenue({id:'default',name:'Classic Stage',icon:'🎤'}); };
+  grid.appendChild(classic);
+
+  // Categories
+  VENUE_CATEGORIES.forEach(cat=>{
+    const isOpen = expandedCategories.has(cat.id);
+
+    // Category header
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 4px;cursor:pointer;-webkit-user-select:none;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:4px;';
+    header.innerHTML = `<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.6);font-family:'DM Mono',monospace;">${cat.label}</div><div style="font-size:14px;color:rgba(255,200,120,.4);transition:transform .2s;transform:rotate(${isOpen?'180deg':'0deg'})" id="cat-arrow-${cat.id}">▼</div>`;
+    header.onclick = ()=>{
+      if(expandedCategories.has(cat.id)) expandedCategories.delete(cat.id);
+      else expandedCategories.add(cat.id);
+      showStageOverlay(); // re-render
+    };
+    grid.appendChild(header);
+
+    // Venue grid for this category
+    if(isOpen){
+      const venueGrid = document.createElement('div');
+      venueGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;';
+      cat.venues.forEach(v=>{
+        const card = document.createElement('div');
+        card.style.cssText = `padding:12px 8px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${v.id===currentVenueId?'rgba(255,200,80,.7)':'rgba(255,255,255,.08)'};background:${v.id===currentVenueId?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};-webkit-user-select:none;`;
+        card.innerHTML = `<div style="font-size:24px;margin-bottom:4px;">${v.icon}</div><div style="font-size:10px;color:rgba(255,220,150,.8);font-family:'DM Mono',monospace;letter-spacing:.04em;">${v.name}</div>`;
+        card.onclick = ()=>{ selectVenue(v); };
+        venueGrid.appendChild(card);
+      });
+      grid.appendChild(venueGrid);
+    }
   });
+
   document.getElementById('stage-overlay').style.display = 'flex';
 }
 
@@ -1398,7 +1561,7 @@ function toggleSingerLog(){
   if(dbgVisible) renderLog();
 }
 
-document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#home-body,#aud-list,#singer-venue-grid,#singer-dbg')) e.preventDefault();},{passive:false});
+document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#home-body,#aud-list,#singer-venue-grid,#singer-dbg,#stage-venue-grid')) e.preventDefault();},{passive:false});
 </script>
 
 <!-- Debug log panel -->
