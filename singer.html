@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.37</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.38</div>
 </div>
 
 <!-- HOME -->
@@ -194,7 +194,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;">← Search</div>
-      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.37</div>
+      <div style="font-size:11px;color:rgba(255,200,120,.55);letter-spacing:.12em;font-family:'DM Mono',monospace;">v1.38</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -1379,7 +1379,7 @@ const VENUE_CATEGORIES = [
 const SINGER_VENUES = VENUE_CATEGORIES.flatMap(c=>c.venues).concat([{id:'default',name:'Classic Stage',icon:'🎤'}]);
 
 let currentVenueId = 'default';
-let expandedCategories = new Set(['big']); // first category open by default
+let expandedCategories = new Set(); // all collapsed by default
 
 function showStageOverlay(){
   const grid = document.getElementById('singer-venue-grid');
@@ -1401,9 +1401,13 @@ function showStageOverlay(){
     header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 4px;cursor:pointer;-webkit-user-select:none;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:4px;';
     header.innerHTML = `<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.6);font-family:'DM Mono',monospace;">${cat.label}</div><div style="font-size:14px;color:rgba(255,200,120,.4);transition:transform .2s;transform:rotate(${isOpen?'180deg':'0deg'})" id="cat-arrow-${cat.id}">▼</div>`;
     header.onclick = ()=>{
-      if(expandedCategories.has(cat.id)) expandedCategories.delete(cat.id);
-      else expandedCategories.add(cat.id);
-      showStageOverlay(); // re-render
+      if(expandedCategories.has(cat.id)){
+        expandedCategories.delete(cat.id);
+      } else {
+        expandedCategories.clear(); // close all others
+        expandedCategories.add(cat.id);
+      }
+      showStageOverlay();
     };
     grid.appendChild(header);
 
