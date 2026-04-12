@@ -299,7 +299,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.42</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.44</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -421,7 +421,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.42</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.44</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -2808,8 +2808,20 @@ function getAmbientCtx(){
 }
 
 function stopAmbientAudio(){
-  ambientNodes.forEach(n=>{ try{ n.stop(); }catch(e){} });
+  log('stopAmbientAudio — stopping '+ambientNodes.length+' nodes', 'info');
+  ambientNodes.forEach(n=>{ try{ n.stop(); n.disconnect(); }catch(e){} });
   ambientNodes = [];
+  if(ambientGain){
+    try{ ambientGain.disconnect(); }catch(e){}
+    ambientGain = null;
+    log('stopAmbientAudio — gain node disconnected', 'info');
+  }
+  if(ambientAudioCtx){
+    ambientGain = ambientAudioCtx.createGain();
+    ambientGain.gain.value = ambientVolume;
+    ambientGain.connect(ambientAudioCtx.destination);
+    log('stopAmbientAudio — gain node recreated', 'info');
+  }
 }
 
 function setAmbientVolume(vol, fadeTime=2){
@@ -2874,31 +2886,41 @@ function scheduleBeeps(freqs, interval, gain=0.04){
 let particles = [];
 let ambientAnimId = null;
 
-let ambientRunning = false; // guard flag
+let ambientRunning = false;
+let ambientGeneration = 0; // increments on each venue stop — particles check this to know when to die
 
 function stopAmbientAnim(){
+  log('stopAmbientAnim — generation:'+ambientGeneration+' particles:'+particles.length, 'info');
   ambientRunning = false;
+  ambientGeneration++;
   if(ambientAnimId){ cancelAnimationFrame(ambientAnimId); ambientAnimId=null; }
   particles = [];
   ambientCtx.clearRect(0,0,ambientW,ambientH);
 }
 
-function spawnParticles(config){ particles.push(...Array.from({length:config.count||20},()=>config.spawn())); }
+function spawnParticles(config){
+  const gen = ambientGeneration; // capture current generation
+  particles.push(...Array.from({length:config.count||20},()=>{
+    const p = config.spawn();
+    // Wrap alive() for eternal particles to die when generation changes
+    if(p._eternal){ const orig = p.alive.bind(p); p.alive = ()=> ambientGeneration===gen && orig(); }
+    return p;
+  }));
+}
 
 function runParticleLoop(){
-  if(!ambientRunning) return; // guard — stops if venue changed
   ambientCtx.clearRect(0,0,ambientW,ambientH);
   particles = particles.filter(p=>{
     p.update();
     p.draw(ambientCtx);
     return p.alive();
   });
-  ambientAnimId = requestAnimationFrame(runParticleLoop);
+  if(ambientRunning) ambientAnimId = requestAnimationFrame(runParticleLoop);
 }
 
 function startParticleLoop(){
   ambientRunning = true;
-  // called by startParticleLoop
+  runParticleLoop();
 }
 
 // ── Venue Profiles ──
@@ -2922,7 +2944,7 @@ const AMBIENT_PROFILES = {
         o:Math.random(), phase:Math.random()*Math.PI*2, speed:Math.random()*0.02+0.01,
         update(){ this.o=0.3+Math.sin(this.phase+=this.speed)*0.7; },
         draw(c){ c.beginPath(); c.arc(this.x,this.y,1.2,0,Math.PI*2); c.fillStyle=`rgba(255,255,255,${this.o*0.6})`; c.fill(); },
-        alive(){ return ambientRunning; }
+        _eternal:true, alive(){ return true; }
       }; } });
       // Sweeping spotlights
       let beamAngle=0;
@@ -2930,7 +2952,7 @@ const AMBIENT_PROFILES = {
         angle:side*Math.PI*0.3, speed:0.003*side,
         update(){ this.angle+=this.speed; if(Math.abs(this.angle)>Math.PI*0.4) this.speed*=-1; },
         draw(c){ c.save(); c.translate(ambientW/2,0); c.rotate(this.angle); const g=c.createLinearGradient(0,0,0,ambientH); g.addColorStop(0,'rgba(255,255,200,0.12)'); g.addColorStop(1,'rgba(255,255,200,0)'); c.fillStyle=g; c.beginPath(); c.moveTo(-10,0); c.lineTo(10,0); c.lineTo(ambientW*0.4,ambientH); c.lineTo(-ambientW*0.4,ambientH); c.closePath(); c.fill(); c.restore(); },
-        alive(){ return ambientRunning; }
+        _eternal:true, alive(){ return true; }
       }; } });
       startParticleLoop();
     }
@@ -2953,7 +2975,7 @@ const AMBIENT_PROFILES = {
       spawnParticles({ count:1, spawn(){ return {
         update(){ rot+=0.008; },
         draw(c){ dots.forEach(d=>{ const a=d.angle+rot; const x=ambientW/2+Math.cos(a)*d.dist; const y=ambientH*0.3+Math.sin(a)*d.dist*0.4; if(x>0&&x<ambientW&&y>0&&y<ambientH){ c.beginPath(); c.arc(x,y,d.size,0,Math.PI*2); c.fillStyle=d.color; c.globalAlpha=0.7; c.fill(); c.globalAlpha=1; } }); },
-        alive(){ return ambientRunning; }
+        _eternal:true, alive(){ return true; }
       }; } });
       startParticleLoop();
     }
@@ -2977,13 +2999,13 @@ const AMBIENT_PROFILES = {
         o:Math.random()*0.5+0.1, phase:Math.random()*Math.PI*2,
         update(){ this.x-=this.speed; this.phase+=0.02; this.o=0.2+Math.sin(this.phase)*0.2; if(this.x<0) this.x=ambientW; },
         draw(c){ c.beginPath(); c.arc(this.x,this.y,this.size,0,Math.PI*2); c.fillStyle=`rgba(200,220,255,${this.o})`; c.fill(); },
-        alive(){ return ambientRunning; }
+        _eternal:true, alive(){ return true; }
       }; } });
       // Control panel blinks
       const panels=Array.from({length:12},()=>({ x:Math.random()*ambientW*0.3, y:ambientH*0.6+Math.random()*ambientH*0.35, color:`hsl(${Math.random()*60+180},100%,60%)`, phase:Math.random()*Math.PI*2, speed:Math.random()*0.05+0.02 }));
       spawnParticles({ count:1, spawn(){ return {
         update(){}, draw(c){ panels.forEach(p=>{ p.phase+=p.speed; const o=0.4+Math.sin(p.phase)*0.6; c.beginPath(); c.arc(p.x,p.y,3,0,Math.PI*2); c.fillStyle=p.color; c.globalAlpha=o; c.fill(); c.globalAlpha=1; }); },
-        alive(){ return ambientRunning; }
+        _eternal:true, alive(){ return true; }
       }; } });
       startParticleLoop();
     }
@@ -3026,13 +3048,13 @@ const AMBIENT_PROFILES = {
         vy:Math.random()*0.2+0.05, o:Math.random()*0.15+0.05, size:Math.random()*2+0.5,
         update(){ this.y+=this.vy; this.o-=0.0002; if(this.y>ambientH) this.y=0; },
         draw(c){ c.beginPath(); c.arc(this.x,this.y,this.size,0,Math.PI*2); c.fillStyle=`rgba(255,230,180,${this.o})`; c.fill(); },
-        alive(){ return ambientRunning; }
+        _eternal:true, alive(){ return true; }
       }; } });
       // Neon flicker overlay
       spawnParticles({ count:1, spawn(){ return {
         update(){ neonTimer++; if(neonTimer>180&&Math.random()<0.02){ neonAlpha=Math.random()<0.3?0.3:1; neonTimer=0; } },
         draw(c){ c.fillStyle=`rgba(255,100,50,${neonAlpha*0.04})`; c.fillRect(0,0,ambientW,ambientH); },
-        alive(){ return ambientRunning; }
+        _eternal:true, alive(){ return true; }
       }; } });
       startParticleLoop();
     }
@@ -3052,7 +3074,7 @@ const AMBIENT_PROFILES = {
       spawnParticles({ count:1, spawn(){ return {
         update(){ lasers.forEach(l=>{ l.angle+=l.speed; if(Math.abs(l.angle)>Math.PI*0.45) l.speed*=-1; }); },
         draw(c){ lasers.forEach(l=>{ c.save(); c.translate(ambientW/2,ambientH); c.rotate(l.angle); const g=c.createLinearGradient(0,0,0,-ambientH); g.addColorStop(0,`hsla(${l.hue},100%,60%,0.4)`); g.addColorStop(1,`hsla(${l.hue},100%,60%,0)`); c.fillStyle=g; c.fillRect(-2,-ambientH,4,ambientH); c.restore(); }); },
-        alive(){ return ambientRunning; }
+        _eternal:true, alive(){ return true; }
       }; } });
       // Confetti
       spawnParticles({ count:60, spawn(){ return {
@@ -3080,7 +3102,7 @@ const AMBIENT_PROFILES = {
         vx:(Math.random()-0.5)*0.3, vy:(Math.random()-0.5)*0.2,
         update(){ this.phase+=this.speed; this.x+=this.vx; this.y+=this.vy; if(this.x<0)this.x=ambientW; if(this.x>ambientW)this.x=0; if(this.y<0)this.y=ambientH; if(this.y>ambientH)this.y=0; },
         draw(c){ const o=0.4+Math.sin(this.phase)*0.6; c.beginPath(); c.arc(this.x,this.y,2,0,Math.PI*2); c.fillStyle=`rgba(180,255,100,${o*0.8})`; c.fill(); const g=c.createRadialGradient(this.x,this.y,0,this.x,this.y,8); g.addColorStop(0,`rgba(180,255,100,${o*0.3})`); g.addColorStop(1,'rgba(180,255,100,0)'); c.fillStyle=g; c.fillRect(this.x-8,this.y-8,16,16); },
-        alive(){ return ambientRunning; }
+        _eternal:true, alive(){ return true; }
       }; } });
       startParticleLoop();
     }
@@ -3111,7 +3133,7 @@ const AMBIENT_PROFILES = {
       spawnParticles({ count:1, spawn(){ return {
         update(){ glowPhase+=0.03; },
         draw(c){ const o=0.04+Math.sin(glowPhase)*0.02; c.fillStyle=`rgba(255,80,0,${o})`; c.fillRect(0,ambientH*0.7,ambientW,ambientH*0.3); },
-        alive(){ return ambientRunning; }
+        _eternal:true, alive(){ return true; }
       }; } });
       startParticleLoop();
     }
@@ -3133,14 +3155,14 @@ const AMBIENT_PROFILES = {
         size:Math.random()*6+2, o:Math.random()*0.3+0.1,
         update(){ this.y+=this.vy; this.x+=this.vx; this.vx+=(Math.random()-0.5)*0.05; if(this.y<-10){ this.y=ambientH+10; this.x=Math.random()*ambientW; } },
         draw(c){ c.beginPath(); c.arc(this.x,this.y,this.size,0,Math.PI*2); c.strokeStyle=`rgba(150,220,255,${this.o})`; c.lineWidth=1; c.stroke(); },
-        alive(){ return ambientRunning; }
+        _eternal:true, alive(){ return true; }
       }; } });
       // Caustic light shimmer
       let causticPhase=0;
       spawnParticles({ count:1, spawn(){ return {
         update(){ causticPhase+=0.02; },
         draw(c){ c.fillStyle=`rgba(50,150,255,${0.03+Math.sin(causticPhase)*0.015})`; c.fillRect(0,0,ambientW,ambientH); },
-        alive(){ return ambientRunning; }
+        _eternal:true, alive(){ return true; }
       }; } });
       startParticleLoop();
     }
@@ -3157,18 +3179,22 @@ let currentAmbientVenue = null;
 
 function startAmbient(venueId){
   if(currentAmbientVenue === venueId) return;
+  log('startAmbient — from:'+currentAmbientVenue+' to:'+venueId, 'info');
   currentAmbientVenue = venueId;
   stopAmbientAudio();
   stopAmbientAnim();
-  if(!venueId || venueId==='default') return; // Classic Stage — minimal ambient only
+  if(!venueId || venueId==='default'){
+    log('startAmbient — classic stage, no ambient', 'info');
+    return;
+  }
   const profile = getProfile(venueId);
   try{
     if(!ambientAudioCtx) getAmbientCtx();
     if(ambientAudioCtx.state==='suspended') ambientAudioCtx.resume();
     if(profile.audio) profile.audio();
     if(profile.anim) profile.anim();
-    log('Ambient started: '+venueId, 'ok');
-  }catch(e){ log('Ambient error: '+e.message, 'warn'); }
+    log('startAmbient — started: '+venueId+' nodes:'+ambientNodes.length, 'ok');
+  }catch(e){ log('startAmbient — error: '+e.message, 'err'); }
 }
 
 function stopAmbient(){
