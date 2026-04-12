@@ -299,7 +299,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.40</div>
+    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.41</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -421,7 +421,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.40</div>
+  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.41</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -593,6 +593,8 @@ function initVenueMode(){
     document.getElementById('aud-layer').style.zIndex='2';
   }
   log('initVenueMode — venueMode=true yaw:'+venueYaw+' pitch:'+venuePitch+' panReady:'+panReady, 'ok');
+  // Start ambient audio/animation for this venue
+  startAmbient(selectedVenueId);
 }
 
 function zoomVenueOut(){
@@ -2290,13 +2292,14 @@ let ytSongDuration = 600; // set by doPlayWithYT, used by onStateChange ticker
 
 function doPlayWithYT(){
   document.getElementById('videochat-wrap').style.display='none';
-  hideTVSongCard(); // ensure card is always hidden when song starts
-  if(venueMode) {} // zoom controlled by singer app only — starts zoomed in
+  hideTVSongCard();
+  if(venueMode) {}
   playing=true;
   elapsed=0;
-  window._songStartTime = Date.now(); // for stale stop-song guard
+  window._songStartTime = Date.now();
   lIdx=-1;
-  resetLyrics(); // ensure clean lyrics state on every new performance
+  resetLyrics();
+  setAmbientVolume(0.08, 3); // fade ambient down when song starts
   clearAllTickers();
   document.getElementById('stage-stop-btn').style.display='block';
   sendMsg({type:'play-start', song:song.title, artist:song.artist, videoId:song.videoId||'', ts:Date.now()});
@@ -2445,7 +2448,6 @@ function updL(le){
 function updP(){const pct=Math.min(100,(elapsed/600)*100);document.getElementById('pf').style.width=pct+'%';sendMsg({type:'progress',pct,elapsed});}
 function doEnd(){
   document.getElementById('videochat-wrap').style.display='flex';
-  // zoom stays wherever singer left it — no auto zoom on end
   const stack = new Error().stack.split('\n').slice(1,4).join(' | ');
   log('doEnd() called — elapsed:'+Math.round(elapsed)+'s | '+stack, 'warn');
   doPause();
@@ -2459,7 +2461,7 @@ function doEnd(){
   document.getElementById('lm').textContent='';
   document.getElementById('ln').textContent='';
   resetPlay();
-  // Keep phoneControlled=true and song intact — singer can start same song again
+  setAmbientVolume(ambientVolume, 2); // restore ambient after song ends
 }
 
 // ═══════════════════════════════════════
@@ -3164,25 +3166,9 @@ function stopAmbient(){
   currentAmbientVenue = null;
 }
 
-// Hook into venue changes
-const _origInitVenueMode = initVenueMode;
-function initVenueMode(){
-  _origInitVenueMode();
-  startAmbient(selectedVenueId);
-}
+// Hook into venue changes — startAmbient called directly from initVenueMode above
 
-// Lower ambient when song plays, restore when done
-const _origDoPlayWithYT = doPlayWithYT;
-function doPlayWithYT(){
-  _origDoPlayWithYT();
-  setAmbientVolume(0.08, 3); // fade down over 3s
-}
-
-const _origDoEnd = doEnd;
-function doEnd(){
-  _origDoEnd();
-  setAmbientVolume(ambientVolume, 2);
-}
+// Ambient volume hooks called directly from doPlayWithYT and doEnd above
 
 window.addEventListener('resize',()=>{
   resizeAC(); drawStage();
