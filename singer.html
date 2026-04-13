@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.63</div>
+  <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.65</div>
 </div>
 
 <!-- HOME -->
@@ -194,7 +194,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;">← Search</div>
-      <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.63</div>
+      <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.65</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -466,6 +466,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
       <div class="perf-btn" onclick="sendPanLeft()" style="flex:1;font-size:18px;">◀</div>
       <div class="perf-btn" onclick="sendPanRight()" style="flex:1;font-size:18px;">▶</div>
     </div>
+    <div class="perf-btn" onclick="showPerfCostumePicker()" style="grid-column:1/-1;">👑 Costume</div>
   </div>
 
   <!-- Bottom row: watchers left, comments toggle right -->
@@ -489,12 +490,34 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
       <div onclick="sendClearAllAccessories()" style="font-size:11px;color:rgba(196,122,107,.7);font-family:'DM Mono',monospace;cursor:pointer;">Clear All</div>
     </div>
     <div style="font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.08em;font-family:'DM Mono',monospace;padding:0 18px 10px;flex-shrink:0;">Tap to toggle · multiple allowed</div>
+    <!-- AR Filters section -->
+    <div id="singer-deepar-grid" style="padding:0 18px;flex-shrink:0;"></div>
+    <!-- Divider -->
+    <div style="margin:10px 18px 6px;border-top:1px solid rgba(255,255,255,.06);flex-shrink:0;"></div>
+    <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.08em;font-family:'DM Mono',monospace;padding:0 18px 8px;flex-shrink:0;">Basic overlays</div>
+    <!-- Basic accessories grid -->
     <div id="singer-costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;overflow-y:auto;flex:1;padding:0 18px 16px;-webkit-overflow-scrolling:touch;align-content:start;"></div>
   </div>
 </div>
 
 <!-- POST SONG — not used, goes straight to home -->
 <div id="screen-postsong" class="screen" style="display:none;"></div>
+
+<!-- PERF COSTUME OVERLAY — slides up over performance screen -->
+<div id="perf-costume-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(4,2,6,.96);backdrop-filter:blur(8px);flex-direction:column;overflow:hidden;">
+  <div style="padding:max(14px,env(safe-area-inset-top)) 18px 10px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+    <div onclick="hidePerfCostumePicker()" style="font-size:13px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;-webkit-user-select:none;">✕ Close</div>
+    <div style="font-family:'Cormorant Garamond',serif;font-size:18px;color:rgba(255,220,150,.9);font-style:italic;">Accessories</div>
+    <div onclick="sendClearAllAccessories();clearAllDeepAREffects();updatePerfCostumeGrid();" style="font-size:11px;color:rgba(196,122,107,.7);font-family:'DM Mono',monospace;cursor:pointer;-webkit-user-select:none;">Clear All</div>
+  </div>
+  <div style="font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.08em;font-family:'DM Mono',monospace;padding:0 18px 10px;flex-shrink:0;">Tap to toggle · multiple allowed</div>
+  <!-- AR Filters -->
+  <div id="perf-deepar-grid" style="padding:0 18px;flex-shrink:0;overflow-y:auto;max-height:55%;-webkit-overflow-scrolling:touch;"></div>
+  <!-- Divider -->
+  <div style="margin:8px 18px 6px;border-top:1px solid rgba(255,255,255,.06);flex-shrink:0;"></div>
+  <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.08em;font-family:'DM Mono',monospace;padding:0 18px 6px;flex-shrink:0;">Basic overlays</div>
+  <div id="perf-costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;overflow-y:auto;flex:1;padding:0 18px 16px;-webkit-overflow-scrolling:touch;align-content:start;"></div>
+</div>
 
 <div id="toast"></div>
 
@@ -934,18 +957,108 @@ const SINGER_ACCESSORIES = [
 
 let singerActiveAccessories = new Set();
 
-function showSingerCostumePicker(){
-  const grid = document.getElementById('singer-costume-grid');
-  grid.innerHTML = '';
-  SINGER_ACCESSORIES.forEach(a=>{
-    const active = singerActiveAccessories.has(a.id);
-    const card = document.createElement('div');
-    card.id = 'sacc-'+a.id;
-    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'rgba(255,200,80,.7)':'rgba(255,255,255,.08)'};background:${active?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};-webkit-user-select:none;touch-action:manipulation;`;
-    card.innerHTML = `<div style="font-size:28px;margin-bottom:4px;">${a.emoji}</div><div style="font-size:9px;color:rgba(255,220,150,.7);font-family:'DM Mono',monospace;">${a.label}</div>`;
-    card.onclick = ()=>{ singerToggleAccessory(a.id); };
-    grid.appendChild(card);
+// ── DeepAR effects ────────────────────────────────────────────────────────────
+const DEEPAR_BASE = 'https://cdn.jsdelivr.net/npm/deepar/';
+const DEEPAR_EFFECTS = [
+  { id:'dar-glasses-classic', label:'Classic Glasses', emoji:'🕶',  category:'Glasses', slot:'face', url: DEEPAR_BASE+'effects/aviators' },
+  { id:'dar-glasses-nerd',    label:'Nerd Glasses',    emoji:'🤓',  category:'Glasses', slot:'face', url: DEEPAR_BASE+'effects/nerd_glasses' },
+  { id:'dar-glasses-round',   label:'Round Glasses',   emoji:'👓',  category:'Glasses', slot:'face', url: DEEPAR_BASE+'effects/round_glasses' },
+  { id:'dar-beard',           label:'Beard',           emoji:'🧔',  category:'Face',    slot:'face', url: DEEPAR_BASE+'effects/beard' },
+  { id:'dar-makeup',          label:'Glam Makeup',     emoji:'💄',  category:'Face',    slot:'face', url: DEEPAR_BASE+'effects/makeup' },
+  { id:'dar-cat',             label:'Cat',             emoji:'🐱',  category:'Masks',   slot:'face', url: DEEPAR_BASE+'effects/cat' },
+  { id:'dar-deer',            label:'Deer',            emoji:'🦌',  category:'Masks',   slot:'face', url: DEEPAR_BASE+'effects/deer' },
+  { id:'dar-flowers',         label:'Flower Crown',    emoji:'🌸',  category:'Head',    slot:'hat',  url: DEEPAR_BASE+'effects/flowers' },
+  { id:'dar-viking',          label:'Viking Helmet',   emoji:'⛑️',  category:'Head',    slot:'hat',  url: DEEPAR_BASE+'effects/viking_helmet' },
+  { id:'dar-hair-blue',       label:'Blue Hair',       emoji:'💙',  category:'Hair',    slot:'hair', url: DEEPAR_BASE+'effects/hair_blue' },
+  { id:'dar-hair-green',      label:'Green Hair',      emoji:'💚',  category:'Hair',    slot:'hair', url: DEEPAR_BASE+'effects/hair_green' },
+  { id:'dar-hair-red',        label:'Red Hair',        emoji:'❤️',  category:'Hair',    slot:'hair', url: DEEPAR_BASE+'effects/hair_red' },
+];
+
+// Track active DeepAR effect per slot
+const activeDeepARSlots = {};
+
+function buildDeepARGrid(containerId){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+
+  // Group by category
+  const categories = [...new Set(DEEPAR_EFFECTS.map(e=>e.category))];
+
+  container.innerHTML = `<div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+    color:rgba(255,200,120,.4);font-family:'DM Mono',monospace;padding:8px 0 6px;">
+    ✨ AR Filters (DeepAR)</div>`;
+
+  categories.forEach(cat=>{
+    const catEl = document.createElement('div');
+    catEl.style.cssText = 'font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.3);font-family:"DM Mono",monospace;margin:8px 0 4px;';
+    catEl.textContent = cat;
+    container.appendChild(catEl);
+
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:4px;';
+
+    DEEPAR_EFFECTS.filter(e=>e.category===cat).forEach(eff=>{
+      const active = activeDeepARSlots[eff.slot] === eff.id;
+      const card = document.createElement('div');
+      card.id = 'dar-card-'+eff.id;
+      card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;
+        border:1px solid ${active?'rgba(255,200,80,.7)':'rgba(255,255,255,.08)'};
+        background:${active?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};
+        -webkit-user-select:none;touch-action:manipulation;`;
+      card.innerHTML = `<div style="font-size:24px;margin-bottom:3px;">${eff.emoji}</div>
+        <div style="font-size:8px;color:rgba(255,220,150,.7);font-family:'DM Mono',monospace;line-height:1.3;">${eff.label}</div>`;
+      card.onclick = ()=>toggleDeepAREffect(eff);
+      grid.appendChild(card);
+    });
+    container.appendChild(grid);
   });
+
+  // Clear all DeepAR button
+  const clearBtn = document.createElement('div');
+  clearBtn.style.cssText = 'margin-top:8px;padding:10px;text-align:center;font-size:11px;color:rgba(196,122,107,.7);font-family:"DM Mono",monospace;cursor:pointer;border:1px solid rgba(196,122,107,.2);border-radius:8px;-webkit-user-select:none;';
+  clearBtn.textContent = 'Clear AR Filters';
+  clearBtn.onclick = clearAllDeepAREffects;
+  container.appendChild(clearBtn);
+}
+
+function toggleDeepAREffect(eff){
+  const wasActive = activeDeepARSlots[eff.slot] === eff.id;
+  if(wasActive){
+    // Deactivate
+    delete activeDeepARSlots[eff.slot];
+    sendToStage({ type:'set-deepar-effect', slot:eff.slot, url:null });
+  } else {
+    // Deactivate previous in same slot
+    const prevId = activeDeepARSlots[eff.slot];
+    if(prevId){
+      const prevCard = document.getElementById('dar-card-'+prevId);
+      if(prevCard){ prevCard.style.borderColor='rgba(255,255,255,.08)'; prevCard.style.background='rgba(255,255,255,.03)'; }
+    }
+    activeDeepARSlots[eff.slot] = eff.id;
+    sendToStage({ type:'set-deepar-effect', slot:eff.slot, url:eff.url });
+  }
+  // Update card highlight
+  const card = document.getElementById('dar-card-'+eff.id);
+  if(card){
+    const nowActive = activeDeepARSlots[eff.slot] === eff.id;
+    card.style.borderColor = nowActive ? 'rgba(255,200,80,.7)' : 'rgba(255,255,255,.08)';
+    card.style.background  = nowActive ? 'rgba(255,200,80,.12)' : 'rgba(255,255,255,.03)';
+  }
+  showToast(wasActive ? 'Filter off' : eff.label+' on');
+}
+
+function clearAllDeepAREffects(){
+  Object.keys(activeDeepARSlots).forEach(slot=>delete activeDeepARSlots[slot]);
+  sendToStage({ type:'clear-deepar-effects' });
+  // Rebuild grid to clear highlights
+  const activeGrid = document.getElementById('singer-deepar-grid') || document.getElementById('perf-deepar-grid');
+  if(activeGrid) buildDeepARGrid(activeGrid.id);
+  showToast('AR filters cleared');
+}
+
+function showSingerCostumePicker(){
+  buildDeepARGrid('singer-deepar-grid');
+  buildCostumeGrid('singer-costume-grid', 'sacc-');
   showScreen('screen-costume');
 }
 
@@ -964,22 +1077,56 @@ function updateCostumeSub(){
 function singerToggleAccessory(id){
   if(singerActiveAccessories.has(id)) singerActiveAccessories.delete(id);
   else singerActiveAccessories.add(id);
-  // Update card highlight
-  const card = document.getElementById('sacc-'+id);
-  if(card){
-    const active = singerActiveAccessories.has(id);
-    card.style.borderColor = active ? 'rgba(255,200,80,.7)' : 'rgba(255,255,255,.08)';
-    card.style.background  = active ? 'rgba(255,200,80,.12)' : 'rgba(255,255,255,.03)';
-  }
-  updateCostumeSub();
+  syncAllCostumeGrids();
   sendToStage({ type:'toggle-accessory', id, active: singerActiveAccessories.has(id) });
 }
 
 function sendClearAllAccessories(){
   singerActiveAccessories.clear();
-  updateCostumeSub();
+  syncAllCostumeGrids();
   sendToStage({ type:'clear-accessories' });
-  showSingerCostumePicker(); // re-render to clear highlights
+}
+
+function buildCostumeGrid(gridId, cardPrefix){
+  const grid = document.getElementById(gridId);
+  grid.innerHTML = '';
+  SINGER_ACCESSORIES.forEach(a=>{
+    const active = singerActiveAccessories.has(a.id);
+    const card = document.createElement('div');
+    card.id = cardPrefix+a.id;
+    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'rgba(255,200,80,.7)':'rgba(255,255,255,.08)'};background:${active?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};-webkit-user-select:none;touch-action:manipulation;`;
+    card.innerHTML = `<div style="font-size:28px;margin-bottom:4px;">${a.emoji}</div><div style="font-size:9px;color:rgba(255,220,150,.7);font-family:'DM Mono',monospace;">${a.label}</div>`;
+    card.onclick = ()=>{ singerToggleAccessory(a.id); syncAllCostumeGrids(); };
+    grid.appendChild(card);
+  });
+}
+
+function syncAllCostumeGrids(){
+  // Keep both grids in sync without full rebuild — just update highlights
+  ['sacc-','pacc-'].forEach(prefix=>{
+    SINGER_ACCESSORIES.forEach(a=>{
+      const card = document.getElementById(prefix+a.id);
+      if(!card) return;
+      const active = singerActiveAccessories.has(a.id);
+      card.style.borderColor = active ? 'rgba(255,200,80,.7)' : 'rgba(255,255,255,.08)';
+      card.style.background  = active ? 'rgba(255,200,80,.12)' : 'rgba(255,255,255,.03)';
+    });
+  });
+  updateCostumeSub();
+}
+
+function showPerfCostumePicker(){
+  buildDeepARGrid('perf-deepar-grid');
+  buildCostumeGrid('perf-costume-grid', 'pacc-');
+  document.getElementById('perf-costume-overlay').style.display = 'flex';
+}
+
+function hidePerfCostumePicker(){
+  document.getElementById('perf-costume-overlay').style.display = 'none';
+}
+
+function updatePerfCostumeGrid(){
+  buildCostumeGrid('perf-costume-grid', 'pacc-');
 }
 
 // ── SEARCH ──
