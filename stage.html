@@ -299,7 +299,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:10px;color:rgba(255,220,150,.7);letter-spacing:.06em;font-family:'DM Mono',monospace;">v1.44</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.46</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -421,7 +421,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.1em;font-family:'DM Mono',monospace;">v1.44</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.46</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -571,9 +571,12 @@ function initVenueMode(){
   log('initVenueMode — selectedVenueId:'+selectedVenueId+' venue:'+(venue?venue.name:'NOT FOUND')+' skyboxId:'+(venue?venue.skyboxId:'n/a')+' panReady:'+panReady+' viewMode:'+viewMode, 'info');
   if(!venue || !venue.skyboxId){
     venueMode = false;
-    document.getElementById('pan-layer').style.opacity='0';
-    document.getElementById('pan-layer').style.pointerEvents='none';
-    log('initVenueMode — no skyboxId, venueMode=false', 'warn');
+    // Only hide pan-layer in audience view — singer view always needs it for the programmatic panorama
+    if(viewMode === 'audience'){
+      document.getElementById('pan-layer').style.opacity='0';
+      document.getElementById('pan-layer').style.pointerEvents='none';
+    }
+    log('initVenueMode — no skyboxId, venueMode=false viewMode:'+viewMode, 'warn');
     return;
   }
   venueMode = true;
@@ -1160,17 +1163,19 @@ async function publishCanvasToAgora(){
     const vt = canvasStream.getVideoTracks();
     if(vt.length){
       const res = RESOLUTIONS[currentResolution] || RESOLUTIONS.hd;
+      const bitrateMax = res.w >= 1920 ? 4000 : res.w >= 1280 ? 2000 : 800;
+      log('Agora encoder: '+res.w+'×'+res.h+' bitrateMax:'+bitrateMax+'kbps resolution:'+currentResolution, 'info');
       localVideoTrack = AgoraRTC.createCustomVideoTrack({
         mediaStreamTrack: vt[0],
         encoderConfig: {
           width: res.w, height: res.h,
           frameRate: 30,
           bitrateMin: 600,
-          bitrateMax: res.w >= 1920 ? 4000 : res.w >= 1280 ? 2000 : 800
+          bitrateMax
         }
       });
       await agoraClient.publish([localVideoTrack]);
-      console.log('Agora: published canvas video track');
+      log('Agora: canvas video track published ✓', 'ok');
     }
   }catch(e){ console.warn('Canvas publish:', e); }
 }
@@ -1926,8 +1931,12 @@ function handleAudienceMsg(msg){
   if(msg.type==='toggle-accessory'){
     if(msg.active) activeAccessories.add(msg.id);
     else activeAccessories.delete(msg.id);
+    log('accessory toggle: '+msg.id+' active:'+msg.active+' total:'+activeAccessories.size, 'info');
   }
-  if(msg.type==='clear-accessories'){ activeAccessories.clear(); }
+  if(msg.type==='clear-accessories'){
+    activeAccessories.clear();
+    log('accessories cleared', 'info');
+  }
 
   // ── Singer phone remote control ──
   if(msg.type==='mic-connected'){
@@ -2474,8 +2483,11 @@ function renderLoop(){
   requestAnimationFrame(renderLoop); fc++;
 
   if(viewMode==='panorama'){
-    // ── SINGER VIEW — head-tracked / manual, no singer composite ──
+    // ── SINGER VIEW — head-tracked / manual ──
     if(!panReady || !panRenderer) return;
+    // Ensure pan-layer always visible in singer view
+    const plS = document.getElementById('pan-layer');
+    if(plS.style.opacity !== '1'){ plS.style.opacity='1'; plS.style.zIndex='2'; }
     cYaw   = lerp(cYaw,   tYaw,   SMOOTH);
     cPitch = lerp(cPitch, tPitch, SMOOTH);
     panCamera3.fov = 80; panCamera3.updateProjectionMatrix();
@@ -2532,6 +2544,7 @@ function renderLoop(){
 function enterStage(){
   document.getElementById('start').style.display='none';
   const res = RESOLUTIONS[currentResolution] || RESOLUTIONS.hd;
+  log('enterStage — resolution:'+currentResolution+' ('+res.w+'×'+res.h+') cameraId:'+(selectedCameraId||'auto'), 'info');
   const videoConstraints = selectedCameraId
     ? { deviceId:{ exact:selectedCameraId }, width:{ideal:res.w}, height:{ideal:res.h} }
     : { width:{ideal:res.w}, height:{ideal:res.h}, facingMode:'user' };
@@ -2541,19 +2554,21 @@ function enterStage(){
     camVideo  = document.getElementById('webcam');
     camVideo.srcObject = stream;
     camVideo.onloadedmetadata = ()=>{
+      const settings = stream.getVideoTracks()[0].getSettings();
+      log('Camera active: '+settings.width+'×'+settings.height+' deviceId:'+(settings.deviceId||'unknown').slice(0,12), 'ok');
       camVideo.play();
       showGuide();
       startSegmentation(camVideo);
       startPoseDetection(camVideo);
       publishCanvasToAgora();
       initVenueMode();
-      initAudienceDrag(); // init drag on load so it's ready immediately
+      initAudienceDrag();
       document.getElementById('sdot').className = 'dot ld';
       document.getElementById('slbl').textContent = 'Camera active';
     };
   })
   .catch(err=>{
-    console.warn('Camera error:', err);
+    log('Camera error: '+err.message, 'err');
     document.getElementById('sdot').className = 'dot of';
     document.getElementById('slbl').textContent = 'Camera denied';
     showGuide();
@@ -2802,30 +2817,41 @@ let ambientVolume = 0.35; // base volume
 let songPlaying = false;
 
 function getAmbientCtx(){
-  if(!ambientAudioCtx) ambientAudioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if(!ambientAudioCtx){
+    ambientAudioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    log('getAmbientCtx — created, state:'+ambientAudioCtx.state+' sampleRate:'+ambientAudioCtx.sampleRate, 'info');
+  }
   if(!ambientGain){ ambientGain = ambientAudioCtx.createGain(); ambientGain.gain.value = ambientVolume; ambientGain.connect(ambientAudioCtx.destination); }
   return ambientAudioCtx;
 }
 
 function stopAmbientAudio(){
-  log('stopAmbientAudio — stopping '+ambientNodes.length+' nodes', 'info');
+  const ctxState = ambientAudioCtx ? ambientAudioCtx.state : 'none';
+  log('stopAmbientAudio — nodes:'+ambientNodes.length+' ctxState:'+ctxState, 'info');
   ambientNodes.forEach(n=>{ try{ n.stop(); n.disconnect(); }catch(e){} });
   ambientNodes = [];
   if(ambientGain){
     try{ ambientGain.disconnect(); }catch(e){}
     ambientGain = null;
-    log('stopAmbientAudio — gain node disconnected', 'info');
+    log('stopAmbientAudio — gain disconnected', 'info');
   }
   if(ambientAudioCtx){
-    ambientGain = ambientAudioCtx.createGain();
-    ambientGain.gain.value = ambientVolume;
-    ambientGain.connect(ambientAudioCtx.destination);
-    log('stopAmbientAudio — gain node recreated', 'info');
+    log('stopAmbientAudio — suspending ctx (state:'+ambientAudioCtx.state+')', 'info');
+    ambientAudioCtx.suspend().then(()=>{
+      log('stopAmbientAudio — suspended ✓ resuming...', 'info');
+      ambientAudioCtx.resume().then(()=>{
+        ambientGain = ambientAudioCtx.createGain();
+        ambientGain.gain.value = ambientVolume;
+        ambientGain.connect(ambientAudioCtx.destination);
+        log('stopAmbientAudio — resumed ✓ gain recreated state:'+ambientAudioCtx.state, 'ok');
+      }).catch(e=>log('stopAmbientAudio — resume failed: '+e.message,'err'));
+    }).catch(e=>log('stopAmbientAudio — suspend failed: '+e.message,'err'));
   }
 }
 
 function setAmbientVolume(vol, fadeTime=2){
-  if(!ambientGain) return;
+  if(!ambientGain){ log('setAmbientVolume — no gain node, skipping','warn'); return; }
+  log('setAmbientVolume — vol:'+vol+' fade:'+fadeTime+'s ctxState:'+ambientAudioCtx.state, 'info');
   ambientGain.gain.cancelScheduledValues(ambientAudioCtx.currentTime);
   ambientGain.gain.linearRampToValueAtTime(vol, ambientAudioCtx.currentTime + fadeTime);
 }
@@ -2890,7 +2916,7 @@ let ambientRunning = false;
 let ambientGeneration = 0; // increments on each venue stop — particles check this to know when to die
 
 function stopAmbientAnim(){
-  log('stopAmbientAnim — generation:'+ambientGeneration+' particles:'+particles.length, 'info');
+  log('stopAmbientAnim — gen:'+ambientGeneration+' particles:'+particles.length+' running:'+ambientRunning, 'info');
   ambientRunning = false;
   ambientGeneration++;
   if(ambientAnimId){ cancelAnimationFrame(ambientAnimId); ambientAnimId=null; }
@@ -2920,6 +2946,7 @@ function runParticleLoop(){
 
 function startParticleLoop(){
   ambientRunning = true;
+  log('startParticleLoop — gen:'+ambientGeneration+' particles:'+particles.length, 'info');
   runParticleLoop();
 }
 
@@ -3188,12 +3215,22 @@ function startAmbient(venueId){
     return;
   }
   const profile = getProfile(venueId);
+  const capturedVenue = venueId;
+  // Wait for AudioContext to be ready after suspend/resume before starting audio
+  const startAudio = ()=>{
+    if(currentAmbientVenue !== capturedVenue) return; // venue changed again
+    try{
+      if(ambientAudioCtx && ambientAudioCtx.state==='suspended') ambientAudioCtx.resume();
+      if(profile.audio) profile.audio();
+      log('startAmbient — audio started: '+venueId+' nodes:'+ambientNodes.length, 'ok');
+    }catch(e){ log('startAmbient — audio error: '+e.message, 'err'); }
+  };
+  // Start animation immediately, delay audio slightly for AudioContext to settle
   try{
     if(!ambientAudioCtx) getAmbientCtx();
-    if(ambientAudioCtx.state==='suspended') ambientAudioCtx.resume();
-    if(profile.audio) profile.audio();
     if(profile.anim) profile.anim();
-    log('startAmbient — started: '+venueId+' nodes:'+ambientNodes.length, 'ok');
+    setTimeout(startAudio, 150);
+    log('startAmbient — anim started: '+venueId, 'ok');
   }catch(e){ log('startAmbient — error: '+e.message, 'err'); }
 }
 
