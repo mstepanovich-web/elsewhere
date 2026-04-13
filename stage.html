@@ -299,7 +299,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.47</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.48</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -421,7 +421,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.47</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.48</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -2825,9 +2825,13 @@ function getAmbientCtx(){
   return ambientAudioCtx;
 }
 
+let audioStopGen = 0; // increments on each stop to cancel stale callbacks
+
 function stopAmbientAudio(){
   const ctxState = ambientAudioCtx ? ambientAudioCtx.state : 'none';
   log('stopAmbientAudio — nodes:'+ambientNodes.length+' ctxState:'+ctxState, 'info');
+  audioStopGen++; // invalidate any pending resume callbacks
+  const myGen = audioStopGen;
   ambientNodes.forEach(n=>{ try{ n.stop(); n.disconnect(); }catch(e){} });
   ambientNodes = [];
   if(ambientGain){
@@ -2838,12 +2842,14 @@ function stopAmbientAudio(){
   if(ambientAudioCtx){
     log('stopAmbientAudio — suspending ctx (state:'+ambientAudioCtx.state+')', 'info');
     ambientAudioCtx.suspend().then(()=>{
-      log('stopAmbientAudio — suspended ✓ resuming...', 'info');
+      log('stopAmbientAudio — suspended ✓ resuming... gen:'+myGen+'/'+audioStopGen, 'info');
+      if(myGen !== audioStopGen){ log('stopAmbientAudio — stale resume cancelled gen:'+myGen,'warn'); return; }
       ambientAudioCtx.resume().then(()=>{
+        if(myGen !== audioStopGen){ log('stopAmbientAudio — stale gain recreate cancelled','warn'); return; }
         ambientGain = ambientAudioCtx.createGain();
         ambientGain.gain.value = ambientVolume;
         ambientGain.connect(ambientAudioCtx.destination);
-        log('stopAmbientAudio — resumed ✓ gain recreated state:'+ambientAudioCtx.state, 'ok');
+        log('stopAmbientAudio — resumed ✓ gain recreated state:'+ambientAudioCtx.state+' gen:'+myGen, 'ok');
       }).catch(e=>log('stopAmbientAudio — resume failed: '+e.message,'err'));
     }).catch(e=>log('stopAmbientAudio — suspend failed: '+e.message,'err'));
   }
@@ -2921,17 +2927,21 @@ function stopAmbientAnim(){
   ambientGeneration++;
   if(ambientAnimId){ cancelAnimationFrame(ambientAnimId); ambientAnimId=null; }
   particles = [];
+  // Hard clear canvas immediately
+  ambientCtx.clearRect(0,0,ambientW,ambientH);
+  ambientCtx.fillStyle='rgba(0,0,0,0)';
   ambientCtx.clearRect(0,0,ambientW,ambientH);
 }
 
 function spawnParticles(config){
-  const gen = ambientGeneration; // capture current generation
+  const gen = ambientGeneration;
+  const before = particles.length;
   particles.push(...Array.from({length:config.count||20},()=>{
     const p = config.spawn();
-    // Wrap alive() for eternal particles to die when generation changes
     if(p._eternal){ const orig = p.alive.bind(p); p.alive = ()=> ambientGeneration===gen && orig(); }
     return p;
   }));
+  log('spawnParticles — added:'+(particles.length-before)+' total:'+particles.length+' gen:'+gen, 'info');
 }
 
 function runParticleLoop(){
@@ -2945,6 +2955,8 @@ function runParticleLoop(){
 }
 
 function startParticleLoop(){
+  // Clear canvas and any stale particles before starting
+  ambientCtx.clearRect(0,0,ambientW,ambientH);
   ambientRunning = true;
   log('startParticleLoop — gen:'+ambientGeneration+' particles:'+particles.length, 'info');
   runParticleLoop();
