@@ -306,7 +306,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.57</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.59</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -428,7 +428,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.57</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.59</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -683,35 +683,35 @@ const ACCESSORIES = [
 
   // Mohawks
   { id:'mohawk-red',    label:'Mohawk Red',    emoji:'🔴', anchor:'head-top', offsetY:-0.5, scale:0.6,
-    drawFn(c, cx, cy, size){ drawMohawk(c, cx, cy, size, '#e8192c'); } },
+    drawFn:(c,cx,cy,sz)=>drawMohawk(c,cx,cy,sz,'#e8192c') },
   { id:'mohawk-blue',   label:'Mohawk Blue',   emoji:'🔵', anchor:'head-top', offsetY:-0.5, scale:0.6,
-    drawFn(c, cx, cy, size){ drawMohawk(c, cx, cy, size, '#1976d2'); } },
+    drawFn:(c,cx,cy,sz)=>drawMohawk(c,cx,cy,sz,'#1976d2') },
   { id:'mohawk-green',  label:'Mohawk Green',  emoji:'🟢', anchor:'head-top', offsetY:-0.5, scale:0.6,
-    drawFn(c, cx, cy, size){ drawMohawk(c, cx, cy, size, '#00c853'); } },
+    drawFn:(c,cx,cy,sz)=>drawMohawk(c,cx,cy,sz,'#00c853') },
   { id:'mohawk-purple', label:'Mohawk Purple', emoji:'🟣', anchor:'head-top', offsetY:-0.5, scale:0.6,
-    drawFn(c, cx, cy, size){ drawMohawk(c, cx, cy, size, '#9c27b0'); } },
+    drawFn:(c,cx,cy,sz)=>drawMohawk(c,cx,cy,sz,'#9c27b0') },
   { id:'mohawk-rainbow',label:'Mohawk Rainbow',emoji:'🌈', anchor:'head-top', offsetY:-0.5, scale:0.6,
-    drawFn(c, cx, cy, size){ drawMohawk(c, cx, cy, size, 'rainbow'); } },
+    drawFn:(c,cx,cy,sz)=>drawMohawk(c,cx,cy,sz,'rainbow') },
 
   // Glasses
   { id:'glasses-round',  label:'Round Glasses',  emoji:'🕶', anchor:'eyes', offsetY:0.0, scale:0.6,
-    drawFn(c, cx, cy, size){ drawGlasses(c, cx, cy, size, 'round', '#222'); } },
+    drawFn:(c,cx,cy,sz)=>drawGlasses(c,cx,cy,sz,'round','#222') },
   { id:'glasses-square', label:'Square Glasses', emoji:'🔲', anchor:'eyes', offsetY:0.0, scale:0.6,
-    drawFn(c, cx, cy, size){ drawGlasses(c, cx, cy, size, 'square', '#222'); } },
+    drawFn:(c,cx,cy,sz)=>drawGlasses(c,cx,cy,sz,'square','#222') },
   { id:'glasses-heart',  label:'Heart Glasses',  emoji:'❤️', anchor:'eyes', offsetY:0.0, scale:0.6,
-    drawFn(c, cx, cy, size){ drawGlasses(c, cx, cy, size, 'heart', '#e8192c'); } },
+    drawFn:(c,cx,cy,sz)=>drawGlasses(c,cx,cy,sz,'heart','#e8192c') },
   { id:'glasses-star',   label:'Star Glasses',   emoji:'⭐', anchor:'eyes', offsetY:0.0, scale:0.6,
-    drawFn(c, cx, cy, size){ drawGlasses(c, cx, cy, size, 'star', '#ffd600'); } },
+    drawFn:(c,cx,cy,sz)=>drawGlasses(c,cx,cy,sz,'star','#ffd600') },
 
   // Shoulder pads
   { id:'shoulderpads', label:'Spike Pads', emoji:'⚔️', anchor:'shoulders-both', offsetY:0.0, scale:1.0,
-    drawFn(c, cx, cy, size, anchors){ drawShoulderPads(c, anchors); } },
+    drawFn:(c,cx,cy,sz,an)=>drawShoulderPads(c,an) },
 
   // Beard
-  { id:'beard-long',  label:'Long Beard',  emoji:'🧔', anchor:'chin', offsetY:0.0, scale:1.0,
-    drawFn(c, cx, cy, size){ drawBeard(c, cx, cy, size, 'long'); } },
-  { id:'beard-viking',label:'Viking Beard',emoji:'⚡', anchor:'chin', offsetY:0.0, scale:1.0,
-    drawFn(c, cx, cy, size){ drawBeard(c, cx, cy, size, 'viking'); } },
+  { id:'beard-long',   label:'Long Beard',   emoji:'🧔', anchor:'chin', offsetY:0.1, scale:1.0,
+    drawFn:(c,cx,cy,sz)=>drawBeard(c,cx,cy,sz,'long') },
+  { id:'beard-viking', label:'Viking Beard', emoji:'⚡', anchor:'chin', offsetY:0.1, scale:1.0,
+    drawFn:(c,cx,cy,sz)=>drawBeard(c,cx,cy,sz,'viking') },
 ];
 
 let activeAccessories = new Set();
@@ -821,7 +821,13 @@ function drawGlasses(c, cx, cy, size, shape, color){
     if(shape==='round'){
       c.beginPath(); c.ellipse(x+w/2, y, w/2, h/2, 0, 0, Math.PI*2); c.fill(); c.stroke();
     } else if(shape==='square'){
-      c.beginPath(); c.roundRect(x, y-h/2, w, h, 4); c.fill(); c.stroke();
+      c.beginPath();
+      const r2=4, x2=x, y2=y-h/2, w2=w, h2=h;
+      c.moveTo(x2+r2,y2); c.lineTo(x2+w2-r2,y2); c.quadraticCurveTo(x2+w2,y2,x2+w2,y2+r2);
+      c.lineTo(x2+w2,y2+h2-r2); c.quadraticCurveTo(x2+w2,y2+h2,x2+w2-r2,y2+h2);
+      c.lineTo(x2+r2,y2+h2); c.quadraticCurveTo(x2,y2+h2,x2,y2+h2-r2);
+      c.lineTo(x2,y2+r2); c.quadraticCurveTo(x2,y2,x2+r2,y2); c.closePath();
+      c.fill(); c.stroke();
     } else if(shape==='heart'){
       // Simple heart shape
       c.beginPath();
@@ -956,8 +962,10 @@ function drawBeard(c, cx, cy, size, style){
 }
 
 // Called every frame from the render loop — draws active accessories onto canvas
+let accLogFrame = 0;
 function drawAccessories(){
   if(!activeAccessories.size) return;
+  accLogFrame++;
 
   const W = AC.width, H = AC.height;
   const rect = singerRect();
@@ -967,6 +975,12 @@ function drawAccessories(){
   const zH = rect.h * zoomFactor;
   const zX = rect.x + rect.w/2 - zW/2;
   const zY = rect.y - (zH - rect.h) * (0.5 + zoomOffset);
+
+  // Log rect + zoom every 90 frames
+  if(accLogFrame % 90 === 1){
+    log(`ACC rect: x=${Math.round(zX)} y=${Math.round(zY)} w=${Math.round(zW)} h=${Math.round(zH)} zoom=${zoomFactor.toFixed(2)}`, 'info');
+    log(`ACC landmarks: face=${!!lastFaceLandmarks} pose=${!!lastPoseLandmarks}`, 'info');
+  }
 
   // Convert normalized landmark (0-1 in video frame) to canvas coords
   // The singer is drawn mirrored: ctx.translate(zX+zW, zY); ctx.scale(-1,1)
@@ -996,6 +1010,11 @@ function drawAccessories(){
     anchors['head-top']   = { x: faceCx, y: forehead.y, size: faceW };
     anchors['eyes']       = { x: faceCx, y: (leftEye.y+rightEye.y)/2, size: faceW };
     anchors['head-center']= { x: faceCx, y: (forehead.y+chin.y)/2, size: faceW };
+    anchors['chin']       = { x: chin.x, y: chin.y, size: faceW };
+    if(accLogFrame % 90 === 1){
+      log(`ACC face: cx=${Math.round(faceCx)} foreheadY=${Math.round(forehead.y)} chinY=${Math.round(chin.y)} faceW=${Math.round(faceW)}`, 'info');
+      log(`ACC eyes: y=${Math.round((leftEye.y+rightEye.y)/2)} lmRaw: lEar.x=${lastFaceLandmarks[234].x.toFixed(3)} rEar.x=${lastFaceLandmarks[454].x.toFixed(3)}`, 'info');
+    }
   }
 
   if(lastPoseLandmarks){
@@ -1017,16 +1036,9 @@ function drawAccessories(){
     anchors['shoulders-both']  = { x: shoulderCx, y: (ls.y+rs.y)/2, size: shoulderW };
     anchors['body-center']     = { x: shoulderCx, y: (ls.y+rs.y)/2 + torsoH*0.3, size: shoulderW*1.1 };
     anchors['hand-right']      = { x: rw.x, y: rw.y, size: shoulderW*0.35 };
-  }
-
-  if(lastFaceLandmarks){
-    const lm = lastFaceLandmarks;
-    const chin = lmToCanvas(lm[152]);
-    const leftEar = lmToCanvas(lm[234]);
-    const rightEar = lmToCanvas(lm[454]);
-    const faceW = Math.abs(rightEar.x - leftEar.x);
-    // chin anchor sits just below the chin point
-    anchors['chin'] = { x: chin.x, y: chin.y, size: faceW };
+    if(accLogFrame % 90 === 1){
+      log(`ACC pose: lSh=(${Math.round(ls.x)},${Math.round(ls.y)}) rSh=(${Math.round(rs.x)},${Math.round(rs.y)}) shW=${Math.round(shoulderW)}`, 'info');
+    }
   }
 
   // Fallback from singer rect if no landmarks
@@ -1054,18 +1066,21 @@ function drawAccessories(){
     const cx = anchor.x;
     const cy = anchor.y + (acc.offsetY * anchor.size * 2);
 
+    if(accLogFrame % 90 === 1){
+      log(`ACC draw [${id}]: anchor=${acc.anchor} cx=${Math.round(cx)} cy=${Math.round(cy)} size=${Math.round(drawSize)} anchorSize=${Math.round(anchor.size)}`, 'info');
+    }
+
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-
-    if(acc.drawFn){
-      // Custom canvas drawing
-      acc.drawFn(ctx, cx, cy, drawSize, anchors);
-    } else {
-      // Emoji fallback
-      const img = getEmojiImage(acc.emoji, 160);
-      ctx.drawImage(img, cx - drawSize/2, cy - drawSize/2, drawSize, drawSize);
-    }
+    try{
+      if(acc.drawFn){
+        acc.drawFn(ctx, cx, cy, drawSize, anchors);
+      } else {
+        const img = getEmojiImage(acc.emoji, 160);
+        ctx.drawImage(img, cx - drawSize/2, cy - drawSize/2, drawSize, drawSize);
+      }
+    }catch(e){ log('ACC draw error ['+id+']: '+e.message,'err'); }
     ctx.restore();
   });
 }
