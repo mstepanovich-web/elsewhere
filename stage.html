@@ -308,7 +308,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.70</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.71</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -430,7 +430,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.70</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.71</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -440,7 +440,6 @@ if (typeof AgoraRTC === 'undefined') {
 }
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 
@@ -643,7 +642,9 @@ async function switchResolution(key){
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     camStream=stream; camVideo.srcObject=stream;
     await camVideo.play();
-    startSegmentation(camVideo);
+    // Restart DeepAR with new resolution
+    if(deepARInst){ try{ deepARInst.shutdown(); }catch(e){} deepARInst=null; deepARReady=false; segOk=false; }
+    startDeepAR(camVideo);
     const actual = stream.getVideoTracks()[0].getSettings();
     log('Resolution active: '+actual.width+'×'+actual.height, 'ok');
     showToast('⚙️ '+res.label);
@@ -1494,37 +1495,8 @@ async function publishCanvasToAgora(){
 
 async function publishCamToAgora(){ await publishCanvasToAgora(); }
 
-function startSegmentation(vid){
-  if(typeof SelfieSegmentation === 'undefined'){
-    segOk = false; return;
-  }
-  const seg = new SelfieSegmentation({
-    locateFile: f=>`https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`
-  });
-  seg.setOptions({ modelSelection:1, selfieMode:false });
-  seg.onResults(res=>{
-    if(!segOk){
-      segOk=true;
-      document.getElementById('sdot').className='dot ok';
-      document.getElementById('slbl').textContent='Compositing';
-    }
-    segPending=res;
-  });
-
-  // Drive segmentation manually using existing video stream — avoids second getUserMedia call
-  let segRunning = true;
-  async function segLoop(){
-    if(!segRunning) return;
-    if(vid.readyState >= 2){
-      try{ await seg.send({image:vid}); }catch(e){}
-      if((guideActive || activeAccessories.size > 0) && poseInst){
-        try{ await poseInst.send({image:vid}); }catch(e){}
-      }
-    }
-    requestAnimationFrame(segLoop);
-  }
-  segLoop();
-}
+// startSegmentation replaced by DeepAR — kept as no-op for safety
+function startSegmentation(vid){ log('startSegmentation: replaced by DeepAR','info'); }
 
 function startPoseDetection(vid){
   if(typeof Pose === 'undefined'){ return; }
@@ -1551,7 +1523,6 @@ function startPoseDetection(vid){
 // ── DeepAR initialization ────────────────────────────────────────────────────
 async function startDeepAR(vid){
   try{
-    // Dynamic import — avoids module/non-module script conflicts
     const deepar = await import('https://cdn.jsdelivr.net/npm/deepar/js/deepar.esm.js');
     if(!deepar || !deepar.initialize){ log('DeepAR SDK failed to load','err'); return; }
 
@@ -1564,21 +1535,49 @@ async function startDeepAR(vid){
       licenseKey: DEEPAR_KEY,
       canvas:     deepARCanvas,
       additionalOptions: {
-        cameraConfig: { disableDefaultCamera: true } // we supply video ourselves
+        hint: ['segmentationInit', 'faceInit'],
+        cameraConfig: { disableDefaultCamera: true }
       }
     });
 
-    // Supply our existing camera stream instead of letting DeepAR open its own
-    deepARInst.setVideoElement(vid, false); // false = not mirrored (we mirror in drawSinger)
+    deepARInst.setVideoElement(vid, false);
 
-    // Get the actual output canvas DeepAR renders into
+    // Enable background removal — transparent bg so venue shows through
+    await deepARInst.backgroundReplacement(true);
+    log('DeepAR: background removal active','ok');
+
     deepARCanvas = deepARInst.getCanvas();
     deepARReady = true;
+    segOk = true; // render loop checks this to know compositing is ready
+
+    document.getElementById('sdot').className='dot ok';
+    document.getElementById('slbl').textContent='Compositing';
     log('DeepAR: ready ✓ canvas:'+(deepARCanvas?'ok':'null'),'ok');
+
+    // Start the render-driving loop (replaces old segLoop)
+    startDeepARLoop(vid);
 
   }catch(e){
     log('DeepAR init error: '+e.message,'err');
+    log('DeepAR failed — falling back to MediaPipe','warn');
   }
+}
+
+// Drives the render loop and pose detection now that SelfieSegmentation is removed
+function startDeepARLoop(vid){
+  async function loop(){
+    if(vid.readyState >= 2){
+      // Drive pose for hand-raise guide and landmark-based accessories
+      if((guideActive || activeAccessories.size > 0) && poseInst){
+        try{ await poseInst.send({image:vid}); }catch(e){}
+      }
+      // DeepAR output canvas is already composited (person + filter, bg transparent)
+      // Feed it into segPending so the render loop draws it correctly
+      segPending = { image: deepARCanvas, segmentationMask: null };
+    }
+    requestAnimationFrame(loop);
+  }
+  loop();
 }
 
 // Switch active effect in a slot — null clears the slot
@@ -2930,26 +2929,43 @@ function renderLoop(){
       pl.style.pointerEvents = 'none';
       drawStage();
     }
-    // Singer composite (both venue and classic stage)
-    // If DeepAR is active and has effects loaded, use its output as the camera source
-    // This pipes the filter-applied frame through the same segmentation mask
-    const deepARActive = camStream && deepARReady && deepARCanvas &&
-      Object.entries(deepARSlots).some(([slot,url])=> url && slot !== 'bg');
-    if(segPending){
-      if(deepARActive){
-        // Swap the segmentation source image with DeepAR's filtered output
-        drawSinger(deepARCanvas, segPending.segmentationMask);
-      } else {
-        drawSinger(segPending.image, segPending.segmentationMask);
+    // Singer composite — DeepAR handles background removal + AR filters
+    if(deepARReady && deepARCanvas){
+      // DeepAR output already has background removed — draw directly into singer rect
+      const rect = singerRect();
+      const zW = rect.w * zoomFactor;
+      const zH = rect.h * zoomFactor;
+      const zX = rect.x + rect.w/2 - zW/2;
+      const zY = rect.y - (zH - rect.h) * (0.5 + zoomOffset);
+      ctx.save();
+      ctx.translate(zX+zW, zY); ctx.scale(-1,1);
+      ctx.drawImage(deepARCanvas, 0, 0, zW, zH);
+      ctx.restore();
+      // Spotlight
+      const cx = rect.x + rect.w/2;
+      const sg = ctx.createRadialGradient(cx, zY+zH*.1, 0, cx, zY+zH*.35, rect.w*1.4/zoomFactor);
+      sg.addColorStop(0,`rgba(${V.r},${V.g},${V.b},.14)`); sg.addColorStop(1,'transparent');
+      ctx.fillStyle=sg; ctx.fillRect(zX-zW, zY-zH*.1, zW*3, zH*1.2);
+      // Foot blend
+      const footAlpha = Math.max(0, 1-(zoomFactor-1)*2);
+      if(footAlpha>0){
+        ctx.save(); ctx.globalCompositeOperation='multiply'; ctx.globalAlpha=footAlpha;
+        const leg=ctx.createLinearGradient(0,zY+zH*.78,0,zY+zH);
+        leg.addColorStop(0,'transparent'); leg.addColorStop(1,'rgba(6,3,4,.5)');
+        ctx.fillStyle=leg; ctx.fillRect(zX,zY,zW,zH); ctx.restore();
       }
-    } else if(camVideo && camVideo.readyState>=2 && !segOk){
+      // Shadow
+      const shg=ctx.createRadialGradient(cx,rect.y+rect.h,0,cx,rect.y+rect.h,rect.w*.65);
+      shg.addColorStop(0,`rgba(0,0,0,${Math.max(0.1,0.55/zoomFactor)})`); shg.addColorStop(1,'transparent');
+      ctx.fillStyle=shg; ctx.fillRect(rect.x-rect.w*.4, rect.y+rect.h-8, rect.w*1.8, 28);
+    } else if(camVideo && camVideo.readyState>=2){
+      // DeepAR not ready yet — show raw camera as fallback
       const rect=singerRect();
-      const src = deepARActive ? deepARCanvas : camVideo;
       ctx.save(); ctx.translate(rect.x+rect.w,rect.y); ctx.scale(-1,1);
-      ctx.drawImage(src,0,0,rect.w,rect.h); ctx.restore();
+      ctx.drawImage(camVideo,0,0,rect.w,rect.h); ctx.restore();
     }
 
-    // Hand-drawn accessories (emoji overlays etc) — always on stage device
+    // Hand-drawn accessories (emoji overlays)
     if(camStream) drawAccessories();
   } // end audience view
 } // end renderLoop
@@ -2975,16 +2991,16 @@ function enterStage(){
       log('Camera active: '+settings.width+'×'+settings.height+' deviceId:'+(settings.deviceId||'unknown').slice(0,12), 'ok');
       camVideo.play();
       showGuide();
-      startSegmentation(camVideo);
+      // DeepAR replaces SelfieSegmentation — handles background removal + AR filters
+      startDeepAR(camVideo);
       startPoseDetection(camVideo);
-      // Stagger MediaPipe + DeepAR to avoid simultaneous WASM loading
-      setTimeout(initFaceMesh, 3000);
-      setTimeout(()=>startDeepAR(camVideo), 5000);
+      // Stagger FaceMesh to avoid competing with DeepAR WASM loading
+      setTimeout(initFaceMesh, 4000);
       publishCanvasToAgora();
       initVenueMode();
       initAudienceDrag();
       document.getElementById('sdot').className = 'dot ld';
-      document.getElementById('slbl').textContent = 'Camera active';
+      document.getElementById('slbl').textContent = 'Starting...';
     };
   })
   .catch(err=>{
