@@ -308,7 +308,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.71</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.72</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -430,7 +430,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.71</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.72</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1542,19 +1542,30 @@ async function startDeepAR(vid){
 
     deepARInst.setVideoElement(vid, false);
 
-    // Enable background removal — transparent bg so venue shows through
-    await deepARInst.backgroundReplacement(true);
-    log('DeepAR: background removal active','ok');
+    // Load the background segmentation effect — makes background transparent
+    // This is the correct way to get transparent BG in DeepAR v5
+    try{
+      await deepARInst.switchEffect(
+        DEEPAR_BASE + 'effects/background_segmentation',
+        { slot: 'background' }
+      );
+      log('DeepAR: background segmentation loaded','ok');
+    }catch(segErr){
+      // background_segmentation may not exist on CDN — try backgroundReplacement API
+      log('DeepAR: switchEffect bg failed ('+segErr.message+'), trying backgroundReplacement API','warn');
+      try{
+        await deepARInst.backgroundReplacement(true, null);
+      }catch(e2){ log('DeepAR: backgroundReplacement also failed: '+e2.message,'warn'); }
+    }
 
     deepARCanvas = deepARInst.getCanvas();
     deepARReady = true;
-    segOk = true; // render loop checks this to know compositing is ready
+    segOk = true;
 
     document.getElementById('sdot').className='dot ok';
     document.getElementById('slbl').textContent='Compositing';
     log('DeepAR: ready ✓ canvas:'+(deepARCanvas?'ok':'null'),'ok');
 
-    // Start the render-driving loop (replaces old segLoop)
     startDeepARLoop(vid);
 
   }catch(e){
@@ -1571,9 +1582,6 @@ function startDeepARLoop(vid){
       if((guideActive || activeAccessories.size > 0) && poseInst){
         try{ await poseInst.send({image:vid}); }catch(e){}
       }
-      // DeepAR output canvas is already composited (person + filter, bg transparent)
-      // Feed it into segPending so the render loop draws it correctly
-      segPending = { image: deepARCanvas, segmentationMask: null };
     }
     requestAnimationFrame(loop);
   }
