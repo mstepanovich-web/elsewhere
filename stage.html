@@ -299,7 +299,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.49</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.51</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -421,7 +421,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.49</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.51</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1443,10 +1443,21 @@ function buildPanorama(){
 
   if(venue.skyboxId){
     const url = `${VENUE_BASE_URL}${venue.skyboxId}.jpg`;
+    const capturedVenueId = venue.id;
     log('buildPanorama: loading texture '+url, 'info');
     const loader = new THREE.TextureLoader();
     loader.crossOrigin = 'anonymous';
+
+    // Fallback if texture takes too long
+    const timeoutId = setTimeout(()=>{
+      if(selectedVenueId !== capturedVenueId) return; // venue changed, ignore
+      log('buildPanorama: texture timeout (8s) — using programmatic fallback', 'warn');
+      buildProgrammaticPanorama();
+    }, 8000);
+
     loader.load(url, tex=>{
+      clearTimeout(timeoutId);
+      if(selectedVenueId !== capturedVenueId){ log('buildPanorama: stale texture load ignored for '+capturedVenueId,'warn'); return; }
       tex.needsUpdate = true;
       const sGeo = new THREE.SphereGeometry(500,60,40); sGeo.scale(-1,1,1);
       panScene.add(new THREE.Mesh(sGeo, new THREE.MeshBasicMaterial({map:tex})));
@@ -1462,6 +1473,7 @@ function buildPanorama(){
         log('buildPanorama: camera snapped yaw='+venue.staticYaw+' pitch='+venue.staticPitch, 'ok');
       }
     }, undefined, (err)=>{
+      clearTimeout(timeoutId);
       log('buildPanorama: TEXTURE FAILED '+url, 'err');
       buildProgrammaticPanorama();
     });
@@ -2927,10 +2939,12 @@ function stopAmbientAnim(){
   ambientGeneration++;
   if(ambientAnimId){ cancelAnimationFrame(ambientAnimId); ambientAnimId=null; }
   particles = [];
-  // Hard clear canvas immediately
+  // Full canvas wipe — reset composite to ensure transparency
+  ambientCtx.globalCompositeOperation = 'source-over';
+  ambientCtx.globalAlpha = 1;
   ambientCtx.clearRect(0,0,ambientW,ambientH);
-  ambientCtx.fillStyle='rgba(0,0,0,0)';
-  ambientCtx.clearRect(0,0,ambientW,ambientH);
+  // Hide the canvas entirely when not animating so nothing bleeds through
+  document.getElementById('ambient-layer').style.opacity = '0';
 }
 
 function spawnParticles(config){
@@ -2945,18 +2959,24 @@ function spawnParticles(config){
 }
 
 function runParticleLoop(){
+  ambientCtx.globalAlpha = 1;
+  ambientCtx.globalCompositeOperation = 'source-over';
   ambientCtx.clearRect(0,0,ambientW,ambientH);
   particles = particles.filter(p=>{
     p.update();
     p.draw(ambientCtx);
+    ambientCtx.globalAlpha = 1; // reset after each particle draw
     return p.alive();
   });
   if(ambientRunning) ambientAnimId = requestAnimationFrame(runParticleLoop);
 }
 
 function startParticleLoop(){
-  // Clear canvas and any stale particles before starting
+  // Clear canvas and reset state before starting
+  ambientCtx.globalCompositeOperation = 'source-over';
+  ambientCtx.globalAlpha = 1;
   ambientCtx.clearRect(0,0,ambientW,ambientH);
+  document.getElementById('ambient-layer').style.opacity = '1';
   ambientRunning = true;
   log('startParticleLoop — gen:'+ambientGeneration+' particles:'+particles.length, 'info');
   runParticleLoop();
@@ -3034,9 +3054,17 @@ const AMBIENT_PROFILES = {
   speakeasy: {
     audio(){
       const ac=getAmbientCtx();
-      // Occasional glass clink only — no brown noise base layer
-      function clink(){ if(!ambientRunning||currentAmbientVenue!=='speakeasy') return; const t=ac.currentTime; const o=ac.createOscillator(); o.frequency.value=1200+Math.random()*400; o.type='sine'; const g=ac.createGain(); g.gain.setValueAtTime(0.1,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.8); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.9); setTimeout(clink, 4000+Math.random()*6000); }
-      setTimeout(clink,2000);
+      const myVenue = 'speakeasy';
+      // Occasional glass clink — checks currentAmbientVenue to self-terminate
+      function clink(){
+        if(currentAmbientVenue !== myVenue) return; // stop when venue changes
+        const t=ac.currentTime;
+        const o=ac.createOscillator(); o.frequency.value=1200+Math.random()*400; o.type='sine';
+        const g=ac.createGain(); g.gain.setValueAtTime(0.1,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.8);
+        o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.9);
+        setTimeout(clink, 4000+Math.random()*6000);
+      }
+      setTimeout(clink, 2000);
     },
     anim(){
       // Smoke wisps
