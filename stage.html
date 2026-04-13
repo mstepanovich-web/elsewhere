@@ -308,7 +308,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.86</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.88</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -430,7 +430,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.86</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.88</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1516,19 +1516,29 @@ function startSegmentation(vid){
     }
     segPending=res;
   });
-  // Segmentation loop — runs independently, never blocked by pose
+  // MediaPipe mutex — seg and pose share WASM runtime, must never run simultaneously
+  let mediapipeBusy = false;
+
+  // Segmentation loop — runs every frame, skips if MediaPipe busy
   async function segLoop(){
-    if(vid.readyState >= 2){
+    if(vid.readyState >= 2 && !mediapipeBusy){
+      mediapipeBusy = true;
       try{ await seg.send({image:vid}); }catch(e){ log('seg.send error: '+e.message,'err'); }
+      mediapipeBusy = false;
     }
     requestAnimationFrame(segLoop);
   }
   segLoop();
 
-  // Separate pose loop — only runs when guide or accessories need it
+  // Pose loop — only runs when needed, skips if MediaPipe busy
+  let poseFrameCount = 0;
   async function poseLoop(){
-    if(vid.readyState >= 2 && (guideActive || activeAccessories.size > 0) && poseInst){
+    poseFrameCount++;
+    if(poseFrameCount % 3 === 0 && vid.readyState >= 2 &&
+       (guideActive || activeAccessories.size > 0) && poseInst && !mediapipeBusy){
+      mediapipeBusy = true;
       try{ await poseInst.send({image:vid}); }catch(e){}
+      mediapipeBusy = false;
     }
     requestAnimationFrame(poseLoop);
   }
@@ -2347,7 +2357,8 @@ function handleAudienceMsg(msg){
   if(msg.type==='toggle-accessory'){
     if(msg.active) activeAccessories.add(msg.id);
     else activeAccessories.delete(msg.id);
-    log('accessory toggle: '+msg.id+' active:'+msg.active+' total:'+activeAccessories.size, 'info');
+    log('accessory toggle: '+msg.id+' active:'+msg.active+' total:'+activeAccessories.size+
+        ' segOk:'+segOk+' segPending:'+(segPending?'yes':'null')+' mediapipeBusy:'+(typeof mediapipeBusy!=='undefined'?mediapipeBusy:'n/a'), 'info');
   }
   if(msg.type==='clear-accessories'){
     activeAccessories.clear();
@@ -2926,7 +2937,7 @@ function renderLoop(){
 
   } else {
     // ── AUDIENCE VIEW ──
-    if(fc%300===0) log('renderLoop audience: venueMode='+venueMode+' panReady='+panReady+' panRenderer='+!!panRenderer+' viewMode='+viewMode, 'info');
+    if(fc%300===0) log('renderLoop audience: venueMode='+venueMode+' panReady='+panReady+' panRenderer='+!!panRenderer+' viewMode='+viewMode+' segOk='+segOk+' segPending='+(segPending?'yes':'null')+' accessories='+activeAccessories.size, 'info');
     if(venueMode && panReady && panRenderer){
       // Venue panorama background + singer on top
       venueFOV = lerp(venueFOV, venueFOVTarget, FOV_SMOOTH);
