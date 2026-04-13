@@ -233,6 +233,9 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <canvas id="pan-layer"></canvas>
 <canvas id="ambient-layer" style="position:fixed;inset:0;z-index:3;pointer-events:none;"></canvas>
 
+<!-- DeepAR offscreen canvas — receives filtered output, composited into AC -->
+<canvas id="deepar-canvas" style="display:none;"></canvas>
+
 <!-- Venue transition overlay -->
 <div id="venue-transition" style="position:fixed;inset:0;z-index:10;background:#080508;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;pointer-events:none;transition:opacity 0.3s;">
   <div id="venue-transition-icon" style="font-size:48px;"></div>
@@ -306,7 +309,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.63</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.65</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -428,7 +431,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.63</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.65</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -436,6 +439,10 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 if (typeof AgoraRTC === 'undefined') {
   document.write('<script src="https://cdn.jsdelivr.net/npm/agora-rtc-sdk-ng@4.20.0/AgoraRTC_N-4.20.0.js"><\/script>');
 }
+</script>
+<script type="module">
+  import * as DeepARModule from 'https://cdn.jsdelivr.net/npm/deepar/js/deepar.esm.js';
+  window.DeepAR = DeepARModule;
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
@@ -1420,6 +1427,37 @@ function drawSinger(image, mask){
 let segOk      = false;
 let poseInst   = null;   // MediaPipe Pose instance for hand detection
 
+// ── DeepAR ──────────────────────────────────────────────────────────────────
+const DEEPAR_KEY = 'cc3419fb050feb3ddd228e79bff8594b9a70a23957fe7d886c46b2bc09d337be3e451d850516851c';
+const DEEPAR_BASE = 'https://cdn.jsdelivr.net/npm/deepar/';
+let deepARInst   = null;  // DeepAR SDK instance
+let deepARReady  = false; // true once initialized
+let deepARCanvas = null;  // offscreen canvas DeepAR renders into
+
+// Effect slot map — multiple slots can be active simultaneously
+// slot names: 'face' (masks/glasses/makeup), 'hair', 'hat'
+const deepARSlots = { face: null, hair: null, hat: null };
+
+// Built-in effect library — maps to DeepAR CDN effect files
+const DEEPAR_EFFECTS = [
+  // Glasses
+  { id:'dar-glasses-classic', label:'Classic Glasses', emoji:'🕶',  category:'Glasses', slot:'face', url: DEEPAR_BASE+'effects/aviators' },
+  { id:'dar-glasses-nerd',    label:'Nerd Glasses',    emoji:'🤓',  category:'Glasses', slot:'face', url: DEEPAR_BASE+'effects/nerd_glasses' },
+  { id:'dar-glasses-round',   label:'Round Glasses',   emoji:'👓',  category:'Glasses', slot:'face', url: DEEPAR_BASE+'effects/round_glasses' },
+  // Masks & face
+  { id:'dar-beard',           label:'Beard',           emoji:'🧔',  category:'Face',    slot:'face', url: DEEPAR_BASE+'effects/beard' },
+  { id:'dar-makeup',          label:'Glam Makeup',     emoji:'💄',  category:'Face',    slot:'face', url: DEEPAR_BASE+'effects/makeup' },
+  { id:'dar-cat',             label:'Cat',             emoji:'🐱',  category:'Masks',   slot:'face', url: DEEPAR_BASE+'effects/cat' },
+  { id:'dar-deer',            label:'Deer',            emoji:'🦌',  category:'Masks',   slot:'face', url: DEEPAR_BASE+'effects/deer' },
+  // Hats & head
+  { id:'dar-flowers',         label:'Flower Crown',    emoji:'🌸',  category:'Head',    slot:'hat',  url: DEEPAR_BASE+'effects/flowers' },
+  { id:'dar-viking',          label:'Viking Helmet',   emoji:'⛑️',  category:'Head',    slot:'hat',  url: DEEPAR_BASE+'effects/viking_helmet' },
+  // Hair
+  { id:'dar-hair-blue',       label:'Blue Hair',       emoji:'💙',  category:'Hair',    slot:'hair', url: DEEPAR_BASE+'effects/hair_blue' },
+  { id:'dar-hair-green',      label:'Green Hair',      emoji:'💚',  category:'Hair',    slot:'hair', url: DEEPAR_BASE+'effects/hair_green' },
+  { id:'dar-hair-red',        label:'Red Hair',        emoji:'❤️',  category:'Hair',    slot:'hair', url: DEEPAR_BASE+'effects/hair_red' },
+];
+
 // startEverything removed — camera init moved to enterStage() for correct user gesture timing
 
 // ── Publish canvas video to Agora (no laptop mic — phone handles audio) ──
@@ -1504,9 +1542,52 @@ function startPoseDetection(vid){
   // No separate Camera — driven by segmentation's Camera loop above
 }
 
-// ═══════════════════════════════════════
-// POSITIONING GUIDE
-// ═══════════════════════════════════════
+// ── DeepAR initialization ────────────────────────────────────────────────────
+async function startDeepAR(vid){
+  try{
+    // DeepAR SDK loads as ES module — access via window.deepar set by the module script
+    const DeepAR = window.DeepAR;
+    if(!DeepAR){ log('DeepAR SDK not loaded yet — retrying in 2s','warn'); setTimeout(()=>startDeepAR(vid),2000); return; }
+
+    deepARCanvas = document.getElementById('deepar-canvas');
+    // Size to match camera
+    deepARCanvas.width  = vid.videoWidth  || 640;
+    deepARCanvas.height = vid.videoHeight || 480;
+
+    log('DeepAR: initializing...','info');
+    deepARInst = await DeepAR.create({
+      licenseKey:   DEEPAR_KEY,
+      canvas:       deepARCanvas,
+      libPath:      DEEPAR_BASE+'wasm/',
+      segmentationInfoZip: DEEPAR_BASE+'wasm/segmentation.zip',
+      onInitialize(){ deepARReady=true; log('DeepAR: ready ✓','ok'); }
+    });
+
+    // Point DeepAR at the camera video stream
+    await deepARInst.startVideo(false); // false = not mirrored (we mirror in drawSinger)
+    log('DeepAR: video started','ok');
+
+  }catch(e){
+    log('DeepAR init error: '+e.message,'err');
+  }
+}
+
+// Switch active effect in a slot — null clears the slot
+async function setDeepAREffect(slot, url){
+  if(!deepARInst || !deepARReady){ log('DeepAR not ready','warn'); return; }
+  try{
+    if(!url){
+      // Clear slot — load empty/null effect
+      await deepARInst.clearEffect(slot);
+      deepARSlots[slot] = null;
+      log('DeepAR: cleared slot '+slot,'info');
+    } else {
+      await deepARInst.loadEffect(url, slot);
+      deepARSlots[slot] = url;
+      log('DeepAR: loaded '+url+' → slot:'+slot,'ok');
+    }
+  }catch(e){ log('DeepAR effect error: '+e.message,'err'); }
+}
 // guideActive, handRaised, handProgress, handStart, guideClosed declared at top of script
 const HOLD_MS    = 3000;
 
@@ -2242,6 +2323,14 @@ function handleAudienceMsg(msg){
     activeAccessories.clear();
     log('accessories cleared', 'info');
   }
+  if(msg.type==='set-deepar-effect'){
+    setDeepAREffect(msg.slot, msg.url || null);
+    log('DeepAR effect: slot='+msg.slot+' url='+(msg.url||'clear'), 'info');
+  }
+  if(msg.type==='clear-deepar-effects'){
+    Object.keys(deepARSlots).forEach(slot=>setDeepAREffect(slot, null));
+    log('DeepAR: all effects cleared', 'info');
+  }
 
   // ── Singer phone remote control ──
   if(msg.type==='mic-connected'){
@@ -2838,8 +2927,26 @@ function renderLoop(){
       ctx.save(); ctx.translate(rect.x+rect.w,rect.y); ctx.scale(-1,1);
       ctx.drawImage(camVideo,0,0,rect.w,rect.h); ctx.restore();
     }
-    // Accessories overlay — only drawn on stage device (has camStream)
-    if(camStream) drawAccessories();
+
+    // DeepAR filter overlay — drawn on top of singer, composited with face tracking
+    if(camStream && deepARReady && deepARCanvas && Object.values(deepARSlots).some(v=>v)){
+      const rect = singerRect();
+      const zW = rect.w * zoomFactor;
+      const zH = rect.h * zoomFactor;
+      const zX = rect.x + rect.w/2 - zW/2;
+      const zY = rect.y - (zH - rect.h) * (0.5 + zoomOffset);
+      // Draw mirrored to match singer orientation
+      ctx.save();
+      ctx.translate(zX+zW, zY); ctx.scale(-1,1);
+      ctx.drawImage(deepARCanvas, 0, 0, zW, zH);
+      ctx.restore();
+    } else if(camStream && !deepARReady) {
+      // Fall back to hand-drawn accessories while DeepAR loads
+      drawAccessories();
+    }
+
+    // Hand-drawn accessories still active (non-DeepAR items like emoji)
+    if(camStream && deepARReady) drawAccessories();
   } // end audience view
 } // end renderLoop
 
@@ -2866,8 +2973,9 @@ function enterStage(){
       showGuide();
       startSegmentation(camVideo);
       startPoseDetection(camVideo);
-      // Delay FaceMesh init by 3s to avoid competing with segmentation+pose WASM loading
+      // Stagger MediaPipe + DeepAR to avoid simultaneous WASM loading
       setTimeout(initFaceMesh, 3000);
+      setTimeout(()=>startDeepAR(camVideo), 5000);
       publishCanvasToAgora();
       initVenueMode();
       initAudienceDrag();
