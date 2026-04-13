@@ -308,7 +308,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.73</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.74</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -430,7 +430,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.73</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.74</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1535,38 +1535,41 @@ async function startDeepAR(vid){
       licenseKey: DEEPAR_KEY,
       canvas:     deepARCanvas,
       additionalOptions: {
-        hint: ['segmentationInit', 'faceInit'],
         cameraConfig: { disableDefaultCamera: true }
+        // Removed segmentationInit hint — causes hang on some setups
       }
     });
 
     deepARInst.setVideoElement(vid, false);
-
-    // Get output canvas first
     deepARCanvas = deepARInst.getCanvas();
 
-    // Enable background segmentation (transparent BG) via the dedicated API
-    // Pass a 1x1 transparent PNG as the replacement image so bg becomes transparent
-    const transparentPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
-    try{
-      await deepARInst.backgroundReplacement(true, transparentPng);
-      log('DeepAR: background segmentation active (transparent)','ok');
-    }catch(e){
-      log('DeepAR: background segmentation failed: '+e.message,'warn');
-    }
-
+    // Mark as ready immediately — don't block on background removal
     deepARReady = true;
     segOk = true;
-
     document.getElementById('sdot').className='dot ok';
     document.getElementById('slbl').textContent='Compositing';
-    log('DeepAR: ready ✓ canvas:'+(deepARCanvas?'ok':'null'),'ok');
+    log('DeepAR: ready ✓','ok');
 
     startDeepARLoop(vid);
 
+    // Trigger background removal async — non-blocking
+    // Use a small delay to let DeepAR settle before loading segmentation model
+    setTimeout(async()=>{
+      try{
+        const transparentPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+        await deepARInst.backgroundReplacement(true, transparentPng);
+        log('DeepAR: background removal active','ok');
+      }catch(e){
+        log('DeepAR: background removal failed: '+e.message+' — will use MediaPipe fallback','warn');
+        // Re-enable MediaPipe segmentation as fallback
+        startSegmentation(vid);
+      }
+    }, 1000);
+
   }catch(e){
     log('DeepAR init error: '+e.message,'err');
-    log('DeepAR failed — falling back to MediaPipe','warn');
+    // Full fallback to MediaPipe
+    startSegmentation(vid);
   }
 }
 
