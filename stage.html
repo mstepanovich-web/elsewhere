@@ -308,7 +308,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.96</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.97</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -373,14 +373,19 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 </div>
 
 <!-- Costume Picker Overlay -->
-<div id="costume-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:var(--color-overlay);backdrop-filter:blur(8px);flex-direction:column;padding:40px 20px 24px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-shrink:0;">
+<div id="costume-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(4,2,6,.97);flex-direction:column;overflow:hidden;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:40px 20px 12px;flex-shrink:0;border-bottom:1px solid rgba(255,200,80,.15);">
     <div style="font-family:var(--font-display);font-size:22px;color:var(--color-text);font-style:italic;">Accessories</div>
     <div onclick="hideCostumePicker()" style="font-size:22px;cursor:pointer;color:rgba(255,200,120,.5);padding:4px 10px;">✕</div>
   </div>
-  <div style="font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.08em;font-family:var(--font-mono);margin-bottom:14px;flex-shrink:0;">Tap to toggle · multiple allowed</div>
-  <div id="costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;align-content:start;"></div>
-  <div onclick="clearAllAccessories()" style="margin-top:14px;padding:12px;text-align:center;font-size:12px;color:rgba(196,122,107,.7);font-family:var(--font-mono);cursor:pointer;border:1px solid rgba(196,122,107,.2);border-radius:6px;flex-shrink:0;">✕ Remove All</div>
+  <div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+    <div style="font-size:10px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:var(--font-mono);padding:12px 20px 8px;text-transform:uppercase;">AR Filters (DeepAR)</div>
+    <div id="stage-deepar-grid" style="padding:0 20px 8px;"></div>
+    <div style="margin:8px 20px;border-top:1px solid rgba(255,255,255,.08);"></div>
+    <div style="font-size:10px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:var(--font-mono);padding:0 20px 8px;text-transform:uppercase;">Basic Overlays</div>
+    <div id="costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:0 20px 16px;align-content:start;"></div>
+    <div onclick="clearAllAccessories()" style="margin:8px 20px 20px;padding:12px;text-align:center;font-size:12px;color:rgba(196,122,107,.7);font-family:var(--font-mono);cursor:pointer;border:1px solid rgba(196,122,107,.2);border-radius:6px;">✕ Remove All Accessories</div>
+  </div>
 </div>
 
 <!-- Quality Picker Overlay -->
@@ -430,7 +435,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.96</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.97</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -737,18 +742,49 @@ function getEmojiImage(emoji, size=120){
 }
 
 function showCostumePicker(){
+  buildStageDeepARGrid();
   const grid = document.getElementById('costume-grid');
   grid.innerHTML = '';
   ACCESSORIES.forEach(a=>{
     const active = activeAccessories.has(a.id);
     const card = document.createElement('div');
     card.id = 'acc-'+a.id;
-    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'var(--color-gold-dim)':'var(--color-white-soft)'};background:${active?'var(--color-gold-faint)':'var(--color-white-ghost)'};-webkit-user-select:none;`;
-    card.innerHTML = `<div style="font-size:28px;margin-bottom:4px;">${a.emoji}</div><div style="font-size:9px;color:var(--color-text-faint);font-family:var(--font-mono);">${a.label}</div>`;
+    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'rgba(255,200,80,.6)':'rgba(255,255,255,.15)'};background:${active?'rgba(255,200,80,.15)':'rgba(255,255,255,.05)'};-webkit-user-select:none;`;
+    card.innerHTML = `<div style="font-size:28px;margin-bottom:4px;">${a.emoji}</div><div style="font-size:9px;color:rgba(255,220,150,.75);font-family:var(--font-mono);">${a.label}</div>`;
     card.onclick = ()=>{ toggleAccessory(a.id); };
     grid.appendChild(card);
   });
   document.getElementById('costume-overlay').style.display='flex';
+}
+
+function buildStageDeepARGrid(){
+  const grid = document.getElementById('stage-deepar-grid');
+  if(!grid) return;
+  grid.innerHTML = '';
+  const categories = [...new Set(DEEPAR_EFFECTS.map(e=>e.category))];
+  categories.forEach(cat=>{
+    const effects = DEEPAR_EFFECTS.filter(e=>e.category===cat);
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:9px;color:rgba(255,200,80,.45);letter-spacing:.1em;font-family:var(--font-mono);padding:6px 0 4px;text-transform:uppercase;';
+    label.textContent = cat;
+    grid.appendChild(label);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;';
+    effects.forEach(eff=>{
+      const active = deepARSlots[eff.slot] === eff.url;
+      const card = document.createElement('div');
+      card.id = 'stage-dar-'+eff.id;
+      card.style.cssText = `padding:8px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'rgba(255,200,80,.6)':'rgba(255,255,255,.12)'};background:${active?'rgba(255,200,80,.15)':'rgba(255,255,255,.04)'};`;
+      card.innerHTML = `<div style="font-size:22px;margin-bottom:3px;">${eff.emoji}</div><div style="font-size:9px;color:rgba(255,220,150,.75);font-family:var(--font-mono);">${eff.label}</div>`;
+      card.onclick = ()=>{
+        const isActive = deepARSlots[eff.slot] === eff.url;
+        setDeepAREffect(eff.slot, isActive ? null : eff.url);
+        setTimeout(buildStageDeepARGrid, 400);
+      };
+      row.appendChild(card);
+    });
+    grid.appendChild(row);
+  });
 }
 
 function hideCostumePicker(){
