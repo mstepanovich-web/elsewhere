@@ -308,7 +308,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.97</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.99</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -435,7 +435,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.97</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.99</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1466,6 +1466,7 @@ const DEEPAR_BASE = 'https://cdn.jsdelivr.net/npm/deepar/';
 let deepARInst   = null;  // DeepAR SDK instance
 let deepARReady  = false; // true once initialized
 let deepARBgReady = false; // true once background_replacement effect loaded
+let deepARProcessing = false; // true when DeepAR has active effects — skip seg that frame
 let deepARCanvas = null;  // offscreen canvas DeepAR renders into
 
 // Effect slot map — multiple slots can be active simultaneously
@@ -1552,12 +1553,15 @@ function startSegmentation(vid){
     }
     segPending=res;
   });
-  // MediaPipe mutex — seg and pose share WASM runtime, must never run simultaneously
+  // Segmentation loop — throttles when DeepAR is active to reduce video element contention
   let mediapipeBusy = false;
-
-  // Segmentation loop — runs every frame, skips if MediaPipe busy
+  let segFrameCount = 0;
   async function segLoop(){
-    if(vid.readyState >= 2 && !mediapipeBusy){
+    segFrameCount++;
+    // When DeepAR is processing, run seg every 4th frame to reduce conflict
+    // When DeepAR is idle, run every frame for best quality
+    const segInterval = deepARProcessing ? 4 : 1;
+    if(segFrameCount % segInterval === 0 && vid.readyState >= 2 && !mediapipeBusy){
       mediapipeBusy = true;
       try{ await seg.send({image:vid}); }catch(e){ log('seg.send error: '+e.message,'err'); }
       mediapipeBusy = false;
@@ -1566,11 +1570,11 @@ function startSegmentation(vid){
   }
   segLoop();
 
-  // Pose loop — only runs when needed, skips if MediaPipe busy
+  // Pose loop — only runs when needed, skips if MediaPipe busy or DeepAR active
   let poseFrameCount = 0;
   async function poseLoop(){
     poseFrameCount++;
-    if(poseFrameCount % 3 === 0 && vid.readyState >= 2 &&
+    if(poseFrameCount % 6 === 0 && vid.readyState >= 2 &&
        (guideActive || activeAccessories.size > 0) && poseInst && !mediapipeBusy){
       mediapipeBusy = true;
       try{ await poseInst.send({image:vid}); }catch(e){}
@@ -1662,6 +1666,9 @@ async function setDeepAREffect(slot, url){
     // Pause DeepAR processing when no filters active (prevents watermark showing)
     const anyActive = Object.values(deepARSlots).some(v => v && v !== 'clear');
     deepARInst.setPaused(!anyActive);
+    // When DeepAR is active, it competes with MediaPipe for the video element
+    // Signal the seg/pose loops via a global flag
+    deepARProcessing = anyActive;
   }catch(e){ log('DeepAR effect error: '+e.message,'err'); }
 }
 // guideActive, handRaised, handProgress, handStart, guideClosed declared at top of script
@@ -3016,7 +3023,12 @@ function renderLoop(){
     // DeepAR AR filter overlay — only when a filter slot is actually active
     const deepARFilterActive = deepARReady && deepARCanvas &&
       Object.entries(deepARSlots).some(([s,u])=> u && u !== 'clear' && s !== 'bg');
-    if(deepARFilterActive){
+    if(deepARFilterActive && segPending){
+      // Draw DeepAR through the same segmentation mask as drawSinger
+      // This works on both Classic Stage and venues
+      drawSinger(deepARCanvas, segPending.segmentationMask);
+    } else if(deepARFilterActive && !segPending){
+      // No mask available — use source-atop as fallback (works on venues only)
       const rect = singerRect();
       const zW = rect.w * zoomFactor;
       const zH = rect.h * zoomFactor;
