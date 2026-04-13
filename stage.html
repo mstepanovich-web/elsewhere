@@ -308,7 +308,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.78</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.79</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -430,7 +430,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.78</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.79</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1531,34 +1531,47 @@ async function startDeepAR(vid){
     deepARCanvas.width  = vid.videoWidth  || 640;
     deepARCanvas.height = vid.videoHeight || 480;
 
-    log('DeepAR: calling initialize with effect: '+ELSEWHERE_EFFECTS_BASE+'background_replacement.deepar','info');
+    log('DeepAR: calling initialize (no effect at init)...','info');
     deepARInst = await deepar.initialize({
       licenseKey: DEEPAR_KEY,
       canvas:     deepARCanvas,
-      effect: ELSEWHERE_EFFECTS_BASE + 'background_replacement.deepar',
       additionalOptions: {
         cameraConfig: { disableDefaultCamera: true }
       }
     });
-    log('DeepAR: initialize() resolved','ok');
+    log('DeepAR: initialize() resolved ✓','ok');
 
     deepARInst.setVideoElement(vid, false);
     deepARCanvas = deepARInst.getCanvas();
 
-    // Wire up DeepAR callbacks for full visibility
+    // Wire up callbacks
     deepARInst.callbacks.onInitialize        = ()=> log('DeepAR CB: onInitialize','ok');
     deepARInst.callbacks.onEffectSwitched    = (e)=> log('DeepAR CB: onEffectSwitched — '+JSON.stringify(e),'ok');
-    deepARInst.callbacks.onFaceVisibilityChanged = (v)=> log('DeepAR CB: face visible='+v,'info');
     deepARInst.callbacks.onError             = (e,m)=> log('DeepAR CB: ERROR code='+e+' msg='+m,'err');
-    deepARInst.callbacks.onImageVisibilityChanged = (v)=> log('DeepAR CB: image visible='+v,'info');
 
-    deepARReady  = true;
-    deepARBgReady = true;
-    segOk = true;
-
-    document.getElementById('sdot').className='dot ok';
-    document.getElementById('slbl').textContent='Compositing';
-    log('DeepAR: ready ✓ background removal active','ok');
+    // Test: fetch the effect file manually first to check CORS/content-type
+    const bgUrl = ELSEWHERE_EFFECTS_BASE + 'background_replacement.deepar';
+    log('DeepAR: testing fetch of '+bgUrl,'info');
+    try{
+      const resp = await fetch(bgUrl);
+      log('DeepAR: fetch status='+resp.status+' type='+resp.headers.get('content-type')+' size='+resp.headers.get('content-length'),'info');
+      if(!resp.ok) throw new Error('HTTP '+resp.status);
+      const buf = await resp.arrayBuffer();
+      log('DeepAR: file fetched ok, '+buf.byteLength+' bytes — loading into DeepAR...','ok');
+      // Pass ArrayBuffer directly to avoid any URL/CORS issue
+      await deepARInst.switchEffect(buf, { slot: 'background' });
+      log('DeepAR: background removal active ✓','ok');
+      deepARReady  = true;
+      deepARBgReady = true;
+      segOk = true;
+      document.getElementById('sdot').className='dot ok';
+      document.getElementById('slbl').textContent='Compositing';
+    }catch(e){
+      log('DeepAR: background load failed: '+e.message,'err');
+      deepARReady = true;
+      // Fall back to MediaPipe for background removal
+      startSegmentation(vid);
+    }
 
     startDeepARLoop(vid);
 
