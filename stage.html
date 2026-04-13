@@ -306,7 +306,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.59</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.60</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -428,7 +428,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.59</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.60</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -2009,28 +2009,36 @@ function initHeadTracking(){
     }
   });
 
-  // FaceMesh head tracking (runs alongside drag — drag overrides when active)
-  if(typeof FaceMesh!=='undefined' && camVideo && camVideo.srcObject){
-    const fm=new FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
-    fm.setOptions({maxNumFaces:1,refineLandmarks:false,minDetectionConfidence:.5,minTrackingConfidence:.5});
-    fm.onResults(res=>{
-      if(!res.multiFaceLandmarks||!res.multiFaceLandmarks[0]) return;
-      const lm=res.multiFaceLandmarks[0];
-      lastFaceLandmarks = lm; // always store for accessories
-      if(dragging) return; // don't update head tracking during drag
+  initFaceMesh();
+}
+
+let faceMeshInit = false;
+function initFaceMesh(){
+  if(faceMeshInit) return; faceMeshInit=true;
+  if(typeof FaceMesh==='undefined'){ log('FaceMesh lib not loaded','err'); return; }
+  if(!camVideo || !camVideo.srcObject){ log('FaceMesh: camVideo not ready, retrying in 1s','warn'); setTimeout(initFaceMesh,1000); faceMeshInit=false; return; }
+  log('FaceMesh: initializing','info');
+  const fm=new FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
+  fm.setOptions({maxNumFaces:1,refineLandmarks:false,minDetectionConfidence:.5,minTrackingConfidence:.5});
+  fm.onResults(res=>{
+    if(!res.multiFaceLandmarks||!res.multiFaceLandmarks[0]){ lastFaceLandmarks=null; return; }
+    const lm=res.multiFaceLandmarks[0];
+    lastFaceLandmarks = lm;
+    if(viewMode==='singer'){
+      // Only drive head tracking in singer view
       const nose=lm[1],lE=lm[234],rE=lm[454],fh=lm[10],ch=lm[152];
       const emx=(lE.x+rE.x)/2,esp=Math.abs(rE.x-lE.x)||.001;
       tYaw  = -(nose.x-emx)/(esp*.5)*75;
       const fH=Math.abs(ch.y-fh.y)||.001,fmy=(fh.y+ch.y)/2;
       tPitch= (nose.y-fmy)/(fH*.5)*55;
-    });
-    // Use setInterval to send frames — avoids conflict with segmentation Camera loop
-    setInterval(async()=>{
-      if(camVideo && camVideo.readyState>=2){
-        try{ await fm.send({image:camVideo}); }catch(e){}
-      }
-    }, 100);
-  }
+    }
+  });
+  setInterval(async()=>{
+    if(camVideo && camVideo.readyState>=2){
+      try{ await fm.send({image:camVideo}); }catch(e){}
+    }
+  }, 100);
+  log('FaceMesh: running','ok');
 }
 
 // ═══════════════════════════════════════
@@ -2857,6 +2865,7 @@ function enterStage(){
       showGuide();
       startSegmentation(camVideo);
       startPoseDetection(camVideo);
+      initFaceMesh(); // start FaceMesh immediately — needed for accessories in audience view
       publishCanvasToAgora();
       initVenueMode();
       initAudienceDrag();
