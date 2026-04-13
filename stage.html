@@ -1,25 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Elsewhere · Stage</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,500;1,300&family=DM+Mono:wght@300;400&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;}
-body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mono',monospace;cursor:none;}
+body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--font-mono);cursor:none;}
 
 /* ── VENUE PICKER ── */
 #venue-picker{display:flex;flex-direction:column;align-items:center;gap:10px;margin:10px 0;width:100%;max-width:560px;}
-#venue-picker-label{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:'DM Mono',monospace;}
+#venue-picker-label{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:var(--font-mono);}
 #venue-grid{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:560px;}
 .venue-card{
-  width:100px;padding:8px 6px;background:rgba(255,200,80,.04);border:1px solid rgba(255,200,80,.12);
+  width:100px;padding:8px 6px;background:rgba(255,200,80,.04);border:1px solid var(--color-gold-faint);
   border-radius:6px;cursor:pointer;text-align:center;transition:all .15s;
-  font-family:'DM Mono',monospace;
+  font-family:var(--font-mono);
 }
-.venue-card:hover{background:rgba(255,200,80,.1);border-color:rgba(255,200,80,.35);}
-.venue-card.selected{background:rgba(255,200,80,.14);border-color:rgba(255,200,80,.7);box-shadow:0 0 10px rgba(255,200,80,.2);}
+.venue-card:hover{background:var(--color-border-dim);border-color:rgba(255,200,80,.35);}
+.venue-card.selected{background:rgba(255,200,80,.14);border-color:var(--color-gold-dim);box-shadow:0 0 10px var(--color-gold-border);}
 .venue-icon{font-size:22px;margin-bottom:4px;}
 .venue-name{font-size:9px;letter-spacing:.04em;color:rgba(255,220,150,.65);line-height:1.3;}
 #aud-layer{position:fixed;inset:0;z-index:2;}
@@ -27,21 +27,21 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
 /* Lyrics */
 #lw{position:fixed;bottom:9%;left:0;right:0;text-align:center;z-index:50;pointer-events:none;}
-#lm{font-family:'Cormorant Garamond',serif;font-size:clamp(22px,3.2vw,50px);font-weight:500;color:#fff;padding:0 6%;line-height:1.15;text-shadow:0 0 25px rgba(255,220,100,.9),0 0 50px rgba(255,180,60,.5),0 2px 6px #000;}
-#ln{font-family:'Cormorant Garamond',serif;font-size:clamp(13px,1.8vw,28px);font-weight:300;color:rgba(255,220,150,.38);padding:5px 8% 0;text-shadow:0 0 10px rgba(255,180,60,.3),0 1px 4px #000;}
+#lm{font-family:var(--font-display);font-size:clamp(22px,3.2vw,50px);font-weight:500;color:#fff;padding:0 6%;line-height:1.15;text-shadow:0 0 25px rgba(255,220,100,.9),0 0 50px rgba(255,180,60,.5),0 2px 6px #000;}
+#ln{font-family:var(--font-display);font-size:clamp(13px,1.8vw,28px);font-weight:300;color:rgba(255,220,150,.38);padding:5px 8% 0;text-shadow:0 0 10px rgba(255,180,60,.3),0 1px 4px #000;}
 
 /* Top bar */
-#bar{position:fixed;top:0;left:0;right:0;height:44px;background:rgba(0,0,0,.82);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:space-between;padding:0 14px;z-index:300;gap:10px;border-bottom:1px solid rgba(255,200,80,.12);}
+#bar{position:fixed;top:0;left:0;right:0;height:44px;background:rgba(0,0,0,.82);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:space-between;padding:0 14px;z-index:300;gap:10px;border-bottom:1px solid var(--color-gold-faint);}
 #bar-center{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;}
 .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
-.ok{background:#00e87a;box-shadow:0 0 5px #00e87a;}
+.ok{background:var(--color-green);box-shadow:0 0 5px var(--color-green);}
 .ld{background:#f5c842;animation:blink 1s infinite;}
 .of{background:rgba(255,200,80,.35);}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
 .bi{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,220,150,.65);white-space:nowrap;}
 #rcode-wrap{font-size:15px;letter-spacing:.22em;font-weight:500;color:rgba(255,200,80,.98);text-align:center;cursor:pointer;flex-shrink:0;text-shadow:0 0 10px rgba(255,200,80,.4);}
 #rcode-wrap small{display:block;font-size:8px;letter-spacing:.1em;color:rgba(255,200,120,.5);margin-bottom:1px;font-weight:300;}
-#vtoggle{padding:5px 11px;background:rgba(255,200,80,.12);border:1px solid rgba(255,200,80,.3);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.85);cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;}
+#vtoggle{padding:5px 11px;background:var(--color-gold-faint);border:1px solid rgba(255,200,80,.3);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-dim);cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;}
 #vtoggle:hover{background:rgba(255,200,80,.22);color:#fff;}
 #vtoggle.pano{border-color:rgba(100,200,255,.5);color:rgba(180,230,255,.9);background:rgba(100,200,255,.12);}
 
@@ -53,9 +53,9 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
 /* Controls */
 #ctrl{position:fixed;bottom:16px;right:14px;display:flex;gap:8px;z-index:200;}
-.btn{padding:7px 14px;background:rgba(0,0,0,.7);border:1px solid rgba(255,200,80,.35);border-radius:4px;font-size:10px;letter-spacing:.1em;color:rgba(255,220,150,.92);cursor:pointer;text-transform:uppercase;transition:all .15s;font-family:'DM Mono',monospace;backdrop-filter:blur(4px);}
-.btn:hover{background:rgba(255,200,80,.2);border-color:rgba(255,200,80,.6);color:#fff;}
-.input{width:100%;padding:10px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:rgba(255,220,150,.9);font-size:14px;font-family:'DM Mono',monospace;outline:none;}
+.btn{padding:7px 14px;background:rgba(0,0,0,.7);border:1px solid rgba(255,200,80,.35);border-radius:4px;font-size:10px;letter-spacing:.1em;color:rgba(255,220,150,.92);cursor:pointer;text-transform:uppercase;transition:all .15s;font-family:var(--font-mono);backdrop-filter:blur(4px);}
+.btn:hover{background:var(--color-gold-border);border-color:rgba(255,200,80,.6);color:#fff;}
+.input{width:100%;padding:10px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:var(--color-text);font-size:14px;font-family:var(--font-mono);outline:none;}
 .input::placeholder{color:rgba(255,200,120,.25);}
 .input:focus{border-color:rgba(255,200,80,.35);}
 
@@ -79,7 +79,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   padding:28px 32px;
 }
 #idle-panel.pulse{
-  border-color:rgba(255,200,80,.7);
+  border-color:var(--color-gold-dim);
   animation:qr-pulse 1.2s infinite;
 }
 @keyframes qr-pulse{
@@ -89,8 +89,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 }
 #idle-qr-wrap{background:#fff;padding:12px;border-radius:8px;}
 #idle-qr-canvas{display:block;}
-#idle-msg{font-size:13px;color:rgba(255,220,150,.85);letter-spacing:.06em;line-height:1.8;max-width:240px;}
-#idle-msg strong{color:rgba(255,220,150,.95);display:block;font-size:15px;margin-bottom:4px;font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:300;}
+#idle-msg{font-size:13px;color:var(--color-text-dim);letter-spacing:.06em;line-height:1.8;max-width:240px;}
+#idle-msg strong{color:rgba(255,220,150,.95);display:block;font-size:15px;margin-bottom:4px;font-family:var(--font-display);font-style:italic;font-weight:300;}
 #idle-room{font-size:11px;color:rgba(255,200,120,.4);letter-spacing:.16em;text-transform:uppercase;margin-top:4px;}
 
 /* ── SEARCH RESULTS OVERLAY ON TV ── */
@@ -100,17 +100,17 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   display:none;flex-direction:column;
   padding:40px 5%;
 }
-#tv-search-title{font-family:'Cormorant Garamond',serif;font-size:clamp(18px,2.5vw,36px);color:rgba(255,220,150,.6);font-style:italic;margin-bottom:20px;letter-spacing:.04em;}
-#tv-search-query{font-family:'Cormorant Garamond',serif;font-size:clamp(28px,4vw,58px);color:rgba(255,220,150,.95);font-style:italic;margin-bottom:28px;text-shadow:0 0 30px rgba(255,180,60,.3);}
+#tv-search-title{font-family:var(--font-display);font-size:clamp(18px,2.5vw,36px);color:rgba(255,220,150,.6);font-style:italic;margin-bottom:20px;letter-spacing:.04em;}
+#tv-search-query{font-family:var(--font-display);font-size:clamp(28px,4vw,58px);color:rgba(255,220,150,.95);font-style:italic;margin-bottom:28px;text-shadow:0 0 30px rgba(255,180,60,.3);}
 #tv-results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;overflow:hidden;}
 .tv-result{
-  background:rgba(255,200,80,.05);border:1px solid rgba(255,200,80,.12);border-radius:8px;
+  background:rgba(255,200,80,.05);border:1px solid var(--color-gold-faint);border-radius:8px;
   padding:14px;cursor:pointer;transition:all .2s;position:relative;
 }
-.tv-result.selected{border-color:rgba(255,200,80,.6);background:rgba(255,200,80,.12);box-shadow:0 0 20px rgba(255,200,80,.15);}
+.tv-result.selected{border-color:rgba(255,200,80,.6);background:var(--color-gold-faint);box-shadow:0 0 20px var(--color-border-dim);}
 .tv-result-num{position:absolute;top:10px;left:12px;font-size:11px;color:rgba(255,200,120,.4);letter-spacing:.08em;}
-.tv-result-thumb{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:4px;background:rgba(255,200,80,.06);margin-bottom:8px;}
-.tv-result-title{font-size:clamp(11px,1.2vw,16px);color:rgba(255,220,150,.85);line-height:1.3;margin-bottom:4px;}
+.tv-result-thumb{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:4px;background:var(--color-gold-ghost);margin-bottom:8px;}
+.tv-result-title{font-size:clamp(11px,1.2vw,16px);color:var(--color-text-dim);line-height:1.3;margin-bottom:4px;}
 .tv-result-meta{font-size:clamp(9px,0.9vw,12px);color:rgba(255,200,120,.4);letter-spacing:.04em;}
 
 /* ── SELECTED SONG CARD ON TV ── */
@@ -119,14 +119,14 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   z-index:455;display:none;
   flex-direction:row;align-items:center;gap:14px;
   background:rgba(4,2,6,.88);
-  border-top:1px solid rgba(255,200,80,.15);
-  border-bottom:1px solid rgba(255,200,80,.1);
+  border-top:1px solid var(--color-border-dim);
+  border-bottom:1px solid var(--color-border-dim);
   padding:12px 28px;
   backdrop-filter:blur(12px);
 }
-#tv-song-thumb{width:52px;height:36px;object-fit:cover;border-radius:4px;background:rgba(255,200,80,.06);flex-shrink:0;}
+#tv-song-thumb{width:52px;height:36px;object-fit:cover;border-radius:4px;background:var(--color-gold-ghost);flex-shrink:0;}
 #tv-song-artist{font-size:10px;color:rgba(255,200,120,.5);letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-#tv-song-title{font-family:'Cormorant Garamond',serif;font-size:clamp(14px,1.8vw,24px);color:rgba(255,220,150,.95);font-style:italic;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#tv-song-title{font-family:var(--font-display);font-size:clamp(14px,1.8vw,24px);color:rgba(255,220,150,.95);font-style:italic;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #tv-song-hint{font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.1em;text-transform:uppercase;flex-shrink:0;}
 
 /* ── COMMENT BAR ── */
@@ -134,7 +134,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   position:fixed;right:0;top:42px;bottom:3px;
   width:280px;z-index:200;
   background:rgba(4,2,6,.85);backdrop-filter:blur(8px);
-  border-left:1px solid rgba(255,200,80,.1);
+  border-left:1px solid var(--color-border-dim);
   display:none;flex-direction:column;
   transform:translateX(100%);transition:transform .3s ease;
 }
@@ -142,7 +142,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 #cb-header{padding:12px 14px;border-bottom:1px solid rgba(255,200,80,.08);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.4);display:flex;justify-content:space-between;align-items:center;}
 #cb-close{cursor:pointer;color:rgba(255,200,120,.4);font-size:14px;}
 #cb-feed{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:8px;}
-.cb-item{font-size:12px;color:rgba(255,220,150,.8);padding:7px 10px;background:rgba(255,200,80,.04);border-radius:6px;border-left:2px solid rgba(255,200,80,.2);line-height:1.5;}
+.cb-item{font-size:12px;color:rgba(255,220,150,.8);padding:7px 10px;background:rgba(255,200,80,.04);border-radius:6px;border-left:2px solid var(--color-gold-border);line-height:1.5;}
 .cb-item .cb-name{font-size:10px;color:rgba(255,200,120,.4);margin-bottom:2px;letter-spacing:.06em;}
 
 /* ── VIDEO CHAT OVERLAYS ── */
@@ -159,14 +159,14 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   box-shadow:0 8px 32px rgba(0,0,0,.7);
 }
 .vc-tile video{width:100%;height:100%;object-fit:cover;}
-.vc-name{position:absolute;bottom:0;left:0;right:0;padding:6px 10px;font-size:12px;color:rgba(255,220,150,.9);background:rgba(0,0,0,.6);letter-spacing:.04em;}
+.vc-name{position:absolute;bottom:0;left:0;right:0;padding:6px 10px;font-size:12px;color:var(--color-text);background:rgba(0,0,0,.6);letter-spacing:.04em;}
 
 /* Song panel */
 .panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(4,2,6,.97);border:1px solid rgba(255,200,80,.18);border-radius:8px;padding:22px;z-index:800;display:none;min-width:340px;}
-.panel h2{font-family:'Cormorant Garamond',serif;font-size:20px;color:rgba(255,220,150,.85);font-style:italic;margin-bottom:14px;}
-.so{padding:10px 14px;border:1px solid rgba(255,200,80,.1);border-radius:3px;margin-bottom:7px;cursor:pointer;transition:all .15s;}
+.panel h2{font-family:var(--font-display);font-size:20px;color:var(--color-text-dim);font-style:italic;margin-bottom:14px;}
+.so{padding:10px 14px;border:1px solid var(--color-border-dim);border-radius:3px;margin-bottom:7px;cursor:pointer;transition:all .15s;}
 .so:hover{background:rgba(255,200,80,.07);border-color:rgba(255,200,80,.28);}
-.so-t{font-family:'Cormorant Garamond',serif;font-size:15px;color:rgba(255,220,150,.75);margin-bottom:2px;}
+.so-t{font-family:var(--font-display);font-size:15px;color:rgba(255,220,150,.75);margin-bottom:2px;}
 .so-a{font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.08em;text-transform:uppercase;}
 
 /* ── POSITIONING GUIDE ───────────────────────────────────── */
@@ -184,46 +184,46 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 #gpwrap{width:270px;display:none;}
 #gplbl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(0,232,122,.75);text-align:center;margin-bottom:5px;}
 #gptrack{height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;}
-#gpfill{height:100%;width:0%;border-radius:2px;background:linear-gradient(90deg,#00e87a,#00ffa3);box-shadow:0 0 8px rgba(0,232,122,.5);}
-#gmanual{margin-top:4px;padding:11px 26px;background:rgba(255,200,80,.1);border:1px solid rgba(255,200,80,.4);border-radius:4px;font-size:13px;color:rgba(255,220,150,.9);cursor:pointer;font-family:'DM Mono',monospace;letter-spacing:.08em;}
-#gmanual:hover{background:rgba(255,200,80,.2);}
+#gpfill{height:100%;width:0%;border-radius:2px;background:linear-gradient(90deg,var(--color-green),#00ffa3);box-shadow:0 0 8px rgba(0,232,122,.5);}
+#gmanual{margin-top:4px;padding:11px 26px;background:var(--color-border-dim);border:1px solid rgba(255,200,80,.4);border-radius:4px;font-size:13px;color:var(--color-text);cursor:pointer;font-family:var(--font-mono);letter-spacing:.08em;}
+#gmanual:hover{background:var(--color-gold-border);}
 
 /* Countdown */
 #cd{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:700;background:rgba(0,0,0,.4);}
-#cdn{font-family:'Cormorant Garamond',serif;font-size:18vw;color:rgba(255,220,150,.88);text-shadow:0 0 80px rgba(255,180,60,.4);}
+#cdn{font-family:var(--font-display);font-size:18vw;color:rgba(255,220,150,.88);text-shadow:0 0 80px rgba(255,180,60,.4);}
 
 /* Applause */
 #ap{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:600;pointer-events:none;}
-#apt{font-family:'Cormorant Garamond',serif;font-size:clamp(50px,9vw,110px);color:rgba(255,220,150,.92);font-style:italic;text-shadow:0 0 60px rgba(255,180,60,.6);animation:apan 2.8s ease forwards;}
+#apt{font-family:var(--font-display);font-size:clamp(50px,9vw,110px);color:rgba(255,220,150,.92);font-style:italic;text-shadow:0 0 60px rgba(255,180,60,.6);animation:apan 2.8s ease forwards;}
 @keyframes apan{0%{opacity:0;transform:scale(.8)}20%{opacity:1;transform:scale(1)}75%{opacity:1}100%{opacity:0;transform:translateY(-30px)}}
 
 /* Start screen */
 #start{position:fixed;inset:0;background:rgba(0,0,0,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:13px;z-index:900;}
-#start h1{font-family:'Cormorant Garamond',serif;font-size:clamp(38px,6vw,78px);color:rgba(255,220,150,.92);font-style:italic;text-shadow:0 0 50px rgba(255,180,60,.35);letter-spacing:.06em;}
+#start h1{font-family:var(--font-display);font-size:clamp(38px,6vw,78px);color:rgba(255,220,150,.92);font-style:italic;text-shadow:0 0 50px rgba(255,180,60,.35);letter-spacing:.06em;}
 #start p{font-size:12px;color:rgba(255,200,120,.4);letter-spacing:.16em;text-transform:uppercase;}
 .sf{font-size:11px;color:rgba(255,200,120,.28);display:flex;align-items:center;gap:8px;}
 .fd{width:4px;height:4px;border-radius:50%;background:rgba(255,200,80,.5);flex-shrink:0;}
-.sb{margin-top:8px;padding:13px 36px;background:rgba(255,200,80,.1);border:1px solid rgba(255,200,80,.38);border-radius:3px;font-size:15px;font-family:'Cormorant Garamond',serif;color:rgba(255,220,150,.88);cursor:pointer;letter-spacing:.08em;transition:all .2s;}
+.sb{margin-top:8px;padding:13px 36px;background:var(--color-border-dim);border:1px solid rgba(255,200,80,.38);border-radius:3px;font-size:15px;font-family:var(--font-display);color:rgba(255,220,150,.88);cursor:pointer;letter-spacing:.08em;transition:all .2s;}
 .sb:hover{background:rgba(255,200,80,.18);}
 #shint{font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:1.9;}
 
 /* ── ON-SCREEN DEBUG LOG ── */
 #dbg{
   position:fixed;top:44px;right:0;width:320px;max-height:50vh;
-  background:rgba(0,0,0,.88);border-left:1px solid rgba(255,200,80,.15);
-  font-size:10px;font-family:'DM Mono',monospace;color:rgba(255,220,150,.8);
+  background:rgba(0,0,0,.88);border-left:1px solid var(--color-border-dim);
+  font-size:10px;font-family:var(--font-mono);color:rgba(255,220,150,.8);
   overflow-y:auto;z-index:999;display:none;padding:6px;
 }
 #dbg-toggle{
   position:fixed;top:46px;right:4px;z-index:1000;
-  background:rgba(0,0,0,.7);border:1px solid rgba(255,200,80,.25);
-  border-radius:4px;padding:3px 7px;font-size:9px;color:rgba(255,200,80,.7);
-  cursor:pointer;font-family:'DM Mono',monospace;letter-spacing:.06em;
+  background:rgba(0,0,0,.7);border:1px solid var(--color-border);
+  border-radius:4px;padding:3px 7px;font-size:9px;color:var(--color-gold-dim);
+  cursor:pointer;font-family:var(--font-mono);letter-spacing:.06em;
 }
 .dl{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04);line-height:1.4;}
 .dl.warn{color:rgba(255,150,80,.9);}
 .dl.err{color:rgba(196,100,80,.9);}
-.dl.ok{color:rgba(0,232,122,.8);}
+.dl.ok{color:var(--color-green-dim);}
 </style>
 </head>
 <body>
@@ -238,8 +238,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <!-- Venue transition overlay -->
 <div id="venue-transition" style="position:fixed;inset:0;z-index:10;background:#080508;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;pointer-events:none;transition:opacity 0.3s;">
   <div id="venue-transition-icon" style="font-size:48px;"></div>
-  <div id="venue-transition-name" style="font-family:'Cormorant Garamond',serif;font-size:28px;color:rgba(255,220,150,.9);font-style:italic;letter-spacing:.05em;"></div>
-  <div style="font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.15em;font-family:'DM Mono',monospace;text-transform:uppercase;">Loading venue...</div>
+  <div id="venue-transition-name" style="font-family:var(--font-display);font-size:28px;color:var(--color-text);font-style:italic;letter-spacing:.05em;"></div>
+  <div style="font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.15em;font-family:var(--font-mono);text-transform:uppercase;">Loading venue...</div>
 </div>
 <video id="webcam" autoplay playsinline muted></video>
 <canvas id="proc"></canvas>
@@ -251,8 +251,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
 <!-- On-screen debug log -->
 <div id="dbg-toggle" onclick="toggleDbg()">LOG</div>
-<div id="set-center-btn" onclick="logCurrentYaw('singer')" style="display:none;position:fixed;top:54px;right:120px;z-index:400;padding:4px 10px;background:rgba(0,232,122,.15);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;font-family:'DM Mono',monospace;">Set Singer View</div>
-<div id="set-aud-btn" onclick="logCurrentYaw('audience')" style="display:none;position:fixed;top:54px;right:240px;z-index:400;padding:4px 10px;background:rgba(255,200,80,.15);border:1px solid rgba(255,200,80,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,80,.8);cursor:pointer;font-family:'DM Mono',monospace;">Set Audience View</div>
+<div id="set-center-btn" onclick="logCurrentYaw('singer')" style="display:none;position:fixed;top:54px;right:120px;z-index:400;padding:4px 10px;background:rgba(0,232,122,.15);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;font-family:var(--font-mono);">Set Singer View</div>
+<div id="set-aud-btn" onclick="logCurrentYaw('audience')" style="display:none;position:fixed;top:54px;right:240px;z-index:400;padding:4px 10px;background:var(--color-border-dim);border:1px solid rgba(255,200,80,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,80,.8);cursor:pointer;font-family:var(--font-mono);">Set Audience View</div>
 <div id="dbg"></div>
 
 <div id="rx"></div>
@@ -303,14 +303,14 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   <div id="bar-center">
     <div id="rcode-wrap" title="Click to copy"><small>Room Code</small><span id="rcode">––––––</span></div>
     <div id="qr-toggle" onclick="showSongs()" title="Show QR code"
-      style="font-size:10px;letter-spacing:.08em;cursor:pointer;padding:4px 8px;opacity:0.6;-webkit-user-select:none;font-family:'DM Mono',monospace;border:1px solid rgba(255,200,80,.2);border-radius:3px;color:rgba(255,220,150,.7);"
+      style="font-size:10px;letter-spacing:.08em;cursor:pointer;padding:4px 8px;opacity:0.6;-webkit-user-select:none;font-family:var(--font-mono);border:1px solid var(--color-gold-border);border-radius:3px;color:var(--color-text-faint);"
       >QR</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.81</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.82</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
-      style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
+      style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
   </div>
 </div>
@@ -337,7 +337,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   <div style="background:#fff;padding:14px;border-radius:8px;">
     <canvas id="songs-qr-canvas" width="200" height="200"></canvas>
   </div>
-  <div style="text-align:center;font-size:13px;color:rgba(255,220,150,.7);line-height:1.8;letter-spacing:.04em;">
+  <div style="text-align:center;font-size:13px;color:var(--color-text-faint);line-height:1.8;letter-spacing:.04em;">
     Scan with your phone to search<br>and select a song
   </div>
   <div style="font-size:10px;color:rgba(255,200,120,.3);letter-spacing:.12em;text-transform:uppercase;">
@@ -364,41 +364,41 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 <div id="ap"><div id="apt">Bravo!</div></div>
 
 <!-- Stage Venue Picker Overlay -->
-<div id="stage-venue-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(4,2,6,.96);backdrop-filter:blur(8px);flex-direction:column;padding:40px 20px 24px;">
+<div id="stage-venue-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:var(--color-overlay);backdrop-filter:blur(8px);flex-direction:column;padding:40px 20px 24px;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-shrink:0;">
-    <div style="font-family:'Cormorant Garamond',serif;font-size:22px;color:rgba(255,220,150,.9);font-style:italic;">Choose Venue</div>
+    <div style="font-family:var(--font-display);font-size:22px;color:var(--color-text);font-style:italic;">Choose Venue</div>
     <div onclick="hideStageVenuePicker()" style="font-size:22px;cursor:pointer;color:rgba(255,200,120,.5);padding:4px 10px;">✕</div>
   </div>
   <div id="stage-venue-grid" style="overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;"></div>
 </div>
 
 <!-- Costume Picker Overlay -->
-<div id="costume-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(4,2,6,.96);backdrop-filter:blur(8px);flex-direction:column;padding:40px 20px 24px;">
+<div id="costume-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:var(--color-overlay);backdrop-filter:blur(8px);flex-direction:column;padding:40px 20px 24px;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-shrink:0;">
-    <div style="font-family:'Cormorant Garamond',serif;font-size:22px;color:rgba(255,220,150,.9);font-style:italic;">Accessories</div>
+    <div style="font-family:var(--font-display);font-size:22px;color:var(--color-text);font-style:italic;">Accessories</div>
     <div onclick="hideCostumePicker()" style="font-size:22px;cursor:pointer;color:rgba(255,200,120,.5);padding:4px 10px;">✕</div>
   </div>
-  <div style="font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.08em;font-family:'DM Mono',monospace;margin-bottom:14px;flex-shrink:0;">Tap to toggle · multiple allowed</div>
+  <div style="font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.08em;font-family:var(--font-mono);margin-bottom:14px;flex-shrink:0;">Tap to toggle · multiple allowed</div>
   <div id="costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;align-content:start;"></div>
-  <div onclick="clearAllAccessories()" style="margin-top:14px;padding:12px;text-align:center;font-size:12px;color:rgba(196,122,107,.7);font-family:'DM Mono',monospace;cursor:pointer;border:1px solid rgba(196,122,107,.2);border-radius:6px;flex-shrink:0;">✕ Remove All</div>
+  <div onclick="clearAllAccessories()" style="margin-top:14px;padding:12px;text-align:center;font-size:12px;color:rgba(196,122,107,.7);font-family:var(--font-mono);cursor:pointer;border:1px solid rgba(196,122,107,.2);border-radius:6px;flex-shrink:0;">✕ Remove All</div>
 </div>
 
 <!-- Quality Picker Overlay -->
-<div id="quality-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(4,2,6,.96);backdrop-filter:blur(8px);flex-direction:column;padding:40px 20px 24px;align-items:center;justify-content:center;gap:16px;">
-  <div style="font-family:'Cormorant Garamond',serif;font-size:22px;color:rgba(255,220,150,.9);font-style:italic;margin-bottom:8px;">Camera Quality</div>
-  <div class="quality-opt" data-res="standard" onclick="switchResolution('standard')" style="width:100%;max-width:360px;padding:16px 20px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);cursor:pointer;">
-    <div style="font-size:14px;color:rgba(255,220,150,.9);font-family:'DM Mono',monospace;">Standard</div>
+<div id="quality-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:var(--color-overlay);backdrop-filter:blur(8px);flex-direction:column;padding:40px 20px 24px;align-items:center;justify-content:center;gap:16px;">
+  <div style="font-family:var(--font-display);font-size:22px;color:var(--color-text);font-style:italic;margin-bottom:8px;">Camera Quality</div>
+  <div class="quality-opt" data-res="standard" onclick="switchResolution('standard')" style="width:100%;max-width:360px;padding:16px 20px;border-radius:8px;border:1px solid var(--color-white-soft);background:var(--color-white-ghost);cursor:pointer;">
+    <div style="font-size:14px;color:var(--color-text);font-family:var(--font-mono);">Standard</div>
     <div style="font-size:11px;color:rgba(255,200,120,.45);margin-top:4px;">640×480 · Lower CPU usage · Faster</div>
   </div>
-  <div class="quality-opt" data-res="hd" onclick="switchResolution('hd')" style="width:100%;max-width:360px;padding:16px 20px;border-radius:8px;border:1px solid rgba(255,200,80,.7);background:rgba(255,200,80,.12);cursor:pointer;">
-    <div style="font-size:14px;color:rgba(255,220,150,.9);font-family:'DM Mono',monospace;">HD ✓ Recommended</div>
+  <div class="quality-opt" data-res="hd" onclick="switchResolution('hd')" style="width:100%;max-width:360px;padding:16px 20px;border-radius:8px;border:1px solid var(--color-gold-dim);background:var(--color-gold-faint);cursor:pointer;">
+    <div style="font-size:14px;color:var(--color-text);font-family:var(--font-mono);">HD ✓ Recommended</div>
     <div style="font-size:11px;color:rgba(255,200,120,.45);margin-top:4px;">1280×720 · Good balance of quality and performance</div>
   </div>
-  <div class="quality-opt" data-res="fhd" onclick="switchResolution('fhd')" style="width:100%;max-width:360px;padding:16px 20px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);cursor:pointer;">
-    <div style="font-size:14px;color:rgba(255,220,150,.9);font-family:'DM Mono',monospace;">Full HD</div>
+  <div class="quality-opt" data-res="fhd" onclick="switchResolution('fhd')" style="width:100%;max-width:360px;padding:16px 20px;border-radius:8px;border:1px solid var(--color-white-soft);background:var(--color-white-ghost);cursor:pointer;">
+    <div style="font-size:14px;color:var(--color-text);font-family:var(--font-mono);">Full HD</div>
     <div style="font-size:11px;color:rgba(255,200,120,.45);margin-top:4px;">1920×1080 · Sharpest · Requires fast Mac</div>
   </div>
-  <div onclick="hideQualityPicker()" style="margin-top:8px;font-size:13px;color:rgba(255,200,120,.4);cursor:pointer;font-family:'DM Mono',monospace;">Cancel</div>
+  <div onclick="hideQualityPicker()" style="margin-top:8px;font-size:13px;color:rgba(255,200,120,.4);cursor:pointer;font-family:var(--font-mono);">Cancel</div>
 </div>
 
 <div id="start">
@@ -413,14 +413,14 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   <!-- Camera + Resolution selectors -->
   <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin:10px 0;width:100%;max-width:320px;">
     <div style="display:flex;flex-direction:column;gap:6px;width:100%;">
-      <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:'DM Mono',monospace;">Camera</div>
-      <select id="cam-select" style="background:rgba(255,200,80,.06);border:1px solid rgba(255,200,80,.25);border-radius:4px;color:rgba(255,220,150,.85);font-family:'DM Mono',monospace;font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
+      <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:var(--font-mono);">Camera</div>
+      <select id="cam-select" style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:4px;color:var(--color-text-dim);font-family:var(--font-mono);font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
         <option value="">Detecting cameras...</option>
       </select>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px;width:100%;">
-      <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:'DM Mono',monospace;">Quality</div>
-      <select id="res-select" onchange="setResolution(this.value)" style="background:rgba(255,200,80,.06);border:1px solid rgba(255,200,80,.25);border-radius:4px;color:rgba(255,220,150,.85);font-family:'DM Mono',monospace;font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
+      <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:var(--font-mono);">Quality</div>
+      <select id="res-select" onchange="setResolution(this.value)" style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:4px;color:var(--color-text-dim);font-family:var(--font-mono);font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
         <option value="hd">HD — 1280×720 (Recommended)</option>
         <option value="standard">Standard — 640×480 (Lower CPU)</option>
         <option value="fhd">Full HD — 1920×1080 (High CPU)</option>
@@ -430,7 +430,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.81</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.82</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -517,8 +517,8 @@ function showStageVenuePicker(){
   const classic = VENUES.find(v=>v.id==='default');
   if(classic){
     const el = document.createElement('div');
-    el.style.cssText = `padding:12px 14px;border-radius:10px;border:1px solid ${selectedVenueId==='default'?'rgba(255,200,80,.7)':'rgba(255,255,255,.08)'};background:${selectedVenueId==='default'?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:14px;`;
-    el.innerHTML = `<span style="font-size:26px;">🎤</span><div style="font-size:13px;color:rgba(255,220,150,.9);font-family:'DM Mono',monospace;">Classic Stage</div>`;
+    el.style.cssText = `padding:12px 14px;border-radius:10px;border:1px solid ${selectedVenueId==='default'?'var(--color-gold-dim)':'var(--color-white-soft)'};background:${selectedVenueId==='default'?'var(--color-gold-faint)':'var(--color-white-ghost)'};display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:14px;`;
+    el.innerHTML = `<span style="font-size:26px;">🎤</span><div style="font-size:13px;color:var(--color-text);font-family:var(--font-mono);">Classic Stage</div>`;
     el.onclick = ()=>{ applyStageVenue(classic); };
     grid.appendChild(el);
   }
@@ -531,7 +531,7 @@ function showStageVenuePicker(){
     // Header
     const header = document.createElement('div');
     header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 4px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:4px;';
-    header.innerHTML = `<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.6);font-family:'DM Mono',monospace;">${cat.label}</div><div style="font-size:14px;color:rgba(255,200,120,.4);transform:rotate(${isOpen?'180deg':'0deg'})">▼</div>`;
+    header.innerHTML = `<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.6);font-family:var(--font-mono);">${cat.label}</div><div style="font-size:14px;color:rgba(255,200,120,.4);transform:rotate(${isOpen?'180deg':'0deg'})">▼</div>`;
     header.onclick = ()=>{
       if(stageExpandedCats.has(cat.id)){
         stageExpandedCats.delete(cat.id);
@@ -548,8 +548,8 @@ function showStageVenuePicker(){
       venueGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;';
       catVenues.forEach(v=>{
         const card = document.createElement('div');
-        card.style.cssText = `padding:10px 6px;text-align:center;cursor:pointer;border-radius:6px;border:1px solid ${v.id===selectedVenueId?'rgba(255,200,80,.7)':'rgba(255,255,255,.08)'};background:${v.id===selectedVenueId?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};`;
-        card.innerHTML = `<div style="font-size:20px;margin-bottom:3px;">${v.icon}</div><div style="font-size:9px;color:rgba(255,220,150,.8);font-family:'DM Mono',monospace;">${v.name}</div>`;
+        card.style.cssText = `padding:10px 6px;text-align:center;cursor:pointer;border-radius:6px;border:1px solid ${v.id===selectedVenueId?'var(--color-gold-dim)':'var(--color-white-soft)'};background:${v.id===selectedVenueId?'var(--color-gold-faint)':'var(--color-white-ghost)'};`;
+        card.innerHTML = `<div style="font-size:20px;margin-bottom:3px;">${v.icon}</div><div style="font-size:9px;color:rgba(255,220,150,.8);font-family:var(--font-mono);">${v.name}</div>`;
         card.onclick = ()=>{ applyStageVenue(v); };
         venueGrid.appendChild(card);
       });
@@ -656,8 +656,8 @@ async function switchResolution(key){
 function showQualityPicker(){
   document.querySelectorAll('.quality-opt').forEach(el=>{
     const active = el.dataset.res===currentResolution;
-    el.style.borderColor = active ? 'rgba(255,200,80,.7)' : 'rgba(255,255,255,.08)';
-    el.style.background  = active ? 'rgba(255,200,80,.12)' : 'rgba(255,255,255,.03)';
+    el.style.borderColor = active ? 'var(--color-gold-dim)' : 'var(--color-white-soft)';
+    el.style.background  = active ? 'var(--color-gold-faint)' : 'var(--color-white-ghost)';
   });
   document.getElementById('quality-overlay').style.display='flex';
 }
@@ -743,8 +743,8 @@ function showCostumePicker(){
     const active = activeAccessories.has(a.id);
     const card = document.createElement('div');
     card.id = 'acc-'+a.id;
-    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'rgba(255,200,80,.7)':'rgba(255,255,255,.08)'};background:${active?'rgba(255,200,80,.12)':'rgba(255,255,255,.03)'};-webkit-user-select:none;`;
-    card.innerHTML = `<div style="font-size:28px;margin-bottom:4px;">${a.emoji}</div><div style="font-size:9px;color:rgba(255,220,150,.7);font-family:'DM Mono',monospace;">${a.label}</div>`;
+    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'var(--color-gold-dim)':'var(--color-white-soft)'};background:${active?'var(--color-gold-faint)':'var(--color-white-ghost)'};-webkit-user-select:none;`;
+    card.innerHTML = `<div style="font-size:28px;margin-bottom:4px;">${a.emoji}</div><div style="font-size:9px;color:var(--color-text-faint);font-family:var(--font-mono);">${a.label}</div>`;
     card.onclick = ()=>{ toggleAccessory(a.id); };
     grid.appendChild(card);
   });
@@ -762,8 +762,8 @@ function toggleAccessory(id){
   const card = document.getElementById('acc-'+id);
   if(card){
     const active = activeAccessories.has(id);
-    card.style.borderColor = active ? 'rgba(255,200,80,.7)' : 'rgba(255,255,255,.08)';
-    card.style.background  = active ? 'rgba(255,200,80,.12)' : 'rgba(255,255,255,.03)';
+    card.style.borderColor = active ? 'var(--color-gold-dim)' : 'var(--color-white-soft)';
+    card.style.background  = active ? 'var(--color-gold-faint)' : 'var(--color-white-ghost)';
   }
 }
 
@@ -1149,8 +1149,8 @@ function showShareToast(msg) {
     t = document.createElement('div');
     t.id = 'share-toast';
     t.style.cssText = `position:fixed;bottom:70px;left:50%;transform:translateX(-50%);
-      background:rgba(4,2,6,.97);border:1px solid rgba(255,200,80,.25);border-radius:8px;
-      padding:14px 20px;font-size:12px;color:rgba(255,220,150,.9);z-index:500;
+      background:rgba(4,2,6,.97);border:1px solid var(--color-border);border-radius:8px;
+      padding:14px 20px;font-size:12px;color:var(--color-text);z-index:500;
       max-width:90vw;text-align:center;line-height:1.7;letter-spacing:.04em;
       backdrop-filter:blur(6px);word-break:break-all;`;
     document.body.appendChild(t);
@@ -1725,12 +1725,12 @@ function runGuideLoop(gc, W, H){
     rrect(rx,ry,rw,rh,cr);
     gctx.strokeStyle = locked ? `rgba(0,232,122,1)` : 'rgba(255,200,80,1)';
     gctx.lineWidth = 4;
-    gctx.shadowColor = locked ? 'rgba(0,232,122,.8)' : 'rgba(255,200,80,.6)';
+    gctx.shadowColor = locked ? 'var(--color-green-dim)' : 'rgba(255,200,80,.6)';
     gctx.shadowBlur = 16;
     gctx.stroke(); gctx.restore();
     // --- Tick marks top & bottom ---
     gctx.save(); gctx.lineWidth=2;
-    gctx.strokeStyle = locked ? 'rgba(0,232,122,.8)' : 'rgba(255,200,80,.65)';
+    gctx.strokeStyle = locked ? 'var(--color-green-dim)' : 'rgba(255,200,80,.65)';
     gctx.beginPath(); gctx.moveTo(cx-14,ry); gctx.lineTo(cx+14,ry); gctx.stroke();
     gctx.beginPath(); gctx.moveTo(cx-14,ry+rh); gctx.lineTo(cx+14,ry+rh); gctx.stroke();
     gctx.restore();
@@ -2010,8 +2010,8 @@ function toggleHeadTracking(){
   const btn = document.getElementById('htoggle');
   btn.textContent = headTrackingAuto ? 'Auto' : 'Manual';
   btn.style.borderColor = headTrackingAuto ? 'rgba(255,200,80,.3)' : 'rgba(0,232,122,.4)';
-  btn.style.color = headTrackingAuto ? 'rgba(255,220,150,.7)' : 'rgba(0,232,122,.8)';
-  btn.style.background = headTrackingAuto ? 'rgba(255,200,80,.12)' : 'rgba(0,232,122,.12)';
+  btn.style.color = headTrackingAuto ? 'var(--color-text-faint)' : 'var(--color-green-dim)';
+  btn.style.background = headTrackingAuto ? 'var(--color-gold-faint)' : 'rgba(0,232,122,.12)';
   if(!headTrackingAuto) initMousePan();
 }
 
@@ -2539,7 +2539,7 @@ function handleAudienceMsg(msg){
 function showToast(msg){
   let t=document.getElementById('stage-toast');
   if(!t){ t=document.createElement('div'); t.id='stage-toast';
-    t.style.cssText='position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:rgba(4,2,6,.95);border:1px solid rgba(255,200,80,.25);border-radius:8px;padding:10px 20px;font-size:12px;color:rgba(255,220,150,.9);z-index:500;pointer-events:none;backdrop-filter:blur(4px);white-space:nowrap;';
+    t.style.cssText='position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:rgba(4,2,6,.95);border:1px solid var(--color-border);border-radius:8px;padding:10px 20px;font-size:12px;color:var(--color-text);z-index:500;pointer-events:none;backdrop-filter:blur(4px);white-space:nowrap;';
     document.body.appendChild(t);
   }
   t.textContent=msg; t.style.display='block';
@@ -2550,7 +2550,7 @@ function showToast(msg){
 // REACTIONS
 // ═══════════════════════════════════════
 function spawnRx(e,x){ const el=document.createElement('div'); el.className='rx'; el.textContent=e; el.style.left=x+'%'; el.style.bottom=(10+Math.random()*8)+'%'; el.style.animationDuration=(2.2+Math.random()*.8)+'s'; document.getElementById('rx').appendChild(el); el.addEventListener('animationend',()=>el.remove()); }
-function spawnComment(t){ const el=document.createElement('div'); el.style.cssText=`position:fixed;left:${10+Math.random()*60}%;bottom:${18+Math.random()*18}%;font-size:12px;color:rgba(255,220,150,.85);z-index:45;pointer-events:none;background:rgba(0,0,0,.55);padding:4px 10px;border-radius:12px;border:1px solid rgba(255,200,80,.2);animation:rxup 4s ease-out forwards;font-family:'DM Mono',monospace;`; el.textContent=t; document.body.appendChild(el); el.addEventListener('animationend',()=>el.remove()); }
+function spawnComment(t){ const el=document.createElement('div'); el.style.cssText=`position:fixed;left:${10+Math.random()*60}%;bottom:${18+Math.random()*18}%;font-size:12px;color:var(--color-text-dim);z-index:45;pointer-events:none;background:rgba(0,0,0,.55);padding:4px 10px;border-radius:12px;border:1px solid var(--color-gold-border);animation:rxup 4s ease-out forwards;font-family:var(--font-mono);`; el.textContent=t; document.body.appendChild(el); el.addEventListener('animationend',()=>el.remove()); }
 function playCheer(){ try{ const c=new(window.AudioContext||window.webkitAudioContext)(),buf=c.createBuffer(1,c.sampleRate*.8,c.sampleRate),d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/c.sampleRate*4); const s=c.createBufferSource(); s.buffer=buf; const g=c.createGain(); g.gain.value=.15; s.connect(g); g.connect(c.destination); s.start(); setTimeout(()=>c.close(),1000); }catch(e){} }
 
 // ═══════════════════════════════════════
