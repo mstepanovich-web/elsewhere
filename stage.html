@@ -306,7 +306,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.56</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.57</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -428,7 +428,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.56</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.57</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -680,6 +680,38 @@ const ACCESSORIES = [
   { id:'guitar',     label:'Air Guitar',  emoji:'🎸', anchor:'body-center', offsetY: 0.0,  scale:0.80 },
   { id:'butterfly',  label:'Butterfly',   emoji:'🦋', anchor:'shoulder',    offsetY:-0.05, scale:0.50 },
   { id:'sparkles',   label:'Sparkles',    emoji:'💫', anchor:'head-top',    offsetY:-0.08, scale:0.85 },
+
+  // Mohawks
+  { id:'mohawk-red',    label:'Mohawk Red',    emoji:'🔴', anchor:'head-top', offsetY:-0.5, scale:0.6,
+    drawFn(c, cx, cy, size){ drawMohawk(c, cx, cy, size, '#e8192c'); } },
+  { id:'mohawk-blue',   label:'Mohawk Blue',   emoji:'🔵', anchor:'head-top', offsetY:-0.5, scale:0.6,
+    drawFn(c, cx, cy, size){ drawMohawk(c, cx, cy, size, '#1976d2'); } },
+  { id:'mohawk-green',  label:'Mohawk Green',  emoji:'🟢', anchor:'head-top', offsetY:-0.5, scale:0.6,
+    drawFn(c, cx, cy, size){ drawMohawk(c, cx, cy, size, '#00c853'); } },
+  { id:'mohawk-purple', label:'Mohawk Purple', emoji:'🟣', anchor:'head-top', offsetY:-0.5, scale:0.6,
+    drawFn(c, cx, cy, size){ drawMohawk(c, cx, cy, size, '#9c27b0'); } },
+  { id:'mohawk-rainbow',label:'Mohawk Rainbow',emoji:'🌈', anchor:'head-top', offsetY:-0.5, scale:0.6,
+    drawFn(c, cx, cy, size){ drawMohawk(c, cx, cy, size, 'rainbow'); } },
+
+  // Glasses
+  { id:'glasses-round',  label:'Round Glasses',  emoji:'🕶', anchor:'eyes', offsetY:0.0, scale:0.6,
+    drawFn(c, cx, cy, size){ drawGlasses(c, cx, cy, size, 'round', '#222'); } },
+  { id:'glasses-square', label:'Square Glasses', emoji:'🔲', anchor:'eyes', offsetY:0.0, scale:0.6,
+    drawFn(c, cx, cy, size){ drawGlasses(c, cx, cy, size, 'square', '#222'); } },
+  { id:'glasses-heart',  label:'Heart Glasses',  emoji:'❤️', anchor:'eyes', offsetY:0.0, scale:0.6,
+    drawFn(c, cx, cy, size){ drawGlasses(c, cx, cy, size, 'heart', '#e8192c'); } },
+  { id:'glasses-star',   label:'Star Glasses',   emoji:'⭐', anchor:'eyes', offsetY:0.0, scale:0.6,
+    drawFn(c, cx, cy, size){ drawGlasses(c, cx, cy, size, 'star', '#ffd600'); } },
+
+  // Shoulder pads
+  { id:'shoulderpads', label:'Spike Pads', emoji:'⚔️', anchor:'shoulders-both', offsetY:0.0, scale:1.0,
+    drawFn(c, cx, cy, size, anchors){ drawShoulderPads(c, anchors); } },
+
+  // Beard
+  { id:'beard-long',  label:'Long Beard',  emoji:'🧔', anchor:'chin', offsetY:0.0, scale:1.0,
+    drawFn(c, cx, cy, size){ drawBeard(c, cx, cy, size, 'long'); } },
+  { id:'beard-viking',label:'Viking Beard',emoji:'⚡', anchor:'chin', offsetY:0.0, scale:1.0,
+    drawFn(c, cx, cy, size){ drawBeard(c, cx, cy, size, 'viking'); } },
 ];
 
 let activeAccessories = new Set();
@@ -734,6 +766,193 @@ function toggleAccessory(id){
 function clearAllAccessories(){
   activeAccessories.clear();
   showCostumePicker(); // re-render to clear highlights
+}
+
+// ── Custom accessory drawing functions ──
+
+function drawMohawk(c, cx, cy, size, color){
+  const w = size * 0.22;
+  const h = size * 1.1;
+  const spikes = 5;
+  const spikeW = w / spikes;
+  c.save();
+  for(let i=0; i<spikes; i++){
+    const sx = cx - w/2 + i*spikeW + spikeW/2;
+    const tipY = cy - h + (i%2===0 ? 0 : h*0.15);
+    const baseY = cy;
+    if(color==='rainbow'){
+      const hue = (i/spikes)*300;
+      c.fillStyle = `hsl(${hue},100%,55%)`;
+    } else {
+      c.fillStyle = color;
+    }
+    c.beginPath();
+    c.moveTo(sx - spikeW*0.5, baseY);
+    c.lineTo(sx, tipY);
+    c.lineTo(sx + spikeW*0.5, baseY);
+    c.closePath();
+    c.fill();
+    // Shine
+    c.fillStyle = 'rgba(255,255,255,0.25)';
+    c.beginPath();
+    c.moveTo(sx - spikeW*0.15, baseY);
+    c.lineTo(sx - spikeW*0.05, tipY + h*0.1);
+    c.lineTo(sx + spikeW*0.1, baseY);
+    c.closePath();
+    c.fill();
+  }
+  c.restore();
+}
+
+function drawGlasses(c, cx, cy, size, shape, color){
+  const lensW = size * 0.42;
+  const lensH = shape==='round' ? size*0.32 : size*0.28;
+  const gap = size * 0.08;
+  const lx = cx - gap/2 - lensW; // left lens center
+  const rx = cx + gap/2;          // right lens center
+  const lw = 3.5;
+
+  c.save();
+  c.strokeStyle = color;
+  c.lineWidth = lw;
+  c.fillStyle = 'rgba(200,230,255,0.12)'; // tinted transparent lens
+
+  function drawLens(x, y, w, h){
+    if(shape==='round'){
+      c.beginPath(); c.ellipse(x+w/2, y, w/2, h/2, 0, 0, Math.PI*2); c.fill(); c.stroke();
+    } else if(shape==='square'){
+      c.beginPath(); c.roundRect(x, y-h/2, w, h, 4); c.fill(); c.stroke();
+    } else if(shape==='heart'){
+      // Simple heart shape
+      c.beginPath();
+      c.moveTo(x+w/2, y+h*0.3);
+      c.bezierCurveTo(x+w/2, y-h*0.1, x+w*1.1, y-h*0.4, x+w*1.1, y);
+      c.bezierCurveTo(x+w*1.1, y+h*0.4, x+w/2, y+h*0.7, x+w/2, y+h*0.7);
+      c.bezierCurveTo(x+w/2, y+h*0.7, x-w*0.1, y+h*0.4, x-w*0.1, y);
+      c.bezierCurveTo(x-w*0.1, y-h*0.4, x+w/2, y-h*0.1, x+w/2, y+h*0.3);
+      c.fill(); c.stroke();
+    } else if(shape==='star'){
+      const pts=5, r1=w/2, r2=w/4, cx2=x+w/2, cy2=y;
+      c.beginPath();
+      for(let i=0;i<pts*2;i++){
+        const r=i%2===0?r1:r2;
+        const a=(i*Math.PI/pts)-Math.PI/2;
+        i===0?c.moveTo(cx2+r*Math.cos(a),cy2+r*Math.sin(a)):c.lineTo(cx2+r*Math.cos(a),cy2+r*Math.sin(a));
+      }
+      c.closePath(); c.fill(); c.stroke();
+    }
+  }
+
+  drawLens(lx, cy, lensW, lensH);
+  drawLens(rx, cy, lensW, lensH);
+
+  // Bridge
+  c.beginPath(); c.moveTo(lx+lensW, cy); c.lineTo(rx, cy); c.stroke();
+  // Temple arms
+  c.beginPath(); c.moveTo(lx, cy); c.lineTo(lx - size*0.15, cy - size*0.05); c.stroke();
+  c.beginPath(); c.moveTo(rx+lensW, cy); c.lineTo(rx+lensW + size*0.15, cy - size*0.05); c.stroke();
+
+  c.restore();
+}
+
+function drawShoulderPads(c, anchors){
+  if(!anchors['shoulder-left'] || !anchors['shoulder-right']) return;
+  const ls = anchors['shoulder-left'];
+  const rs = anchors['shoulder-right'];
+  const padSize = ls.size * 2.2;
+
+  function drawPad(x, y, side){
+    c.save();
+    c.translate(x, y);
+    const g = c.createRadialGradient(0,0,0,0,0,padSize*0.6);
+    g.addColorStop(0,'rgba(160,160,180,0.95)');
+    g.addColorStop(1,'rgba(80,80,100,0.85)');
+    c.fillStyle = g;
+    // Main pad dome
+    c.beginPath(); c.ellipse(0, 0, padSize*0.55, padSize*0.32, 0, 0, Math.PI*2); c.fill();
+    c.strokeStyle='rgba(200,200,220,0.6)'; c.lineWidth=2; c.stroke();
+    // Spikes
+    const numSpikes = 5;
+    for(let i=0;i<numSpikes;i++){
+      const a = (side===1 ? -Math.PI*0.15 : Math.PI*1.15) + (i-(numSpikes-1)/2)*0.38;
+      const spikeLen = padSize * (0.35 + (i===(numSpikes-1)/2?0.1:0));
+      const bx = Math.cos(a+Math.PI/2)*padSize*0.28;
+      const by = Math.sin(a+Math.PI/2)*padSize*0.18;
+      c.save();
+      c.translate(bx, by);
+      c.rotate(a);
+      const sg = c.createLinearGradient(0,0,spikeLen,0);
+      sg.addColorStop(0,'rgba(200,200,220,0.9)');
+      sg.addColorStop(1,'rgba(255,255,255,0.4)');
+      c.fillStyle=sg;
+      c.beginPath(); c.moveTo(0,-padSize*0.06); c.lineTo(spikeLen,0); c.lineTo(0,padSize*0.06); c.closePath(); c.fill();
+      c.restore();
+    }
+    c.restore();
+  }
+
+  drawPad(ls.x, ls.y, -1);
+  drawPad(rs.x, rs.y, 1);
+}
+
+function drawBeard(c, cx, cy, size, style){
+  c.save();
+  if(style==='long'){
+    // Long flowing beard
+    const bW = size * 0.75;
+    const bH = size * 1.4;
+    const g = c.createLinearGradient(cx, cy, cx, cy+bH);
+    g.addColorStop(0,'rgba(80,60,40,0.95)');
+    g.addColorStop(0.6,'rgba(60,45,30,0.9)');
+    g.addColorStop(1,'rgba(40,30,20,0.0)');
+    c.fillStyle=g;
+    c.beginPath();
+    c.moveTo(cx - bW*0.45, cy);
+    c.quadraticCurveTo(cx - bW*0.5, cy+bH*0.5, cx - bW*0.15, cy+bH);
+    c.quadraticCurveTo(cx, cy+bH*1.05, cx + bW*0.15, cy+bH);
+    c.quadraticCurveTo(cx + bW*0.5, cy+bH*0.5, cx + bW*0.45, cy);
+    c.closePath(); c.fill();
+    // Highlight
+    c.fillStyle='rgba(140,110,70,0.2)';
+    c.beginPath();
+    c.moveTo(cx-bW*0.15, cy);
+    c.quadraticCurveTo(cx-bW*0.1, cy+bH*0.4, cx, cy+bH*0.85);
+    c.quadraticCurveTo(cx+bW*0.1, cy+bH*0.4, cx+bW*0.15, cy);
+    c.closePath(); c.fill();
+  } else if(style==='viking'){
+    // Viking braided beard with two points
+    const bW = size * 0.85;
+    const bH = size * 1.6;
+    const g = c.createLinearGradient(cx, cy, cx, cy+bH);
+    g.addColorStop(0,'rgba(180,130,50,0.95)');
+    g.addColorStop(1,'rgba(140,90,30,0.0)');
+    c.fillStyle=g;
+    // Left braid
+    c.beginPath();
+    c.moveTo(cx - bW*0.1, cy);
+    c.quadraticCurveTo(cx - bW*0.55, cy+bH*0.5, cx - bW*0.3, cy+bH);
+    c.quadraticCurveTo(cx - bW*0.2, cy+bH*1.05, cx - bW*0.0, cy+bH*0.7);
+    c.quadraticCurveTo(cx - bW*0.1, cy+bH*0.4, cx - bW*0.0, cy);
+    c.closePath(); c.fill();
+    // Right braid
+    c.beginPath();
+    c.moveTo(cx + bW*0.1, cy);
+    c.quadraticCurveTo(cx + bW*0.55, cy+bH*0.5, cx + bW*0.3, cy+bH);
+    c.quadraticCurveTo(cx + bW*0.2, cy+bH*1.05, cx + bW*0.0, cy+bH*0.7);
+    c.quadraticCurveTo(cx + bW*0.1, cy+bH*0.4, cx + bW*0.0, cy);
+    c.closePath(); c.fill();
+    // Braid bands
+    c.strokeStyle='rgba(100,70,20,0.5)'; c.lineWidth=2;
+    [-0.3, -0.2].forEach(side=>{
+      [0.3,0.5,0.7].forEach(t=>{
+        c.beginPath();
+        c.moveTo(cx+side*bW*1.1, cy+bH*t);
+        c.lineTo(cx+side*bW*0.6, cy+bH*(t+0.05));
+        c.stroke();
+      });
+    });
+  }
+  c.restore();
 }
 
 // Called every frame from the render loop — draws active accessories onto canvas
@@ -792,20 +1011,37 @@ function drawAccessories(){
     const hipCy      = (lh.y + rh.y) / 2;
     const torsoH     = Math.abs(hipCy - (ls.y+rs.y)/2);
 
-    anchors['shoulder']    = { x: ls.x, y: ls.y, size: shoulderW*0.4 };
-    anchors['body-center'] = { x: shoulderCx, y: (ls.y+rs.y)/2 + torsoH*0.3, size: shoulderW*1.1 };
-    anchors['hand-right']  = { x: rw.x, y: rw.y, size: shoulderW*0.35 };
+    anchors['shoulder']        = { x: ls.x, y: ls.y, size: shoulderW*0.4 };
+    anchors['shoulder-left']   = { x: ls.x, y: ls.y, size: shoulderW*0.38 };
+    anchors['shoulder-right']  = { x: rs.x, y: rs.y, size: shoulderW*0.38 };
+    anchors['shoulders-both']  = { x: shoulderCx, y: (ls.y+rs.y)/2, size: shoulderW };
+    anchors['body-center']     = { x: shoulderCx, y: (ls.y+rs.y)/2 + torsoH*0.3, size: shoulderW*1.1 };
+    anchors['hand-right']      = { x: rw.x, y: rw.y, size: shoulderW*0.35 };
+  }
+
+  if(lastFaceLandmarks){
+    const lm = lastFaceLandmarks;
+    const chin = lmToCanvas(lm[152]);
+    const leftEar = lmToCanvas(lm[234]);
+    const rightEar = lmToCanvas(lm[454]);
+    const faceW = Math.abs(rightEar.x - leftEar.x);
+    // chin anchor sits just below the chin point
+    anchors['chin'] = { x: chin.x, y: chin.y, size: faceW };
   }
 
   // Fallback from singer rect if no landmarks
   if(!anchors['head-top']){
     const faceW = zW * 0.38;
     const cx = zX + zW/2;
-    anchors['head-top']   = { x: cx, y: zY + zH*0.06, size: faceW };
-    anchors['eyes']       = { x: cx, y: zY + zH*0.12, size: faceW };
-    anchors['body-center']= { x: cx, y: zY + zH*0.45, size: zW*0.65 };
-    anchors['hand-right'] = { x: zX + zW*0.72, y: zY + zH*0.52, size: zW*0.22 };
-    anchors['shoulder']   = { x: zX + zW*0.28, y: zY + zH*0.26, size: zW*0.18 };
+    anchors['head-top']        = { x: cx, y: zY + zH*0.06, size: faceW };
+    anchors['eyes']            = { x: cx, y: zY + zH*0.12, size: faceW };
+    anchors['chin']            = { x: cx, y: zY + zH*0.22, size: faceW };
+    anchors['body-center']     = { x: cx, y: zY + zH*0.45, size: zW*0.65 };
+    anchors['hand-right']      = { x: zX + zW*0.72, y: zY + zH*0.52, size: zW*0.22 };
+    anchors['shoulder']        = { x: zX + zW*0.28, y: zY + zH*0.26, size: zW*0.18 };
+    anchors['shoulder-left']   = { x: zX + zW*0.25, y: zY + zH*0.26, size: zW*0.18 };
+    anchors['shoulder-right']  = { x: zX + zW*0.75, y: zY + zH*0.26, size: zW*0.18 };
+    anchors['shoulders-both']  = { x: cx, y: zY + zH*0.26, size: zW*0.6 };
   }
 
   activeAccessories.forEach(id=>{
@@ -818,11 +1054,18 @@ function drawAccessories(){
     const cx = anchor.x;
     const cy = anchor.y + (acc.offsetY * anchor.size * 2);
 
-    const img = getEmojiImage(acc.emoji, 160);
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, cx - drawSize/2, cy - drawSize/2, drawSize, drawSize);
+
+    if(acc.drawFn){
+      // Custom canvas drawing
+      acc.drawFn(ctx, cx, cy, drawSize, anchors);
+    } else {
+      // Emoji fallback
+      const img = getEmojiImage(acc.emoji, 160);
+      ctx.drawImage(img, cx - drawSize/2, cy - drawSize/2, drawSize, drawSize);
+    }
     ctx.restore();
   });
 }
