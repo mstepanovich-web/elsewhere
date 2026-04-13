@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -184,7 +183,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.67</div>
+  <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.70</div>
 </div>
 
 <!-- HOME -->
@@ -194,7 +193,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;">← Search</div>
-      <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.67</div>
+      <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.70</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -959,19 +958,27 @@ let singerActiveAccessories = new Set();
 
 // ── DeepAR effects ────────────────────────────────────────────────────────────
 const DEEPAR_BASE = 'https://cdn.jsdelivr.net/npm/deepar/';
+const ELSEWHERE_EFFECTS_BASE = 'https://mstepanovich-web.github.io/elsewhere/effects/';
 const DEEPAR_EFFECTS = [
-  { id:'dar-glasses-classic', label:'Classic Glasses', emoji:'🕶',  category:'Glasses', slot:'face', url: DEEPAR_BASE+'effects/aviators' },
-  { id:'dar-glasses-nerd',    label:'Nerd Glasses',    emoji:'🤓',  category:'Glasses', slot:'face', url: DEEPAR_BASE+'effects/nerd_glasses' },
-  { id:'dar-glasses-round',   label:'Round Glasses',   emoji:'👓',  category:'Glasses', slot:'face', url: DEEPAR_BASE+'effects/round_glasses' },
-  { id:'dar-beard',           label:'Beard',           emoji:'🧔',  category:'Face',    slot:'face', url: DEEPAR_BASE+'effects/beard' },
-  { id:'dar-makeup',          label:'Glam Makeup',     emoji:'💄',  category:'Face',    slot:'face', url: DEEPAR_BASE+'effects/makeup' },
-  { id:'dar-cat',             label:'Cat',             emoji:'🐱',  category:'Masks',   slot:'face', url: DEEPAR_BASE+'effects/cat' },
-  { id:'dar-deer',            label:'Deer',            emoji:'🦌',  category:'Masks',   slot:'face', url: DEEPAR_BASE+'effects/deer' },
-  { id:'dar-flowers',         label:'Flower Crown',    emoji:'🌸',  category:'Head',    slot:'hat',  url: DEEPAR_BASE+'effects/flowers' },
-  { id:'dar-viking',          label:'Viking Helmet',   emoji:'⛑️',  category:'Head',    slot:'hat',  url: DEEPAR_BASE+'effects/viking_helmet' },
-  { id:'dar-hair-blue',       label:'Blue Hair',       emoji:'💙',  category:'Hair',    slot:'hair', url: DEEPAR_BASE+'effects/hair_blue' },
-  { id:'dar-hair-green',      label:'Green Hair',      emoji:'💚',  category:'Hair',    slot:'hair', url: DEEPAR_BASE+'effects/hair_green' },
-  { id:'dar-hair-red',        label:'Red Hair',        emoji:'❤️',  category:'Hair',    slot:'hair', url: DEEPAR_BASE+'effects/hair_red' },
+  { id:'dar-aviators',     label:'Aviators',        emoji:'🕶',  category:'Glasses',  slot:'face', url: DEEPAR_BASE+'effects/aviators' },
+  { id:'dar-neon-horns',   label:'Neon Horns',      emoji:'😈',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Neon_Devil_Horns.deepar' },
+  { id:'dar-flower-face',  label:'Flower Face',     emoji:'🌸',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'flower_face.deepar' },
+  { id:'dar-makeup',       label:'Makeup',          emoji:'💄',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'MakeupLook.deepar' },
+  { id:'dar-stallone',     label:'Stallone',        emoji:'🥊',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Stallone.deepar' },
+  { id:'dar-vendetta',     label:'Vendetta Mask',   emoji:'🎭',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Vendetta_Mask.deepar' },
+  { id:'dar-humanoid',     label:'Humanoid',        emoji:'🤖',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Humanoid.deepar' },
+  { id:'dar-hope',         label:'Hope',            emoji:'✨',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Hope.deepar' },
+  { id:'dar-viking',       label:'Viking Helmet',   emoji:'⛑️', category:'Head',     slot:'hat',  url: ELSEWHERE_EFFECTS_BASE+'viking_helmet.deepar' },
+  { id:'dar-elephant',     label:'Elephant Trunk',  emoji:'🐘',  category:'Head',     slot:'hat',  url: ELSEWHERE_EFFECTS_BASE+'Elephant_Trunk.deepar' },
+  { id:'dar-snail',        label:'Snail',           emoji:'🐌',  category:'Head',     slot:'hat',  url: ELSEWHERE_EFFECTS_BASE+'Snail.deepar' },
+  { id:'dar-fire',         label:'Fire Effect',     emoji:'🔥',  category:'Effects',  slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Fire_Effect.deepar' },
+  { id:'dar-burning',      label:'Burning',         emoji:'🌋',  category:'Effects',  slot:'face', url: ELSEWHERE_EFFECTS_BASE+'burning_effect.deepar' },
+  { id:'dar-hearts',       label:'8bit Hearts',     emoji:'❤️', category:'Effects',  slot:'face', url: ELSEWHERE_EFFECTS_BASE+'8bitHearts.deepar' },
+  { id:'dar-emotions',     label:'Emotions',        emoji:'😂',  category:'Effects',  slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Emotions_Exaggerator.deepar' },
+  { id:'dar-emotion-meter',label:'Emotion Meter',   emoji:'📊',  category:'Effects',  slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Emotion_Meter.deepar' },
+  { id:'dar-galaxy',       label:'Galaxy BG',       emoji:'🌌',  category:'BG',       slot:'bg',   url: ELSEWHERE_EFFECTS_BASE+'galaxy_background.deepar' },
+  { id:'dar-ping-pong',    label:'Ping Pong',       emoji:'🏓',  category:'Games',    slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Ping_Pong.deepar' },
+  { id:'dar-split-view',   label:'Split View',      emoji:'🪞',  category:'Fun',      slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Split_View_Look.deepar' },
 ];
 
 // Track active DeepAR effect per slot

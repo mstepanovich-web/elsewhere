@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -309,7 +308,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.67</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.70</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -431,7 +430,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.67</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.70</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1434,24 +1433,35 @@ let deepARCanvas = null;  // offscreen canvas DeepAR renders into
 // slot names: 'face' (masks/glasses/makeup), 'hair', 'hat'
 const deepARSlots = { face: null, hair: null, hat: null };
 
-// Built-in effect library — maps to DeepAR CDN effect files
+// Built-in effect library — hosted at /elsewhere/effects/ on GitHub Pages
+const ELSEWHERE_EFFECTS_BASE = 'https://mstepanovich-web.github.io/elsewhere/effects/';
 const DEEPAR_EFFECTS = [
-  // Glasses
-  { id:'dar-glasses-classic', label:'Classic Glasses', emoji:'🕶',  category:'Glasses', slot:'face', url: DEEPAR_BASE+'effects/aviators' },
-  { id:'dar-glasses-nerd',    label:'Nerd Glasses',    emoji:'🤓',  category:'Glasses', slot:'face', url: DEEPAR_BASE+'effects/nerd_glasses' },
-  { id:'dar-glasses-round',   label:'Round Glasses',   emoji:'👓',  category:'Glasses', slot:'face', url: DEEPAR_BASE+'effects/round_glasses' },
-  // Masks & face
-  { id:'dar-beard',           label:'Beard',           emoji:'🧔',  category:'Face',    slot:'face', url: DEEPAR_BASE+'effects/beard' },
-  { id:'dar-makeup',          label:'Glam Makeup',     emoji:'💄',  category:'Face',    slot:'face', url: DEEPAR_BASE+'effects/makeup' },
-  { id:'dar-cat',             label:'Cat',             emoji:'🐱',  category:'Masks',   slot:'face', url: DEEPAR_BASE+'effects/cat' },
-  { id:'dar-deer',            label:'Deer',            emoji:'🦌',  category:'Masks',   slot:'face', url: DEEPAR_BASE+'effects/deer' },
-  // Hats & head
-  { id:'dar-flowers',         label:'Flower Crown',    emoji:'🌸',  category:'Head',    slot:'hat',  url: DEEPAR_BASE+'effects/flowers' },
-  { id:'dar-viking',          label:'Viking Helmet',   emoji:'⛑️',  category:'Head',    slot:'hat',  url: DEEPAR_BASE+'effects/viking_helmet' },
-  // Hair
-  { id:'dar-hair-blue',       label:'Blue Hair',       emoji:'💙',  category:'Hair',    slot:'hair', url: DEEPAR_BASE+'effects/hair_blue' },
-  { id:'dar-hair-green',      label:'Green Hair',      emoji:'💚',  category:'Hair',    slot:'hair', url: DEEPAR_BASE+'effects/hair_green' },
-  { id:'dar-hair-red',        label:'Red Hair',        emoji:'❤️',  category:'Hair',    slot:'hair', url: DEEPAR_BASE+'effects/hair_red' },
+  // Glasses (CDN — confirmed working)
+  { id:'dar-aviators',     label:'Aviators',        emoji:'🕶',  category:'Glasses',  slot:'face', url: DEEPAR_BASE+'effects/aviators' },
+  // Face filters
+  { id:'dar-neon-horns',   label:'Neon Horns',      emoji:'😈',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Neon_Devil_Horns.deepar' },
+  { id:'dar-flower-face',  label:'Flower Face',     emoji:'🌸',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'flower_face.deepar' },
+  { id:'dar-makeup',       label:'Makeup',          emoji:'💄',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'MakeupLook.deepar' },
+  { id:'dar-stallone',     label:'Stallone',        emoji:'🥊',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Stallone.deepar' },
+  { id:'dar-vendetta',     label:'Vendetta Mask',   emoji:'🎭',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Vendetta_Mask.deepar' },
+  { id:'dar-humanoid',     label:'Humanoid',        emoji:'🤖',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Humanoid.deepar' },
+  { id:'dar-hope',         label:'Hope',            emoji:'✨',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Hope.deepar' },
+  // Head / body
+  { id:'dar-viking',       label:'Viking Helmet',   emoji:'⛑️', category:'Head',     slot:'hat',  url: ELSEWHERE_EFFECTS_BASE+'viking_helmet.deepar' },
+  { id:'dar-elephant',     label:'Elephant Trunk',  emoji:'🐘',  category:'Head',     slot:'hat',  url: ELSEWHERE_EFFECTS_BASE+'Elephant_Trunk.deepar' },
+  { id:'dar-snail',        label:'Snail',           emoji:'🐌',  category:'Head',     slot:'hat',  url: ELSEWHERE_EFFECTS_BASE+'Snail.deepar' },
+  // Effects / particles
+  { id:'dar-fire',         label:'Fire Effect',     emoji:'🔥',  category:'Effects',  slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Fire_Effect.deepar' },
+  { id:'dar-burning',      label:'Burning',         emoji:'🌋',  category:'Effects',  slot:'face', url: ELSEWHERE_EFFECTS_BASE+'burning_effect.deepar' },
+  { id:'dar-hearts',       label:'8bit Hearts',     emoji:'❤️', category:'Effects',  slot:'face', url: ELSEWHERE_EFFECTS_BASE+'8bitHearts.deepar' },
+  { id:'dar-pixels',       label:'Pixel Hearts',    emoji:'💗',  category:'Effects',  slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Hope.deepar' },
+  { id:'dar-emotions',     label:'Emotions',        emoji:'😂',  category:'Effects',  slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Emotions_Exaggerator.deepar' },
+  { id:'dar-emotion-meter',label:'Emotion Meter',   emoji:'📊',  category:'Effects',  slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Emotion_Meter.deepar' },
+  // Background
+  { id:'dar-galaxy',       label:'Galaxy BG',       emoji:'🌌',  category:'BG',       slot:'bg',   url: ELSEWHERE_EFFECTS_BASE+'galaxy_background.deepar' },
+  // Games / fun
+  { id:'dar-ping-pong',    label:'Ping Pong',       emoji:'🏓',  category:'Games',    slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Ping_Pong.deepar' },
+  { id:'dar-split-view',   label:'Split View',      emoji:'🪞',  category:'Fun',      slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Split_View_Look.deepar' },
 ];
 
 // startEverything removed — camera init moved to enterStage() for correct user gesture timing
@@ -2921,32 +2931,26 @@ function renderLoop(){
       drawStage();
     }
     // Singer composite (both venue and classic stage)
-    if(segPending) drawSinger(segPending.image, segPending.segmentationMask);
-    else if(camVideo && camVideo.readyState>=2 && !segOk){
+    // If DeepAR is active and has effects loaded, use its output as the camera source
+    // This pipes the filter-applied frame through the same segmentation mask
+    const deepARActive = camStream && deepARReady && deepARCanvas &&
+      Object.entries(deepARSlots).some(([slot,url])=> url && slot !== 'bg');
+    if(segPending){
+      if(deepARActive){
+        // Swap the segmentation source image with DeepAR's filtered output
+        drawSinger(deepARCanvas, segPending.segmentationMask);
+      } else {
+        drawSinger(segPending.image, segPending.segmentationMask);
+      }
+    } else if(camVideo && camVideo.readyState>=2 && !segOk){
       const rect=singerRect();
+      const src = deepARActive ? deepARCanvas : camVideo;
       ctx.save(); ctx.translate(rect.x+rect.w,rect.y); ctx.scale(-1,1);
-      ctx.drawImage(camVideo,0,0,rect.w,rect.h); ctx.restore();
+      ctx.drawImage(src,0,0,rect.w,rect.h); ctx.restore();
     }
 
-    // DeepAR filter overlay — drawn on top of singer, composited with face tracking
-    if(camStream && deepARReady && deepARCanvas && Object.values(deepARSlots).some(v=>v)){
-      const rect = singerRect();
-      const zW = rect.w * zoomFactor;
-      const zH = rect.h * zoomFactor;
-      const zX = rect.x + rect.w/2 - zW/2;
-      const zY = rect.y - (zH - rect.h) * (0.5 + zoomOffset);
-      // Draw mirrored to match singer orientation
-      ctx.save();
-      ctx.translate(zX+zW, zY); ctx.scale(-1,1);
-      ctx.drawImage(deepARCanvas, 0, 0, zW, zH);
-      ctx.restore();
-    } else if(camStream && !deepARReady) {
-      // Fall back to hand-drawn accessories while DeepAR loads
-      drawAccessories();
-    }
-
-    // Hand-drawn accessories still active (non-DeepAR items like emoji)
-    if(camStream && deepARReady) drawAccessories();
+    // Hand-drawn accessories (emoji overlays etc) — always on stage device
+    if(camStream) drawAccessories();
   } // end audience view
 } // end renderLoop
 
