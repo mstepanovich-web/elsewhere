@@ -184,7 +184,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.56</div>
+  <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.57</div>
 </div>
 
 <!-- HOME -->
@@ -194,7 +194,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:'DM Mono',monospace;cursor:pointer;">← Search</div>
-      <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.56</div>
+      <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.57</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -899,22 +899,37 @@ function stopVoiceFullscreen(){
 
 // ── ACCESSORIES / COSTUME ──
 const SINGER_ACCESSORIES = [
-  { id:'crown',      label:'Crown',       emoji:'👑' },
-  { id:'tophat',     label:'Top Hat',     emoji:'🎩' },
-  { id:'halo',       label:'Halo',        emoji:'😇' },
-  { id:'devilhorns', label:'Devil Horns', emoji:'😈' },
-  { id:'sunglasses', label:'Sunglasses',  emoji:'😎' },
-  { id:'bow',        label:'Bow',         emoji:'🎀' },
-  { id:'bunnyears',  label:'Bunny Ears',  emoji:'🐰' },
-  { id:'catears',    label:'Cat Ears',    emoji:'🐱' },
-  { id:'fireHalo',   label:'Fire Halo',   emoji:'🔥' },
-  { id:'icecrwon',   label:'Ice Crown',   emoji:'❄️' },
-  { id:'stars',      label:'Star Burst',  emoji:'✨' },
-  { id:'rainbow',    label:'Rainbow',     emoji:'🌈' },
-  { id:'mic',        label:'Mic',         emoji:'🎤' },
-  { id:'guitar',     label:'Air Guitar',  emoji:'🎸' },
-  { id:'butterfly',  label:'Butterfly',   emoji:'🦋' },
-  { id:'sparkles',   label:'Sparkles',    emoji:'💫' },
+  { id:'crown',          label:'Crown',         emoji:'👑' },
+  { id:'tophat',         label:'Top Hat',        emoji:'🎩' },
+  { id:'halo',           label:'Halo',           emoji:'😇' },
+  { id:'devilhorns',     label:'Devil Horns',    emoji:'😈' },
+  { id:'sunglasses',     label:'Sunglasses',     emoji:'😎' },
+  { id:'bow',            label:'Bow',            emoji:'🎀' },
+  { id:'bunnyears',      label:'Bunny Ears',     emoji:'🐰' },
+  { id:'catears',        label:'Cat Ears',       emoji:'🐱' },
+  { id:'fireHalo',       label:'Fire Halo',      emoji:'🔥' },
+  { id:'icecrwon',       label:'Ice Crown',      emoji:'❄️' },
+  { id:'stars',          label:'Star Burst',     emoji:'✨' },
+  { id:'rainbow',        label:'Rainbow',        emoji:'🌈' },
+  { id:'mic',            label:'Mic',            emoji:'🎤' },
+  { id:'guitar',         label:'Air Guitar',     emoji:'🎸' },
+  { id:'butterfly',      label:'Butterfly',      emoji:'🦋' },
+  { id:'sparkles',       label:'Sparkles',       emoji:'💫' },
+  // Mohawks
+  { id:'mohawk-red',     label:'Mohawk Red',     emoji:'🔴' },
+  { id:'mohawk-blue',    label:'Mohawk Blue',    emoji:'🔵' },
+  { id:'mohawk-green',   label:'Mohawk Green',   emoji:'🟢' },
+  { id:'mohawk-purple',  label:'Mohawk Purple',  emoji:'🟣' },
+  { id:'mohawk-rainbow', label:'Mohawk Rainbow', emoji:'🌈' },
+  // Glasses
+  { id:'glasses-round',  label:'Round Glasses',  emoji:'🕶' },
+  { id:'glasses-square', label:'Square Glasses', emoji:'🔲' },
+  { id:'glasses-heart',  label:'Heart Glasses',  emoji:'❤️' },
+  { id:'glasses-star',   label:'Star Glasses',   emoji:'⭐' },
+  // Shoulder pads & Beard
+  { id:'shoulderpads',   label:'Spike Pads',     emoji:'⚔️' },
+  { id:'beard-long',     label:'Long Beard',     emoji:'🧔' },
+  { id:'beard-viking',   label:'Viking Beard',   emoji:'⚡' },
 ];
 
 let singerActiveAccessories = new Set();
