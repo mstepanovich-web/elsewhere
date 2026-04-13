@@ -308,7 +308,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.79</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.80</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -430,7 +430,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.79</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.80</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1521,7 +1521,8 @@ function startPoseDetection(vid){
   // No separate Camera — driven by segmentation's Camera loop above
 }
 
-// ── DeepAR initialization — background removal + AR filters ──────────────────
+
+// ── DeepAR initialization — AR filters only (MediaPipe handles background) ───
 async function startDeepAR(vid){
   try{
     const deepar = await import('https://cdn.jsdelivr.net/npm/deepar/js/deepar.esm.js');
@@ -1531,56 +1532,26 @@ async function startDeepAR(vid){
     deepARCanvas.width  = vid.videoWidth  || 640;
     deepARCanvas.height = vid.videoHeight || 480;
 
-    log('DeepAR: calling initialize (no effect at init)...','info');
+    log('DeepAR: initializing...','info');
     deepARInst = await deepar.initialize({
       licenseKey: DEEPAR_KEY,
       canvas:     deepARCanvas,
-      additionalOptions: {
-        cameraConfig: { disableDefaultCamera: true }
-      }
+      additionalOptions: { cameraConfig: { disableDefaultCamera: true } }
     });
-    log('DeepAR: initialize() resolved ✓','ok');
 
     deepARInst.setVideoElement(vid, false);
     deepARCanvas = deepARInst.getCanvas();
+    deepARInst.callbacks.onEffectSwitched = (e)=> log('DeepAR: effect loaded — '+JSON.stringify(e),'ok');
+    deepARInst.callbacks.onError = (e,m)=> log('DeepAR ERROR: '+e+' '+m,'err');
 
-    // Wire up callbacks
-    deepARInst.callbacks.onInitialize        = ()=> log('DeepAR CB: onInitialize','ok');
-    deepARInst.callbacks.onEffectSwitched    = (e)=> log('DeepAR CB: onEffectSwitched — '+JSON.stringify(e),'ok');
-    deepARInst.callbacks.onError             = (e,m)=> log('DeepAR CB: ERROR code='+e+' msg='+m,'err');
-
-    // Test: fetch the effect file manually first to check CORS/content-type
-    const bgUrl = ELSEWHERE_EFFECTS_BASE + 'background_replacement.deepar';
-    log('DeepAR: testing fetch of '+bgUrl,'info');
-    try{
-      const resp = await fetch(bgUrl);
-      log('DeepAR: fetch status='+resp.status+' type='+resp.headers.get('content-type')+' size='+resp.headers.get('content-length'),'info');
-      if(!resp.ok) throw new Error('HTTP '+resp.status);
-      const buf = await resp.arrayBuffer();
-      log('DeepAR: file fetched ok, '+buf.byteLength+' bytes — loading into DeepAR...','ok');
-      // Pass ArrayBuffer directly to avoid any URL/CORS issue
-      await deepARInst.switchEffect(buf, { slot: 'background' });
-      log('DeepAR: background removal active ✓','ok');
-      deepARReady  = true;
-      deepARBgReady = true;
-      segOk = true;
-      document.getElementById('sdot').className='dot ok';
-      document.getElementById('slbl').textContent='Compositing';
-    }catch(e){
-      log('DeepAR: background load failed: '+e.message,'err');
-      deepARReady = true;
-      // Fall back to MediaPipe for background removal
-      startSegmentation(vid);
-    }
-
-    startDeepARLoop(vid);
+    deepARReady = true;
+    log('DeepAR: ready ✓ (AR filters active)','ok');
 
   }catch(e){
     log('DeepAR init error: '+e.message,'err');
-    // Fallback to MediaPipe
-    startSegmentation(vid);
   }
 }
+
 
 // Drives the render loop and pose detection now that SelfieSegmentation is removed
 function startDeepARLoop(vid){
@@ -2945,55 +2916,26 @@ function renderLoop(){
       pl.style.pointerEvents = 'none';
       drawStage();
     }
-    // Singer composite
-    if(deepARBgReady && deepARCanvas){
-      // DeepAR handling background removal — draw directly, bg is transparent
+    // Singer composite — MediaPipe removes background, DeepAR adds filters on top
+    if(segPending) drawSinger(segPending.image, segPending.segmentationMask);
+    else if(camVideo && camVideo.readyState>=2 && !segOk){
+      const rect=singerRect();
+      ctx.save(); ctx.translate(rect.x+rect.w,rect.y); ctx.scale(-1,1);
+      ctx.drawImage(camVideo,0,0,rect.w,rect.h); ctx.restore();
+    }
+
+    // DeepAR AR filter overlay — source-atop so filter only appears on singer pixels
+    if(deepARReady && deepARCanvas && Object.entries(deepARSlots).some(([s,u])=>u && s!=='bg')){
       const rect = singerRect();
       const zW = rect.w * zoomFactor;
       const zH = rect.h * zoomFactor;
       const zX = rect.x + rect.w/2 - zW/2;
       const zY = rect.y - (zH - rect.h) * (0.5 + zoomOffset);
       ctx.save();
+      ctx.globalCompositeOperation = 'source-atop';
       ctx.translate(zX+zW, zY); ctx.scale(-1,1);
       ctx.drawImage(deepARCanvas, 0, 0, zW, zH);
       ctx.restore();
-      // Spotlight
-      const cx = rect.x + rect.w/2;
-      const sg = ctx.createRadialGradient(cx, zY+zH*.1, 0, cx, zY+zH*.35, rect.w*1.4/zoomFactor);
-      sg.addColorStop(0,`rgba(${V.r},${V.g},${V.b},.14)`); sg.addColorStop(1,'transparent');
-      ctx.fillStyle=sg; ctx.fillRect(zX-zW, zY-zH*.1, zW*3, zH*1.2);
-      // Foot blend
-      const footAlpha = Math.max(0, 1-(zoomFactor-1)*2);
-      if(footAlpha>0){
-        ctx.save(); ctx.globalCompositeOperation='multiply'; ctx.globalAlpha=footAlpha;
-        const leg=ctx.createLinearGradient(0,zY+zH*.78,0,zY+zH);
-        leg.addColorStop(0,'transparent'); leg.addColorStop(1,'rgba(6,3,4,.5)');
-        ctx.fillStyle=leg; ctx.fillRect(zX,zY,zW,zH); ctx.restore();
-      }
-      // Shadow
-      const shg=ctx.createRadialGradient(cx,rect.y+rect.h,0,cx,rect.y+rect.h,rect.w*.65);
-      shg.addColorStop(0,`rgba(0,0,0,${Math.max(0.1,0.55/zoomFactor)})`); shg.addColorStop(1,'transparent');
-      ctx.fillStyle=shg; ctx.fillRect(rect.x-rect.w*.4, rect.y+rect.h-8, rect.w*1.8, 28);
-    } else if(segPending){
-      // MediaPipe fallback — background removal via segmentation mask
-      drawSinger(segPending.image, segPending.segmentationMask);
-      // DeepAR filter overlay on top if active
-      if(deepARReady && deepARCanvas && Object.entries(deepARSlots).some(([s,u])=>u && s!=='bg')){
-        const rect = singerRect();
-        const zW = rect.w * zoomFactor;
-        const zH = rect.h * zoomFactor;
-        const zX = rect.x + rect.w/2 - zW/2;
-        const zY = rect.y - (zH - rect.h) * (0.5 + zoomOffset);
-        ctx.save();
-        ctx.globalCompositeOperation = 'source-atop';
-        ctx.translate(zX+zW, zY); ctx.scale(-1,1);
-        ctx.drawImage(deepARCanvas, 0, 0, zW, zH);
-        ctx.restore();
-      }
-    } else if(camVideo && camVideo.readyState>=2 && !segOk){
-      const rect=singerRect();
-      ctx.save(); ctx.translate(rect.x+rect.w,rect.y); ctx.scale(-1,1);
-      ctx.drawImage(camVideo,0,0,rect.w,rect.h); ctx.restore();
     }
 
     // Hand-drawn accessories
@@ -3024,7 +2966,7 @@ function enterStage(){
       showGuide();
       startSegmentation(camVideo);   // MediaPipe handles background removal
       startPoseDetection(camVideo);
-      setTimeout(()=>startDeepAR(camVideo), 2000);  // DeepAR handles AR filters
+      setTimeout(()=>startDeepAR(camVideo), 2000); // DeepAR handles AR filters
       setTimeout(initFaceMesh, 4000);
       publishCanvasToAgora();
       initVenueMode();
