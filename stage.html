@@ -299,7 +299,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.46</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.47</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -421,7 +421,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.46</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.47</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -3218,7 +3218,8 @@ function startAmbient(venueId){
   const capturedVenue = venueId;
   // Wait for AudioContext to be ready after suspend/resume before starting audio
   const startAudio = ()=>{
-    if(currentAmbientVenue !== capturedVenue) return; // venue changed again
+    if(currentAmbientVenue !== capturedVenue){ log('startAudio cancelled — venue changed to '+currentAmbientVenue,'warn'); return; }
+    if(!ambientGain){ log('startAudio — gain not ready yet, retrying in 100ms','warn'); setTimeout(startAudio,100); return; }
     try{
       if(ambientAudioCtx && ambientAudioCtx.state==='suspended') ambientAudioCtx.resume();
       if(profile.audio) profile.audio();
@@ -3229,7 +3230,7 @@ function startAmbient(venueId){
   try{
     if(!ambientAudioCtx) getAmbientCtx();
     if(profile.anim) profile.anim();
-    setTimeout(startAudio, 150);
+    setTimeout(startAudio, 300);
     log('startAmbient — anim started: '+venueId, 'ok');
   }catch(e){ log('startAmbient — error: '+e.message, 'err'); }
 }
