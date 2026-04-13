@@ -183,7 +183,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.88</div>
+  <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.91</div>
 </div>
 
 <!-- HOME -->
@@ -193,7 +193,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.88</div>
+      <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.91</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -533,7 +533,7 @@ const YT_API_KEY   = 'AIzaSyD9hs9juo0WyUghjUgmv6Abn0ixWw1iqvM';
 const YT_PROXY     = 'https://www.googleapis.com/youtube/v3';
 const LRCLIB_URL   = 'https://lrclib.net/api';
 
-let roomCode='', agoraClient=null, agoraReady=false;
+let roomCode='', agoraClient=null, agoraReady=false, dataStreamId=null;
 let micStream=null, micAudioTrack=null, micPublished=false;
 let audioCtx=null, micSource=null, gainNode=null, inputBoostNode=null;
 let reverbNode=null, echoDelay=null, echoFeedback=null, analyser=null;
@@ -583,6 +583,17 @@ async function doJoin(){
     agoraClient.on('stream-message',(uid,data)=>{try{handleStageMsg(JSON.parse(new TextDecoder().decode(data)));}catch(e){}});
     await agoraClient.join(AGORA_APP_ID,CHAN_PREFIX+raw,null,null);
     const selfUID = agoraClient.uid;
+
+    // Create data stream for sending messages to stage
+    // Required in Agora SDK v4+ for sendStreamMessage to work reliably
+    try{
+      dataStreamId = await agoraClient.createDataStream({ ordered: true, reliable: true });
+      log('Data stream created: id='+dataStreamId, 'ok');
+    }catch(e){
+      log('createDataStream failed: '+e.message+' — will try sendStreamMessage directly', 'warn');
+      dataStreamId = null;
+    }
+
     agoraReady=true;
     log('Agora joined — UID: '+selfUID+' channel: '+CHAN_PREFIX+raw, 'ok');
     agoraClient.on('user-joined',u=>{ if(u.uid===selfUID) return; addAudMember(u.uid,null); log('Audience joined UID:'+u.uid, 'info'); });
@@ -609,31 +620,41 @@ async function doJoin(){
 
 // ── AGORA MSG ──
 async function sendToStage(obj){
-  if(!agoraClient||!agoraReady) return;
+  if(!agoraClient||!agoraReady){
+    log('sendToStage: not ready — agoraClient='+(!!agoraClient)+' agoraReady='+agoraReady, 'warn');
+    return;
+  }
   try{
     const json = JSON.stringify(obj);
     const bytes = new TextEncoder().encode(json);
-    // Agora sendStreamMessage limit is 1KB
+    log('sendToStage: sending type='+obj.type+' bytes='+bytes.length+' streamId='+dataStreamId, 'info');
     if(bytes.length <= 900){
-      await agoraClient.sendStreamMessage(bytes, true);
+      if(dataStreamId !== null){
+        await agoraClient.sendStreamMessage(dataStreamId, bytes);
+      } else {
+        await agoraClient.sendStreamMessage(bytes, true);
+      }
+      log('sendToStage: sent ok', 'ok');
     } else {
-      // Split into chunks with a sequence header
       const CHUNK = 800;
       const str = json;
       const total = Math.ceil(str.length / CHUNK);
-      const id = Date.now().toString(36); // unique message ID
+      const id = Date.now().toString(36);
       for(let i=0;i<total;i++){
-        const chunk = {
-          _chunk:true, _id:id, _i:i, _n:total,
-          _d: str.slice(i*CHUNK, (i+1)*CHUNK)
-        };
+        const chunk = { _chunk:true, _id:id, _i:i, _n:total, _d: str.slice(i*CHUNK, (i+1)*CHUNK) };
         const cb = new TextEncoder().encode(JSON.stringify(chunk));
-        await agoraClient.sendStreamMessage(cb, true);
-        // Small delay between chunks to avoid flooding
+        if(dataStreamId !== null){
+          await agoraClient.sendStreamMessage(dataStreamId, cb);
+        } else {
+          await agoraClient.sendStreamMessage(cb, true);
+        }
         if(i < total-1) await new Promise(r=>setTimeout(r,50));
       }
+      log('sendToStage: chunked sent ok ('+total+' chunks)', 'ok');
     }
-  }catch(e){ console.warn('sendToStage error:', e); }
+  }catch(e){
+    log('sendToStage ERROR: '+e.message+' type='+obj.type, 'err');
+  }
 }
 function handleStageMsg(msg){
   if(msg.type==='song-ended'){ muteMic(); showScreen('screen-home'); }
@@ -1741,12 +1762,12 @@ document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#h
 </script>
 
 <!-- Debug log panel -->
-<div id="singer-dbg-panel" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(4,2,8,.97);padding:max(50px,env(safe-area-inset-top)) 14px 14px;flex-direction:column;overflow:hidden;">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0;">
-    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,200,120,.6);font-family:var(--font-mono);">Debug Log</div>
-    <div onclick="toggleSingerLog()" style="font-size:18px;cursor:pointer;color:rgba(255,200,120,.5);padding:4px 8px;">✕</div>
+<div id="singer-dbg-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;height:200px;z-index:9000;background:rgba(4,2,8,.95);border-top:1px solid rgba(255,200,80,.25);flex-direction:column;overflow:hidden;pointer-events:auto;">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 10px;border-bottom:1px solid rgba(255,200,80,.1);flex-shrink:0;">
+    <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,200,120,.5);font-family:var(--font-mono);">Debug Log — tap costume while this is open</div>
+    <div onclick="toggleSingerLog()" style="font-size:16px;cursor:pointer;color:rgba(255,200,120,.5);padding:2px 8px;">✕</div>
   </div>
-  <div id="singer-dbg" style="flex:1;overflow-y:auto;font-family:var(--font-mono);-webkit-overflow-scrolling:touch;"></div>
+  <div id="singer-dbg" style="flex:1;overflow-y:auto;font-family:var(--font-mono);-webkit-overflow-scrolling:touch;padding:4px 10px;"></div>
 </div>
 
 <!-- Log button — fixed top left -->
