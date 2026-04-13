@@ -183,7 +183,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.94</div>
+  <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.95</div>
 </div>
 
 <!-- HOME -->
@@ -193,7 +193,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.94</div>
+      <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.95</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -482,19 +482,20 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 
 <!-- COSTUME PICKER -->
 <div id="screen-costume" class="screen">
-  <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
-    <div style="padding:max(14px,env(safe-area-inset-top)) 18px 10px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
-      <div onclick="hideSingerCostumePicker()" style="font-size:13px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Back</div>
-      <div style="font-family:var(--font-display);font-size:18px;color:var(--color-text);font-style:italic;">Accessories</div>
-      <div onclick="sendClearAllAccessories()" style="font-size:11px;color:rgba(196,122,107,.7);font-family:var(--font-mono);cursor:pointer;">Clear All</div>
+  <div style="display:flex;flex-direction:column;height:100%;background:#0a0608;">
+    <!-- Header -->
+    <div style="padding:max(20px,env(safe-area-inset-top)) 18px 12px;display:flex;align-items:center;justify-content:space-between;background:#0a0608;flex-shrink:0;border-bottom:1px solid rgba(255,200,80,.15);">
+      <div onclick="hideSingerCostumePicker()" style="font-size:14px;color:rgba(255,200,80,.8);letter-spacing:.06em;font-family:monospace;padding:8px 4px;">← Back</div>
+      <div style="font-size:18px;color:rgba(255,220,150,.9);font-style:italic;">Accessories</div>
+      <div onclick="sendClearAllAccessories()" style="font-size:12px;color:rgba(255,100,80,.8);font-family:monospace;padding:8px 4px;">Clear All</div>
     </div>
-    <!-- Single scrollable container for everything -->
-    <div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
-      <div style="font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.08em;font-family:var(--font-mono);padding:0 18px 8px;">AR Filters</div>
-      <div id="singer-deepar-grid" style="padding:0 18px 4px;"></div>
-      <div style="margin:10px 18px 6px;border-top:1px solid rgba(255,255,255,.06);"></div>
-      <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.08em;font-family:var(--font-mono);padding:0 18px 8px;">Basic overlays · tap to toggle</div>
-      <div id="singer-costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 18px 40px;align-content:start;"></div>
+    <!-- Scrollable content -->
+    <div style="flex:1;overflow-y:scroll;-webkit-overflow-scrolling:touch;min-height:0;">
+      <div style="font-size:11px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:monospace;padding:12px 18px 8px;text-transform:uppercase;">AR Filters</div>
+      <div id="singer-deepar-grid" style="padding:0 18px 8px;"></div>
+      <div style="margin:4px 18px 8px;border-top:1px solid rgba(255,255,255,.1);"></div>
+      <div style="font-size:11px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:monospace;padding:0 18px 8px;text-transform:uppercase;">Basic Overlays</div>
+      <div id="singer-costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 18px 60px;"></div>
     </div>
   </div>
 </div>
@@ -503,19 +504,18 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 <div id="screen-postsong" class="screen" style="display:none;"></div>
 
 <!-- PERF COSTUME OVERLAY — slides up over performance screen -->
-<div id="perf-costume-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:var(--color-overlay);backdrop-filter:blur(8px);flex-direction:column;overflow:hidden;">
-  <div style="padding:max(14px,env(safe-area-inset-top)) 18px 10px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
-    <div onclick="hidePerfCostumePicker()" style="font-size:13px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;-webkit-user-select:none;">✕ Close</div>
-    <div style="font-family:var(--font-display);font-size:18px;color:var(--color-text);font-style:italic;">Accessories</div>
-    <div onclick="sendClearAllAccessories();clearAllDeepAREffects();updatePerfCostumeGrid();" style="font-size:11px;color:rgba(196,122,107,.7);font-family:var(--font-mono);cursor:pointer;-webkit-user-select:none;">Clear All</div>
+<div id="perf-costume-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(10,6,8,.97);flex-direction:column;overflow:hidden;">
+  <div style="padding:max(20px,env(safe-area-inset-top)) 18px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid rgba(255,200,80,.15);">
+    <div onclick="hidePerfCostumePicker()" style="font-size:14px;color:rgba(255,200,80,.8);font-family:monospace;padding:8px 4px;-webkit-user-select:none;">✕ Close</div>
+    <div style="font-size:18px;color:rgba(255,220,150,.9);font-style:italic;">Accessories</div>
+    <div onclick="sendClearAllAccessories();clearAllDeepAREffects();updatePerfCostumeGrid();" style="font-size:12px;color:rgba(255,100,80,.8);font-family:monospace;padding:8px 4px;-webkit-user-select:none;">Clear All</div>
   </div>
-  <!-- Single scrollable container -->
-  <div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
-    <div style="font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.08em;font-family:var(--font-mono);padding:0 18px 8px;">AR Filters</div>
-    <div id="perf-deepar-grid" style="padding:0 18px 4px;"></div>
-    <div style="margin:8px 18px 6px;border-top:1px solid rgba(255,255,255,.06);"></div>
-    <div style="font-size:10px;color:rgba(255,200,120,.25);letter-spacing:.08em;font-family:var(--font-mono);padding:0 18px 6px;">Basic overlays · tap to toggle</div>
-    <div id="perf-costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 18px 40px;align-content:start;"></div>
+  <div style="flex:1;overflow-y:scroll;-webkit-overflow-scrolling:touch;min-height:0;">
+    <div style="font-size:11px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:monospace;padding:12px 18px 8px;text-transform:uppercase;">AR Filters</div>
+    <div id="perf-deepar-grid" style="padding:0 18px 8px;"></div>
+    <div style="margin:4px 18px 8px;border-top:1px solid rgba(255,255,255,.1);"></div>
+    <div style="font-size:11px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:monospace;padding:0 18px 8px;text-transform:uppercase;">Basic Overlays</div>
+    <div id="perf-costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 18px 60px;"></div>
   </div>
 </div>
 
@@ -1116,8 +1116,8 @@ function buildCostumeGrid(gridId, cardPrefix){
     const active = singerActiveAccessories.has(a.id);
     const card = document.createElement('div');
     card.id = cardPrefix+a.id;
-    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'var(--color-gold-dim)':'rgba(255,255,255,.15)'};background:${active?'var(--color-gold-faint)':'rgba(255,255,255,.06)'};-webkit-user-select:none;touch-action:manipulation;`;
-    card.innerHTML = `<div style="font-size:26px;margin-bottom:4px;">${a.emoji}</div><div style="font-size:10px;color:rgba(255,220,150,.7);font-family:var(--font-mono);">${a.label}</div>`;
+    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'rgba(255,200,80,.6)':'rgba(255,255,255,.2)'};background:${active?'rgba(255,200,80,.15)':'rgba(255,255,255,.06)'};-webkit-user-select:none;touch-action:manipulation;`;
+    card.innerHTML = `<div style="font-size:26px;margin-bottom:4px;">${a.emoji}</div><div style="font-size:11px;color:rgba(255,220,150,.85);font-family:monospace;">${a.label}</div>`;
     card.onclick = ()=>{ singerToggleAccessory(a.id); syncAllCostumeGrids(); };
     grid.appendChild(card);
   });
