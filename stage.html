@@ -308,7 +308,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.83</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.84</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -430,7 +430,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.83</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v1.84</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1498,7 +1498,11 @@ async function publishCanvasToAgora(){
 async function publishCamToAgora(){ await publishCanvasToAgora(); }
 
 function startSegmentation(vid){
-  if(typeof SelfieSegmentation === 'undefined'){ segOk=false; return; }
+  if(typeof SelfieSegmentation === 'undefined'){
+    log('startSegmentation: SelfieSegmentation undefined — script not loaded','err');
+    segOk=false; return;
+  }
+  log('startSegmentation: starting MediaPipe segmentation','info');
   const seg = new SelfieSegmentation({
     locateFile: f=>`https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`
   });
@@ -1506,6 +1510,7 @@ function startSegmentation(vid){
   seg.onResults(res=>{
     if(!segOk){
       segOk=true;
+      log('startSegmentation: first result received — compositing active','ok');
       document.getElementById('sdot').className='dot ok';
       document.getElementById('slbl').textContent='Compositing';
     }
@@ -1515,7 +1520,7 @@ function startSegmentation(vid){
   async function segLoop(){
     if(!segRunning) return;
     if(vid.readyState >= 2){
-      try{ await seg.send({image:vid}); }catch(e){}
+      try{ await seg.send({image:vid}); }catch(e){ log('seg.send error: '+e.message,'err'); }
       if((guideActive || activeAccessories.size > 0) && poseInst){
         try{ await poseInst.send({image:vid}); }catch(e){}
       }
