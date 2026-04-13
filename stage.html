@@ -299,7 +299,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.48</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.49</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,232,122,.8);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -421,7 +421,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'DM Mo
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.48</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v1.49</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -2966,16 +2966,12 @@ function startParticleLoop(){
 const AMBIENT_PROFILES = {
 
   default: {
-    audio(){ const ac=getAmbientCtx(); playLoop(makeNoise(ac,4,'brown'),0.04); },
+    audio: null, // audio disabled for testing
     anim(){ spawnParticles({ count:8, spawn(){ return { x:Math.random()*ambientW, y:Math.random()*ambientH, r:Math.random()*1.5+0.5, o:Math.random()*0.3+0.05, life:1, update(){ this.y-=0.2; this.o-=0.0003; }, draw(c){ c.beginPath(); c.arc(this.x,this.y,this.r,0,Math.PI*2); c.fillStyle=`rgba(255,220,150,${this.o})`; c.fill(); }, alive(){ return this.o>0&&this.y>0; } }; } }); startParticleLoop(); }
   },
 
   stadium: {
-    audio(){
-      const ac=getAmbientCtx();
-      playLoop(makeNoise(ac,4,'brown'),0.18); // crowd roar
-      playLoop(makeNoise(ac,4,'white'),0.03); // air
-    },
+    audio: null, // disabled for testing
     anim(){
       // Phone lights twinkling across seats
       spawnParticles({ count:300, spawn(){ return {
@@ -2998,14 +2994,7 @@ const AMBIENT_PROFILES = {
   },
 
   disco: {
-    audio(){
-      const ac=getAmbientCtx();
-      // Bass thump — 120bpm
-      const bpm=120, interval=60/bpm;
-      let t=ac.currentTime+0.5;
-      function thump(){ if(!ambientRunning||currentAmbientVenue!=='disco') return; const o=ac.createOscillator(); o.frequency.value=60; o.type='sine'; const g=ac.createGain(); g.gain.setValueAtTime(0.5,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.3); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.35); t+=interval; if(t<ac.currentTime+60) setTimeout(thump,(t-ac.currentTime-0.1)*1000); } thump();
-      playLoop(makeNoise(ac,4,'brown'),0.06);
-    },
+    audio: null, // disabled for testing
     anim(){
       // Mirror ball dots rotating
       const dots=[];
@@ -3021,15 +3010,7 @@ const AMBIENT_PROFILES = {
   },
 
   space: {
-    audio(){
-      const ac=getAmbientCtx();
-      // Station hum
-      playTone(60,0.06,'sine');
-      playTone(120,0.03,'sine');
-      // Beeps
-      scheduleBeeps([880,1200,660,1760],2.5,0.05);
-      scheduleBeeps([440,550],5,0.03);
-    },
+    audio: null, // disabled for testing
     anim(){
       // Drifting stars
       spawnParticles({ count:150, spawn(){ return {
@@ -3053,8 +3034,7 @@ const AMBIENT_PROFILES = {
   speakeasy: {
     audio(){
       const ac=getAmbientCtx();
-      playLoop(makeNoise(ac,4,'brown'),0.08); // crowd murmur
-      // Occasional glass clink
+      // Occasional glass clink only — no brown noise base layer
       function clink(){ if(!ambientRunning||currentAmbientVenue!=='speakeasy') return; const t=ac.currentTime; const o=ac.createOscillator(); o.frequency.value=1200+Math.random()*400; o.type='sine'; const g=ac.createGain(); g.gain.setValueAtTime(0.1,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.8); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.9); setTimeout(clink, 4000+Math.random()*6000); }
       setTimeout(clink,2000);
     },
@@ -3073,12 +3053,7 @@ const AMBIENT_PROFILES = {
   },
 
   honkytonk: {
-    audio(){
-      const ac=getAmbientCtx();
-      playLoop(makeNoise(ac,4,'brown'),0.07);
-      function whoop(){ if(!ambientRunning||currentAmbientVenue!=='honkytonk') return; const t=ac.currentTime; const o=ac.createOscillator(); o.frequency.setValueAtTime(300,t); o.frequency.linearRampToValueAtTime(600,t+0.3); o.type='sine'; const g=ac.createGain(); g.gain.setValueAtTime(0.08,t); g.gain.linearRampToValueAtTime(0,t+0.4); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.45); setTimeout(whoop,5000+Math.random()*8000); }
-      setTimeout(whoop,3000);
-    },
+    audio: null, // disabled for testing
     anim(){
       // Neon sign flicker + dust
       let neonAlpha=1, neonTimer=0;
@@ -3100,13 +3075,7 @@ const AMBIENT_PROFILES = {
   },
 
   festival: {
-    audio(){
-      const ac=getAmbientCtx();
-      playLoop(makeNoise(ac,4,'brown'),0.15);
-      // Bass thump 128bpm
-      const interval=60/128; let t=ac.currentTime+0.5;
-      function thump(){ if(!ambientRunning||currentAmbientVenue!=='festival') return; const o=ac.createOscillator(); o.frequency.value=55; const g=ac.createGain(); g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.25); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.3); t+=interval; if(t<ac.currentTime+60) setTimeout(thump,(t-ac.currentTime-0.1)*1000); } thump();
-    },
+    audio: null, // disabled for testing
     anim(){
       // Lasers + confetti
       const lasers=Array.from({length:4},(_,i)=>({ hue:i*90, angle:Math.PI*0.3-i*0.2, speed:(i%2?1:-1)*0.004 }));
