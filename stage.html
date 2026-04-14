@@ -225,6 +225,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 .dl.err{color:rgba(196,100,80,.9);}
 .dl.ok{color:var(--color-green-dim);}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 </head>
 <body>
 
@@ -308,7 +309,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.03</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.04</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -435,7 +436,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.03</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.04</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1859,17 +1860,28 @@ function runGuideLoop(gc, W, H){
 // VENUES
 // ═══════════════════════════════════════
 const VENUES = [
-  { id:'stadium',   name:'Stadium',          icon:'🏟️', skyboxId:'stadium',   startYaw:-45,  staticYaw:151,  staticPitch:-17 },
-  { id:'jazz',      name:'Jazz Club',         icon:'🎷', skyboxId:null,        startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'speakeasy', name:'Speakeasy',         icon:'🥃', skyboxId:'speakeasy', startYaw:66,   staticYaw:201,  staticPitch:-1  },
-  { id:'vegas',     name:'Las Vegas',         icon:'🎰', skyboxId:'vegas',     startYaw:79,   staticYaw:-150, staticPitch:2   },
-  { id:'broadway',  name:'Broadway',          icon:'🎭', skyboxId:null,        startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'disco',     name:'Disco Club',        icon:'🪩', skyboxId:'disco',     startYaw:-200, staticYaw:23,   staticPitch:0   },
-  { id:'honkytonk', name:'Honky Tonk',        icon:'🤠', skyboxId:'honkytonk', startYaw:168,  staticYaw:-71,  staticPitch:6   },
-  { id:'festival',  name:'Festival',          icon:'🎪', skyboxId:'festival',  startYaw:358,  staticYaw:109,  staticPitch:-6  },
-  { id:'space',     name:'Space Station',     icon:'🚀', skyboxId:null,        startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'forest',    name:'Enchanted Forest',  icon:'🌲', skyboxId:null,        startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'default',   name:'Classic Stage',     icon:'🎤', skyboxId:null,        startYaw:363,  staticYaw:0,    staticPitch:0   },
+  { id:'default',    name:'Classic Stage',     icon:'🎤', skyboxId:null,          startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'stadium',    name:'Stadium',           icon:'🏟️', skyboxId:'stadium',    startYaw:-45,  staticYaw:151,  staticPitch:-17 },
+  { id:'speakeasy',  name:'Speakeasy',         icon:'🥃', skyboxId:'speakeasy',  startYaw:66,   staticYaw:201,  staticPitch:-1  },
+  { id:'disco',      name:'Disco Club',        icon:'🪩', skyboxId:'disco',      startYaw:-200, staticYaw:23,   staticPitch:0   },
+  { id:'honkytonk',  name:'Honky Tonk',        icon:'🤠', skyboxId:'honkytonk',  startYaw:168,  staticYaw:-71,  staticPitch:6   },
+  { id:'festival',   name:'Festival',          icon:'🎪', skyboxId:'festival',   startYaw:358,  staticYaw:109,  staticPitch:-6  },
+  { id:'vegas',      name:'Las Vegas',         icon:'🎰', skyboxId:'vegas',      startYaw:79,   staticYaw:-150, staticPitch:2   },
+  { id:'jazz',       name:'Jazz Club',         icon:'🎷', skyboxId:'jazz',       startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'broadway',   name:'Broadway',          icon:'🎭', skyboxId:'broadway',   startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'forest',     name:'Enchanted Forest',  icon:'🌲', skyboxId:'forest',     startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'space',      name:'Space Station',     icon:'🚀', skyboxId:'space',      startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'dragonlair', name:"Dragon's Lair",     icon:'🐉', skyboxId:'dragonlair', startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'underwater', name:'Underwater',        icon:'🐠', skyboxId:'underwater', startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'divebar',    name:'Dive Bar',          icon:'🍺', skyboxId:'divebar',    startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'supperclub', name:'Supper Club',       icon:'🍷', skyboxId:'supperclub', startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'bourbon',    name:'Bourbon Street',    icon:'🎺', skyboxId:'bourbon',    startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'cabaret',    name:'Cabaret',           icon:'🪗', skyboxId:'cabaret',    startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'rooftop',    name:'Rooftop Party',     icon:'🌆', skyboxId:'rooftop',    startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'artdeco',    name:'Art Deco Ballroom', icon:'✨', skyboxId:'artdeco',    startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'skiodge',    name:'Après-Ski Lodge',   icon:'⛷️', skyboxId:'skiodge',   startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'tikibar',    name:'Tiki Bar',          icon:'🌺', skyboxId:'tikibar',    startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'wildwest',   name:'Wild West',         icon:'🤠', skyboxId:'wildwest',   startYaw:0,    staticYaw:0,    staticPitch:0   },
 ];
 
 const VENUE_BASE_URL = 'https://mstepanovich-web.github.io/elsewhere/venues/';
@@ -1920,6 +1932,8 @@ function buildPanorama(){
   }
 
   // Clear existing meshes
+  // Dispose any existing 3D venue effects
+  if(venueEffects3D){ venueEffects3D.dispose(); venueEffects3D=null; }
   while(panScene.children.length) panScene.remove(panScene.children[0]);
   panReady = false;
 
@@ -1947,6 +1961,8 @@ function buildPanorama(){
       tex.needsUpdate = true;
       const sGeo = new THREE.SphereGeometry(500,60,40); sGeo.scale(-1,1,1);
       panScene.add(new THREE.Mesh(sGeo, new THREE.MeshBasicMaterial({map:tex})));
+      // Add venue-specific 3D effects into the panorama scene
+      addVenueEffects3D(capturedVenueId);
       panReady = true;
       tYaw = venue.startYaw || 0;
       cYaw = venue.startYaw || 0;
@@ -2082,6 +2098,198 @@ function buildProgrammaticPanorama(){
   panReady=true;
   initVenueMode();
   log('Programmatic panorama built', 'ok');
+}
+
+// ── 3D Venue Effects — rendered inside the Three.js panorama scene ────────────
+let venueEffects3D = null; // holds { update, dispose } for current venue
+
+function addVenueEffects3D(venueId){
+  // Clean up previous effects
+  if(venueEffects3D){ venueEffects3D.dispose(); venueEffects3D=null; }
+
+  if(venueId === 'stadium') venueEffects3D = buildStadiumEffects3D();
+  else if(venueId === 'speakeasy') venueEffects3D = buildSpeakeasyEffects3D();
+}
+
+function buildStadiumEffects3D(){
+  const objects = [];
+
+  // ── 1. Phone lights — 2000 tiny points scattered in crowd area ──
+  const lightGeo = new THREE.BufferGeometry();
+  const count = 2000;
+  const pos = new Float32Array(count * 3);
+  const phases = new Float32Array(count);
+  for(let i=0; i<count; i++){
+    const phi   = (Math.random() * 0.7 + 0.15) * Math.PI; // vertical spread (crowd area)
+    const theta = Math.random() * Math.PI * 2;             // full 360°
+    const r     = 460 + Math.random() * 30;                // near sphere wall
+    pos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+    pos[i*3+1] = r * Math.cos(phi) * 0.4 - 80;            // flatten vertically, lower
+    pos[i*3+2] = r * Math.sin(phi) * Math.sin(theta);
+    phases[i]  = Math.random() * Math.PI * 2;
+  }
+  lightGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const lightMat = new THREE.PointsMaterial({
+    color: 0xffffff, size: 2.5, sizeAttenuation: true,
+    transparent: true, opacity: 0.8, depthWrite: false
+  });
+  const lights = new THREE.Points(lightGeo, lightMat);
+  panScene.add(lights);
+  objects.push(lights);
+
+  // ── 2. Sweeping spotlights — 4 cones from ceiling ──
+  const spotData = [
+    { phi: 0.15, theta: 0.0,       color: 0xfffce0, speed: 0.003 },
+    { phi: 0.15, theta: Math.PI,   color: 0xfffce0, speed:-0.004 },
+    { phi: 0.12, theta: Math.PI/2, color: 0xfff0cc, speed: 0.005 },
+    { phi: 0.12, theta:-Math.PI/2, color: 0xfff0cc, speed:-0.003 },
+  ];
+  const cones = spotData.map(sd=>{
+    const geo = new THREE.CylinderGeometry(0, 35, 300, 16, 1, true);
+    geo.translate(0, -150, 0); // pivot at top
+    const mat = new THREE.MeshBasicMaterial({
+      color: sd.color, transparent: true, opacity: 0.06,
+      side: THREE.BackSide, depthWrite: false
+    });
+    const cone = new THREE.Mesh(geo, mat);
+    // Position at ceiling
+    const r = 380;
+    cone.position.set(
+      r * Math.sin(sd.phi) * Math.cos(sd.theta),
+      r * Math.cos(sd.phi),
+      r * Math.sin(sd.phi) * Math.sin(sd.theta)
+    );
+    cone.lookAt(0, 0, 0);
+    cone.userData = { speed: sd.speed, angle: sd.theta };
+    panScene.add(cone);
+    objects.push(cone);
+    return cone;
+  });
+
+  let frame = 0;
+  function update(){
+    frame++;
+    // Twinkle phone lights
+    if(frame % 3 === 0){
+      lightMat.opacity = 0.5 + Math.sin(frame * 0.04) * 0.3;
+    }
+    // Sweep spotlights
+    cones.forEach(cone=>{
+      cone.userData.angle += cone.userData.speed;
+      const sd = spotData[cones.indexOf(cone)];
+      const r = 380, phi = sd.phi + Math.sin(frame * 0.01) * 0.08;
+      const theta = cone.userData.angle;
+      cone.position.set(
+        r * Math.sin(phi) * Math.cos(theta),
+        r * Math.cos(phi),
+        r * Math.sin(phi) * Math.sin(theta)
+      );
+      cone.lookAt(0, 0, 0);
+    });
+  }
+
+  function dispose(){
+    objects.forEach(o=>{ panScene.remove(o); o.geometry.dispose(); o.material.dispose(); });
+  }
+
+  return { update, dispose };
+}
+
+function buildSpeakeasyEffects3D(){
+  const objects = [];
+
+  // ── 1. Volumetric smoke — many translucent spheres drifting upward ──
+  const smokeCount = 60;
+  const smokeMeshes = [];
+  const smokeGeo = new THREE.SphereGeometry(1, 6, 6);
+
+  for(let i=0; i<smokeCount; i++){
+    const scale  = 15 + Math.random() * 40;
+    const mat    = new THREE.MeshBasicMaterial({
+      color: 0xbbbbaa, transparent: true,
+      opacity: Math.random() * 0.04 + 0.01,
+      depthWrite: false
+    });
+    const mesh = new THREE.Mesh(smokeGeo, mat);
+    // Random position inside the sphere — low to mid height
+    const r     = 50 + Math.random() * 300;
+    const phi   = (0.4 + Math.random() * 0.5) * Math.PI;
+    const theta = Math.random() * Math.PI * 2;
+    mesh.position.set(
+      r * Math.sin(phi) * Math.cos(theta),
+      r * Math.cos(phi) * 0.5 - 30,
+      r * Math.sin(phi) * Math.sin(theta)
+    );
+    mesh.scale.setScalar(scale);
+    mesh.userData = {
+      vy: 0.08 + Math.random() * 0.12,
+      vx: (Math.random() - 0.5) * 0.05,
+      vz: (Math.random() - 0.5) * 0.05,
+      life: Math.random(),
+      maxOpacity: mat.opacity
+    };
+    panScene.add(mesh);
+    smokeMeshes.push(mesh);
+    objects.push(mesh);
+  }
+
+  // ── 2. Warm candle glow points — scattered on tables ──
+  const candleGeo = new THREE.BufferGeometry();
+  const cCount = 40;
+  const cPos = new Float32Array(cCount * 3);
+  for(let i=0; i<cCount; i++){
+    const r     = 80 + Math.random() * 250;
+    const theta = Math.random() * Math.PI * 2;
+    cPos[i*3]   = r * Math.cos(theta);
+    cPos[i*3+1] = -80 - Math.random() * 40; // table height
+    cPos[i*3+2] = r * Math.sin(theta);
+  }
+  candleGeo.setAttribute('position', new THREE.BufferAttribute(cPos, 3));
+  const candleMat = new THREE.PointsMaterial({
+    color: 0xffaa33, size: 4, sizeAttenuation: true,
+    transparent: true, opacity: 0.7, depthWrite: false
+  });
+  const candles = new THREE.Points(candleGeo, candleMat);
+  panScene.add(candles);
+  objects.push(candles);
+
+  let frame = 0;
+  function update(){
+    frame++;
+    // Drift smoke upward
+    smokeMeshes.forEach(mesh=>{
+      mesh.position.y += mesh.userData.vy;
+      mesh.position.x += mesh.userData.vx;
+      mesh.position.z += mesh.userData.vz;
+      mesh.userData.life += 0.003;
+      // Fade in then fade out
+      const t = mesh.userData.life % 1;
+      mesh.material.opacity = mesh.userData.maxOpacity * Math.sin(t * Math.PI);
+      // Reset when faded out
+      if(t > 0.98){
+        const r     = 50 + Math.random() * 300;
+        const phi   = (0.55 + Math.random() * 0.35) * Math.PI;
+        const theta = Math.random() * Math.PI * 2;
+        mesh.position.set(
+          r * Math.sin(phi) * Math.cos(theta),
+          r * Math.cos(phi) * 0.5 - 30,
+          r * Math.sin(phi) * Math.sin(theta)
+        );
+        mesh.userData.life = Math.random() * 0.1;
+      }
+    });
+    // Flicker candles
+    if(frame % 4 === 0){
+      candleMat.opacity = 0.5 + Math.random() * 0.5;
+    }
+  }
+
+  function dispose(){
+    objects.forEach(o=>{ panScene.remove(o); o.geometry.dispose(); o.material.dispose(); });
+    smokeGeo.dispose();
+  }
+
+  return { update, dispose };
 }
 
 // Head tracking (mouse fallback if FaceMesh unavailable)
@@ -3018,6 +3226,7 @@ function renderLoop(){
     panCamera3.fov = 80; panCamera3.updateProjectionMatrix();
     panCamera3.rotation.y = -(headTrackingAuto ? cYaw   : manualYaw  ) * D2R * YS;
     panCamera3.rotation.x = -(headTrackingAuto ? clamp(cPitch,-MU,MD) : clamp(manualPitch,-MU,MD)) * D2R * PS;
+    if(venueEffects3D) venueEffects3D.update();
     panRenderer.render(panScene, panCamera3);
     if(fc%3===0){
       document.getElementById('cneedle').style.transform=`translateX(-50%) translateY(-100%) rotate(${cYaw*YS}deg)`;
@@ -3039,6 +3248,8 @@ function renderLoop(){
       venuePitch = lerp(venuePitch, venuePitchTarget, SMOOTH);
       panCamera3.rotation.y = -venueYaw   * D2R;
       panCamera3.rotation.x = -venuePitch * D2R;
+      // Update 3D venue effects before rendering
+      if(venueEffects3D) venueEffects3D.update();
       panRenderer.render(panScene, panCamera3);
       const pl = document.getElementById('pan-layer');
       pl.style.opacity = '1';
@@ -3561,17 +3772,73 @@ const AMBIENT_PROFILES = {
   stadium: {
     audio(){ playAmbientMp3('stadium'); },
     anim(){
-      spawnParticles({ count:300, spawn(){ return {
-        x:Math.random()*ambientW, y:ambientH*0.1+Math.random()*ambientH*0.55,
-        o:Math.random(), phase:Math.random()*Math.PI*2, speed:Math.random()*0.02+0.01,
-        update(){ this.o=0.3+Math.sin(this.phase+=this.speed)*0.7; },
-        draw(c){ c.beginPath(); c.arc(this.x,this.y,1.2,0,Math.PI*2); c.fillStyle=`rgba(255,255,255,${this.o*0.6})`; c.fill(); },
+      // 4 GSAP-animated spotlight beams sweeping independently
+      const beams = Array.from({length:4}, (_,i)=>({
+        angle: (i-1.5)*0.25,
+        targetAngle: (Math.random()-0.5)*0.8,
+        alpha: 0.08 + Math.random()*0.06,
+        hue: [220,200,240,180][i]
+      }));
+
+      // GSAP sweep each beam to a new random position every 2-4 seconds
+      function sweepBeam(beam){
+        if(currentAmbientVenue !== 'stadium') return;
+        const newAngle = (Math.random()-0.5)*0.85;
+        gsap.to(beam, {
+          angle: newAngle, alpha: 0.06 + Math.random()*0.1,
+          duration: 1.5 + Math.random()*2.5, ease:'power1.inOut',
+          onComplete: ()=> sweepBeam(beam)
+        });
+      }
+      beams.forEach((b,i)=> setTimeout(()=>sweepBeam(b), i*800));
+
+      // Crowd cheer swell — GSAP brightens phone lights
+      const crowdState = { brightness: 0.6 };
+      function cheerSwell(){
+        if(currentAmbientVenue !== 'stadium') return;
+        gsap.to(crowdState, {
+          brightness: 1.4, duration: 0.8, ease:'power2.out',
+          onComplete:()=> gsap.to(crowdState, { brightness: 0.6, duration: 3, ease:'power1.in' })
+        });
+        setTimeout(cheerSwell, 8000 + Math.random()*8000);
+      }
+      setTimeout(cheerSwell, 4000);
+
+      // 400 phone lights in crowd — twinkle independently
+      spawnParticles({ count:400, spawn(){ return {
+        x: Math.random()*ambientW,
+        y: ambientH*0.08 + Math.random()*ambientH*0.52,
+        phase: Math.random()*Math.PI*2,
+        speed: Math.random()*0.025+0.008,
+        update(){ this.phase += this.speed; },
+        draw(c){
+          const o = (0.2 + Math.sin(this.phase)*0.8) * crowdState.brightness;
+          c.beginPath(); c.arc(this.x,this.y,1.4,0,Math.PI*2);
+          c.fillStyle = `rgba(255,255,255,${Math.max(0,Math.min(1,o*0.7))}`; c.fill();
+        },
         _eternal:true, alive(){ return true; }
       }; } });
-      spawnParticles({ count:2, spawn(){ const side=Math.random()<0.5?-1:1; return {
-        angle:side*Math.PI*0.3, speed:0.003*side,
-        update(){ this.angle+=this.speed; if(Math.abs(this.angle)>Math.PI*0.4) this.speed*=-1; },
-        draw(c){ c.save(); c.translate(ambientW/2,0); c.rotate(this.angle); const g=c.createLinearGradient(0,0,0,ambientH); g.addColorStop(0,'rgba(255,255,200,0.12)'); g.addColorStop(1,'rgba(255,255,200,0)'); c.fillStyle=g; c.beginPath(); c.moveTo(-10,0); c.lineTo(10,0); c.lineTo(ambientW*0.4,ambientH); c.lineTo(-ambientW*0.4,ambientH); c.closePath(); c.fill(); c.restore(); },
+
+      // Spotlight beams
+      spawnParticles({ count:1, spawn(){ return {
+        update(){},
+        draw(c){
+          beams.forEach(b=>{
+            c.save();
+            c.translate(ambientW/2, 0);
+            c.rotate(b.angle);
+            const g = c.createLinearGradient(0,0,0,ambientH);
+            g.addColorStop(0, `hsla(${b.hue},80%,95%,${b.alpha})`);
+            g.addColorStop(0.5, `hsla(${b.hue},80%,95%,${b.alpha*0.4})`);
+            g.addColorStop(1, `hsla(${b.hue},80%,95%,0)`);
+            c.fillStyle = g;
+            c.beginPath();
+            c.moveTo(-6,0); c.lineTo(6,0);
+            c.lineTo(ambientW*0.5,ambientH); c.lineTo(-ambientW*0.5,ambientH);
+            c.closePath(); c.fill();
+            c.restore();
+          });
+        },
         _eternal:true, alive(){ return true; }
       }; } });
       startParticleLoop();
@@ -3581,12 +3848,66 @@ const AMBIENT_PROFILES = {
   disco: {
     audio(){ playAmbientMp3('disco'); },
     anim(){
-      const dots=[];
-      for(let i=0;i<80;i++) dots.push({ angle:Math.random()*Math.PI*2, dist:Math.random()*Math.max(ambientW,ambientH)*0.6, color:`hsl(${Math.random()*360},100%,70%)`, size:Math.random()*3+1, speed:0.004+Math.random()*0.003 });
-      let rot=0;
+      // GSAP beat-synced mirror ball — 120bpm = 500ms per beat
+      const BPM = 120, BEAT = 60000 / BPM;
+      const dots = [];
+      for(let i=0;i<120;i++) dots.push({
+        angle: Math.random()*Math.PI*2,
+        dist: Math.random()*Math.max(ambientW,ambientH)*0.65,
+        color: `hsl(${Math.random()*360},100%,70%)`,
+        size: Math.random()*4+1,
+        baseSize: Math.random()*4+1
+      });
+      let rot = 0;
+      // Beat pulse state
+      const beatState = { scale: 1, brightness: 1 };
+
+      // GSAP beat pulse — fires every beat
+      function pulseBeat(){
+        if(currentAmbientVenue !== 'disco') return;
+        gsap.to(beatState, {
+          scale: 1.8, brightness: 1.6, duration: 0.08, ease: 'power2.out',
+          onComplete: ()=> gsap.to(beatState, { scale: 1, brightness: 1, duration: 0.35, ease: 'power2.in' })
+        });
+        setTimeout(pulseBeat, BEAT);
+      }
+      setTimeout(pulseBeat, BEAT);
+
+      // Floor flash on beat
+      const flashState = { alpha: 0 };
+      function flashBeat(){
+        if(currentAmbientVenue !== 'disco') return;
+        gsap.to(flashState, {
+          alpha: 0.18, duration: 0.05, ease: 'power3.out',
+          onComplete: ()=> gsap.to(flashState, { alpha: 0, duration: 0.4, ease: 'power2.in' })
+        });
+        setTimeout(flashBeat, BEAT);
+      }
+      setTimeout(flashBeat, BEAT * 0.5); // offset by half beat
+
       spawnParticles({ count:1, spawn(){ return {
-        update(){ rot+=0.008; },
-        draw(c){ dots.forEach(d=>{ const a=d.angle+rot; const x=ambientW/2+Math.cos(a)*d.dist; const y=ambientH*0.3+Math.sin(a)*d.dist*0.4; if(x>0&&x<ambientW&&y>0&&y<ambientH){ c.beginPath(); c.arc(x,y,d.size,0,Math.PI*2); c.fillStyle=d.color; c.globalAlpha=0.7; c.fill(); c.globalAlpha=1; } }); },
+        update(){ rot += 0.012; },
+        draw(c){
+          // Floor flash
+          if(flashState.alpha > 0){
+            const fg = c.createLinearGradient(0, ambientH*0.6, 0, ambientH);
+            fg.addColorStop(0, `rgba(255,180,255,${flashState.alpha})`);
+            fg.addColorStop(1, `rgba(120,80,255,${flashState.alpha*0.5})`);
+            c.fillStyle = fg; c.fillRect(0, ambientH*0.6, ambientW, ambientH*0.4);
+          }
+          // Mirror ball dots — scale on beat
+          dots.forEach(d=>{
+            const a = d.angle + rot;
+            const x = ambientW/2 + Math.cos(a)*d.dist;
+            const y = ambientH*0.3 + Math.sin(a)*d.dist*0.4;
+            if(x>0&&x<ambientW&&y>0&&y<ambientH){
+              const s = d.baseSize * beatState.scale;
+              c.beginPath(); c.arc(x,y,s,0,Math.PI*2);
+              c.fillStyle = d.color; c.globalAlpha = 0.6 * beatState.brightness;
+              c.fill(); c.globalAlpha = 1;
+            }
+          });
+        },
         _eternal:true, alive(){ return true; }
       }; } });
       startParticleLoop();
@@ -3620,13 +3941,66 @@ const AMBIENT_PROFILES = {
   speakeasy: {
     audio(){ playAmbientMp3('speakeasy'); },
     anim(){
-      spawnParticles({ count:25, spawn(){ return {
-        x:Math.random()*ambientW, y:ambientH*0.7+Math.random()*ambientH*0.3,
-        vx:(Math.random()-0.5)*0.3, vy:-(Math.random()*0.5+0.2),
-        size:Math.random()*20+8, o:Math.random()*0.06+0.02,
-        update(){ this.x+=this.vx; this.y+=this.vy; this.size+=0.15; this.o-=0.0003; this.vx+=(Math.random()-0.5)*0.03; },
-        draw(c){ const g=c.createRadialGradient(this.x,this.y,0,this.x,this.y,this.size); g.addColorStop(0,`rgba(200,200,200,${this.o})`); g.addColorStop(1,'rgba(200,200,200,0)'); c.fillStyle=g; c.fillRect(this.x-this.size,this.y-this.size,this.size*2,this.size*2); },
-        alive(){ return this.o>0&&this.y>-50; }
+      // Warm amber light shafts from above — GSAP slow drift
+      const shafts = Array.from({length:3}, (_,i)=>({
+        x: ambientW*(0.25 + i*0.25),
+        alpha: 0.04 + Math.random()*0.04,
+        width: 60 + Math.random()*40
+      }));
+      shafts.forEach(s=>{
+        function driftShaft(){
+          if(currentAmbientVenue !== 'speakeasy') return;
+          gsap.to(s, {
+            x: s.x + (Math.random()-0.5)*80,
+            alpha: 0.03 + Math.random()*0.06,
+            duration: 4 + Math.random()*4,
+            ease: 'sine.inOut',
+            onComplete: driftShaft
+          });
+        }
+        setTimeout(driftShaft, Math.random()*2000);
+      });
+
+      // Volumetric smoke wisps — larger, slower, more atmospheric
+      spawnParticles({ count:35, spawn(){ return {
+        x: Math.random()*ambientW,
+        y: ambientH*0.6 + Math.random()*ambientH*0.4,
+        vx: (Math.random()-0.5)*0.4,
+        vy: -(Math.random()*0.35+0.1),
+        size: Math.random()*45+20,
+        o: Math.random()*0.05+0.015,
+        update(){
+          this.x += this.vx; this.y += this.vy;
+          this.size += 0.2; this.o -= 0.00015;
+          this.vx += (Math.random()-0.5)*0.02;
+        },
+        draw(c){
+          const g = c.createRadialGradient(this.x,this.y,0,this.x,this.y,this.size);
+          g.addColorStop(0,`rgba(210,190,160,${this.o})`);
+          g.addColorStop(1,'rgba(210,190,160,0)');
+          c.fillStyle=g; c.fillRect(this.x-this.size,this.y-this.size,this.size*2,this.size*2);
+        },
+        alive(){ return this.o>0 && this.y>-100; }
+      }; } });
+
+      // Light shaft overlay
+      spawnParticles({ count:1, spawn(){ return {
+        update(){},
+        draw(c){
+          shafts.forEach(s=>{
+            const g = c.createLinearGradient(0,0,0,ambientH*0.7);
+            g.addColorStop(0, `rgba(255,210,140,${s.alpha})`);
+            g.addColorStop(1, 'rgba(255,210,140,0)');
+            c.fillStyle = g;
+            c.beginPath();
+            c.moveTo(s.x - s.width*0.3, 0);
+            c.lineTo(s.x + s.width*0.3, 0);
+            c.lineTo(s.x + s.width, ambientH*0.7);
+            c.lineTo(s.x - s.width, ambientH*0.7);
+            c.closePath(); c.fill();
+          });
+        },
+        _eternal:true, alive(){ return true; }
       }; } });
       startParticleLoop();
     }
@@ -3649,15 +4023,70 @@ const AMBIENT_PROFILES = {
   festival: {
     audio(){ playAmbientMp3('festival'); },
     anim(){
-      const lasers=Array.from({length:4},(_,i)=>({ hue:i*90, angle:Math.PI*0.3-i*0.2, speed:(i%2?1:-1)*0.004 }));
+      // GSAP beat-synced laser show — 128bpm = 469ms per beat
+      const BPM = 128, BEAT = 60000 / BPM;
+      const lasers = Array.from({length:6},(_,i)=>({
+        hue: i*60, angle: Math.PI*0.35 - i*0.14,
+        speed: (i%2?1:-1)*0.005,
+        width: 3+i%2*2,
+        alpha: 0.35
+      }));
+
+      // Beat pulse — lasers flare on every beat
+      function beatPulse(){
+        if(currentAmbientVenue !== 'festival') return;
+        lasers.forEach((l,i)=>{
+          gsap.to(l, {
+            alpha: 0.85, width: (3+i%2*2)*2.5,
+            duration: 0.06, ease:'power3.out',
+            onComplete:()=> gsap.to(l, { alpha: 0.35, width: 3+i%2*2, duration: 0.38, ease:'power2.in' })
+          });
+        });
+        setTimeout(beatPulse, BEAT);
+      }
+      setTimeout(beatPulse, BEAT * 0.5);
+
+      // Strobe flash on every 4th beat (downbeat)
+      const strobe = { alpha: 0 };
+      let beatCount = 0;
+      function strobePulse(){
+        if(currentAmbientVenue !== 'festival') return;
+        beatCount++;
+        if(beatCount % 4 === 0){
+          gsap.to(strobe, {
+            alpha: 0.25, duration: 0.04,
+            onComplete:()=> gsap.to(strobe, { alpha: 0, duration: 0.2 })
+          });
+        }
+        setTimeout(strobePulse, BEAT);
+      }
+      setTimeout(strobePulse, BEAT);
+
       spawnParticles({ count:1, spawn(){ return {
-        update(){ lasers.forEach(l=>{ l.angle+=l.speed; if(Math.abs(l.angle)>Math.PI*0.45) l.speed*=-1; }); },
-        draw(c){ lasers.forEach(l=>{ c.save(); c.translate(ambientW/2,ambientH); c.rotate(l.angle); const g=c.createLinearGradient(0,0,0,-ambientH); g.addColorStop(0,`hsla(${l.hue},100%,60%,0.4)`); g.addColorStop(1,`hsla(${l.hue},100%,60%,0)`); c.fillStyle=g; c.fillRect(-2,-ambientH,4,ambientH); c.restore(); }); },
+        update(){ lasers.forEach(l=>{ l.angle+=l.speed; if(Math.abs(l.angle)>Math.PI*0.48) l.speed*=-1; }); },
+        draw(c){
+          // Strobe flash
+          if(strobe.alpha>0){ c.fillStyle=`rgba(255,255,255,${strobe.alpha})`; c.fillRect(0,0,ambientW,ambientH); }
+          // Beat-synced lasers
+          lasers.forEach(l=>{
+            c.save(); c.translate(ambientW/2,ambientH); c.rotate(l.angle);
+            const g=c.createLinearGradient(0,0,0,-ambientH);
+            g.addColorStop(0,`hsla(${l.hue},100%,65%,${l.alpha})`);
+            g.addColorStop(0.6,`hsla(${l.hue},100%,65%,${l.alpha*0.3})`);
+            g.addColorStop(1,`hsla(${l.hue},100%,65%,0)`);
+            c.fillStyle=g; c.fillRect(-l.width/2,-ambientH,l.width,ambientH);
+            c.restore();
+          });
+        },
         _eternal:true, alive(){ return true; }
       }; } });
-      spawnParticles({ count:60, spawn(){ return {
-        x:Math.random()*ambientW, y:-10, vy:Math.random()*1+0.5, vx:(Math.random()-0.5)*1.5,
-        color:`hsl(${Math.random()*360},100%,65%)`, size:Math.random()*4+2, rot:Math.random()*Math.PI*2, rotV:Math.random()*0.1-0.05,
+
+      // Continuous confetti
+      spawnParticles({ count:80, spawn(){ return {
+        x:Math.random()*ambientW, y:-10,
+        vy:Math.random()*1.2+0.4, vx:(Math.random()-0.5)*2,
+        color:`hsl(${Math.random()*360},100%,65%)`,
+        size:Math.random()*5+2, rot:Math.random()*Math.PI*2, rotV:(Math.random()-0.5)*0.12,
         update(){ this.x+=this.vx; this.y+=this.vy; this.rot+=this.rotV; },
         draw(c){ c.save(); c.translate(this.x,this.y); c.rotate(this.rot); c.fillStyle=this.color; c.fillRect(-this.size/2,-this.size/2,this.size,this.size); c.restore(); },
         alive(){ return this.y<ambientH+20; }
