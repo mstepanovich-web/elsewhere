@@ -308,7 +308,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.01</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.03</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -435,7 +435,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.01</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.03</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -3373,8 +3373,10 @@ let audioStopGen = 0; // increments on each stop to cancel stale callbacks
 function stopAmbientAudio(){
   const ctxState = ambientAudioCtx ? ambientAudioCtx.state : 'none';
   log('stopAmbientAudio — nodes:'+ambientNodes.length+' ctxState:'+ctxState, 'info');
-  audioStopGen++; // invalidate any pending resume callbacks
+  audioStopGen++;
   const myGen = audioStopGen;
+  // Stop MP3 source if playing
+  stopAmbientMp3();
   ambientNodes.forEach(n=>{ try{ n.stop(); n.disconnect(); }catch(e){} });
   ambientNodes = [];
   if(ambientGain){
@@ -3513,21 +3515,51 @@ function startParticleLoop(){
   runParticleLoop();
 }
 
+// ── ElevenLabs ambient sound player ──────────────────────────────────────────
+const SOUNDS_BASE = 'https://mstepanovich-web.github.io/elsewhere/sounds/';
+let ambientMp3Source = null;
+let ambientMp3VenueId = null;
+
+async function playAmbientMp3(venueId){
+  const ac = getAmbientCtx();
+  if(ambientMp3VenueId === venueId && ambientMp3Source) return;
+  if(ambientMp3Source){ try{ ambientMp3Source.stop(); }catch(e){} ambientMp3Source=null; }
+  ambientMp3VenueId = venueId;
+  const url = SOUNDS_BASE + venueId + '.mp3';
+  try{
+    const resp = await fetch(url);
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const buf = await resp.arrayBuffer();
+    if(ambientMp3VenueId !== venueId) return;
+    const decoded = await ac.decodeAudioData(buf);
+    if(ambientMp3VenueId !== venueId) return;
+    const src = ac.createBufferSource();
+    src.buffer = decoded;
+    src.loop = true;
+    src.connect(ambientGain);
+    src.start();
+    ambientMp3Source = src;
+    log('Ambient MP3 playing: '+venueId,'ok');
+  }catch(e){
+    log('Ambient MP3 failed ('+venueId+'): '+e.message,'warn');
+  }
+}
+
+function stopAmbientMp3(){
+  if(ambientMp3Source){ try{ ambientMp3Source.stop(); }catch(e){} ambientMp3Source=null; }
+  ambientMp3VenueId = null;
+}
+
 // ── Venue Profiles ──
 const AMBIENT_PROFILES = {
 
   default: {
     audio: null,
-    anim: null  // no animation on classic stage
+    anim: null
   },
 
   stadium: {
-    audio(){
-      const ac=getAmbientCtx();
-      // Crowd cheer swell on song start — no base noise layer
-      function cheer(){ if(currentAmbientVenue!=='stadium') return; const buf=makeNoise(ac,1,'brown'); const src=ac.createBufferSource(); src.buffer=buf; const g=ac.createGain(); g.gain.setValueAtTime(0,ac.currentTime); g.gain.linearRampToValueAtTime(0.25,ac.currentTime+0.5); g.gain.linearRampToValueAtTime(0,ac.currentTime+3); src.connect(g); g.connect(ambientGain); src.start(); src.stop(ac.currentTime+3.5); setTimeout(cheer, 8000+Math.random()*6000); }
-      setTimeout(cheer, 3000);
-    },
+    audio(){ playAmbientMp3('stadium'); },
     anim(){
       spawnParticles({ count:300, spawn(){ return {
         x:Math.random()*ambientW, y:ambientH*0.1+Math.random()*ambientH*0.55,
@@ -3547,12 +3579,7 @@ const AMBIENT_PROFILES = {
   },
 
   disco: {
-    audio(){
-      const ac=getAmbientCtx();
-      const bpm=120, interval=60/bpm; let t=ac.currentTime+0.5;
-      function thump(){ if(currentAmbientVenue!=='disco') return; const o=ac.createOscillator(); o.frequency.value=60; o.type='sine'; const g=ac.createGain(); g.gain.setValueAtTime(0.5,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.3); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.35); t+=interval; if(t<ac.currentTime+60) setTimeout(thump,(t-ac.currentTime-0.1)*1000); }
-      thump();
-    },
+    audio(){ playAmbientMp3('disco'); },
     anim(){
       const dots=[];
       for(let i=0;i<80;i++) dots.push({ angle:Math.random()*Math.PI*2, dist:Math.random()*Math.max(ambientW,ambientH)*0.6, color:`hsl(${Math.random()*360},100%,70%)`, size:Math.random()*3+1, speed:0.004+Math.random()*0.003 });
@@ -3591,18 +3618,7 @@ const AMBIENT_PROFILES = {
   },
 
   speakeasy: {
-    audio(){
-      const ac=getAmbientCtx();
-      function clink(){
-        if(currentAmbientVenue!=='speakeasy') return;
-        const t=ac.currentTime;
-        const o=ac.createOscillator(); o.frequency.value=1200+Math.random()*400; o.type='sine';
-        const g=ac.createGain(); g.gain.setValueAtTime(0.1,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.8);
-        o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.9);
-        setTimeout(clink, 4000+Math.random()*6000);
-      }
-      setTimeout(clink, 2000);
-    },
+    audio(){ playAmbientMp3('speakeasy'); },
     anim(){
       spawnParticles({ count:25, spawn(){ return {
         x:Math.random()*ambientW, y:ambientH*0.7+Math.random()*ambientH*0.3,
@@ -3617,12 +3633,7 @@ const AMBIENT_PROFILES = {
   },
 
   honkytonk: {
-    audio(){
-      const ac=getAmbientCtx();
-      // Occasional whoop — no base noise
-      function whoop(){ if(currentAmbientVenue!=='honkytonk') return; const t=ac.currentTime; const o=ac.createOscillator(); o.frequency.setValueAtTime(300,t); o.frequency.linearRampToValueAtTime(600,t+0.3); o.type='sine'; const g=ac.createGain(); g.gain.setValueAtTime(0.08,t); g.gain.linearRampToValueAtTime(0,t+0.4); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.45); setTimeout(whoop,5000+Math.random()*8000); }
-      setTimeout(whoop, 2000);
-    },
+    audio(){ playAmbientMp3('honkytonk'); },
     anim(){
       // Neon sign flicker only — removed amber dust particles
       let neonAlpha=1, neonTimer=0;
@@ -3636,13 +3647,7 @@ const AMBIENT_PROFILES = {
   },
 
   festival: {
-    audio(){
-      const ac=getAmbientCtx();
-      // Bass thump only — no crowd noise
-      const interval=60/128; let t=ac.currentTime+0.5;
-      function thump(){ if(currentAmbientVenue!=='festival') return; const o=ac.createOscillator(); o.frequency.value=55; const g=ac.createGain(); g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.25); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.3); t+=interval; if(t<ac.currentTime+60) setTimeout(thump,(t-ac.currentTime-0.1)*1000); }
-      thump();
-    },
+    audio(){ playAmbientMp3('festival'); },
     anim(){
       const lasers=Array.from({length:4},(_,i)=>({ hue:i*90, angle:Math.PI*0.3-i*0.2, speed:(i%2?1:-1)*0.004 }));
       spawnParticles({ count:1, spawn(){ return {
@@ -3662,10 +3667,7 @@ const AMBIENT_PROFILES = {
   },
 
   forest: {
-    audio(){
-      // Bird/fairy chimes only — no brown noise base
-      scheduleBeeps([880,1100,660,1320],1.5,0.03);
-    },
+    audio(){ playAmbientMp3('forest'); },
     anim(){
       spawnParticles({ count:40, spawn(){ return {
         x:Math.random()*ambientW, y:Math.random()*ambientH,
