@@ -314,7 +314,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.17</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.19</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -453,7 +453,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.17</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.19</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -2373,12 +2373,11 @@ function hideVenueTransition(){
   const el = document.getElementById('venue-transition');
   if(!el){ log('hideVenueTransition: element NOT FOUND','err'); return; }
   log('hideVenueTransition: called — display='+el.style.display+' opacity='+el.style.opacity,'info');
+  // Force hide immediately — don't wait for CSS transition
+  el.style.display = 'none';
   el.style.opacity = '0';
-  setTimeout(()=>{
-    el.style.display = 'none';
-    el.style.opacity = '1';
-    log('hideVenueTransition: done ✓','ok');
-  }, 350);
+  el.style.pointerEvents = 'none';
+  log('hideVenueTransition: done ✓','ok');
 }
 
 function buildPanorama(){
@@ -2410,7 +2409,6 @@ function buildPanorama(){
     const url = `${VENUE_BASE_URL}${venue.skyboxId}.jpg`;
     const capturedVenueId = venue.id;
     log('buildPanorama: loading texture '+url, 'info');
-    showVenueTransition(venue); // show overlay while loading
     const loader = new THREE.TextureLoader();
     loader.crossOrigin = 'anonymous';
 
@@ -2434,13 +2432,13 @@ function buildPanorama(){
       cYaw = venue.startYaw || 0;
       manualYaw = venue.startYaw || 0;
       log('buildPanorama: texture loaded ✓ panReady=true viewMode='+viewMode, 'ok');
+      hideVenueTransition(); // hide loading overlay immediately
       initVenueMode();
       if(panCamera3 && viewMode==='audience'){
         panCamera3.rotation.y = -(venue.staticYaw||0) * D2R;
         panCamera3.rotation.x = -(venue.staticPitch||0) * D2R;
         log('buildPanorama: camera snapped yaw='+venue.staticYaw+' pitch='+venue.staticPitch, 'ok');
       }
-      hideVenueTransition(); // fade out once venue is ready
     }, undefined, (err)=>{
       clearTimeout(timeoutId);
       log('buildPanorama: TEXTURE FAILED '+url, 'err');
@@ -3252,7 +3250,6 @@ function handleAudienceMsg(msg){
       cancelVenueTour();
       if(venueEffects3D){ venueEffects3D.dispose(); venueEffects3D=null; }
       if(panScene) while(panScene.children.length) panScene.remove(panScene.children[0]);
-      if(v.skyboxId) showVenueTransition(v);
       buildPanorama();
       tYaw = v.startYaw || 0; cYaw = v.startYaw || 0;
       log('set-venue: found id='+v.id+' skyboxId='+v.skyboxId+' viewMode='+viewMode, 'ok');
