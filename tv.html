@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elsewhere · TV</title>
+  <link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%; overflow: hidden;
+      background: var(--color-bg);
+      font-family: var(--font-ui);
+    }
+
+    /* ── Ambient background ─────────────────────── */
+    .bg {
+      position: fixed; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse 55% 55% at 20% 60%, rgba(255,200,80,.04) 0%, transparent 65%),
+        radial-gradient(ellipse 45% 45% at 80% 40%, rgba(201,169,110,.03) 0%, transparent 65%),
+        var(--color-bg);
+    }
+
+    /* ── Wordmark ───────────────────────────────── */
+    .wordmark {
+      position: fixed; top: 32px; left: 50%; transform: translateX(-50%);
+      z-index: 20;
+      font-family: var(--font-display); font-size: clamp(18px, 2vw, 26px);
+      font-weight: 300; letter-spacing: var(--tracking-widest);
+      color: rgba(255,200,80,.55); text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    /* ── Screens ────────────────────────────────── */
+    .screen {
+      position: fixed; inset: 0; z-index: 10;
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.35s ease;
+      padding: 80px 40px 40px;
+    }
+    .screen.active { display: flex; }
+    .screen.visible { opacity: 1; }
+
+    /* ── SCREEN 1: Setup ────────────────────────── */
+    .setup-title {
+      font-family: var(--font-display);
+      font-size: clamp(32px, 4vw, 56px);
+      font-weight: 300; letter-spacing: var(--tracking-wide);
+      color: rgba(255,220,150,.92); margin-bottom: 8px; text-align: center;
+    }
+    .setup-sub {
+      font-size: var(--text-sm); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+      margin-bottom: clamp(32px, 5vh, 56px); text-align: center;
+    }
+
+    .setup-fields {
+      display: flex; gap: clamp(20px, 4vw, 48px);
+      flex-wrap: wrap; justify-content: center;
+      width: 100%; max-width: 760px; margin-bottom: clamp(32px, 5vh, 56px);
+    }
+
+    .field-group {
+      display: flex; flex-direction: column; gap: 8px;
+      flex: 1 1 280px; max-width: 340px;
+    }
+    .field-label {
+      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+      font-family: var(--font-mono);
+    }
+    .field-select {
+      background: rgba(255,200,80,.07);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      color: var(--color-text);
+      font-family: var(--font-mono); font-size: var(--text-md);
+      padding: 14px 16px; cursor: pointer; outline: none;
+      width: 100%;
+      transition: border-color var(--transition-fast);
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(255,200,80,.4)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 36px;
+    }
+    .field-select:focus { border-color: var(--color-border-bright); }
+    .field-select option { background: #0a0608; }
+
+    .setup-btn {
+      padding: 18px 56px;
+      background: rgba(255,200,80,.75);
+      border: none; border-radius: var(--radius-pill);
+      color: var(--color-bg);
+      font-family: var(--font-ui); font-size: var(--text-sm);
+      letter-spacing: var(--tracking-wider); text-transform: uppercase;
+      font-weight: 600; cursor: pointer;
+      box-shadow: 0 4px 24px rgba(255,200,80,.18);
+      transition: background var(--transition-fast), transform var(--transition-fast);
+    }
+    .setup-btn:hover { background: rgba(255,200,80,.92); }
+    .setup-btn:active { transform: scale(0.98); }
+
+    /* camera preview pill */
+    .cam-preview-wrap {
+      display: none; align-items: center; gap: 10px;
+      margin-top: 16px;
+    }
+    .cam-preview-wrap.visible { display: flex; }
+    .cam-preview {
+      width: 80px; height: 52px; border-radius: 6px;
+      object-fit: cover; border: 1px solid var(--color-border-dim);
+      transform: scaleX(-1);
+    }
+    .cam-preview-label {
+      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+      font-family: var(--font-mono);
+    }
+
+    /* ── SCREEN 2: QR codes ─────────────────────── */
+    .qr-header {
+      font-family: var(--font-display);
+      font-size: clamp(18px, 2vw, 26px);
+      font-weight: 300; letter-spacing: var(--tracking-wider);
+      color: var(--color-text-faint); text-align: center;
+      margin-bottom: clamp(32px, 5vh, 56px);
+    }
+
+    .qr-grid {
+      display: flex; gap: clamp(32px, 6vw, 80px);
+      align-items: stretch; flex-wrap: wrap; justify-content: center;
+      width: 100%; max-width: 900px;
+    }
+
+    .qr-tile {
+      flex: 1 1 300px; max-width: 380px;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 20px; padding: clamp(28px, 4vw, 44px) clamp(24px, 3vw, 40px);
+      border: 1px solid var(--color-border-dim);
+      border-radius: var(--radius-xl);
+      transition: border-color 0.3s ease;
+      position: relative; overflow: hidden;
+    }
+    .qr-tile::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+    }
+    .qr-tile--karaoke {
+      background: linear-gradient(160deg, rgba(20,12,8,.92) 0%, rgba(10,6,4,.96) 100%);
+    }
+    .qr-tile--karaoke::before {
+      background: radial-gradient(ellipse 70% 55% at 50% 100%, rgba(255,200,80,.06) 0%, transparent 70%);
+    }
+    .qr-tile--fashion {
+      background: linear-gradient(160deg, rgba(16,11,9,.94) 0%, rgba(8,5,4,.97) 100%);
+    }
+    .qr-tile--fashion::before {
+      background: radial-gradient(ellipse 70% 55% at 50% 100%, rgba(201,169,110,.06) 0%, transparent 70%);
+    }
+
+    .qr-mode-label {
+      font-family: var(--font-display);
+      font-size: clamp(26px, 3.5vw, 44px);
+      font-weight: 300; letter-spacing: var(--tracking-wide);
+      text-align: center;
+    }
+    .qr-tile--karaoke .qr-mode-label { color: rgba(255,220,150,.92); }
+    .qr-tile--fashion  .qr-mode-label { color: #F5ECD7; }
+
+    .qr-box {
+      background: #fff; padding: 14px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 24px rgba(0,0,0,.5);
+      flex-shrink: 0;
+    }
+    .qr-box canvas { display: block; }
+
+    .qr-url {
+      font-family: var(--font-mono); font-size: clamp(10px, 1.1vw, 13px);
+      letter-spacing: var(--tracking-normal);
+      text-align: center; word-break: break-all;
+      line-height: 1.6;
+    }
+    .qr-tile--karaoke .qr-url { color: rgba(255,200,120,.4); }
+    .qr-tile--fashion  .qr-url { color: rgba(201,169,110,.4); }
+
+    .qr-hint {
+      font-size: clamp(10px, 1vw, 13px); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; text-align: center;
+    }
+    .qr-tile--karaoke .qr-hint { color: rgba(255,200,120,.35); }
+    .qr-tile--fashion  .qr-hint { color: rgba(201,169,110,.35); }
+
+    /* room code badge */
+    .room-badge {
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+      z-index: 30; display: flex; align-items: center; gap: 10px;
+      background: rgba(4,2,6,.9); backdrop-filter: blur(8px);
+      border: 1px solid var(--color-border-dim);
+      border-radius: var(--radius-pill); padding: 8px 20px;
+      opacity: 0; transition: opacity 0.4s ease 0.6s;
+    }
+    .room-badge.visible { opacity: 1; }
+    .room-badge-label {
+      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+      font-family: var(--font-mono);
+    }
+    .room-badge-code {
+      font-family: var(--font-mono); font-size: var(--text-md);
+      letter-spacing: var(--tracking-wider); font-weight: 500;
+      color: rgba(255,200,80,.9);
+    }
+
+    /* back button */
+    .back-btn {
+      position: fixed; top: 28px; left: 32px; z-index: 30;
+      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+      cursor: pointer; background: none; border: none;
+      font-family: var(--font-ui); display: none;
+    }
+    .back-btn.visible { display: block; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg"></div>
+  <div class="wordmark">Elsewhere</div>
+  <button class="back-btn" id="back-btn">← Back</button>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- SCREEN 1: Setup                           -->
+  <!-- ══════════════════════════════════════════ -->
+  <div class="screen active" id="screen-setup">
+
+    <div class="setup-title">Set Up Your Stage</div>
+    <div class="setup-sub">Select your camera and quality, then continue</div>
+
+    <div class="setup-fields">
+
+      <div class="field-group">
+        <div class="field-label">Camera</div>
+        <select class="field-select" id="cam-select">
+          <option value="">Detecting cameras…</option>
+        </select>
+        <div class="cam-preview-wrap" id="cam-preview-wrap">
+          <video class="cam-preview" id="cam-preview" autoplay muted playsinline></video>
+          <span class="cam-preview-label">Preview</span>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <div class="field-label">Quality</div>
+        <select class="field-select" id="res-select">
+          <option value="hd">HD — 1280×720  (Recommended)</option>
+          <option value="standard">Standard — 640×480  (Lower CPU)</option>
+          <option value="fhd">Full HD — 1920×1080  (High CPU)</option>
+        </select>
+      </div>
+
+    </div>
+
+    <button class="setup-btn" id="setup-continue">Continue →</button>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- SCREEN 2: QR codes                        -->
+  <!-- ══════════════════════════════════════════ -->
+  <div class="screen" id="screen-qr">
+
+    <div class="qr-header">Scan a code on your phone to begin</div>
+
+    <div class="qr-grid">
+
+      <div class="qr-tile qr-tile--karaoke">
+        <div class="qr-mode-label">🎤 Karaoke</div>
+        <div class="qr-box">
+          <canvas id="qr-karaoke" width="200" height="200"></canvas>
+        </div>
+        <div class="qr-url" id="qr-karaoke-url">—</div>
+        <div class="qr-hint">Performer · Audience</div>
+      </div>
+
+      <div class="qr-tile qr-tile--fashion">
+        <div class="qr-mode-label">✨ Fashion</div>
+        <div class="qr-box">
+          <canvas id="qr-fashion" width="200" height="200"></canvas>
+        </div>
+        <div class="qr-url" id="qr-fashion-url">—</div>
+        <div class="qr-hint">Try On · Transform · Reveal</div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Room code badge (shown on QR screen) -->
+  <div class="room-badge" id="room-badge">
+    <span class="room-badge-label">Room</span>
+    <span class="room-badge-code" id="room-badge-code">——</span>
+  </div>
+
+  <script>
+  // ═══════════════════════════════════════
+  //  Config
+  // ═══════════════════════════════════════
+  const BASE_URL   = 'https://mstepanovich-web.github.io/elsewhere';
+  const STAGE_URL  = BASE_URL + '/stage.html';
+  const FASHION_URL = BASE_URL + '/fashion/display.html';
+
+  // Generate room code — same charset as stage.html
+  const CHARS     = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let roomCode    = '';
+  for (let i = 0; i < 6; i++) roomCode += CHARS[Math.floor(Math.random() * CHARS.length)];
+
+  // ═══════════════════════════════════════
+  //  Screen management
+  // ═══════════════════════════════════════
+  function goTo(id) {
+    document.querySelectorAll('.screen').forEach(s => {
+      s.classList.remove('visible');
+      setTimeout(() => {
+        s.classList.remove('active');
+        if (s.id === id) {
+          s.classList.add('active');
+          requestAnimationFrame(() => s.classList.add('visible'));
+        }
+      }, 200);
+    });
+    document.getElementById('back-btn').classList.toggle('visible', id !== 'screen-setup');
+    document.getElementById('room-badge').classList.toggle('visible', id === 'screen-qr');
+  }
+
+  // Show first screen
+  setTimeout(() => document.getElementById('screen-setup').classList.add('visible'), 60);
+
+  document.getElementById('back-btn').addEventListener('click', () => goTo('screen-setup'));
+
+  // ═══════════════════════════════════════
+  //  Camera detection + preview
+  // ═══════════════════════════════════════
+  let previewStream = null;
+  const camSelect   = document.getElementById('cam-select');
+  const previewWrap = document.getElementById('cam-preview-wrap');
+  const previewVid  = document.getElementById('cam-preview');
+
+  async function detectCameras() {
+    try {
+      // Need a temp stream to trigger permission + get labels
+      const tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      tmp.getTracks().forEach(t => t.stop());
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams    = devices.filter(d => d.kind === 'videoinput');
+
+      camSelect.innerHTML = '';
+      cams.forEach((cam, i) => {
+        const opt = document.createElement('option');
+        opt.value = cam.deviceId;
+        opt.textContent = cam.label || `Camera ${i + 1}`;
+        camSelect.appendChild(opt);
+      });
+
+      if (cams.length === 0) {
+        camSelect.innerHTML = '<option value="">No cameras found</option>';
+        return;
+      }
+
+      startPreview(cams[0].deviceId);
+    } catch (e) {
+      camSelect.innerHTML = '<option value="">Camera access denied</option>';
+    }
+  }
+
+  async function startPreview(deviceId) {
+    if (previewStream) previewStream.getTracks().forEach(t => t.stop());
+    try {
+      previewStream = await navigator.mediaDevices.getUserMedia({
+        video: deviceId ? { deviceId: { exact: deviceId } } : true,
+        audio: false
+      });
+      previewVid.srcObject = previewStream;
+      previewWrap.classList.add('visible');
+    } catch (e) {
+      previewWrap.classList.remove('visible');
+    }
+  }
+
+  camSelect.addEventListener('change', () => {
+    if (camSelect.value) startPreview(camSelect.value);
+  });
+
+  detectCameras();
+
+  // ═══════════════════════════════════════
+  //  Continue → show QR screen
+  // ═══════════════════════════════════════
+  document.getElementById('setup-continue').addEventListener('click', () => {
+    // Stop preview — stage.html will open its own camera stream
+    if (previewStream) { previewStream.getTracks().forEach(t => t.stop()); previewStream = null; }
+
+    const selectedCam = camSelect.value;
+    const selectedRes = document.getElementById('res-select').value;
+
+    // Build URLs with room code + camera/res params so stage.html can pick them up
+    const karaokeUrl = `${STAGE_URL}?room=${roomCode}&cam=${encodeURIComponent(selectedCam)}&res=${selectedRes}`;
+    const fashionUrl  = `${FASHION_URL}?room=${roomCode}`;
+
+    // Set room badge
+    document.getElementById('room-badge-code').textContent = roomCode;
+
+    // Render QR codes
+    renderQR('qr-karaoke', karaokeUrl);
+    renderQR('qr-fashion',  fashionUrl);
+
+    // Show URLs
+    document.getElementById('qr-karaoke-url').textContent = karaokeUrl;
+    document.getElementById('qr-fashion-url').textContent  = fashionUrl;
+
+    goTo('screen-qr');
+  });
+
+  // ═══════════════════════════════════════
+  //  QR rendering (qrcodejs from CDN)
+  // ═══════════════════════════════════════
+  function renderQR(canvasId, url) {
+    const canvas = document.getElementById(canvasId);
+    const size   = canvas.width;
+
+    if (typeof QRCode !== 'undefined') {
+      // qrcodejs — render into temp div then copy to canvas
+      const tmp = document.createElement('div');
+      document.body.appendChild(tmp);
+      tmp.style.cssText = 'position:fixed;left:-9999px;top:0;';
+      new QRCode(tmp, { text: url, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
+      const img = tmp.querySelector('img');
+      if (img) {
+        img.onload = () => {
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, size, size);
+          ctx.drawImage(img, 0, 0, size, size);
+          tmp.remove();
+        };
+      } else {
+        const qrCanvas = tmp.querySelector('canvas');
+        if (qrCanvas) {
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, size, size);
+          ctx.drawImage(qrCanvas, 0, 0, size, size);
+        }
+        tmp.remove();
+      }
+      return;
+    }
+
+    // Fallback: draw a placeholder with the URL as text
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#333';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('QR loading…', size / 2, size / 2 - 6);
+    ctx.fillText(url.slice(0, 32), size / 2, size / 2 + 12);
+  }
+  </script>
+
+</body>
+</html>

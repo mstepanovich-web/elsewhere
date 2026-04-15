@@ -501,7 +501,10 @@ const V = { r:255, g:100, b:50 }; // stage accent color
 // ═══════════════════════════════════════
 const AGORA_APP_ID   = 'b2c6543a9ed946829e6526cb68c7efc9'; // ← 32-char hex from console.agora.io
 const CHAN_PREFIX     = 'elsewhere_';
-const ROOM_CODE       = (() => { const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<6;i++) s+=c[Math.floor(Math.random()*c.length)]; return s; })();
+const _urlParams      = new URLSearchParams(location.search);
+const _urlRoom        = (_urlParams.get('room')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+const ROOM_CODE       = _urlRoom.length >= 4 ? _urlRoom : (()=>{ const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<6;i++) s+=c[Math.floor(Math.random()*c.length)]; return s; })();
+const ARRIVED_VIA_QR  = _urlRoom.length >= 4; // true = came from tv.html QR scan
 const CHANNEL         = CHAN_PREFIX + ROOM_CODE;
 
 document.getElementById('rcode').textContent = ROOM_CODE;
@@ -1284,7 +1287,19 @@ async function populateCameraList(){
       opt.textContent = cam.label || `Camera ${i+1}`;
       sel.appendChild(opt);
     });
-    if(cameras.length > 0) selectedCameraId = cameras[0].deviceId;
+    // Pre-select camera from URL param if arrived via tv.html QR
+    const _urlCam = _urlParams.get('cam') || '';
+    const _urlRes = _urlParams.get('res') || '';
+    if (_urlCam && cameras.find(c => c.deviceId === _urlCam)) {
+      selectedCameraId = _urlCam;
+      sel.value = _urlCam;
+    } else if (cameras.length > 0) {
+      selectedCameraId = cameras[0].deviceId;
+    }
+    if (_urlRes && document.getElementById('res-select')) {
+      document.getElementById('res-select').value = _urlRes;
+      setResolution(_urlRes);
+    }
     sel.onchange = ()=>{ selectedCameraId = sel.value; };
   }catch(e){
     const sel = document.getElementById('cam-select');
@@ -3861,6 +3876,7 @@ function loadYouTubeAPI(){
 const SINGER_URL = 'https://mstepanovich-web.github.io/elsewhere/singer.html';
 
 function showWaitingScreen(){
+  if (ARRIVED_VIA_QR) return; // phone already scanned QR from tv.html
   const singerLink = `${SINGER_URL}?code=${ROOM_CODE}`;
   document.getElementById('idle-room-code').textContent = ROOM_CODE;
   document.getElementById('idle-panel').style.display = 'flex';
