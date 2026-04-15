@@ -77,6 +77,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   background:rgba(4,2,6,.82);backdrop-filter:blur(10px);
   border:1px solid rgba(255,200,80,.18);border-radius:14px;
   padding:28px 32px;
+  /* needed so child absolute X button positions inside panel */
+  isolation:isolate;
 }
 #idle-panel.pulse{
   border-color:var(--color-gold-dim);
@@ -261,6 +263,9 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
 <!-- IDLE PANEL — centre stage, shown after guide until song selected -->
 <div id="idle-panel">
+  <div style="width:100%;display:flex;justify-content:flex-end;margin-bottom:-8px;margin-top:-12px;">
+    <div onclick="document.getElementById('idle-panel').style.display='none'" style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);border-radius:50%;cursor:pointer;font-size:13px;color:rgba(255,255,255,0.6);">✕</div>
+  </div>
   <div style="background:#fff;padding:14px;border-radius:8px;display:flex;align-items:center;justify-content:center;">
     <canvas id="idle-qr-canvas" width="160" height="160"></canvas>
   </div>
@@ -309,7 +314,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.04</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.07</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -436,7 +441,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.04</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.07</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -613,6 +618,13 @@ function initVenueMode(){
   log('initVenueMode — venueMode=true yaw:'+venueYaw+' pitch:'+venuePitch+' panReady:'+panReady, 'ok');
   // Start ambient audio/animation for this venue
   startAmbient(selectedVenueId);
+  // Show venue effect tray after 2s if song not active
+  resetTrayForNewVenue();
+  setTimeout(()=>{
+    if(!lyricsRunning && selectedVenueId === venue.id){
+      showVenueEffectTray(selectedVenueId);
+    }
+  }, 2000);
 }
 
 function zoomVenueOut(){
@@ -1617,6 +1629,8 @@ function startPoseDetection(vid){
   poseInst.onResults(res=>{
     if(!res.poseLandmarks) return;
     lastPoseLandmarks = res.poseLandmarks; // store globally for accessories
+    // Process tray gestures from pose landmarks
+    processTrayGesture(res.poseLandmarks);
     if(!guideActive) return; // only use for hand-raise during guide
     const ls=res.poseLandmarks[11], rs=res.poseLandmarks[12];
     const lw=res.poseLandmarks[15], rw=res.poseLandmarks[16];
@@ -1628,7 +1642,285 @@ function startPoseDetection(vid){
 }
 
 
-// ── DeepAR initialization — full pipeline (bg removal + AR filters) ───────────
+// ── Venue Effect Tray ─────────────────────────────────────────────────────────
+// Venue → curated effect IDs. null = blank slot (no effect), always first.
+const VENUE_EFFECTS = {
+  stadium:   [null, 'dar-neon-horns',  'dar-viking',      'dar-hearts',      'dar-fire'        ],
+  speakeasy: [null, 'dar-aviators',    'dar-makeup',      'dar-vendetta',    'dar-stallone'    ],
+  disco:     [null, 'dar-flower-face', 'dar-split-view',  'dar-emotion-meter','dar-galaxy'     ],
+  honkytonk: [null, 'dar-viking',      'dar-stallone',    'dar-aviators',    'dar-neon-horns'  ],
+  festival:  [null, 'dar-fire',        'dar-hearts',      'dar-flower-face', 'dar-neon-horns'  ],
+  forest:    [null, 'dar-flower-face', 'dar-elephant',    'dar-snail',       'dar-galaxy'      ],
+  vegas:     [null, 'dar-aviators',    'dar-makeup',      'dar-split-view',  'dar-stallone'    ],
+  jazz:      [null, 'dar-aviators',    'dar-makeup',      'dar-vendetta',    'dar-humanoid'    ],
+  broadway:  [null, 'dar-vendetta',    'dar-stallone',    'dar-neon-horns',  'dar-hope'        ],
+  underwater:[null, 'dar-elephant',    'dar-snail',       'dar-galaxy',      'dar-humanoid'    ],
+  dragonlair:[null, 'dar-fire',        'dar-burning',     'dar-neon-horns',  'dar-humanoid'    ],
+  space:     [null, 'dar-humanoid',    'dar-galaxy',      'dar-emotion-meter','dar-hope'       ],
+};
+
+// Tray state
+let trayVisible    = false;
+let trayOpacity    = 0;
+let trayIndex      = 0;       // current centered slot index
+let trayVenueId    = null;
+let traySlots      = [];      // resolved effect objects (null = clear slot)
+let trayFadeTimer  = null;
+let trayLocked     = false;   // true when song is active
+
+// Swipe gesture state
+let swipeStartX    = null;
+let swipeHand      = null;    // {x, y, z} of wrist when extended
+let swipeCooldown  = false;
+let pushDetected   = false;
+let pushCooldown   = false;
+
+// ── Show/hide tray ──
+function showVenueEffectTray(venueId){
+  if(trayLocked) return;
+  const slots = VENUE_EFFECTS[venueId];
+  if(!slots || !slots.length) return;
+
+  trayVenueId = venueId;
+  traySlots   = slots.map(id => id ? DEEPAR_EFFECTS.find(e=>e.id===id)||null : null);
+  trayIndex   = 0;
+  trayVisible = true;
+  trayOpacity = 0;
+
+  // Apply blank slot (no effect) on entry
+  applyTraySlot(0);
+
+  // Fade in
+  if(trayFadeTimer) clearInterval(trayFadeTimer);
+  trayFadeTimer = setInterval(()=>{
+    trayOpacity = Math.min(1, trayOpacity + 0.05);
+    if(trayOpacity >= 1) clearInterval(trayFadeTimer);
+  }, 30);
+}
+
+function hideVenueEffectTray(lockIn = false){
+  if(trayFadeTimer) clearInterval(trayFadeTimer);
+  trayFadeTimer = setInterval(()=>{
+    trayOpacity = Math.max(0, trayOpacity - 0.08);
+    if(trayOpacity <= 0){
+      clearInterval(trayFadeTimer);
+      trayVisible = false;
+      if(!lockIn){
+        // Clear effect if dismissed without locking in
+        // (locked-in keeps whatever was active)
+      }
+    }
+  }, 30);
+}
+
+function lockInTrayEffect(){
+  trayLocked = true;
+  hideVenueEffectTray(true);
+}
+
+function resetTrayForNewVenue(){
+  trayLocked = false;
+  trayVisible = false;
+  trayOpacity = 0;
+  trayIndex   = 0;
+  if(trayFadeTimer){ clearInterval(trayFadeTimer); trayFadeTimer=null; }
+}
+
+function applyTraySlot(idx){
+  const slot = traySlots[idx];
+  if(!slot){
+    // Clear all effects
+    if(deepARInst) try{
+      deepARInst.clearEffect('face');
+      deepARInst.clearEffect('hat');
+      deepARInst.clearEffect('bg');
+    }catch(e){}
+    Object.keys(deepARSlots).forEach(k=>{ deepARSlots[k]=null; });
+  } else {
+    // Apply via existing set-deepar-effect path
+    if(deepARInst && deepARReady){
+      deepARInst.switchEffect(slot.url, { slot: slot.slot }).catch(e=>log('Tray effect err:'+e,'warn'));
+      deepARSlots[slot.slot] = slot.url;
+    }
+  }
+}
+
+function traySwipe(dir){
+  // dir: -1 = left (previous), +1 = right (next)
+  if(!trayVisible || swipeCooldown) return;
+  const newIdx = Math.max(0, Math.min(traySlots.length-1, trayIndex + dir));
+  if(newIdx === trayIndex) return;
+  trayIndex = newIdx;
+  applyTraySlot(trayIndex);
+  swipeCooldown = true;
+  setTimeout(()=>{ swipeCooldown=false; }, 600);
+}
+
+// ── Draw tray on canvas ──
+function drawVenueEffectTray(){
+  if(!trayVisible || trayOpacity <= 0 || !traySlots.length) return;
+
+  const W = AC.width, H = AC.height;
+  const SLOT_W = 110, SLOT_H = 120, RADIUS = 18;
+  const TRAY_H = SLOT_H + 32;
+  const visibleSlots = 5; // center + 2 each side
+  const trayW = SLOT_W * visibleSlots + 32;
+  const trayX = W * 0.75 - trayW / 2;          // centered at 75% from left (25% from right)
+  const trayY = H - (H * 0.75) - TRAY_H / 2;   // 75% up from bottom
+
+  ctx.save();
+  ctx.globalAlpha = trayOpacity;
+
+  // Tray background
+  const bg = ctx.createRoundRect ? null : null;
+  ctx.beginPath();
+  ctx.roundRect(trayX - 16, trayY - 12, trayW + 32, TRAY_H + 16, RADIUS);
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Label above tray
+  ctx.font = 'bold 13px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.textAlign = 'center';
+  ctx.fillText('✦ VENUE EFFECTS — SWIPE TO TRY', trayX + trayW/2, trayY - 20);
+
+  // Slots
+  for(let i = -2; i <= 2; i++){
+    const slotIdx = trayIndex + i;
+    if(slotIdx < 0 || slotIdx >= traySlots.length) continue;
+
+    const slot   = traySlots[slotIdx];
+    const cx     = trayX + trayW/2 + i * SLOT_W;
+    const cy     = trayY + TRAY_H/2;
+    const isCurrent = i === 0;
+    const dist   = Math.abs(i);
+    const scale  = isCurrent ? 1 : 1 - dist * 0.15;
+    const alpha  = isCurrent ? 1 : 1 - dist * 0.3;
+
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+
+    // Slot background
+    ctx.beginPath();
+    ctx.roundRect(-SLOT_W/2+6, -SLOT_H/2+4, SLOT_W-12, SLOT_H-8, 12);
+    if(isCurrent){
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.strokeStyle = 'rgba(255,220,80,0.9)';
+      ctx.lineWidth = 2.5;
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 1;
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    // Emoji
+    ctx.font = isCurrent ? '42px serif' : '32px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'white';
+    ctx.fillText(slot ? slot.emoji : '✕', 0, -8);
+
+    // Label
+    ctx.font = `${isCurrent ? 'bold ' : ''}${isCurrent ? 12 : 10}px Inter, sans-serif`;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = isCurrent ? 'rgba(255,220,80,1)' : 'rgba(255,255,255,0.7)';
+    ctx.fillText(slot ? slot.label : 'No Effect', 0, SLOT_H/2 - 14);
+
+    ctx.restore();
+  }
+
+  // Swipe hint arrows
+  if(trayIndex > 0){
+    ctx.font = '20px serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.textAlign = 'center';
+    ctx.fillText('‹', trayX, trayY + TRAY_H/2 + 6);
+  }
+  if(trayIndex < traySlots.length - 1){
+    ctx.fillText('›', trayX + trayW + 32, trayY + TRAY_H/2 + 6);
+  }
+
+  // Palm push to close hint
+  ctx.font = '11px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.textAlign = 'center';
+  ctx.fillText('✋ push to close', trayX + trayW/2, trayY + TRAY_H + 20);
+
+  ctx.restore();
+}
+
+// ── Gesture detection for tray ──
+// Called from pose results each frame — wrist landmarks
+function processTrayGesture(poseLandmarks){
+  if(!trayVisible || !poseLandmarks) return;
+
+  // Right wrist = landmark 16, right elbow = 14, right shoulder = 12
+  // Left wrist = 15, left elbow = 13
+  const rWrist   = poseLandmarks[16];
+  const rElbow   = poseLandmarks[14];
+  const lWrist   = poseLandmarks[15];
+  const lElbow   = poseLandmarks[13];
+  const rShoulder = poseLandmarks[12];
+  const lShoulder = poseLandmarks[11];
+
+  if(!rWrist || !rElbow || !lWrist || !lElbow) return;
+
+  // ── Swipe detection: either hand extended horizontally ──
+  // Hand is "extended" when wrist is well above elbow (arm raised)
+  // and wrist x changes significantly frame to frame
+
+  const checkSwipe = (wrist, elbow, shoulder, side) => {
+    if(!wrist || !elbow || !shoulder) return;
+    // Hand raised: wrist y significantly above elbow y (lower y = higher on screen)
+    const armRaised = (elbow.y - wrist.y) > 0.08;
+    if(!armRaised) return;
+
+    // Track swipe start
+    if(swipeStartX === null){
+      swipeStartX = wrist.x;
+      swipeHand   = side;
+    } else if(swipeHand === side){
+      const dx = wrist.x - swipeStartX;
+      if(Math.abs(dx) > 0.12 && !swipeCooldown){
+        // Mirror: positive dx = hand moved right on screen = swipe right
+        traySwipe(dx > 0 ? -1 : 1);
+        swipeStartX = null;
+        swipeHand   = null;
+      }
+    }
+  };
+
+  checkSwipe(rWrist, rElbow, rShoulder, 'right');
+  checkSwipe(lWrist, lElbow, lShoulder, 'left');
+
+  // Reset swipe tracking if hand lowered
+  if(rWrist && rElbow && lWrist && lElbow){
+    const rRaised = (rElbow.y - rWrist.y) > 0.08;
+    const lRaised = (lElbow.y - lWrist.y) > 0.08;
+    if(!rRaised && !lRaised){
+      swipeStartX = null;
+      swipeHand   = null;
+    }
+  }
+
+  // ── Push to close: wrist Z significantly closer than shoulder Z ──
+  // MediaPipe z values: more negative = closer to camera
+  if(!pushCooldown && rWrist && rShoulder){
+    const zDiff = rShoulder.z - rWrist.z; // positive = wrist pushed forward
+    if(zDiff > 0.25){
+      pushCooldown = true;
+      hideVenueEffectTray(false);
+      setTimeout(()=>{ pushCooldown=false; }, 1500);
+    }
+  }
+}
 async function startDeepAR(vid){
   try{
     const deepar = await import('https://cdn.jsdelivr.net/npm/deepar/js/deepar.esm.js');
@@ -2793,6 +3085,7 @@ function handleAudienceMsg(msg){
   }
 
   if(msg.type==='lyrics-start'){
+    lockInTrayEffect(); // lock current effect and hide tray
     startLyricsTicker();
   }
 
@@ -3286,6 +3579,10 @@ function renderLoop(){
 
     // Hand-drawn accessories
     if(camStream) drawAccessories();
+
+    // Venue effect tray overlay
+    drawVenueEffectTray();
+
   } // end audience view
 } // end renderLoop
 
