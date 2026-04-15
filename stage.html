@@ -314,7 +314,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.07</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.10</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -441,7 +441,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.07</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.10</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -1670,7 +1670,8 @@ let trayLocked     = false;   // true when song is active
 
 // Swipe gesture state
 let swipeStartX    = null;
-let swipeHand      = null;    // {x, y, z} of wrist when extended
+let swipeStartTime = null;
+let swipeHand      = null;    // 'right' or 'left'
 let swipeCooldown  = false;
 let pushDetected   = false;
 let pushCooldown   = false;
@@ -1847,77 +1848,89 @@ function drawVenueEffectTray(){
     ctx.fillText('›', trayX + trayW + 32, trayY + TRAY_H/2 + 6);
   }
 
-  // Palm push to close hint
+  // Dynamic hint — turns yellow when arm is in swipe-ready position
+  const _rW = lastPoseLandmarks ? lastPoseLandmarks[16] : null;
+  const _rS = lastPoseLandmarks ? lastPoseLandmarks[12] : null;
+  const _armReady = _rW && _rS && Math.abs(_rW.y - _rS.y) < 0.18 && _rW.y < 0.75;
+  const _rAbove   = _rW && _rS && _rW.y < _rS.y - 0.12;
   ctx.font = '11px Inter, sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
   ctx.textAlign = 'center';
-  ctx.fillText('✋ push to close', trayX + trayW/2, trayY + TRAY_H + 20);
+  if(_rAbove){
+    ctx.fillStyle = 'rgba(255,100,80,0.9)';
+    ctx.fillText('✋ releasing...', W/2, H - 10);
+  } else if(_armReady){
+    ctx.fillStyle = 'rgba(255,220,80,0.9)';
+    ctx.fillText('👋 swipe left = next  ·  swipe right = prev  ·  raise hand up = close', W/2, H - 10);
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillText('right arm to side to swipe  ·  right hand up to close', W/2, H - 10);
+  }
 
   ctx.restore();
 }
 
 // ── Gesture detection for tray ──
-// Called from pose results each frame — wrist landmarks
 function processTrayGesture(poseLandmarks){
   if(!trayVisible || !poseLandmarks) return;
 
-  // Right wrist = landmark 16, right elbow = 14, right shoulder = 12
-  // Left wrist = 15, left elbow = 13
-  const rWrist   = poseLandmarks[16];
-  const rElbow   = poseLandmarks[14];
-  const lWrist   = poseLandmarks[15];
-  const lElbow   = poseLandmarks[13];
+  const rWrist    = poseLandmarks[16];
+  const rElbow    = poseLandmarks[14];
   const rShoulder = poseLandmarks[12];
-  const lShoulder = poseLandmarks[11];
 
-  if(!rWrist || !rElbow || !lWrist || !lElbow) return;
+  if(!rWrist || !rShoulder) return;
 
-  // ── Swipe detection: either hand extended horizontally ──
-  // Hand is "extended" when wrist is well above elbow (arm raised)
-  // and wrist x changes significantly frame to frame
+  const now = Date.now();
 
-  const checkSwipe = (wrist, elbow, shoulder, side) => {
-    if(!wrist || !elbow || !shoulder) return;
-    // Hand raised: wrist y significantly above elbow y (lower y = higher on screen)
-    const armRaised = (elbow.y - wrist.y) > 0.08;
-    if(!armRaised) return;
+  // Arm extended at shoulder height — wrist within 0.18 of shoulder Y, above hip
+  const atShoulderHeight = Math.abs(rWrist.y - rShoulder.y) < 0.18;
+  const armOut = rWrist.y < 0.75;
+  const armReady = atShoulderHeight && armOut;
 
-    // Track swipe start
-    if(swipeStartX === null){
-      swipeStartX = wrist.x;
-      swipeHand   = side;
-    } else if(swipeHand === side){
-      const dx = wrist.x - swipeStartX;
-      if(Math.abs(dx) > 0.12 && !swipeCooldown){
-        // Mirror: positive dx = hand moved right on screen = swipe right
-        traySwipe(dx > 0 ? -1 : 1);
-        swipeStartX = null;
-        swipeHand   = null;
-      }
-    }
-  };
-
-  checkSwipe(rWrist, rElbow, rShoulder, 'right');
-  checkSwipe(lWrist, lElbow, lShoulder, 'left');
-
-  // Reset swipe tracking if hand lowered
-  if(rWrist && rElbow && lWrist && lElbow){
-    const rRaised = (rElbow.y - rWrist.y) > 0.08;
-    const lRaised = (lElbow.y - lWrist.y) > 0.08;
-    if(!rRaised && !lRaised){
-      swipeStartX = null;
-      swipeHand   = null;
-    }
+  // ── Close tray: right wrist raised ABOVE shoulder ──
+  const rAbove = rWrist.y < rShoulder.y - 0.12;
+  if(rAbove && !pushCooldown){
+    log(`Tray close: right hand raised — closing tray`, 'ok');
+    pushCooldown = true;
+    hideVenueEffectTray(false);
+    setTimeout(()=>{ pushCooldown=false; }, 2000);
+    swipeStartX = null; swipeStartTime = null;
+    return;
   }
 
-  // ── Push to close: wrist Z significantly closer than shoulder Z ──
-  // MediaPipe z values: more negative = closer to camera
-  if(!pushCooldown && rWrist && rShoulder){
-    const zDiff = rShoulder.z - rWrist.z; // positive = wrist pushed forward
-    if(zDiff > 0.25){
-      pushCooldown = true;
-      hideVenueEffectTray(false);
-      setTimeout(()=>{ pushCooldown=false; }, 1500);
+  if(Math.random() < 0.008){
+    log(`Tray close check: rAbove=${rAbove} rWrist.y=${rWrist.y.toFixed(2)} rShoulder.y=${rShoulder.y.toFixed(2)} diff=${(rShoulder.y - rWrist.y).toFixed(2)}`, 'info');
+  }
+
+  // ── Swipe: right arm at shoulder height, wave left or right ──
+  if(!armReady){
+    swipeStartX = null; swipeHand = null; swipeStartTime = null;
+    return;
+  }
+
+  // Log arm-ready state periodically
+  if(Math.random() < 0.016) log(`Tray gesture: armReady ✓ wrist.y=${rWrist.y.toFixed(2)} shoulder.y=${rShoulder.y.toFixed(2)} diff=${Math.abs(rWrist.y - rShoulder.y).toFixed(2)}`, 'info');
+
+  if(swipeStartX === null){
+    swipeStartX    = rWrist.x;
+    swipeStartTime = now;
+    log(`Tray swipe: tracking started x=${rWrist.x.toFixed(3)}`, 'info');
+  } else {
+    // Timeout stale swipe after 1.5s
+    if(now - swipeStartTime > 1500){
+      swipeStartX    = rWrist.x;
+      swipeStartTime = now;
+      return;
+    }
+    const dx = rWrist.x - swipeStartX;
+    if(Math.random() < 0.05) log(`Tray swipe: dx=${dx.toFixed(3)} (need ±0.06)`, 'info');
+    if(Math.abs(dx) > 0.06 && !swipeCooldown){
+      // Mirrored view: wrist moves right (dx > 0) = swipe right = previous
+      //                wrist moves left  (dx < 0) = swipe left  = next
+      const dir = dx > 0 ? -1 : 1;
+      log(`Tray swipe: FIRED dx=${dx.toFixed(3)} → ${dir === 1 ? 'next' : 'prev'}`, 'ok');
+      traySwipe(dir);
+      swipeStartX    = null;
+      swipeStartTime = null;
     }
   }
 }
