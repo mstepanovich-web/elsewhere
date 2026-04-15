@@ -314,7 +314,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.25</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.26</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -453,7 +453,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.25</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.26</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -632,23 +632,17 @@ function initVenueMode(){
     log('initVenueMode — pan-layer opacity=1 zIndex=1, aud-layer zIndex=2','info');
   }
   log('initVenueMode — venueMode=true yaw:'+venueYaw+' pitch:'+venuePitch+' panReady:'+panReady, 'ok');
-
-  // Show venue effect tray after 2s — set this up FIRST before anything can throw
+  // Start ambient audio/animation for this venue
+  startAmbient(selectedVenueId);
+  // Show venue effect tray after 2s if song not active
   resetTrayForNewVenue();
-  const _venueIdForTray = selectedVenueId;
+  const _trayVenueId = selectedVenueId;
   setTimeout(()=>{
-    log('Tray timer fired — lyricsRunning='+lyricsRunning+' venueId='+selectedVenueId+' trayLocked='+trayLocked, 'info');
-    if(!lyricsRunning && selectedVenueId === _venueIdForTray){
+    log('Tray timer fired — venueId='+selectedVenueId+' trayLocked='+trayLocked+' lyricsRunning='+lyricsRunning,'info');
+    if(!lyricsRunning && selectedVenueId === _trayVenueId){
       showVenueEffectTray(selectedVenueId);
     }
   }, 2000);
-
-  // Start ambient audio/animation for this venue
-  try{
-    startAmbient(selectedVenueId);
-  }catch(e){
-    log('startAmbient error: '+e.message,'err');
-  }
 }
 
 function zoomVenueOut(){
@@ -1907,18 +1901,21 @@ function drawVenueEffectTray(){
   const W = AC.width, H = AC.height;
   const SLOT_W = 110, SLOT_H = 120, RADIUS = 18;
   const TRAY_H = SLOT_H + 32;
-  const visibleSlots = 5; // center + 2 each side
+  const visibleSlots = 5;
   const trayW = SLOT_W * visibleSlots + 32;
-  const trayX = W * 0.75 - trayW / 2;          // centered at 75% from left (25% from right)
-  const trayY = H - (H * 0.75) - TRAY_H / 2;   // 75% up from bottom
+  const trayX = (W - trayW) / 2;        // centered horizontally
+  const trayY = H - TRAY_H - 60;        // near bottom of screen
 
   ctx.save();
   ctx.globalAlpha = trayOpacity;
 
-  // Tray background
-  const bg = ctx.createRoundRect ? null : null;
+  // Tray background — use roundRect if available, fallback to rect
   ctx.beginPath();
-  ctx.roundRect(trayX - 16, trayY - 12, trayW + 32, TRAY_H + 16, RADIUS);
+  if(ctx.roundRect){
+    ctx.roundRect(trayX - 16, trayY - 12, trayW + 32, TRAY_H + 16, RADIUS);
+  } else {
+    ctx.rect(trayX - 16, trayY - 12, trayW + 32, TRAY_H + 16);
+  }
   ctx.fillStyle = 'rgba(0,0,0,0.72)';
   ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,0.12)';
@@ -1951,7 +1948,11 @@ function drawVenueEffectTray(){
 
     // Slot background
     ctx.beginPath();
-    ctx.roundRect(-SLOT_W/2+6, -SLOT_H/2+4, SLOT_W-12, SLOT_H-8, 12);
+    if(ctx.roundRect){
+      ctx.roundRect(-SLOT_W/2+6, -SLOT_H/2+4, SLOT_W-12, SLOT_H-8, 12);
+    } else {
+      ctx.rect(-SLOT_W/2+6, -SLOT_H/2+4, SLOT_W-12, SLOT_H-8);
+    }
     if(isCurrent){
       ctx.fillStyle = 'rgba(255,255,255,0.18)';
       ctx.strokeStyle = 'rgba(255,220,80,0.9)';
