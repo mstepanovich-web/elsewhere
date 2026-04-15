@@ -360,7 +360,7 @@
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);"></div>
 </div>
 
-<div class="ver">v2.51</div>
+<div class="ver">v2.52</div>
 
 <script>
 'use strict';
@@ -489,9 +489,20 @@ async function doJoin() {
 
 // ── Messaging ───────────────────────────────────────────────
 function send(obj) {
-  if (!agoraReady || streamId === null) { log('send skipped — not ready: ' + obj.type); return; }
+  if (!agoraReady || !agoraClient) { log('send skipped — not ready: ' + obj.type); return; }
   const bytes = new TextEncoder().encode(JSON.stringify({ ...obj, _uid: myUid, _name: myName }));
-  agoraClient.sendStreamMessage(streamId, bytes).catch(()=>{});
+  try {
+    if (streamId !== null) {
+      agoraClient.sendStreamMessage(streamId, bytes)
+        .then(() => log('sent: ' + obj.type))
+        .catch(e => log('send error: ' + e.message));
+    } else {
+      // Fallback — same pattern as stage.html when createDataStream not supported
+      agoraClient.sendStreamMessage(bytes, true)
+        .then(() => log('sent (fallback): ' + obj.type))
+        .catch(e => log('send fallback error: ' + e.message));
+    }
+  } catch(e) { log('send exception: ' + e.message); }
 }
 
 function handleMessage(uid, data) {
@@ -770,8 +781,15 @@ function shuffle(a) {
 
 function managerStartLastCard() {
   // Build player list from active lobby players
-  const playerNames = lobbyPlayers.filter(p => p.status === 'active').map(p => p.name);
-  if (playerNames.length < 2) { showToast('Need at least 2 players'); return; }
+  // Include manager in player list if they're playing
+  let activePlayers = lobbyPlayers.filter(p => p.status === 'active');
+  // If manager is not in list but managerIsPlayer, add them
+  if (managerIsPlayer && !activePlayers.find(p => p.uid === myUid)) {
+    activePlayers.unshift({ uid: myUid, name: myName, isManager: true, status: 'active' });
+  }
+  const playerNames = activePlayers.map(p => p.name);
+  log('Starting with players: ' + playerNames.join(', ') + ' (total: ' + playerNames.length + ')');
+  if (playerNames.length < 2) { showToast('Need at least 2 players — ' + playerNames.length + ' in lobby'); return; }
 
   const deck = shuffle(buildDeck());
   const hands = {};
@@ -1021,7 +1039,12 @@ Rules: unambiguous, one correct answer, plausible wrong answers, fun_fact max 1 
     const data = await resp.json();
     const text = (data.content?.[0]?.text||'').replace(/```json|```/g,'').trim();
     const qs   = JSON.parse(text).questions;
-    const players = lobbyPlayers.filter(p=>p.status==='active').map(p=>p.name);
+    let triviaActive = lobbyPlayers.filter(p=>p.status==='active');
+    if (managerIsPlayer && !triviaActive.find(p=>p.uid===myUid)) {
+      triviaActive.unshift({ uid:myUid, name:myName, isManager:true, status:'active' });
+    }
+    const players = triviaActive.map(p=>p.name);
+    log('Trivia players: ' + players.join(', '));
     gameState = {
       phase:'waiting', players, questions:qs, currentQuestionIdx:0,
       timePerQuestion:20, timer:0, answers:{},
