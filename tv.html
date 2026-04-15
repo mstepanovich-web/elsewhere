@@ -11,8 +11,11 @@
 
     html, body {
       height: 100%; overflow: hidden;
-      background: var(--color-bg);
-      font-family: var(--font-ui);
+      background: #040206; /* fallback if theme CSS not yet loaded */
+      background: var(--color-bg, #040206);
+      color: rgba(255,220,150,.92);
+      font-family: 'DM Mono', monospace;
+      font-family: var(--font-ui, 'Inter', system-ui, sans-serif);
     }
 
     /* ── Ambient background ─────────────────────── */
