@@ -129,15 +129,15 @@
     }
 
     .qr-grid {
-      display: flex; gap: clamp(32px, 6vw, 80px);
-      align-items: stretch; flex-wrap: wrap; justify-content: center;
-      width: 100%; max-width: 900px;
+      display: flex; gap: clamp(20px, 3vw, 48px);
+      align-items: stretch; flex-wrap: nowrap; justify-content: center;
+      width: 100%; max-width: 1200px;
     }
 
     .qr-tile {
-      flex: 1 1 300px; max-width: 380px;
+      flex: 1 1 0; min-width: 0; max-width: 340px;
       display: flex; flex-direction: column; align-items: center;
-      gap: 20px; padding: clamp(28px, 4vw, 44px) clamp(24px, 3vw, 40px);
+      gap: 16px; padding: clamp(20px, 3vw, 36px) clamp(16px, 2vw, 28px);
       background: var(--color-surface);
       border: 1px solid var(--color-border-dim);
       border-radius: var(--radius-xl);
@@ -152,7 +152,7 @@
 
     .qr-mode-label {
       font-family: var(--font-display);
-      font-size: clamp(26px, 3.5vw, 44px);
+      font-size: clamp(20px, 2.5vw, 34px);
       font-weight: 300; letter-spacing: var(--tracking-wide);
       color: var(--color-text); text-align: center;
     }
@@ -254,7 +254,7 @@
     </div>
 
     <button class="setup-btn" id="setup-continue">Continue →</button>
-    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.47</div>
+    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.48</div>
 
   </div>
 
@@ -270,7 +270,7 @@
       <div class="qr-tile qr-tile--karaoke" id="qr-tile-karaoke" style="cursor:pointer;" title="Click to open Stage on this TV">
         <div class="qr-mode-label">🎤 Karaoke</div>
         <div class="qr-box">
-          <canvas id="qr-karaoke" width="200" height="200"></canvas>
+          <canvas id="qr-karaoke" width="160" height="160"></canvas>
         </div>
         <div class="qr-url" id="qr-karaoke-url">—</div>
         <div class="qr-hint">Scan to select Karaoke</div>
@@ -279,7 +279,7 @@
       <div class="qr-tile qr-tile--fashion">
         <div class="qr-mode-label">✨ Fashion</div>
         <div class="qr-box">
-          <canvas id="qr-fashion" width="200" height="200"></canvas>
+          <canvas id="qr-fashion" width="160" height="160"></canvas>
         </div>
         <div class="qr-url" id="qr-fashion-url">—</div>
         <div class="qr-hint">Scan to select Fashion</div>
@@ -288,7 +288,7 @@
       <div class="qr-tile" style="border-color:rgba(124,77,255,.22);background:linear-gradient(160deg,rgba(12,8,18,.94) 0%,rgba(6,4,10,.97) 100%);">
         <div class="qr-mode-label" style="color:rgba(200,180,255,.9);">🎮 Games</div>
         <div class="qr-box">
-          <canvas id="qr-games" width="200" height="200"></canvas>
+          <canvas id="qr-games" width="160" height="160"></canvas>
         </div>
         <div class="qr-url" id="qr-games-url" style="color:rgba(160,130,255,.4);">—</div>
         <div class="qr-hint" style="color:rgba(160,130,255,.35);">Scan to select Games</div>
