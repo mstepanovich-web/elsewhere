@@ -8,219 +8,327 @@
   <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--color-bg); color: var(--color-text); font-family: var(--font-ui); overflow: hidden; height: 100dvh; display: flex; flex-direction: column; }
-    .screen { position: fixed; inset: 0; display: none; flex-direction: column; overflow-y: auto; padding: env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0); }
+    html, body { height: 100%; background: var(--color-bg); color: var(--color-text); font-family: var(--font-ui); overflow: hidden; }
+
+    /* ── App shell ── */
+    #app { display: flex; flex-direction: column; height: 100dvh; }
+
+    /* ── Manager bar — fixed height, never overlaps content ── */
+    #manager-bar {
+      display: none; flex-direction: row; gap: 8px;
+      padding: 10px 14px; background: rgba(255,200,80,.07);
+      border-bottom: 1px solid var(--color-border-dim);
+      flex-shrink: 0; flex-wrap: wrap; align-items: center;
+    }
+    #manager-bar.visible { display: flex; }
+    .mgr-label { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-gold); font-family: var(--font-mono); }
+    .mgr-btn { padding: 6px 14px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; cursor: pointer; transition: all var(--transition-fast); }
+    .mgr-btn:active { background: var(--color-gold-faint); }
+    .mgr-btn.primary { background: var(--color-gold-dim); color: var(--color-bg); border-color: var(--color-gold); font-weight: 600; }
+    .mgr-btn.danger  { border-color: rgba(232,25,44,.3); color: var(--color-red); }
+    .mgr-btn:disabled { opacity: .35; pointer-events: none; }
+
+    /* ── Screen container ── */
+    #screen-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; position: relative; }
+
+    .screen { display: none; flex-direction: column; min-height: 100%; }
     .screen.active { display: flex; }
 
-    /* ── Manager bar ── */
-    #manager-bar { display: none; flex-direction: row; gap: 8px; padding: 10px 16px; background: rgba(255,200,80,.08); border-bottom: 1px solid var(--color-border); flex-shrink: 0; flex-wrap: wrap; align-items: center; }
-    #manager-bar.visible { display: flex; }
-    .mgr-label { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-gold); font-family: var(--font-mono); width: 100%; }
-    .mgr-btn { padding: 7px 14px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; cursor: pointer; font-family: var(--font-ui); transition: all var(--transition-fast); }
-    .mgr-btn:active { background: var(--color-gold-faint); }
-    .mgr-btn.danger { border-color: var(--color-red-faint); color: var(--color-red); }
+    /* ── Shared typography ── */
+    .page-title { font-family: var(--font-display); font-size: clamp(32px,9vw,52px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text); }
+    .page-sub   { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); }
 
-    /* ── Join screen ── */
+    /* ── JOIN ── */
     #screen-join { align-items: center; justify-content: center; gap: 20px; padding: 40px 24px; }
-    .join-title { font-family: var(--font-display); font-size: clamp(38px,12vw,64px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text); font-style: italic; }
-    .join-sub { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); }
-    .join-field { width: 100%; max-width: 300px; display: flex; flex-direction: column; gap: 6px; }
-    .join-label { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-text-faint); font-family: var(--font-mono); }
-    .join-input { background: var(--color-gold-ghost); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xl); padding: 12px 16px; letter-spacing: .2em; text-transform: uppercase; text-align: center; outline: none; width: 100%; }
+    .join-field  { width: 100%; max-width: 300px; display: flex; flex-direction: column; gap: 6px; }
+    .join-label  { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-text-faint); font-family: var(--font-mono); }
+    .join-input  { background: var(--color-gold-ghost); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xl); padding: 12px 16px; letter-spacing: .2em; text-transform: uppercase; text-align: center; outline: none; width: 100%; }
+    .join-input.name-input { text-transform: none; letter-spacing: normal; font-size: var(--text-lg); }
     .join-input:focus { border-color: var(--color-border-bright); }
-    .join-btn { width: 100%; max-width: 300px; padding: 16px; border-radius: var(--radius-pill); background: var(--color-gold-dim); border: none; color: var(--color-bg); font-size: var(--text-sm); letter-spacing: var(--tracking-wider); text-transform: uppercase; font-weight: 600; cursor: pointer; }
-    .join-btn:disabled { opacity: .35; }
+    .action-btn  { width: 100%; max-width: 300px; padding: 15px; border-radius: var(--radius-pill); background: var(--color-gold-dim); border: none; color: var(--color-bg); font-size: var(--text-sm); letter-spacing: var(--tracking-wider); text-transform: uppercase; font-weight: 600; cursor: pointer; transition: background var(--transition-fast); }
+    .action-btn:disabled { opacity: .35; }
+    .action-btn.ghost { background: transparent; color: var(--color-text-faint); border: 1px solid var(--color-border-dim); }
 
-    /* ── Lobby (game picker) ── */
-    #screen-lobby { padding: 20px 16px; gap: 12px; }
-    .lobby-title { font-family: var(--font-display); font-size: 28px; font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text); padding: 8px 0; }
-    .lobby-sub { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); margin-bottom: 8px; }
-    .game-card { padding: 16px 18px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-dim); background: var(--color-surface); cursor: pointer; transition: all var(--transition-fast); display: flex; align-items: center; gap: 14px; }
+    /* ── LOBBY ── */
+    #screen-lobby { padding: 24px 16px 32px; gap: 14px; }
+    .game-card { padding: 16px 18px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-dim); background: var(--color-surface); cursor: pointer; display: flex; align-items: center; gap: 14px; transition: all var(--transition-fast); }
     .game-card:active { background: var(--color-gold-faint); border-color: var(--color-border); }
-    .game-card-icon { font-size: 28px; flex-shrink: 0; }
-    .game-card-name { font-family: var(--font-display); font-size: 20px; font-weight: 300; letter-spacing: var(--tracking-normal); color: var(--color-text); }
-    .game-card-desc { font-size: var(--text-xs); color: var(--color-text-faint); letter-spacing: var(--tracking-normal); margin-top: 2px; }
     .game-card.disabled { opacity: .4; pointer-events: none; }
-    .home-btn { margin-top: auto; padding: 14px; text-align: center; font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-text-faint); cursor: pointer; }
+    .game-icon { font-size: 28px; flex-shrink: 0; }
+    .game-name { font-family: var(--font-display); font-size: 20px; font-weight: 300; letter-spacing: var(--tracking-normal); color: var(--color-text); }
+    .game-desc { font-size: var(--text-xs); color: var(--color-text-faint); margin-top: 2px; }
+    .home-link { margin-top: auto; padding: 16px; text-align: center; font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-text-faint); cursor: pointer; }
 
-    /* ── Waiting for game ── */
-    #screen-waiting { align-items: center; justify-content: center; gap: 16px; padding: 40px 24px; }
-    .wait-title { font-family: var(--font-display); font-size: clamp(28px,8vw,48px); font-weight: 300; color: var(--color-text); text-align: center; }
-    .wait-sub { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); text-align: center; }
-    .wait-players { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; }
-    .wait-player { padding: 10px 16px; border-radius: var(--radius-md); border: 1px solid var(--color-border-dim); background: var(--color-surface); font-size: var(--text-sm); color: var(--color-text-dim); display: flex; align-items: center; justify-content: space-between; }
-    .wait-player.me { border-color: var(--color-gold-dim); color: var(--color-text); }
+    /* ── GAME LOBBY (waiting room) ── */
+    #screen-game-lobby { padding: 24px 16px; gap: 0; }
+    .lobby-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .lobby-game-title { font-family: var(--font-display); font-size: clamp(28px,8vw,44px); font-weight: 300; color: var(--color-text); }
+    .lobby-limit-badge { font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); color: var(--color-text-faint); padding: 4px 10px; border: 1px solid var(--color-border-dim); border-radius: var(--radius-pill); }
+    .lobby-section-label { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); margin: 20px 0 8px; }
 
-    /* ── Last Card ── */
-    #screen-lastcard { padding: 0; gap: 0; }
-    .lc-hand-label { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); padding: 12px 16px 4px; }
-    .lc-hand { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px 12px; flex: 1; align-content: flex-start; overflow-y: auto; }
-    .lc-card { width: 58px; height: 86px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,.15); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 15px; font-weight: 400; cursor: pointer; transition: all 0.2s; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,.4); -webkit-user-select: none; }
+    /* Player roster */
+    .player-roster { display: flex; flex-direction: column; gap: 8px; }
+    .roster-entry { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: var(--radius-md); background: var(--color-surface); border: 1px solid var(--color-border-dim); transition: border-color 0.2s; }
+    .roster-entry.me    { border-color: var(--color-gold-dim); }
+    .roster-entry.ready { border-color: var(--color-green); }
+    .roster-entry.queue { opacity: .5; border-style: dashed; }
+    .roster-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-green  { background: var(--color-green); box-shadow: 0 0 6px var(--color-green); }
+    .dot-gold   { background: var(--color-gold); box-shadow: 0 0 6px var(--color-gold); }
+    .dot-dim    { background: var(--color-text-ghost); }
+    .roster-name { flex: 1; font-size: var(--text-sm); color: var(--color-text-dim); }
+    .roster-name.me { color: var(--color-text); font-weight: 500; }
+    .roster-badge { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; padding: 2px 8px; border-radius: var(--radius-pill); }
+    .badge-you     { background: var(--color-gold-ghost); color: var(--color-gold-dim); border: 1px solid var(--color-border-dim); }
+    .badge-manager { background: rgba(255,200,80,.12); color: var(--color-gold); border: 1px solid rgba(255,200,80,.2); }
+    .badge-queue   { background: var(--color-white-ghost); color: var(--color-text-faint); border: 1px solid var(--color-border-dim); }
+
+    /* Invite card */
+    .invite-card { margin-top: 8px; padding: 16px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-surface); }
+    .invite-card-title { font-size: var(--text-sm); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-text-dim); margin-bottom: 10px; }
+    .invite-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+    .invite-btn { flex: 1 1 120px; padding: 10px 12px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; cursor: pointer; text-align: center; transition: all var(--transition-fast); }
+    .invite-btn:active { background: var(--color-gold-faint); }
+
+    /* Limit picker (manager only) */
+    .limit-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+    .limit-label { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-text-faint); }
+    .limit-stepper { display: flex; align-items: center; gap: 8px; }
+    .limit-btn { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all var(--transition-fast); }
+    .limit-btn:active { background: var(--color-gold-faint); }
+    .limit-val { font-family: var(--font-mono); font-size: var(--text-xl); color: var(--color-gold); min-width: 32px; text-align: center; font-weight: 500; }
+
+    /* Schedule */
+    .schedule-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+    .schedule-input { flex: 1; background: var(--color-gold-ghost); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm); padding: 10px 12px; outline: none; }
+    .schedule-input:focus { border-color: var(--color-border-bright); }
+
+    /* Start game section */
+    .start-section { margin-top: 24px; padding-bottom: 24px; }
+
+    /* ── LAST CARD ── */
+    #screen-lastcard { padding: 0; }
+    .lc-status { padding: 10px 16px; font-size: var(--text-sm); color: var(--color-text-faint); text-align: center; border-bottom: 1px solid var(--color-border-dim); }
+    .lc-status.your-turn { color: var(--color-gold); font-weight: 500; }
+    .lc-hand-label { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); padding: 10px 16px 4px; }
+    .lc-hand { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px 12px; flex: 1; align-content: flex-start; }
+    .lc-card { width: 58px; height: 86px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,.15); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 15px; cursor: pointer; transition: all 0.2s; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,.4); -webkit-user-select: none; }
     .lc-card.red   { background: #c0392b; color: #fff; }
     .lc-card.black { background: #1a1a2e; color: #eee; }
     .lc-card.wild  { background: linear-gradient(135deg,#8e44ad,#c0392b,#27ae60,#2980b9); color: #ffd700; }
     .lc-card.playable { border-color: var(--color-gold); box-shadow: 0 0 12px rgba(255,200,80,.3); transform: translateY(-4px); }
     .lc-card.selected { border-color: var(--color-green); box-shadow: 0 0 16px rgba(0,232,122,.4); transform: translateY(-8px); }
-    .lc-card.disabled { opacity: 0.35; cursor: default; transform: none; }
-    .lc-actions { display: flex; gap: 8px; padding: 10px 16px; flex-shrink: 0; border-top: 1px solid var(--color-border-dim); }
+    .lc-card.disabled { opacity: 0.35; cursor: default; transform: none !important; }
+    .lc-actions { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--color-border-dim); }
     .lc-action-btn { flex: 1; padding: 13px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; cursor: pointer; text-align: center; transition: all var(--transition-fast); }
     .lc-action-btn.primary { background: var(--color-gold-dim); color: var(--color-bg); border-color: var(--color-gold); font-weight: 600; }
     .lc-action-btn:disabled { opacity: .35; pointer-events: none; }
-    .lc-status { padding: 8px 16px; font-size: var(--text-sm); color: var(--color-text-faint); letter-spacing: var(--tracking-normal); text-align: center; }
-    .lc-status.your-turn { color: var(--color-gold); font-weight: 500; }
-
-    /* Suit chooser */
     #suit-chooser { display: none; position: fixed; inset: 0; background: var(--color-overlay); align-items: center; justify-content: center; z-index: 500; }
     #suit-chooser.show { display: flex; }
     .suit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 32px; background: var(--color-surface); border-radius: var(--radius-xl); border: 1px solid var(--color-border); }
     .suit-choice { width: 80px; height: 80px; border-radius: var(--radius-lg); border: 1.5px solid var(--color-border); background: var(--color-bg-mid); font-size: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
-    .suit-choice:active { background: var(--color-gold-faint); border-color: var(--color-gold); transform: scale(1.05); }
-
-    /* Last Card button */
-    #last-card-btn { display: none; position: fixed; bottom: 100px; right: 16px; z-index: 400; padding: 12px 20px; border-radius: var(--radius-pill); background: var(--color-red); border: none; color: #fff; font-size: var(--text-sm); letter-spacing: var(--tracking-wider); text-transform: uppercase; font-weight: 600; cursor: pointer; box-shadow: 0 4px 20px rgba(232,25,44,.4); animation: lc-pulse 1s infinite; }
+    .suit-choice:active { background: var(--color-gold-faint); border-color: var(--color-gold); }
+    #last-card-btn { display: none; position: fixed; bottom: 90px; right: 16px; z-index: 400; padding: 12px 20px; border-radius: var(--radius-pill); background: var(--color-red); border: none; color: #fff; font-size: var(--text-sm); letter-spacing: var(--tracking-wider); text-transform: uppercase; font-weight: 600; cursor: pointer; animation: lc-pulse 1s infinite; }
     @keyframes lc-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(232,25,44,.5)} 50%{box-shadow:0 0 0 8px rgba(232,25,44,0)} }
 
-    /* ── Trivia ── */
-    #screen-trivia { padding: 0; gap: 0; }
+    /* ── TRIVIA ── */
+    #screen-trivia { padding: 0; }
     .trivia-setup { padding: 20px 16px; display: flex; flex-direction: column; gap: 14px; }
-    .trivia-question-screen { padding: 20px 16px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+    .trivia-game  { padding: 20px 16px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
     .trivia-q-text { font-family: var(--font-display); font-size: clamp(18px,5vw,26px); font-weight: 300; letter-spacing: var(--tracking-tight); color: var(--color-text); line-height: 1.35; }
-    .trivia-options { display: flex; flex-direction: column; gap: 10px; }
+    .trivia-opts { display: flex; flex-direction: column; gap: 10px; }
     .trivia-opt { padding: 14px 16px; border-radius: var(--radius-md); border: 1.5px solid var(--color-border-dim); background: var(--color-surface); display: flex; align-items: center; gap: 12px; cursor: pointer; transition: all 0.2s; -webkit-user-select: none; }
     .trivia-opt:active { background: var(--color-gold-faint); }
     .trivia-opt.selected { border-color: var(--color-gold); background: var(--color-gold-faint); }
-    .trivia-opt.correct { border-color: var(--color-green); background: var(--color-green-faint); }
-    .trivia-opt.wrong   { opacity: .45; }
+    .trivia-opt.correct  { border-color: var(--color-green); background: var(--color-green-faint); }
+    .trivia-opt.wrong    { opacity: .4; }
     .trivia-opt-letter { font-family: var(--font-mono); font-size: var(--text-md); font-weight: 500; color: var(--color-gold); min-width: 24px; }
-    .trivia-opt-text   { font-size: var(--text-sm); color: var(--color-text-dim); }
-    .trivia-timer-bar { height: 4px; background: var(--color-surface); border-radius: var(--radius-pill); overflow: hidden; width: 100%; }
+    .trivia-opt-text { font-size: var(--text-sm); color: var(--color-text-dim); }
+    .trivia-timer-bar  { height: 4px; background: var(--color-surface); border-radius: var(--radius-pill); overflow: hidden; }
     .trivia-timer-fill { height: 100%; background: var(--color-gold); border-radius: var(--radius-pill); transition: width 1s linear; }
     .trivia-status { font-size: var(--text-sm); color: var(--color-text-faint); text-align: center; padding: 8px 0; }
-    .trivia-status.answered { color: var(--color-green); }
-
-    /* Category picker */
+    .trivia-status.correct { color: var(--color-green); }
     .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .cat-card { padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--color-border-dim); background: var(--color-surface); text-align: center; cursor: pointer; transition: all 0.2s; }
     .cat-card:active, .cat-card.selected { border-color: var(--color-gold); background: var(--color-gold-faint); }
     .cat-icon { font-size: 24px; margin-bottom: 4px; }
-    .cat-name { font-size: var(--text-xs); letter-spacing: var(--tracking-normal); color: var(--color-text-dim); }
+    .cat-name { font-size: var(--text-xs); color: var(--color-text-dim); }
+    .diff-row { display: flex; gap: 8px; }
 
     /* ── Version ── */
     .ver { position: fixed; bottom: 8px; right: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--tracking-wider); color: var(--color-gold); z-index: 50; pointer-events: none; }
   </style>
 </head>
 <body>
+<div id="app">
 
-<!-- Manager bar (shown only to manager) -->
-<div id="manager-bar">
-  <div class="mgr-label">★ Manager</div>
-  <button class="mgr-btn" id="mgr-start" onclick="managerStart()">Start</button>
-  <button class="mgr-btn" id="mgr-skip" onclick="managerSkip()" style="display:none">Skip</button>
-  <button class="mgr-btn" id="mgr-next" onclick="managerNext()" style="display:none">Next →</button>
-  <button class="mgr-btn" onclick="showLobby()">Switch Game</button>
-  <button class="mgr-btn danger" onclick="managerEndSession()">End</button>
-</div>
-
-<!-- ── JOIN ── -->
-<div id="screen-join" class="screen active">
-  <div class="join-title">Games</div>
-  <div class="join-sub">Enter your name and room code</div>
-  <div class="join-field">
-    <div class="join-label">Your Name</div>
-    <input class="join-input" id="join-name" type="text" placeholder="Name" maxlength="12" style="text-transform:none;letter-spacing:normal;font-size:var(--text-lg);">
+  <!-- Manager bar — sits above all screens, never overlaps -->
+  <div id="manager-bar">
+    <span class="mgr-label">★ Manager</span>
+    <button class="mgr-btn primary" id="mgr-start"  onclick="managerStart()"  style="display:none">▶ Start Game</button>
+    <button class="mgr-btn"         id="mgr-reveal" onclick="managerReveal()" style="display:none">Reveal</button>
+    <button class="mgr-btn"         id="mgr-next"   onclick="managerNext()"   style="display:none">Next →</button>
+    <button class="mgr-btn"         id="mgr-skip"   onclick="managerSkip()"   style="display:none">Skip Turn</button>
+    <button class="mgr-btn"         onclick="goToLobby()">☰ Games</button>
+    <button class="mgr-btn danger"  onclick="managerEnd()">End</button>
   </div>
-  <div class="join-field">
-    <div class="join-label">Room Code</div>
-    <input class="join-input" id="join-code" type="text" placeholder="ABCDEF" maxlength="6" autocomplete="off" spellcheck="false">
-  </div>
-  <button class="join-btn" id="join-btn" onclick="doJoin()" disabled>Join →</button>
-</div>
 
-<!-- ── LOBBY (game picker) ── -->
-<div id="screen-lobby" class="screen">
-  <div class="lobby-title">Choose a Game</div>
-  <div class="lobby-sub">All players switch at the same time</div>
+  <div id="screen-wrap">
 
-  <div class="game-card" onclick="selectGame('lastcard')">
-    <div class="game-card-icon">🃏</div>
-    <div>
-      <div class="game-card-name">Last Card</div>
-      <div class="game-card-desc">Uno-compatible · 2–8 players · Elsewhere rules</div>
+    <!-- ══════════════════════════════════════════ -->
+    <!-- JOIN                                       -->
+    <!-- ══════════════════════════════════════════ -->
+    <div id="screen-join" class="screen active">
+      <div class="page-title">Games</div>
+      <div class="page-sub">Enter your name and room code</div>
+      <div class="join-field">
+        <div class="join-label">Your Name</div>
+        <input class="join-input name-input" id="join-name" type="text" placeholder="Name" maxlength="14" autocomplete="off">
+      </div>
+      <div class="join-field">
+        <div class="join-label">Room Code</div>
+        <input class="join-input" id="join-code" type="text" placeholder="ABCDEF" maxlength="6" autocomplete="off" spellcheck="false">
+      </div>
+      <button class="action-btn" id="join-btn" onclick="doJoin()" disabled>Join →</button>
     </div>
-  </div>
 
-  <div class="game-card" onclick="selectGame('trivia')">
-    <div class="game-card-icon">🧠</div>
-    <div>
-      <div class="game-card-name">Trivia Night</div>
-      <div class="game-card-desc">AI-generated questions · 2–10 players</div>
+    <!-- ══════════════════════════════════════════ -->
+    <!-- GAME PICKER (lobby)                        -->
+    <!-- ══════════════════════════════════════════ -->
+    <div id="screen-lobby" class="screen">
+      <div style="padding:24px 16px 16px;">
+        <div class="page-title">Choose a Game</div>
+        <div class="page-sub" style="margin-top:4px;">All players switch at the same time</div>
+      </div>
+
+      <div style="padding:0 16px;display:flex;flex-direction:column;gap:10px;">
+        <div class="game-card" onclick="selectGame('lastcard')">
+          <div class="game-icon">🃏</div>
+          <div><div class="game-name">Last Card</div><div class="game-desc">Uno-compatible · 2–8 players</div></div>
+        </div>
+        <div class="game-card" onclick="selectGame('trivia')">
+          <div class="game-icon">🧠</div>
+          <div><div class="game-name">Trivia Night</div><div class="game-desc">AI-generated questions · 2–20 players</div></div>
+        </div>
+        <div class="game-card disabled">
+          <div class="game-icon">🎵</div>
+          <div><div class="game-name">Name That Tune</div><div class="game-desc">Coming soon</div></div>
+        </div>
+        <div class="game-card disabled">
+          <div class="game-icon">⚡</div>
+          <div><div class="game-name">Speed Quiz</div><div class="game-desc">Coming soon</div></div>
+        </div>
+      </div>
+
+      <div class="home-link" onclick="window.location.href='https://mstepanovich-web.github.io/elsewhere/tv.html'">⌂ Back to Home</div>
     </div>
-  </div>
 
-  <div class="game-card disabled">
-    <div class="game-card-icon">🎵</div>
-    <div>
-      <div class="game-card-name">Name That Tune</div>
-      <div class="game-card-desc">Coming soon</div>
+    <!-- ══════════════════════════════════════════ -->
+    <!-- GAME LOBBY (waiting room + invite)         -->
+    <!-- ══════════════════════════════════════════ -->
+    <div id="screen-game-lobby" class="screen">
+      <div style="padding:20px 16px 0;">
+        <div class="lobby-header">
+          <div class="lobby-game-title" id="lobby-game-title">Last Card</div>
+          <div class="lobby-limit-badge" id="lobby-limit-badge">0 / 6</div>
+        </div>
+        <div class="page-sub" id="lobby-sub">Waiting for players</div>
+      </div>
+
+      <!-- Player limit stepper (manager only) -->
+      <div id="limit-section" style="display:none;padding:0 16px;">
+        <div class="lobby-section-label">Player limit</div>
+        <div class="limit-row">
+          <div class="limit-stepper">
+            <div class="limit-btn" onclick="changeLimit(-1)">−</div>
+            <div class="limit-val" id="limit-val">6</div>
+            <div class="limit-btn" onclick="changeLimit(1)">+</div>
+          </div>
+          <div class="limit-label">max players (others join queue)</div>
+        </div>
+      </div>
+
+      <!-- Invite section (manager only) -->
+      <div id="invite-section" style="display:none;padding:0 16px;">
+        <div class="lobby-section-label">Invite players</div>
+        <div class="invite-card">
+          <div class="invite-card-title">Instant invite</div>
+          <div class="invite-btns">
+            <div class="invite-btn" onclick="shareInvite()">📤 Share Link</div>
+            <div class="invite-btn" onclick="copyInvite()">📋 Copy Link</div>
+          </div>
+          <div style="margin-top:14px;">
+            <div class="invite-card-title">Schedule a game</div>
+            <div class="schedule-row">
+              <input class="schedule-input" type="datetime-local" id="schedule-time">
+              <div class="invite-btn" onclick="sendCalendarInvite()" style="white-space:nowrap;">📅 Send</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Player roster -->
+      <div style="padding:0 16px;">
+        <div class="lobby-section-label">In the lobby</div>
+        <div class="player-roster" id="lobby-roster"></div>
+        <div class="lobby-section-label" id="queue-label" style="display:none;">In the queue</div>
+        <div class="player-roster" id="lobby-queue"></div>
+      </div>
+
+      <!-- Start section (manager only) -->
+      <div id="start-section" class="start-section" style="display:none;padding:0 16px 24px;">
+        <button class="action-btn" id="lobby-start-btn" onclick="managerStart()">▶ Start Game</button>
+        <div style="margin-top:8px;text-align:center;font-size:var(--text-xs);color:var(--color-text-faint);">
+          Starts for all players simultaneously
+        </div>
+      </div>
+
+      <!-- Non-manager waiting message -->
+      <div id="waiting-msg" style="padding:24px 16px;text-align:center;">
+        <div style="font-size:var(--text-sm);color:var(--color-text-faint);letter-spacing:var(--tracking-wider);">Waiting for manager to start...</div>
+      </div>
     </div>
-  </div>
 
-  <div class="game-card disabled">
-    <div class="game-card-icon">⚡</div>
-    <div>
-      <div class="game-card-name">Speed Quiz</div>
-      <div class="game-card-desc">Coming soon</div>
+    <!-- ══════════════════════════════════════════ -->
+    <!-- LAST CARD                                  -->
+    <!-- ══════════════════════════════════════════ -->
+    <div id="screen-lastcard" class="screen">
+      <div class="lc-status" id="lc-status">Waiting...</div>
+      <div class="lc-hand-label">Your Hand</div>
+      <div class="lc-hand" id="lc-hand"></div>
+      <div class="lc-actions">
+        <button class="lc-action-btn" id="lc-draw-btn" onclick="lcDraw()" disabled>Draw Card</button>
+        <button class="lc-action-btn primary" id="lc-play-btn" onclick="lcPlay()" disabled>Play Card</button>
+      </div>
     </div>
-  </div>
 
-  <div class="home-btn" onclick="window.location.href='https://mstepanovich-web.github.io/elsewhere/tv.html'">⌂ Back to Home</div>
-</div>
+    <!-- ══════════════════════════════════════════ -->
+    <!-- TRIVIA                                     -->
+    <!-- ══════════════════════════════════════════ -->
+    <div id="screen-trivia" class="screen">
+      <div class="trivia-setup" id="trivia-setup" style="display:none;">
+        <div class="page-title" style="font-size:28px;">Trivia Setup</div>
+        <div class="join-label">Category</div>
+        <div class="cat-grid" id="cat-grid"></div>
+        <div class="join-label" style="margin-top:8px;">Difficulty</div>
+        <div class="diff-row" id="diff-row"></div>
+        <button class="action-btn" id="trivia-gen-btn" onclick="triviaGenerate()">Generate Questions →</button>
+        <div id="trivia-gen-status" style="font-size:var(--text-xs);color:var(--color-text-faint);text-align:center;min-height:18px;"></div>
+      </div>
+      <div class="trivia-game" id="trivia-game" style="display:none;">
+        <div class="trivia-timer-bar"><div class="trivia-timer-fill" id="trivia-timer-fill" style="width:100%"></div></div>
+        <div class="trivia-q-text" id="trivia-q-text">—</div>
+        <div class="trivia-opts" id="trivia-opts"></div>
+        <div class="trivia-status" id="trivia-status"></div>
+      </div>
+      <div id="trivia-waiting" style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:40px;">
+        <div style="font-family:var(--font-display);font-size:28px;color:var(--color-text-faint);">Setting up...</div>
+        <div style="font-size:var(--text-xs);letter-spacing:.15em;text-transform:uppercase;color:var(--color-text-faint);">Manager is generating questions</div>
+      </div>
+    </div>
 
-<!-- ── WAITING ── -->
-<div id="screen-waiting" class="screen">
-  <div class="wait-title" id="wait-game-name">Waiting...</div>
-  <div class="wait-sub" id="wait-sub">Waiting for manager to start</div>
-  <div class="wait-players" id="wait-players"></div>
-</div>
-
-<!-- ── LAST CARD ── -->
-<div id="screen-lastcard" class="screen">
-  <div class="lc-status" id="lc-status">Waiting...</div>
-  <div class="lc-hand-label">Your Hand</div>
-  <div class="lc-hand" id="lc-hand"></div>
-  <div class="lc-actions">
-    <button class="lc-action-btn" id="lc-draw-btn" onclick="lcDraw()">Draw Card</button>
-    <button class="lc-action-btn primary" id="lc-play-btn" onclick="lcPlay()" disabled>Play Card</button>
-  </div>
-</div>
-
-<!-- ── TRIVIA ── -->
-<div id="screen-trivia" class="screen">
-  <!-- Setup (manager only) -->
-  <div class="trivia-setup" id="trivia-setup" style="display:none;">
-    <div class="lobby-title">Trivia Setup</div>
-    <div class="join-label">Category</div>
-    <div class="cat-grid" id="cat-grid"></div>
-    <div class="join-label" style="margin-top:8px;">Difficulty</div>
-    <div style="display:flex;gap:8px;" id="diff-row"></div>
-    <button class="join-btn" id="trivia-generate-btn" onclick="triviaGenerate()">Generate Questions →</button>
-    <div id="trivia-gen-status" style="font-size:var(--text-xs);color:var(--color-text-faint);text-align:center;min-height:20px;"></div>
-  </div>
-
-  <!-- Question screen -->
-  <div class="trivia-question-screen" id="trivia-game" style="display:none;">
-    <div class="trivia-timer-bar"><div class="trivia-timer-fill" id="trivia-timer-fill" style="width:100%"></div></div>
-    <div class="trivia-q-text" id="trivia-q-text">—</div>
-    <div class="trivia-options" id="trivia-options"></div>
-    <div class="trivia-status" id="trivia-status"></div>
-  </div>
-
-  <!-- Waiting for question -->
-  <div id="trivia-waiting" style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:40px;">
-    <div style="font-family:var(--font-display);font-size:28px;color:var(--color-text-faint);">Waiting...</div>
-    <div style="font-size:var(--text-xs);letter-spacing:.15em;text-transform:uppercase;color:var(--color-text-faint);">Manager is setting up</div>
-  </div>
-</div>
+  </div><!-- end screen-wrap -->
+</div><!-- end app -->
 
 <!-- Suit chooser overlay -->
 <div id="suit-chooser">
@@ -232,38 +340,43 @@
   </div>
 </div>
 
-<!-- Last Card declaration button -->
 <button id="last-card-btn" onclick="lcDeclareLastCard()">Last Card!</button>
-
-<div class="ver">v2.48</div>
+<div class="ver">v2.49</div>
 
 <script>
 'use strict';
 
 // ── Config ──────────────────────────────────────────────────
-const AGORA_APP_ID = 'b2c6543a9ed946829e6526cb68c7efc9';
-const CHAN_PREFIX  = 'elsewhere_g';
-const BASE_URL     = 'https://mstepanovich-web.github.io/elsewhere';
-const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
+const AGORA_APP_ID  = 'b2c6543a9ed946829e6526cb68c7efc9';
+const CHAN_PREFIX    = 'elsewhere_g';
+const BASE_URL      = 'https://mstepanovich-web.github.io/elsewhere';
+const CLAUDE_MODEL  = 'claude-sonnet-4-20250514';
+
+const GAME_LIMITS   = { lastcard: { min:2, max:8, default:6 }, trivia: { min:2, max:20, default:10 } };
 
 // ── State ───────────────────────────────────────────────────
-const urlParams  = new URLSearchParams(location.search);
-let roomCode     = (urlParams.get('room') || '').toUpperCase();
-let myName       = '';
-let isManager    = false;
-let agoraClient  = null;
-let streamId     = null;
-let agoraReady   = false;
+const urlP   = new URLSearchParams(location.search);
+let roomCode = (urlP.get('room') || '').toUpperCase();
+let myName   = '';
+let myUid    = null;
+let isManager = false;
+let agoraClient = null, streamId = null, agoraReady = false;
+
 let currentGame  = null;
 let gameState    = null;
 let myHand       = [];
 let selectedCard = null;
-let players      = {};   // uid → name
+
+// Lobby state
+let playerLimit  = 6;
+let lobbyPlayers = [];   // [{ uid, name, isManager, status: 'active'|'queue' }]
+
+// Trivia state
 let triviaCategory = 'general';
 let triviaDiff     = 'Medium';
 let timerInterval  = null;
 
-// ── Join screen validation ──────────────────────────────────
+// ── Join validation ──────────────────────────────────────────
 const nameInput = document.getElementById('join-name');
 const codeInput = document.getElementById('join-code');
 const joinBtn   = document.getElementById('join-btn');
@@ -273,12 +386,9 @@ codeInput.addEventListener('input', () => {
   codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
   checkJoin();
 });
-
 function checkJoin() {
   joinBtn.disabled = !(nameInput.value.trim().length >= 1 && codeInput.value.length >= 4);
 }
-
-// Pre-fill room code from URL
 if (roomCode) { codeInput.value = roomCode; checkJoin(); }
 
 // ── Join ────────────────────────────────────────────────────
@@ -288,48 +398,40 @@ async function doJoin() {
   joinBtn.disabled = true;
   joinBtn.textContent = 'Joining...';
 
-  agoraClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
-
-  agoraClient.on('user-joined', u => {
-    log('User joined: ' + u.uid);
-  });
-  agoraClient.on('user-left', u => {
-    delete players[u.uid];
-    renderWaitPlayers();
-    log('User left: ' + u.uid);
-  });
-  agoraClient.on('stream-message', (uid, data) => {
-    handleMessage(uid, data);
-  });
-
   try {
+    agoraClient = AgoraRTC.createClient({ mode:'rtc', codec:'vp8' });
+    agoraClient.on('user-joined', u => { log('joined: ' + u.uid); });
+    agoraClient.on('user-left', u => {
+      lobbyPlayers = lobbyPlayers.filter(p => p.uid !== u.uid);
+      renderRoster();
+    });
+    agoraClient.on('stream-message', (uid, data) => handleMessage(uid, data));
+
     await agoraClient.join(AGORA_APP_ID, CHAN_PREFIX + roomCode, null, null);
-    const myUid = agoraClient.uid;
-    log('Joined as uid:' + myUid);
+    myUid = agoraClient.uid;
 
-    try {
-      streamId = await agoraClient.createDataStream({ reliable: true, ordered: true });
-    } catch(e) { streamId = null; }
-
+    try { streamId = await agoraClient.createDataStream({ reliable:true, ordered:true }); }
+    catch(e) { streamId = null; }
     agoraReady = true;
 
-    // First to join is manager
-    const existingUsers = agoraClient.remoteUsers;
-    isManager = existingUsers.length === 0;
-
+    // First to join = manager
+    isManager = agoraClient.remoteUsers.length === 0;
     if (isManager) {
       document.getElementById('manager-bar').classList.add('visible');
-      showLobby();
-    } else {
-      goTo('screen-waiting');
-      document.getElementById('wait-sub').textContent = 'Waiting for manager to start a game';
     }
 
-    // Announce join
-    send({ type: 'player-join', name: myName, isManager });
+    // Add myself to lobby
+    lobbyPlayers.push({ uid: myUid, name: myName, isManager, status: 'active' });
 
-    players[myUid] = myName;
-    renderWaitPlayers();
+    // Announce
+    send({ type:'player-join', name:myName, isManager });
+
+    if (isManager) {
+      goToLobby();
+    } else {
+      goTo('screen-game-lobby');
+      updateLobbyUI();
+    }
 
   } catch(e) {
     log('Join error: ' + e.message);
@@ -341,31 +443,47 @@ async function doJoin() {
 // ── Messaging ───────────────────────────────────────────────
 function send(obj) {
   if (!agoraReady || streamId === null) return;
-  const msg   = JSON.stringify({ ...obj, _from: agoraClient.uid, _name: myName });
-  const bytes = new TextEncoder().encode(msg);
-  agoraClient.sendStreamMessage(streamId, bytes).catch(() => {});
+  const bytes = new TextEncoder().encode(JSON.stringify({ ...obj, _uid: myUid, _name: myName }));
+  agoraClient.sendStreamMessage(streamId, bytes).catch(()=>{});
 }
 
 function handleMessage(uid, data) {
   try {
-    const text = new TextDecoder().decode(data);
-    const msg  = JSON.parse(text);
+    const msg = JSON.parse(new TextDecoder().decode(data));
     log('← ' + msg.type);
 
     if (msg.type === 'player-join') {
-      players[uid] = msg.name;
-      renderWaitPlayers();
+      if (!lobbyPlayers.find(p => p.uid === uid)) {
+        const active = lobbyPlayers.filter(p => p.status === 'active').length;
+        const status = active < playerLimit ? 'active' : 'queue';
+        lobbyPlayers.push({ uid, name: msg.name, isManager: msg.isManager, status });
+      }
+      renderRoster();
+      // Send my info back so they know about me
+      send({ type:'player-join-ack', name: myName, isManager });
+    }
+
+    if (msg.type === 'player-join-ack') {
+      if (!lobbyPlayers.find(p => p.uid === uid)) {
+        const active = lobbyPlayers.filter(p => p.status === 'active').length;
+        lobbyPlayers.push({ uid, name: msg.name, isManager: msg.isManager, status: active < playerLimit ? 'active' : 'queue' });
+        renderRoster();
+      }
+    }
+
+    if (msg.type === 'limit-changed') {
+      playerLimit = msg.limit;
+      recomputeQueue();
+      renderRoster();
     }
 
     if (msg.type === 'game-selected') {
-      currentGame = msg.game;
-      document.getElementById('wait-game-name').textContent =
+      currentGame  = msg.game;
+      playerLimit  = GAME_LIMITS[msg.game]?.default || 6;
+      goTo('screen-game-lobby');
+      document.getElementById('lobby-game-title').textContent =
         msg.game === 'lastcard' ? 'Last Card' : 'Trivia Night';
-      goTo('screen-waiting');
-      if (isManager) {
-        document.getElementById('wait-sub').textContent = 'Tap Start when everyone is ready';
-        document.getElementById('mgr-start').style.display = 'block';
-      }
+      updateLobbyUI();
     }
 
     if (msg.type === 'game-start') {
@@ -380,54 +498,153 @@ function handleMessage(uid, data) {
       if (currentGame === 'trivia')   renderTrivia();
     }
 
+    if (msg.type === 'trivia-answer-received' && isManager) {
+      if (gameState && !gameState.answers) gameState.answers = {};
+      if (gameState) gameState.answers[msg._name] = { answer: msg.answer, timeRemaining: msg.timeRemaining };
+      broadcastState();
+    }
+
     if (msg.type === 'switch-game') {
-      showLobby();
+      goToLobby();
     }
 
-    if (msg.type === 'trivia-questions-ready') {
-      if (isManager) {
-        document.getElementById('trivia-gen-status').textContent = '✓ Ready! Tap Start.';
-        document.getElementById('mgr-start').style.display = 'block';
-      }
-    }
-
-  } catch(e) { log('Parse error: ' + e.message); }
+  } catch(e) { log('msg error: ' + e); }
 }
 
 // ── Screen management ────────────────────────────────────────
 function goTo(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  // Manager bar context
-  document.getElementById('mgr-start').style.display = 'none';
-  document.getElementById('mgr-skip').style.display  = 'none';
-  document.getElementById('mgr-next').style.display  = 'none';
+  // Hide all manager context buttons
+  ['mgr-start','mgr-reveal','mgr-next','mgr-skip'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
 }
 
-function showLobby() {
-  if (isManager) {
-    goTo('screen-lobby');
-  }
+function goToLobby() {
+  goTo('screen-lobby');
 }
 
-// ── Game selection ───────────────────────────────────────────
+// ── Lobby ────────────────────────────────────────────────────
 function selectGame(game) {
   if (!isManager) return;
-  currentGame = game;
-  send({ type: 'game-selected', game });
-  goTo('screen-waiting');
+  currentGame  = game;
+  playerLimit  = GAME_LIMITS[game]?.default || 6;
+  send({ type:'game-selected', game });
+  goTo('screen-game-lobby');
+  document.getElementById('lobby-game-title').textContent =
+    game === 'lastcard' ? 'Last Card' : 'Trivia Night';
+  updateLobbyUI();
 
   if (game === 'trivia') {
-    // Manager sets up trivia
-    setTimeout(() => {
-      goTo('screen-trivia');
-      showTriviaSetup();
-    }, 500);
-  } else {
-    document.getElementById('wait-game-name').textContent =
-      game === 'lastcard' ? 'Last Card' : game;
-    document.getElementById('mgr-start').style.display = 'block';
+    setTimeout(() => showTriviaSetup(), 300);
   }
+}
+
+function updateLobbyUI() {
+  const manager = isManager;
+
+  // Show/hide manager-only sections
+  document.getElementById('limit-section').style.display   = manager ? 'block' : 'none';
+  document.getElementById('invite-section').style.display  = manager ? 'block' : 'none';
+  document.getElementById('start-section').style.display   = manager ? 'block' : 'none';
+  document.getElementById('waiting-msg').style.display     = manager ? 'none'  : 'block';
+
+  // Manager start button visibility
+  document.getElementById('mgr-start').style.display = 'none'; // use lobby start btn instead
+
+  document.getElementById('limit-val').textContent = playerLimit;
+  renderRoster();
+}
+
+function changeLimit(delta) {
+  if (!isManager) return;
+  const game    = currentGame || 'lastcard';
+  const limits  = GAME_LIMITS[game] || { min:2, max:20 };
+  playerLimit   = Math.max(limits.min, Math.min(limits.max, playerLimit + delta));
+  document.getElementById('limit-val').textContent = playerLimit;
+  recomputeQueue();
+  renderRoster();
+  send({ type:'limit-changed', limit: playerLimit });
+}
+
+function recomputeQueue() {
+  let count = 0;
+  lobbyPlayers.forEach(p => {
+    if (count < playerLimit) { p.status = 'active'; count++; }
+    else                     { p.status = 'queue'; }
+  });
+}
+
+function renderRoster() {
+  const active = lobbyPlayers.filter(p => p.status === 'active');
+  const queue  = lobbyPlayers.filter(p => p.status === 'queue');
+
+  document.getElementById('lobby-limit-badge').textContent =
+    active.length + ' / ' + playerLimit;
+
+  document.getElementById('lobby-roster').innerHTML = active.map(p => `
+    <div class="roster-entry ${p.uid === myUid ? 'me' : ''}">
+      <div class="roster-dot ${p.uid === myUid ? 'dot-gold' : 'dot-green'}"></div>
+      <div class="roster-name ${p.uid === myUid ? 'me' : ''}">${p.name}</div>
+      ${p.isManager ? '<div class="roster-badge badge-manager">Manager</div>' : ''}
+      ${p.uid === myUid && !p.isManager ? '<div class="roster-badge badge-you">You</div>' : ''}
+    </div>`).join('');
+
+  const queueEl = document.getElementById('lobby-queue');
+  const queueLabel = document.getElementById('queue-label');
+  if (queue.length > 0) {
+    queueLabel.style.display = 'block';
+    queueEl.innerHTML = queue.map(p => `
+      <div class="roster-entry queue">
+        <div class="roster-dot dot-dim"></div>
+        <div class="roster-name">${p.name}</div>
+        <div class="roster-badge badge-queue">Queue</div>
+      </div>`).join('');
+  } else {
+    queueLabel.style.display = 'none';
+    queueEl.innerHTML = '';
+  }
+}
+
+// ── Invite ───────────────────────────────────────────────────
+function getInviteLink() {
+  return `${BASE_URL}/games/player.html?room=${roomCode}`;
+}
+
+function shareInvite() {
+  const link = getInviteLink();
+  const text = `Join my ${currentGame === 'lastcard' ? 'Last Card' : 'game'} on Elsewhere!\n${link}`;
+  if (navigator.share) {
+    navigator.share({ title: 'Join Elsewhere Games', text, url: link }).catch(()=>{});
+  } else {
+    navigator.clipboard.writeText(link).then(() => showToast('Link copied!'));
+  }
+}
+
+function copyInvite() {
+  navigator.clipboard.writeText(getInviteLink()).then(() => showToast('Link copied!')).catch(()=>{});
+}
+
+function sendCalendarInvite() {
+  const dt = document.getElementById('schedule-time').value;
+  if (!dt) { showToast('Pick a date and time first'); return; }
+  const start  = new Date(dt);
+  const end    = new Date(start.getTime() + 60 * 60 * 1000); // 1hr
+  const fmt    = d => d.toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z';
+  const link   = getInviteLink();
+  const title  = encodeURIComponent('Elsewhere Games — ' + (currentGame === 'lastcard' ? 'Last Card' : 'Trivia Night'));
+  const detail = encodeURIComponent('Join the game: ' + link);
+  const cal    = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${detail}&location=${encodeURIComponent(link)}`;
+  window.open(cal, '_blank');
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:var(--color-overlay);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:10px 20px;font-size:var(--text-sm);color:var(--color-text);z-index:999;white-space:nowrap;';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
 }
 
 // ── Manager controls ─────────────────────────────────────────
@@ -436,133 +653,118 @@ function managerStart() {
   if (currentGame === 'trivia')   managerStartTrivia();
 }
 
-function managerSkip() {
-  if (currentGame === 'lastcard') {
-    // Force current player to draw
-    if (!gameState) return;
-    gameState = lcApplyDraw();
-    broadcastState();
-    renderLastCard();
-  }
-  if (currentGame === 'trivia') {
-    send({ type: 'trivia-action', action: { type: 'reveal' } });
-  }
+function managerReveal() {
+  if (currentGame === 'trivia') triviaReveal();
 }
 
 function managerNext() {
-  if (currentGame === 'trivia') {
-    send({ type: 'trivia-action', action: { type: 'next-question' } });
+  if (currentGame === 'trivia') triviaNext();
+}
+
+function managerSkip() {
+  if (currentGame === 'lastcard') {
+    const s = lcApplyDraw(gameState);
+    gameState = s;
+    broadcastState();
+    renderLastCard();
   }
 }
 
-function managerEndSession() {
-  send({ type: 'switch-game' });
-  showLobby();
+function managerEnd() {
+  send({ type:'switch-game' });
+  goToLobby();
 }
 
 // ═══════════════════════════════════════════════════════════
 //  LAST CARD
 // ═══════════════════════════════════════════════════════════
-
-const SUITS   = ['♠','♥','♦','♣'];
-const VALUES  = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+const SUITS  = ['♠','♥','♦','♣'];
+const VALUES = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 
 function buildDeck() {
-  const deck = [];
-  for (const s of SUITS) for (const v of VALUES) deck.push({ suit:s, value:v, id:v+s });
-  deck.push({ suit:null, value:'W',  id:'W1' });
-  deck.push({ suit:null, value:'W',  id:'W2' });
-  deck.push({ suit:null, value:'W4', id:'W4-1' });
-  deck.push({ suit:null, value:'W4', id:'W4-2' });
-  return deck;
+  const d = [];
+  for (const s of SUITS) for (const v of VALUES) d.push({ suit:s, value:v, id:v+s });
+  d.push({ suit:null, value:'W',  id:'W1' });
+  d.push({ suit:null, value:'W',  id:'W2' });
+  d.push({ suit:null, value:'W4', id:'W4-1' });
+  d.push({ suit:null, value:'W4', id:'W4-2' });
+  return d;
 }
 
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i=a.length-1;i>0;i--) { const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-  return a;
+function shuffle(a) {
+  const b = [...a];
+  for (let i=b.length-1;i>0;i--) { const j=Math.floor(Math.random()*(i+1)); [b[i],b[j]]=[b[j],b[i]]; }
+  return b;
 }
 
 function managerStartLastCard() {
-  const playerNames = [myName, ...Object.values(players).filter(n => n !== myName)];
+  // Build player list from active lobby players
+  const playerNames = lobbyPlayers.filter(p => p.status === 'active').map(p => p.name);
+  if (playerNames.length < 2) { showToast('Need at least 2 players'); return; }
+
   const deck = shuffle(buildDeck());
   const hands = {};
   playerNames.forEach(n => { hands[n] = []; });
-
   let idx = 0;
   for (let c=0;c<7;c++) for (const n of playerNames) hands[n].push(deck[idx++]);
-
   let topCard;
-  while (true) { topCard = deck[idx++]; if (!topCard.value.startsWith('W')) break; }
+  while(true) { topCard = deck[idx++]; if (!topCard.value.startsWith('W')) break; }
 
   gameState = {
-    phase: 'playing',
-    players: playerNames,
-    hands,
-    drawPile: deck.slice(idx),
-    discardPile: [topCard],
-    currentSuit: topCard.suit,
-    currentValue: topCard.value,
-    currentPlayerIdx: 0,
-    direction: 1,
-    pendingDraw: 0,
-    lastCard: {},
-    scores: Object.fromEntries(playerNames.map(n => [n,0])),
-    log: [],
+    phase:'playing', players:playerNames, hands,
+    drawPile: deck.slice(idx), discardPile:[topCard],
+    currentSuit: topCard.suit, currentValue: topCard.value,
+    currentPlayerIdx:0, direction:1, pendingDraw:0,
+    lastCard:{}, scores: Object.fromEntries(playerNames.map(n=>[n,0])), log:[],
   };
 
   myHand = [...(gameState.hands[myName] || [])];
-  broadcastState();
+  send({ type:'game-start', state: stripHands(gameState) });
   startLastCard();
 }
 
 function startLastCard() {
   goTo('screen-lastcard');
-  document.getElementById('mgr-skip').style.display = isManager ? 'block' : 'none';
+  document.getElementById('mgr-skip').style.display  = isManager ? 'block' : 'none';
   renderLastCard();
 }
 
 function renderLastCard() {
   if (!gameState) return;
-  const s = gameState;
+  const s      = gameState;
   const myTurn = s.players[s.currentPlayerIdx] === myName;
-
-  // Update my hand from state
   if (s.hands[myName]) myHand = [...s.hands[myName]];
 
-  // Status
-  const statusEl = document.getElementById('lc-status');
+  // Status line
+  const el = document.getElementById('lc-status');
   if (s.phase === 'round-end') {
-    statusEl.textContent = (s.winner === myName ? '🎉 You win!' : s.winner + ' wins!') + ' Round over.';
-    statusEl.className = 'lc-status';
+    el.textContent = s.winner === myName ? '🎉 You win this round!' : s.winner + ' wins the round!';
+    el.className = 'lc-status';
     if (isManager) {
       document.getElementById('mgr-next').style.display = 'block';
-      document.getElementById('mgr-next').onclick = () => managerNextRound();
+      document.getElementById('mgr-next').textContent = 'Next Round →';
+      document.getElementById('mgr-next').onclick = managerNextRound;
     }
   } else if (myTurn) {
-    const pending = s.pendingDraw > 0;
-    statusEl.textContent = pending ? `Draw ${s.pendingDraw} or stack!` : 'Your turn!';
-    statusEl.className = 'lc-status your-turn';
+    el.textContent = s.pendingDraw > 0 ? `Draw ${s.pendingDraw} or stack!` : 'Your turn!';
+    el.className = 'lc-status your-turn';
   } else {
-    statusEl.textContent = (s.players[s.currentPlayerIdx] || '?') + "'s turn";
-    statusEl.className = 'lc-status';
+    el.textContent = (s.players[s.currentPlayerIdx] || '?') + "'s turn";
+    el.className = 'lc-status';
   }
 
-  // Last Card button
-  const lcBtn = document.getElementById('last-card-btn');
-  lcBtn.style.display = (myHand.length === 1 && !s.lastCard[myName]) ? 'block' : 'none';
+  // Last Card! button
+  document.getElementById('last-card-btn').style.display =
+    (myHand.length === 1 && !s.lastCard[myName]) ? 'block' : 'none';
 
-  // Hand
   renderHand(myTurn, s);
-
-  // Action buttons
   document.getElementById('lc-draw-btn').disabled = !myTurn;
   document.getElementById('lc-play-btn').disabled = !(myTurn && selectedCard);
 }
 
 function renderHand(myTurn, s) {
-  const handEl = document.getElementById('lc-hand');
-  handEl.innerHTML = '';
+  const el = document.getElementById('lc-hand');
+  el.innerHTML = '';
   selectedCard = null;
   document.getElementById('lc-play-btn').disabled = true;
 
@@ -570,23 +772,19 @@ function renderHand(myTurn, s) {
     const playable = myTurn && canPlay(s, card);
     const isRed  = card.suit === '♥' || card.suit === '♦';
     const isWild = !card.suit;
-    const cls    = isWild ? 'wild' : isRed ? 'red' : 'black';
-    const label  = card.value + (card.suit || '');
-
-    const el = document.createElement('div');
-    el.className = `lc-card ${cls} ${playable ? 'playable' : 'disabled'}`;
-    el.textContent = label;
-    el.dataset.id  = card.id;
-
+    const div    = document.createElement('div');
+    div.className = `lc-card ${isWild?'wild':isRed?'red':'black'} ${playable?'playable':'disabled'}`;
+    div.textContent = card.value + (card.suit || '');
+    div.dataset.id  = card.id;
     if (playable) {
-      el.onclick = () => {
-        document.querySelectorAll('.lc-card.selected').forEach(c => c.classList.remove('selected'));
-        el.classList.add('selected');
+      div.onclick = () => {
+        document.querySelectorAll('.lc-card.selected').forEach(c=>c.classList.remove('selected'));
+        div.classList.add('selected');
         selectedCard = card;
         document.getElementById('lc-play-btn').disabled = false;
       };
     }
-    handEl.appendChild(el);
+    el.appendChild(div);
   });
 }
 
@@ -611,54 +809,41 @@ function lcChooseSuit(suit) {
 }
 
 function doPlayCard(card, chosenSuit) {
-  const s = JSON.parse(JSON.stringify(gameState));
+  const s   = JSON.parse(JSON.stringify(gameState));
   const pid = myName;
-
-  // Remove from hand
   s.hands[pid] = s.hands[pid].filter(c => c.id !== card.id);
   s.discardPile.push(card);
   s.currentValue = card.value;
 
-  if (card.value === '2') {
-    s.pendingDraw += 2; s.currentSuit = card.suit; advance(s);
-  } else if (card.value === 'W4') {
-    s.pendingDraw += 4; s.currentSuit = chosenSuit || s.currentSuit; advance(s);
-  } else if (card.value === 'W') {
-    s.currentSuit = chosenSuit || s.currentSuit; advance(s);
-  } else if (card.value === 'A') {
-    s.currentSuit = card.suit; advance(s); advance(s);
-  } else if (card.value === 'J') {
-    s.direction *= -1; s.currentSuit = card.suit; advance(s);
-  } else {
-    s.currentSuit = card.suit; advance(s);
-  }
+  if      (card.value === '2')  { s.pendingDraw += 2; s.currentSuit = card.suit; advance(s); }
+  else if (card.value === 'W4') { s.pendingDraw += 4; s.currentSuit = chosenSuit || s.currentSuit; advance(s); }
+  else if (card.value === 'W')  { s.currentSuit = chosenSuit || s.currentSuit; advance(s); }
+  else if (card.value === 'A')  { s.currentSuit = card.suit; advance(s); advance(s); }
+  else if (card.value === 'J')  { s.direction *= -1; s.currentSuit = card.suit; advance(s); }
+  else                          { s.currentSuit = card.suit; advance(s); }
 
   if (s.hands[pid].length === 0) {
-    s.phase = 'round-end'; s.winner = pid;
-    let pts = 0;
+    s.phase   = 'round-end';
+    s.winner  = pid;
+    let pts   = 0;
     for (const [p, hand] of Object.entries(s.hands)) {
-      if (p === pid) continue;
-      pts += hand.reduce((acc, c) => acc + cardPoints(c), 0);
+      if (p !== pid) pts += hand.reduce((a,c) => a + cardPts(c), 0);
     }
-    s.scores[pid] = (s.scores[pid] || 0) + pts;
+    s.scores[pid] = (s.scores[pid]||0) + pts;
   }
 
   selectedCard = null;
-  gameState = s;
+  gameState    = s;
   broadcastState();
   renderLastCard();
 }
 
 function lcDraw() {
   if (!gameState) return;
-  const s = JSON.parse(JSON.stringify(gameState));
-  const pid = myName;
+  const s     = JSON.parse(JSON.stringify(gameState));
   const count = s.pendingDraw > 0 ? s.pendingDraw : 1;
   s.pendingDraw = 0;
-  for (let i=0;i<count;i++) {
-    if (s.drawPile.length === 0) reshuffleDeck(s);
-    if (s.drawPile.length > 0) s.hands[pid].push(s.drawPile.pop());
-  }
+  for (let i=0;i<count;i++) { if(s.drawPile.length===0) reshuffleDeck(s); if(s.drawPile.length>0) s.hands[myName].push(s.drawPile.pop()); }
   advance(s);
   gameState = s;
   myHand = [...s.hands[myName]];
@@ -666,15 +851,12 @@ function lcDraw() {
   renderLastCard();
 }
 
-function lcApplyDraw() {
-  const s = JSON.parse(JSON.stringify(gameState));
+function lcApplyDraw(state) {
+  const s   = JSON.parse(JSON.stringify(state));
   const pid = s.players[s.currentPlayerIdx];
-  const count = s.pendingDraw > 0 ? s.pendingDraw : 1;
+  const cnt = s.pendingDraw > 0 ? s.pendingDraw : 1;
   s.pendingDraw = 0;
-  for (let i=0;i<count;i++) {
-    if (s.drawPile.length === 0) reshuffleDeck(s);
-    if (s.drawPile.length > 0) s.hands[pid].push(s.drawPile.pop());
-  }
+  for (let i=0;i<cnt;i++) { if(s.drawPile.length===0) reshuffleDeck(s); if(s.drawPile.length>0) s.hands[pid].push(s.drawPile.pop()); }
   advance(s);
   return s;
 }
@@ -685,161 +867,113 @@ function lcDeclareLastCard() {
   gameState = s;
   broadcastState();
   document.getElementById('last-card-btn').style.display = 'none';
-  log('Called Last Card!');
 }
 
 function managerNextRound() {
-  if (!gameState) return;
-  const s = JSON.parse(JSON.stringify(gameState));
-  const playerNames = s.players;
+  const s    = JSON.parse(JSON.stringify(gameState));
   const deck = shuffle(buildDeck());
   const hands = {};
-  playerNames.forEach(n => { hands[n] = []; });
+  s.players.forEach(n => { hands[n] = []; });
   let idx = 0;
-  for (let c=0;c<7;c++) for (const n of playerNames) hands[n].push(deck[idx++]);
-  let topCard;
-  while (true) { topCard = deck[idx++]; if (!topCard.value.startsWith('W')) break; }
-
-  gameState = { ...s, phase:'playing', hands, drawPile:deck.slice(idx),
-    discardPile:[topCard], currentSuit:topCard.suit, currentValue:topCard.value,
-    currentPlayerIdx:0, direction:1, pendingDraw:0, lastCard:{}, winner:null };
-
+  for (let c=0;c<7;c++) for (const n of s.players) hands[n].push(deck[idx++]);
+  let top;
+  while(true) { top = deck[idx++]; if (!top.value.startsWith('W')) break; }
+  gameState = { ...s, phase:'playing', hands, drawPile:deck.slice(idx), discardPile:[top],
+    currentSuit:top.suit, currentValue:top.value, currentPlayerIdx:0, direction:1, pendingDraw:0, lastCard:{}, winner:null };
   myHand = [...gameState.hands[myName]];
-  broadcastState();
   document.getElementById('mgr-next').style.display = 'none';
+  broadcastState();
   renderLastCard();
 }
 
 function advance(s) {
   s.currentPlayerIdx = (s.currentPlayerIdx + s.direction + s.players.length) % s.players.length;
 }
-
-function reshuffleDeck(s) {
-  const top = s.discardPile.pop();
-  s.drawPile = shuffle(s.discardPile);
-  s.discardPile = [top];
-}
-
-function cardPoints(card) {
-  if (['J','Q','K','A'].includes(card.value) || card.value === '10') return 10;
-  if (card.value.startsWith('W')) return 20;
-  return parseInt(card.value) || 0;
-}
+function reshuffleDeck(s) { const t=s.discardPile.pop(); s.drawPile=shuffle(s.discardPile); s.discardPile=[t]; }
+function cardPts(c) { if(['J','Q','K','A','10'].includes(c.value)) return 10; if(c.value.startsWith('W')) return 20; return parseInt(c.value)||0; }
 
 // ═══════════════════════════════════════════════════════════
 //  TRIVIA
 // ═══════════════════════════════════════════════════════════
-
 const CATEGORIES = [
-  { id:'general',   label:'General',    emoji:'🧠' },
-  { id:'music',     label:'Music',      emoji:'🎵' },
-  { id:'movies',    label:'Movies & TV',emoji:'🎬' },
-  { id:'sports',    label:'Sports',     emoji:'⚽' },
-  { id:'science',   label:'Science',    emoji:'🔬' },
-  { id:'history',   label:'History',    emoji:'📜' },
-  { id:'food',      label:'Food',       emoji:'🍕' },
-  { id:'geography', label:'Geography',  emoji:'🌍' },
-  { id:'pop',       label:'Pop Culture',emoji:'⭐' },
-  { id:'tech',      label:'Tech',       emoji:'💻' },
+  {id:'general',label:'General',emoji:'🧠'},{id:'music',label:'Music',emoji:'🎵'},
+  {id:'movies',label:'Movies',emoji:'🎬'},{id:'sports',label:'Sports',emoji:'⚽'},
+  {id:'science',label:'Science',emoji:'🔬'},{id:'history',label:'History',emoji:'📜'},
+  {id:'food',label:'Food',emoji:'🍕'},{id:'geography',label:'Geography',emoji:'🌍'},
+  {id:'pop',label:'Pop Culture',emoji:'⭐'},{id:'tech',label:'Tech',emoji:'💻'},
 ];
 
 function showTriviaSetup() {
-  document.getElementById('trivia-setup').style.display  = 'flex';
-  document.getElementById('trivia-game').style.display   = 'none';
+  goTo('screen-trivia');
+  document.getElementById('trivia-setup').style.display   = 'flex';
+  document.getElementById('trivia-game').style.display    = 'none';
   document.getElementById('trivia-waiting').style.display = 'none';
+  buildCatGrid();
+  buildDiffRow();
+}
 
-  // Category grid
-  const catGrid = document.getElementById('cat-grid');
-  catGrid.innerHTML = CATEGORIES.map(c =>
+function buildCatGrid() {
+  document.getElementById('cat-grid').innerHTML = CATEGORIES.map(c =>
     `<div class="cat-card ${c.id===triviaCategory?'selected':''}" onclick="selectCat('${c.id}')">
-      <div class="cat-icon">${c.emoji}</div>
-      <div class="cat-name">${c.label}</div>
-    </div>`
-  ).join('');
+      <div class="cat-icon">${c.emoji}</div><div class="cat-name">${c.label}</div>
+    </div>`).join('');
+}
 
-  // Difficulty row
-  const diffRow = document.getElementById('diff-row');
-  diffRow.innerHTML = ['Easy','Medium','Hard'].map(d =>
+function buildDiffRow() {
+  document.getElementById('diff-row').innerHTML = ['Easy','Medium','Hard'].map(d =>
     `<div class="cat-card ${d===triviaDiff?'selected':''}" style="flex:1;padding:8px 4px;" onclick="selectDiff('${d}')">
       <div class="cat-name">${d}</div>
-    </div>`
-  ).join('');
+    </div>`).join('');
 }
 
-function selectCat(id) {
-  triviaCategory = id;
-  showTriviaSetup();
-}
-
-function selectDiff(d) {
-  triviaDiff = d;
-  showTriviaSetup();
-}
+function selectCat(id) { triviaCategory = id; buildCatGrid(); }
+function selectDiff(d)  { triviaDiff = d; buildDiffRow(); }
 
 async function triviaGenerate() {
-  const statusEl = document.getElementById('trivia-gen-status');
-  const btn = document.getElementById('trivia-generate-btn');
-  statusEl.textContent = 'Generating questions...';
-  btn.disabled = true;
-
-  const cat = CATEGORIES.find(c => c.id === triviaCategory) || CATEGORIES[0];
-  const prompt = `Generate 10 trivia questions for a party game.
-Category: ${cat.label}
-Difficulty: ${triviaDiff}
-Return ONLY valid JSON with no markdown:
-{"questions":[{"id":"q1","question":"...?","options":["A) ...","B) ...","C) ...","D) ..."],"correct":"A","fun_fact":"..."}]}
-Rules: unambiguous questions, one correct answer, plausible wrong options, fun_fact max 1 sentence.`;
-
+  const btn = document.getElementById('trivia-gen-btn');
+  const sta = document.getElementById('trivia-gen-status');
+  btn.disabled = true; sta.textContent = 'Generating questions...';
+  const cat = CATEGORIES.find(c=>c.id===triviaCategory)||CATEGORIES[0];
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: CLAUDE_MODEL,
-        max_tokens: 3000,
-        messages: [{ role:'user', content: prompt }]
-      })
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ model:CLAUDE_MODEL, max_tokens:3000, messages:[{
+        role:'user',
+        content:`Generate 10 trivia questions. Category: ${cat.label}. Difficulty: ${triviaDiff}.
+Return ONLY valid JSON, no markdown:
+{"questions":[{"id":"q1","question":"...?","options":["A) ...","B) ...","C) ...","D) ..."],"correct":"A","fun_fact":"..."}]}
+Rules: unambiguous, one correct answer, plausible wrong answers, fun_fact max 1 sentence.`
+      }]})
     });
-    if (!resp.ok) throw new Error('API error ' + resp.status);
+    if (!resp.ok) throw new Error('API ' + resp.status);
     const data = await resp.json();
-    const text = (data.content?.[0]?.text || '').replace(/```json|```/g,'').trim();
-    const parsed = JSON.parse(text);
-    const questions = parsed.questions;
-
-    // Store on gameState
+    const text = (data.content?.[0]?.text||'').replace(/```json|```/g,'').trim();
+    const qs   = JSON.parse(text).questions;
+    const players = lobbyPlayers.filter(p=>p.status==='active').map(p=>p.name);
     gameState = {
-      phase: 'waiting',
-      players: [myName, ...Object.values(players).filter(n=>n!==myName)],
-      questions,
-      currentQuestionIdx: 0,
-      timePerQuestion: 20,
-      timer: 0,
-      answers: {},
-      scores: {},
-      streak: {},
+      phase:'waiting', players, questions:qs, currentQuestionIdx:0,
+      timePerQuestion:20, timer:0, answers:{},
+      scores:Object.fromEntries(players.map(p=>[p,0])),
+      streak:Object.fromEntries(players.map(p=>[p,0])),
+      category: cat.label,
     };
-    gameState.players.forEach(p => { gameState.scores[p]=0; gameState.streak[p]=0; });
-
-    send({ type: 'trivia-questions-ready' });
-    statusEl.textContent = '✓ ' + questions.length + ' questions ready! Tap Start.';
-    document.getElementById('mgr-start').style.display = 'block';
-    log('Trivia questions generated: ' + questions.length);
-  } catch(e) {
-    statusEl.textContent = 'Error: ' + e.message;
+    sta.textContent = '✓ ' + qs.length + ' questions ready!';
     btn.disabled = false;
-    log('Trivia gen error: ' + e.message);
+    document.getElementById('mgr-start').style.display = 'block';
+    document.getElementById('lobby-start-btn') && (document.getElementById('lobby-start-btn').style.display = 'block');
+  } catch(e) {
+    sta.textContent = 'Error: ' + e.message; btn.disabled = false;
   }
 }
 
 function managerStartTrivia() {
-  if (!gameState || !gameState.questions) return;
-  const state = JSON.parse(JSON.stringify(gameState));
-  state.phase = 'question';
-  state.timer = state.timePerQuestion;
-  gameState = state;
-
-  send({ type: 'game-start', state: stripHands(state) });
-  startTrivia(state);
+  if (!gameState?.questions) { showToast('Generate questions first'); return; }
+  const s = JSON.parse(JSON.stringify(gameState));
+  s.phase = 'question'; s.timer = s.timePerQuestion;
+  gameState = s;
+  send({ type:'game-start', state: s });
+  startTrivia(s);
 }
 
 function startTrivia(state) {
@@ -849,15 +983,14 @@ function startTrivia(state) {
   document.getElementById('trivia-game').style.display    = 'flex';
   document.getElementById('trivia-waiting').style.display = 'none';
   if (isManager) {
-    document.getElementById('mgr-skip').style.display = 'block';
-    document.getElementById('mgr-next').style.display = 'block';
-    document.getElementById('mgr-skip').textContent   = 'Reveal';
-    document.getElementById('mgr-next').textContent   = 'Next →';
-    document.getElementById('mgr-skip').onclick  = () => triviaReveal();
-    document.getElementById('mgr-next').onclick  = () => triviaNext();
+    document.getElementById('mgr-reveal').style.display = 'block';
+    document.getElementById('mgr-next').style.display   = 'block';
+    document.getElementById('mgr-reveal').textContent   = 'Reveal';
+    document.getElementById('mgr-next').textContent     = 'Next →';
+    document.getElementById('mgr-next').onclick = triviaNext;
   }
   renderTrivia();
-  startTriviaTimer();
+  if (isManager) startTriviaTimer();
 }
 
 function renderTrivia() {
@@ -865,52 +998,40 @@ function renderTrivia() {
   const s = gameState;
   const q = s.questions[s.currentQuestionIdx];
   if (!q) return;
-
   document.getElementById('trivia-q-text').textContent = q.question;
-
-  const myAnswer = s.answers?.[myName];
-  const revealed = s.phase === 'reveal';
-  const letters  = ['A','B','C','D'];
-
-  document.getElementById('trivia-options').innerHTML = (q.options||[]).map((opt, i) => {
-    const letter = letters[i];
+  const myAns  = s.answers?.[myName];
+  const reveal = s.phase === 'reveal';
+  const letters= ['A','B','C','D'];
+  document.getElementById('trivia-opts').innerHTML = (q.options||[]).map((opt,i) => {
+    const L = letters[i];
     let cls = '';
-    if (revealed) {
-      cls = letter === q.correct ? 'correct' : (myAnswer?.answer === letter ? 'wrong' : '');
-    } else if (myAnswer?.answer === letter) {
-      cls = 'selected';
-    }
-    const locked = !!myAnswer || revealed;
-    return `<div class="trivia-opt ${cls}" onclick="${locked?'':'triviaAnswer(\''+letter+'\')'}" style="${locked&&!cls?'opacity:.5':''}">
-      <div class="trivia-opt-letter">${letter}</div>
-      <div class="trivia-opt-text">${opt}</div>
+    if (reveal) cls = L===q.correct ? 'correct' : (myAns?.answer===L ? 'wrong' : '');
+    else if (myAns?.answer===L) cls = 'selected';
+    const locked = !!myAns || reveal;
+    return `<div class="trivia-opt ${cls}" onclick="${locked?'':'triviaAnswer(\''+L+'\')'}" style="${locked&&!cls?'opacity:.5':''}">
+      <div class="trivia-opt-letter">${L}</div><div class="trivia-opt-text">${opt}</div>
     </div>`;
   }).join('');
-
-  const statusEl = document.getElementById('trivia-status');
-  if (revealed) {
-    const correct = myAnswer?.answer === q.correct;
-    statusEl.textContent = correct ? '✓ Correct!' : (q.correct + ') ' + (q.options?.[letters.indexOf(q.correct)] || ''));
-    statusEl.className = 'trivia-status ' + (correct ? 'answered' : '');
-  } else if (myAnswer) {
-    statusEl.textContent = 'Answer submitted — waiting for others';
-    statusEl.className = 'trivia-status answered';
+  const sta = document.getElementById('trivia-status');
+  if (reveal) {
+    const ok = myAns?.answer === q.correct;
+    sta.textContent = ok ? '✓ Correct!' : q.correct + ') ' + (q.options?.[letters.indexOf(q.correct)]||'');
+    sta.className = 'trivia-status' + (ok?' correct':'');
+  } else if (myAns) {
+    sta.textContent = 'Submitted — waiting for others';
+    sta.className = 'trivia-status';
   } else {
-    statusEl.textContent = '';
-    statusEl.className = 'trivia-status';
+    sta.textContent = ''; sta.className = 'trivia-status';
   }
 }
 
 function triviaAnswer(letter) {
   if (!gameState || gameState.answers?.[myName]) return;
-  const s = JSON.parse(JSON.stringify(gameState));
-  if (!s.answers) s.answers = {};
-  s.answers[myName] = { answer: letter, timeRemaining: s.timer || 0 };
-  gameState = s;
-  send({ type: 'trivia-answer', answer: letter, timeRemaining: s.timer || 0 });
-  renderTrivia();
-  // If manager also broadcasts state
+  if (!gameState.answers) gameState.answers = {};
+  gameState.answers[myName] = { answer:letter, timeRemaining: gameState.timer||0 };
+  send({ type:'trivia-answer-received', answer:letter, timeRemaining: gameState.timer||0 });
   if (isManager) broadcastState();
+  renderTrivia();
 }
 
 function triviaReveal() {
@@ -919,16 +1040,13 @@ function triviaReveal() {
   s.phase = 'reveal';
   const q = s.questions[s.currentQuestionIdx];
   const letters = ['A','B','C','D'];
-  for (const [pid, ans] of Object.entries(s.answers||{})) {
+  for (const [pid,ans] of Object.entries(s.answers||{})) {
     if (ans.answer === q.correct) {
-      const timeBonus  = Math.round(((ans.timeRemaining||0) / s.timePerQuestion) * 50);
-      const streakBonus = Math.min((s.streak[pid]||0) * 10, 50);
-      const pts = 100 + timeBonus + streakBonus;
-      s.scores[pid] = (s.scores[pid]||0) + pts;
+      const tb = Math.round(((ans.timeRemaining||0)/s.timePerQuestion)*50);
+      const sb = Math.min((s.streak[pid]||0)*10,50);
+      s.scores[pid] = (s.scores[pid]||0) + 100 + tb + sb;
       s.streak[pid] = (s.streak[pid]||0) + 1;
-    } else {
-      s.streak[pid] = 0;
-    }
+    } else { s.streak[pid] = 0; }
   }
   stopTriviaTimer();
   gameState = s;
@@ -940,13 +1058,9 @@ function triviaNext() {
   if (!gameState) return;
   const s = JSON.parse(JSON.stringify(gameState));
   s.currentQuestionIdx++;
-  if (s.currentQuestionIdx >= s.questions.length) {
-    s.phase = 'game-end';
-  } else {
-    s.phase = 'question';
-    s.answers = {};
-    s.timer = s.timePerQuestion;
-  }
+  s.phase   = s.currentQuestionIdx >= s.questions.length ? 'game-end' : 'question';
+  s.answers = {};
+  s.timer   = s.timePerQuestion;
   gameState = s;
   broadcastState();
   renderTrivia();
@@ -955,54 +1069,33 @@ function triviaNext() {
 
 function startTriviaTimer() {
   stopTriviaTimer();
-  if (!gameState) return;
   timerInterval = setInterval(() => {
     if (!gameState) return;
     gameState.timer = Math.max(0, (gameState.timer||0) - 1);
-    const pct = (gameState.timer / gameState.timePerQuestion) * 100;
+    const pct  = (gameState.timer / gameState.timePerQuestion) * 100;
     const fill = document.getElementById('trivia-timer-fill');
     if (fill) fill.style.width = pct + '%';
-    if (gameState.timer <= 0) {
-      stopTriviaTimer();
-      if (isManager) triviaReveal();
-    }
+    if (gameState.timer <= 0) { stopTriviaTimer(); if (isManager) triviaReveal(); }
   }, 1000);
 }
-
-function stopTriviaTimer() {
-  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-}
+function stopTriviaTimer() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
 
 // ── Shared helpers ───────────────────────────────────────────
 function broadcastState() {
   if (!isManager) return;
-  send({ type: 'game-state', state: stripHands(gameState) });
+  send({ type:'game-state', state: stripHands(gameState) });
 }
 
 function stripHands(state) {
-  // Don't broadcast other players' hands — each player sees only their own
-  if (!state || !state.hands) return state;
+  if (!state?.hands) return state;
   const s = JSON.parse(JSON.stringify(state));
-  // Keep only card counts for other players
   for (const pid of Object.keys(s.hands)) {
-    if (pid !== myName) s.hands[pid] = s.hands[pid].map(() => ({ id:'?', value:'?', suit:'?' }));
+    if (pid !== myName) s.hands[pid] = s.hands[pid].map(()=>({id:'?',value:'?',suit:'?'}));
   }
   return s;
 }
 
-function renderWaitPlayers() {
-  const el = document.getElementById('wait-players');
-  const all = { [agoraClient?.uid||'me']: myName, ...players };
-  el.innerHTML = Object.entries(all).map(([uid, name]) =>
-    `<div class="wait-player ${name===myName?'me':''}">
-      <span>${name}</span>
-      ${name===myName ? '<span style="font-size:10px;color:var(--color-text-faint);">You</span>' : ''}
-    </div>`
-  ).join('');
-}
-
-// ── Log ──────────────────────────────────────────────────────
-function log(msg) { console.log('[Games Player]', msg); }
+function log(msg) { console.log('[Games]', msg); }
 </script>
 </body>
 </html>
