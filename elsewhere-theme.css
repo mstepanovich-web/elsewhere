@@ -1,0 +1,250 @@
+/*
+ * ═══════════════════════════════════════════════════════════
+ *  ELSEWHERE — Design Token System
+ *  v1.0
+ *
+ *  Usage:
+ *    <link rel="stylesheet" href="/elsewhere-theme.css">
+ *
+ *  All visual design decisions live here.
+ *  To restyle any Elsewhere product, edit this file only.
+ *  Per-product overrides: add class to <body> e.g. class="theme-worlds"
+ * ═══════════════════════════════════════════════════════════
+ */
+
+/* ── Google Fonts ─────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+/* ── Root Design Tokens ───────────────────────────────────── */
+:root {
+
+  /* Brand Colors — raw values */
+  --gold-h: 45;
+  --gold-s: 100%;
+
+  /* Primary gold (buttons, highlights, room code) */
+  --color-gold:           rgba(255, 200,  80, 1.00);
+  --color-gold-bright:    rgba(255, 220, 150, 1.00);
+  --color-gold-dim:       rgba(255, 200,  80, 0.70);
+  --color-gold-soft:      rgba(255, 200, 120, 0.40);
+  --color-gold-faint:     rgba(255, 200,  80, 0.12);
+  --color-gold-ghost:     rgba(255, 200,  80, 0.06);
+
+  /* Accent green (ok/online status, success) */
+  --color-green:          rgba(  0, 232, 122, 1.00);
+  --color-green-dim:      rgba(  0, 232, 122, 0.80);
+  --color-green-faint:    rgba(  0, 232, 122, 0.15);
+
+  /* Accent red (error, offline status) */
+  --color-red:            rgba(232,  25,  44, 1.00);
+  --color-red-faint:      rgba(232,  25,  44, 0.15);
+
+  /* Background layers */
+  --color-bg:             rgba(  4,   2,   6, 1.00);  /* deepest black-purple */
+  --color-bg-mid:         rgba(  8,   5,   9, 1.00);
+  --color-surface:        rgba( 20,  12,   8, 0.85);  /* card/panel bg */
+  --color-surface-raised: rgba( 28,  16,  10, 0.90);
+  --color-overlay:        rgba(  4,   2,   6, 0.96);  /* full-screen overlays */
+
+  /* Text */
+  --color-text:           rgba(255, 220, 150, 0.92);  /* primary text (warm white) */
+  --color-text-dim:       rgba(255, 220, 150, 0.75);  /* raised: was 0.70 */
+  --color-text-faint:     rgba(255, 220, 150, 0.55);  /* raised: was 0.40 — visible on black */
+  --color-text-ghost:     rgba(255, 255, 255, 0.10);
+  --color-white:          rgba(255, 255, 255, 1.00);
+  --color-white-soft:     rgba(255, 255, 255, 0.12);  /* raised: was 0.08 */
+  --color-white-ghost:    rgba(255, 255, 255, 0.05);  /* raised: was 0.03 */
+
+  /* Borders */
+  --color-border:         rgba(255, 200,  80, 0.30);  /* raised: was 0.20 */
+  --color-border-dim:     rgba(255, 200,  80, 0.15);  /* raised: was 0.10 */
+  --color-border-bright:  rgba(255, 200,  80, 0.60);  /* raised: was 0.50 */
+
+  /* Stage / theatrical */
+  --color-stage-wood:     #2a1010;
+  --color-stage-curtain:  #1a0a10;
+  --color-spotlight-r:    201;
+  --color-spotlight-g:    160;
+  --color-spotlight-b:    76;
+
+  /* ── Typography ───────────────────────────────────────── */
+  --font-display:   'Cormorant Garamond', Georgia, serif;
+  --font-ui:        'Inter', system-ui, sans-serif;
+  --font-mono:      'DM Mono', 'Courier New', monospace;
+
+  /* Type scale */
+  --text-xs:    11px;
+  --text-sm:    13px;
+  --text-base:  15px;
+  --text-md:    17px;
+  --text-lg:    20px;
+  --text-xl:    24px;
+  --text-2xl:   32px;
+  --text-3xl:   42px;
+  --text-4xl:   56px;
+
+  /* Letter spacing */
+  --tracking-tight:   .02em;
+  --tracking-normal:  .05em;
+  --tracking-wide:    .10em;
+  --tracking-wider:   .15em;
+  --tracking-widest:  .22em;
+
+  /* ── Spacing ──────────────────────────────────────────── */
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ── Radii ────────────────────────────────────────────── */
+  --radius-sm:    6px;
+  --radius-md:   12px;
+  --radius-lg:   16px;
+  --radius-xl:   24px;
+  --radius-pill: 999px;
+
+  /* ── Shadows ──────────────────────────────────────────── */
+  --shadow-gold:   0 0 24px rgba(255,200,80,.15);
+  --shadow-card:   0 8px 32px rgba(0,0,0,.6);
+  --shadow-glow:   0 0 40px rgba(255,200,80,.25);
+
+  /* ── Transitions ──────────────────────────────────────── */
+  --transition-fast:   120ms ease;
+  --transition-normal: 220ms ease;
+  --transition-slow:   380ms ease;
+
+  /* ── Z-index scale ────────────────────────────────────── */
+  --z-base:    0;
+  --z-raised:  10;
+  --z-overlay: 100;
+  --z-modal:   200;
+  --z-toast:   300;
+  --z-top:     999;
+
+  /* ── Product identity (override per product) ──────────── */
+  --product-name:         "Elsewhere";
+  --product-color:        var(--color-gold);
+  --product-font:         var(--font-display);
+}
+
+/* ═══════════════════════════════════════════════════════════
+ *  PRODUCT THEMES — override tokens per product
+ *  Usage: <body class="theme-worlds"> or <body class="theme-movies">
+ * ═══════════════════════════════════════════════════════════ */
+
+/* Elsewhere Worlds — cosmic, epic, sci-fi */
+.theme-worlds {
+  --color-gold:           rgba(124,  77, 255, 1.00);
+  --color-gold-bright:    rgba(180, 140, 255, 1.00);
+  --color-gold-dim:       rgba(124,  77, 255, 0.70);
+  --color-gold-soft:      rgba(124,  77, 255, 0.40);
+  --color-gold-faint:     rgba(124,  77, 255, 0.12);
+  --color-gold-ghost:     rgba(124,  77, 255, 0.06);
+  --color-border:         rgba(124,  77, 255, 0.25);
+  --color-text:           rgba(220, 200, 255, 0.90);
+  --font-display:         'Orbitron', 'Inter', sans-serif;
+  --product-name:         "Elsewhere Worlds";
+  --product-color:        rgba(124,77,255,1);
+}
+
+/* Elsewhere Movies / Kids — warm, cinematic, playful */
+.theme-movies {
+  --color-gold:           rgba(255, 120,  60, 1.00);
+  --color-gold-bright:    rgba(255, 180, 100, 1.00);
+  --color-gold-dim:       rgba(255, 120,  60, 0.70);
+  --color-gold-soft:      rgba(255, 120,  60, 0.40);
+  --color-gold-faint:     rgba(255, 120,  60, 0.12);
+  --color-gold-ghost:     rgba(255, 120,  60, 0.06);
+  --color-border:         rgba(255, 120,  60, 0.25);
+  --color-text:           rgba(255, 240, 220, 0.90);
+  --font-display:         'Nunito', 'Inter', sans-serif;
+  --product-name:         "Elsewhere Movies";
+  --product-color:        rgba(255,120,60,1);
+}
+
+/* ═══════════════════════════════════════════════════════════
+ *  GLOBAL BASE STYLES
+ *  Applied to all Elsewhere products
+ * ═══════════════════════════════════════════════════════════ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: var(--radius-pill); }
+
+/* ── Shared component tokens ──────────────────────────────── */
+
+/* Buttons */
+.el-btn {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-gold-ghost);
+  color: var(--color-gold-bright);
+  padding: var(--space-3) var(--space-6);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.el-btn:hover {
+  background: var(--color-gold-faint);
+  border-color: var(--color-border-bright);
+}
+.el-btn-primary {
+  background: var(--color-gold-dim);
+  color: var(--color-bg);
+  border-color: var(--color-gold);
+}
+.el-btn-primary:hover {
+  background: var(--color-gold);
+}
+
+/* Cards */
+.el-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-card);
+}
+
+/* Display headings */
+.el-display {
+  font-family: var(--font-display);
+  color: var(--color-gold-bright);
+  letter-spacing: var(--tracking-wide);
+}
+
+/* Status dots */
+.el-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.el-dot-ok  { background: var(--color-green); box-shadow: 0 0 6px var(--color-green); }
+.el-dot-err { background: var(--color-red); }
+.el-dot-ld  { background: var(--color-gold-dim); animation: el-pulse 1s infinite; }
+.el-dot-off { background: rgba(255,255,255,.2); }
+
+@keyframes el-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .3; }
+}

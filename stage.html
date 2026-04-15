@@ -7,6 +7,7 @@
 <title>Elsewhere · Stage</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
+
 body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--font-mono);cursor:none;}
 
 /* ── VENUE PICKER ── */
@@ -38,10 +39,10 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 .ld{background:#f5c842;animation:blink 1s infinite;}
 .of{background:rgba(255,200,80,.35);}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
-.bi{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,220,150,.65);white-space:nowrap;}
+.bi{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-text-dim);white-space:nowrap;}
 #rcode-wrap{font-size:15px;letter-spacing:.22em;font-weight:500;color:rgba(255,200,80,.98);text-align:center;cursor:pointer;flex-shrink:0;text-shadow:0 0 10px rgba(255,200,80,.4);}
 #rcode-wrap small{display:block;font-size:8px;letter-spacing:.1em;color:rgba(255,200,120,.5);margin-bottom:1px;font-weight:300;}
-#vtoggle{padding:5px 11px;background:var(--color-gold-faint);border:1px solid rgba(255,200,80,.3);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-dim);cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;}
+#vtoggle{padding:5px 11px;background:var(--color-gold-faint);border:1px solid rgba(255,200,80,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text);cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;}
 #vtoggle:hover{background:rgba(255,200,80,.22);color:#fff;}
 #vtoggle.pano{border-color:rgba(100,200,255,.5);color:rgba(180,230,255,.9);background:rgba(100,200,255,.12);}
 
@@ -53,7 +54,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
 /* Controls */
 #ctrl{position:fixed;bottom:16px;right:14px;display:flex;gap:8px;z-index:200;}
-.btn{padding:7px 14px;background:rgba(0,0,0,.7);border:1px solid rgba(255,200,80,.35);border-radius:4px;font-size:10px;letter-spacing:.1em;color:rgba(255,220,150,.92);cursor:pointer;text-transform:uppercase;transition:all .15s;font-family:var(--font-mono);backdrop-filter:blur(4px);}
+.btn{padding:7px 14px;background:rgba(0,0,0,.7);border:1px solid rgba(255,200,80,.45);border-radius:4px;font-size:10px;letter-spacing:.1em;color:var(--color-text);cursor:pointer;text-transform:uppercase;transition:all .15s;font-family:var(--font-mono);backdrop-filter:blur(4px);}
 .btn:hover{background:var(--color-gold-border);border-color:rgba(255,200,80,.6);color:#fff;}
 .input{width:100%;padding:10px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:var(--color-text);font-size:14px;font-family:var(--font-mono);outline:none;}
 .input::placeholder{color:rgba(255,200,120,.25);}
@@ -219,7 +220,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 #dbg-toggle{
   position:fixed;top:46px;right:4px;z-index:1000;
   background:rgba(0,0,0,.7);border:1px solid var(--color-border);
-  border-radius:4px;padding:3px 7px;font-size:9px;color:var(--color-gold-dim);
+  border-radius:4px;padding:3px 7px;font-size:9px;color:var(--color-text);
   cursor:pointer;font-family:var(--font-mono);letter-spacing:.06em;
 }
 .dl{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04);line-height:1.4;}
@@ -314,7 +315,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.31</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.33</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -447,14 +448,14 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   <!-- Camera + Resolution selectors -->
   <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin:10px 0;width:100%;max-width:320px;">
     <div style="display:flex;flex-direction:column;gap:6px;width:100%;">
-      <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:var(--font-mono);">Camera</div>
-      <select id="cam-select" style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:4px;color:var(--color-text-dim);font-family:var(--font-mono);font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
+      <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-text-faint);font-family:var(--font-mono);">Camera</div>
+      <select id="cam-select" style="background:rgba(255,200,80,0.08);border:1px solid var(--color-border);border-radius:4px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
         <option value="">Detecting cameras...</option>
       </select>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px;width:100%;">
-      <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:var(--font-mono);">Quality</div>
-      <select id="res-select" onchange="setResolution(this.value)" style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:4px;color:var(--color-text-dim);font-family:var(--font-mono);font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
+      <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-text-faint);font-family:var(--font-mono);">Quality</div>
+      <select id="res-select" onchange="setResolution(this.value)" style="background:rgba(255,200,80,0.08);border:1px solid var(--color-border);border-radius:4px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
         <option value="hd">HD — 1280×720 (Recommended)</option>
         <option value="standard">Standard — 640×480 (Lower CPU)</option>
         <option value="fhd">Full HD — 1920×1080 (High CPU)</option>
@@ -464,7 +465,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.31</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.33</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
