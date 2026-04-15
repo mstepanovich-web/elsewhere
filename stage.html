@@ -314,7 +314,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.27</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.29</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -345,6 +345,17 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   font-family:var(--font-mono); transition:opacity 0.2s, color 0.2s;
   user-select:none;
 " title="360° venue tour">360°</div>
+
+<!-- Test tray button -->
+<div onclick="resetTrayForNewVenue();showVenueEffectTray(selectedVenueId);" style="
+  position:fixed; bottom:140px; right:18px; z-index:200;
+  width:48px; height:48px; border-radius:50%;
+  background:rgba(0,0,0,0.45); border:1.5px solid rgba(255,200,80,0.4);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; opacity:0.5; color:rgba(255,200,80,0.8);
+  font-size:10px; font-weight:bold; font-family:var(--font-mono);
+  user-select:none;
+" title="Test tray">FX</div>
 <div id="prog"><div id="pf"></div></div>
 
 <div class="panel" id="sp" style="min-width:min(400px,90vw);display:none;flex-direction:column;align-items:center;gap:20px;padding:32px;">
@@ -453,7 +464,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.27</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.29</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -637,10 +648,10 @@ function initVenueMode(){
   // Show venue effect tray after 2s if song not active
   resetTrayForNewVenue();
   const _trayVenueId = selectedVenueId;
-  setTimeout(()=>{
-    console.log('TRAY TIMER FIRED venueId='+selectedVenueId+' trayLocked='+trayLocked);
-    log('Tray timer fired — venueId='+selectedVenueId+' trayLocked='+trayLocked+' lyricsRunning='+lyricsRunning,'info');
-    if(!lyricsRunning && selectedVenueId === _trayVenueId){
+  window._trayTimer = setTimeout(()=>{
+    console.log('TRAY TIMER venueId='+selectedVenueId+' locked='+trayLocked+' lyrics='+lyricsRunning);
+    log('Tray timer fired — venueId='+selectedVenueId+' trayLocked='+trayLocked,'info');
+    if(!lyricsRunning){
       showVenueEffectTray(selectedVenueId);
     }
   }, 2000);
@@ -1798,6 +1809,7 @@ function initTrayCanvasClick(){
     }
   });
 }
+let trayVisible    = false;
 let trayOpacity    = 0;
 let trayIndex      = 0;       // current centered slot index
 let trayVenueId    = null;
