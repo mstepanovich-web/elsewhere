@@ -314,7 +314,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.12</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.13</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -329,14 +329,14 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   <div class="btn" onclick="showSongs()">🎵 Song</div>
   <div class="btn" onclick="toggleCommentBar()">💬 Comments</div>
   <div class="btn" onclick="showStageVenuePicker()">🎭 Venue</div>
-  <div class="btn" onclick="showCostumePicker()">🎭 Costume</div>
+  <div class="btn" onclick="handleCostumeBtn()">🎭 Costume</div>
   <div class="btn" onclick="showQualityPicker()">⚙️ Quality</div>
   <div class="btn danger" id="stage-stop-btn" onclick="doEnd()" style="display:none;">■ Stop</div>
 </div>
 
 <!-- 360 Tour button — bottom right, transparent overlay for testing -->
 <div id="btn-360" onclick="startVenueTour()" style="
-  position:fixed; bottom:18px; right:18px; z-index:200;
+  position:fixed; bottom:80px; right:18px; z-index:200;
   width:48px; height:48px; border-radius:50%;
   background:rgba(0,0,0,0.45); border:1.5px solid rgba(255,255,255,0.25);
   display:flex; align-items:center; justify-content:center;
@@ -453,7 +453,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.12</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.13</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -671,18 +671,17 @@ function startVenueTour(){
   // Phase 3: return to origin yaw over 2s, zoom back in
 
   const ZOOM_OUT_MS  = 1500;
-  const PAN_MS       = 12000;
-  const RETURN_MS    = 2000;
+  const PAN_MS       = 22000;  // slower — was 12s
+  const RETURN_MS    = 2500;
   const TOTAL_MS     = ZOOM_OUT_MS + PAN_MS + RETURN_MS;
 
-  const FOV_TOUR = Math.min(FOV_WIDE, 95); // wide but not distorted
+  const FOV_TOUR = Math.min(FOV_WIDE, 95);
 
   const startTime = performance.now();
 
   function tick(){
     if(!tourActive) return;
     const elapsed = performance.now() - startTime;
-    const t = Math.min(elapsed / TOTAL_MS, 1);
 
     if(elapsed < ZOOM_OUT_MS){
       // Phase 1 — zoom out
@@ -694,32 +693,26 @@ function startVenueTour(){
       panCamera3.updateProjectionMatrix();
 
     } else if(elapsed < ZOOM_OUT_MS + PAN_MS){
-      // Phase 2 — slow 360 pan
+      // Phase 2 — slow full 360 pan in one direction, stop exactly at origin+360
       const p = (elapsed - ZOOM_OUT_MS) / PAN_MS;
-      const ease = p < 0.05 ? p/0.05 * p/0.05 : p > 0.95 ? 1-(p-0.95)/0.05 : 1; // ease in/out at edges
-      venueYawTarget = originYaw + 360 * p;
+      // Ease in for first 5%, ease out for last 5%
+      const eased = p < 0.05 ? 0.5*(p/0.05)*(p/0.05) :
+                    p > 0.95 ? 1 - 0.5*((1-p)/0.05)*((1-p)/0.05) : p;
+      venueYawTarget = originYaw + 360 * eased;
       venueYaw       = venueYawTarget;
       panCamera3.rotation.y = -venueYaw * D2R;
 
     } else if(elapsed < TOTAL_MS){
-      // Phase 3 — return to origin, zoom in
+      // Phase 3 — zoom back in, yaw already at origin+360 (same visual position)
       const p = (elapsed - ZOOM_OUT_MS - PAN_MS) / RETURN_MS;
       const ease = 1 - Math.pow(1 - p, 3);
-
-      // Snap yaw back to origin (wrapped)
-      const currentYaw = originYaw + 360;
-      venueYawTarget = currentYaw + (originYaw - currentYaw) * ease;
-      venueYaw       = venueYawTarget;
-      panCamera3.rotation.y = -venueYaw * D2R;
-
-      // Zoom back in
       venueFOVTarget = FOV_TOUR + (originFOV - FOV_TOUR) * ease;
       venueFOV = venueFOVTarget;
       panCamera3.fov = venueFOVTarget;
       panCamera3.updateProjectionMatrix();
 
     } else {
-      // Done — snap back to clean origin values
+      // Done — snap clean
       venueYawTarget = originYaw;
       venueYaw       = originYaw;
       venueFOVTarget = originFOV;
@@ -864,6 +857,20 @@ function getEmojiImage(emoji, size=120){
   x.fillText(emoji, size/2, size/2);
   emojiCache[key] = c;
   return c;
+}
+
+function handleCostumeBtn(){
+  if(venueMode && !lyricsRunning){
+    // In a venue — show or re-show the effect tray
+    if(!trayVisible){
+      resetTrayForNewVenue();
+      showVenueEffectTray(selectedVenueId);
+    }
+    // Also show the full picker beneath for PC testing
+    showCostumePicker();
+  } else {
+    showCostumePicker();
+  }
 }
 
 function showCostumePicker(){
@@ -1776,7 +1783,25 @@ const VENUE_EFFECTS = {
 };
 
 // Tray state
-let trayVisible    = false;
+let trayAllEffectsZone = null; // {x,y,w,h} of "All Effects" link hit area
+
+// Handle clicks on the audience canvas for tray All Effects link
+function initTrayCanvasClick(){
+  const canvas = document.getElementById('aud-layer');
+  if(!canvas) return;
+  canvas.addEventListener('click', e=>{
+    if(!trayVisible || !trayAllEffectsZone) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const cx = (e.clientX - rect.left) * scaleX;
+    const cy = (e.clientY - rect.top)  * scaleY;
+    const z = trayAllEffectsZone;
+    if(cx >= z.x && cx <= z.x+z.w && cy >= z.y && cy <= z.y+z.h){
+      showCostumePicker();
+    }
+  });
+}
 let trayOpacity    = 0;
 let trayIndex      = 0;       // current centered slot index
 let trayVenueId    = null;
@@ -1953,6 +1978,14 @@ function drawVenueEffectTray(){
     ctx.restore();
   }
 
+  // All Effects link — opens full costume picker
+  ctx.font = 'bold 11px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(255,220,80,0.7)';
+  ctx.textAlign = 'right';
+  ctx.fillText('All Effects ›', W - 20, trayY - 20);
+  // Store click zone for All Effects link
+  trayAllEffectsZone = { x: W - 130, y: trayY - 34, w: 110, h: 20 };
+
   // Swipe hint arrows
   if(trayIndex > 0){
     ctx.font = '20px serif';
@@ -1967,19 +2000,21 @@ function drawVenueEffectTray(){
   // Dynamic hint — turns yellow when arm is in swipe-ready position
   const _rW = lastPoseLandmarks ? lastPoseLandmarks[16] : null;
   const _rS = lastPoseLandmarks ? lastPoseLandmarks[12] : null;
-  const _armReady = _rW && _rS && Math.abs(_rW.y - _rS.y) < 0.18 && _rW.y < 0.75;
-  const _rAbove   = _rW && _rS && _rW.y < _rS.y - 0.12;
+  const _lW = lastPoseLandmarks ? lastPoseLandmarks[15] : null;
+  const _lS = lastPoseLandmarks ? lastPoseLandmarks[11] : null;
+  const _armReady = _rW && _rS && Math.abs(_rW.y - _rS.y) < 0.18 && _rW.y > (_rS.y - 0.12) && _rW.y < 0.75;
+  const _bothUp   = _rW && _rS && _lW && _lS && _rW.y < _rS.y - 0.18 && _lW.y < _lS.y - 0.18;
   ctx.font = '11px Inter, sans-serif';
   ctx.textAlign = 'center';
-  if(_rAbove){
+  if(_bothUp){
     ctx.fillStyle = 'rgba(255,100,80,0.9)';
-    ctx.fillText('✋ releasing...', W/2, H - 10);
+    ctx.fillText('🙌 releasing tray...', W/2, H - 10);
   } else if(_armReady){
     ctx.fillStyle = 'rgba(255,220,80,0.9)';
-    ctx.fillText('👋 swipe left = next  ·  swipe right = prev  ·  raise hand up = close', W/2, H - 10);
+    ctx.fillText('👋 swipe left = next  ·  swipe right = prev  ·  both hands up = close', W/2, H - 10);
   } else {
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.fillText('right arm to side to swipe  ·  right hand up to close', W/2, H - 10);
+    ctx.fillText('right arm to side to swipe  ·  both hands up to close', W/2, H - 10);
   }
 
   ctx.restore();
@@ -1992,38 +2027,41 @@ function processTrayGesture(poseLandmarks){
   const rWrist    = poseLandmarks[16];
   const rElbow    = poseLandmarks[14];
   const rShoulder = poseLandmarks[12];
+  const lWrist    = poseLandmarks[15];
+  const lShoulder = poseLandmarks[11];
 
-  if(!rWrist || !rShoulder) return;
+  if(!rWrist || !rShoulder || !lWrist || !lShoulder) return;
 
   const now = Date.now();
 
-  // Arm extended at shoulder height — wrist within 0.18 of shoulder Y, above hip
-  const atShoulderHeight = Math.abs(rWrist.y - rShoulder.y) < 0.18;
-  const armOut = rWrist.y < 0.75;
-  const armReady = atShoulderHeight && armOut;
-
-  // ── Close tray: right wrist raised ABOVE shoulder ──
-  const rAbove = rWrist.y < rShoulder.y - 0.12;
-  if(rAbove && !pushCooldown){
-    log(`Tray close: right hand raised — closing tray`, 'ok');
+  // ── Close tray: BOTH hands raised clearly above shoulders ──
+  // Raised threshold is 0.18 — well above shoulder, not just arm-out-to-side
+  const rAbove = rWrist.y < rShoulder.y - 0.18;
+  const lAbove = lWrist.y < lShoulder.y - 0.18;
+  if(rAbove && lAbove && !pushCooldown){
+    log('Tray close: both hands raised — closing tray', 'ok');
     pushCooldown = true;
+    swipeStartX = null; swipeStartTime = null;
     hideVenueEffectTray(false);
     setTimeout(()=>{ pushCooldown=false; }, 2000);
+    return;
+  }
+  if(Math.random() < 0.008){
+    log(`Tray close check: rAbove=${rAbove}(${(rShoulder.y - rWrist.y).toFixed(2)}) lAbove=${lAbove}(${(lShoulder.y - lWrist.y).toFixed(2)})`, 'info');
+  }
+
+  // ── Swipe: right arm at shoulder height (not raised above), wave left or right ──
+  // Arm is in swipe position when wrist is within 0.18 of shoulder Y AND not above it
+  const atShoulderHeight = Math.abs(rWrist.y - rShoulder.y) < 0.18;
+  const notRaised = rWrist.y > rShoulder.y - 0.12; // not too high up
+  const armOut    = rWrist.y < 0.75;               // above hip
+  const armReady  = atShoulderHeight && notRaised && armOut;
+
+  if(!armReady){
     swipeStartX = null; swipeStartTime = null;
     return;
   }
 
-  if(Math.random() < 0.008){
-    log(`Tray close check: rAbove=${rAbove} rWrist.y=${rWrist.y.toFixed(2)} rShoulder.y=${rShoulder.y.toFixed(2)} diff=${(rShoulder.y - rWrist.y).toFixed(2)}`, 'info');
-  }
-
-  // ── Swipe: right arm at shoulder height, wave left or right ──
-  if(!armReady){
-    swipeStartX = null; swipeHand = null; swipeStartTime = null;
-    return;
-  }
-
-  // Log arm-ready state periodically
   if(Math.random() < 0.016) log(`Tray gesture: armReady ✓ wrist.y=${rWrist.y.toFixed(2)} shoulder.y=${rShoulder.y.toFixed(2)} diff=${Math.abs(rWrist.y - rShoulder.y).toFixed(2)}`, 'info');
 
   if(swipeStartX === null){
@@ -2031,7 +2069,6 @@ function processTrayGesture(poseLandmarks){
     swipeStartTime = now;
     log(`Tray swipe: tracking started x=${rWrist.x.toFixed(3)}`, 'info');
   } else {
-    // Timeout stale swipe after 1.5s
     if(now - swipeStartTime > 1500){
       swipeStartX    = rWrist.x;
       swipeStartTime = now;
@@ -2040,8 +2077,6 @@ function processTrayGesture(poseLandmarks){
     const dx = rWrist.x - swipeStartX;
     if(Math.random() < 0.05) log(`Tray swipe: dx=${dx.toFixed(3)} (need ±0.06)`, 'info');
     if(Math.abs(dx) > 0.06 && !swipeCooldown){
-      // Mirrored view: wrist moves right (dx > 0) = swipe right = previous
-      //                wrist moves left  (dx < 0) = swipe left  = next
       const dir = dx > 0 ? -1 : 1;
       log(`Tray swipe: FIRED dx=${dx.toFixed(3)} → ${dir === 1 ? 'next' : 'prev'}`, 'ok');
       traySwipe(dir);
@@ -3744,6 +3779,7 @@ function enterStage(){
       publishCanvasToAgora();
       initVenueMode();
       initAudienceDrag();
+      initTrayCanvasClick();
       document.getElementById('sdot').className = 'dot ld';
       document.getElementById('slbl').textContent = 'Starting...';
     };
