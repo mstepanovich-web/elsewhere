@@ -272,7 +272,7 @@
           <canvas id="qr-karaoke" width="200" height="200"></canvas>
         </div>
         <div class="qr-url" id="qr-karaoke-url">—</div>
-        <div class="qr-hint">Scan on phone · Click here to open Stage on TV</div>
+        <div class="qr-hint">Scan to select Karaoke</div>
       </div>
 
       <div class="qr-tile qr-tile--fashion">
@@ -281,7 +281,7 @@
           <canvas id="qr-fashion" width="200" height="200"></canvas>
         </div>
         <div class="qr-url" id="qr-fashion-url">—</div>
-        <div class="qr-hint">Try On · Transform · Reveal</div>
+        <div class="qr-hint">Scan to select Fashion</div>
       </div>
 
     </div>
@@ -301,7 +301,8 @@
   const BASE_URL   = 'https://mstepanovich-web.github.io/elsewhere';
   const STAGE_URL  = BASE_URL + '/stage.html';
   const SINGER_URL = BASE_URL + '/singer.html';
-  const FASHION_URL = BASE_URL + '/fashion/display.html';
+  const FASHION_URL    = BASE_URL + '/fashion/display.html';
+  const STYLIST_URL    = BASE_URL + '/fashion/stylist.html';
 
   // Generate room code — same charset as stage.html
   const CHARS     = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -401,6 +402,7 @@
     // TV navigates itself to stage.html with camera/res params
     const karaokeUrl = `${SINGER_URL}?code=${roomCode}`;
     const fashionUrl  = `${FASHION_URL}?room=${roomCode}`;
+    const stylistUrl  = `${STYLIST_URL}?room=${roomCode}`;
 
     // TV goes to stage immediately after showing QR
     const stageUrl = `${STAGE_URL}?room=${roomCode}&cam=${encodeURIComponent(selectedCam)}&res=${selectedRes}`;
@@ -410,18 +412,27 @@
 
     // Render QR codes
     renderQR('qr-karaoke', karaokeUrl);
-    renderQR('qr-fashion',  fashionUrl);
+    renderQR('qr-fashion',  stylistUrl);
 
     // Show URLs
     document.getElementById('qr-karaoke-url').textContent = karaokeUrl;
-    document.getElementById('qr-fashion-url').textContent  = fashionUrl;
+    document.getElementById('qr-fashion-url').textContent  = stylistUrl;
 
     goTo('screen-qr');
 
-    // TV navigates to stage.html only when Karaoke tile is clicked
-    document.getElementById('qr-tile-karaoke').addEventListener('click', () => {
-      window.location.href = stageUrl;
-    });
+    // Listen for phone scan via BroadcastChannel
+    // singer.html posts 'karaoke-scanned' when it loads with the room code
+    // fashion/stylist.html posts 'fashion-scanned' when it loads with the room code
+    const bc = new BroadcastChannel('elsewhere_tv_' + roomCode);
+    bc.onmessage = (e) => {
+      if (e.data.type === 'karaoke-scanned') {
+        bc.close();
+        window.location.href = stageUrl;
+      } else if (e.data.type === 'fashion-scanned') {
+        bc.close();
+        window.location.href = fashionUrl;
+      }
+    };
   });
 
   // ═══════════════════════════════════════

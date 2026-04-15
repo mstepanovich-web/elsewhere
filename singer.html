@@ -565,7 +565,12 @@ function showScreen(id){
 (()=>{
   const p=new URLSearchParams(window.location.search);
   const c=(p.get('code')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-  if(c.length>=4){ document.getElementById('join-in').value=c; window.addEventListener('load',()=>setTimeout(doJoin,600)); }
+  if(c.length>=4){
+    document.getElementById('join-in').value=c;
+    // Signal tv.html that Karaoke was scanned — TV will navigate to stage.html
+    try { new BroadcastChannel('elsewhere_tv_' + c).postMessage({ type: 'karaoke-scanned' }); } catch(e){}
+    window.addEventListener('load',()=>setTimeout(doJoin,600));
+  }
   else document.getElementById('join-in').focus();
 })();
 

@@ -575,10 +575,16 @@
   // ═══════════════════════════════════════════════
   //  Session state
   // ═══════════════════════════════════════════════
+  // Signal tv.html that Fashion was scanned if room code in URL
+  const _tvRoom = (new URLSearchParams(location.search).get('room')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if (_tvRoom.length >= 4) {
+    try { new BroadcastChannel('elsewhere_tv_' + _tvRoom).postMessage({ type: 'fashion-scanned' }); } catch(e){}
+  }
+
   const session = {
     sessionId: crypto.randomUUID(),
     mode: null,
-    roomCode: null,
+    roomCode: _tvRoom || null,
     userPhoto: null,    // base64
     garments: [],       // [{ base64, category, dataUrl }]
     renderConfig: {},
@@ -650,6 +656,12 @@
   // ═══════════════════════════════════════════════
   //  Screen 1: Mode + Room
   // ═══════════════════════════════════════════════
+  // Pre-fill room code from URL if arrived via tv.html QR
+  if (_tvRoom.length >= 4) {
+    const ri = document.getElementById('room-input');
+    if (ri) { ri.value = _tvRoom; session.roomCode = _tvRoom; checkS1(); }
+  }
+
   document.querySelectorAll('.mode-card').forEach(card => {
     card.addEventListener('click', () => {
       document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
