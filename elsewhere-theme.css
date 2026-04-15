@@ -126,10 +126,37 @@
   --z-toast:   300;
   --z-top:     999;
 
+  /* ── Fashion accent colors ────────────────────────────── */
+  --color-fashion-accent:      #C9A96E;       /* warm gold */
+  --color-fashion-accent-soft: #F5ECD7;       /* light champagne */
+  --color-fashion-accent-dim:  rgba(201,169,110,0.70);
+  --color-fashion-accent-faint:rgba(201,169,110,0.14);
+  --color-fashion-accent-ghost:rgba(201,169,110,0.06);
+
   /* ── Product identity (override per product) ──────────── */
   --product-name:         "Elsewhere";
   --product-color:        var(--color-gold);
   --product-font:         var(--font-display);
+}
+
+/* Elsewhere Fashion — refined luxury editorial */
+.theme-fashion {
+  --color-gold:           rgba(201, 169, 110, 1.00);
+  --color-gold-bright:    rgba(245, 236, 215, 1.00);
+  --color-gold-dim:       rgba(201, 169, 110, 0.70);
+  --color-gold-soft:      rgba(201, 169, 110, 0.40);
+  --color-gold-faint:     rgba(201, 169, 110, 0.14);
+  --color-gold-ghost:     rgba(201, 169, 110, 0.06);
+  --color-border:         rgba(201, 169, 110, 0.28);
+  --color-border-dim:     rgba(201, 169, 110, 0.14);
+  --color-border-bright:  rgba(201, 169, 110, 0.55);
+  --color-surface:        rgba( 14,  10,   8, 0.90);
+  --color-text:           rgba(245, 236, 215, 0.92);
+  --color-text-dim:       rgba(245, 236, 215, 0.65);
+  --color-text-faint:     rgba(245, 236, 215, 0.40);
+  --font-display:         'Cormorant Garamond', Georgia, serif;
+  --product-name:         "Elsewhere Fashion";
+  --product-color:        rgba(201, 169, 110, 1.00);
 }
 
 /* ═══════════════════════════════════════════════════════════

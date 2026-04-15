@@ -1,1039 +1,152 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Elsewhere · Live</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM Mono',monospace;}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elsewhere</title>
+  <link rel="stylesheet" href="/elsewhere/elsewhere-theme.css">
+  <style>
+    html, body { height: 100%; overflow: hidden; background: var(--color-bg); }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100dvh; }
 
-/* ── STREAM VIDEO — hidden, used as source for canvas compositing ── */
-#stream{
-  position:fixed;left:-9999px;width:1px;height:1px;
-  pointer-events:none;
-}
+    .bg-ambient {
+      position: fixed; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse 60% 60% at 20% 50%, rgba(255,200,80,.04) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 50% at 80% 50%, rgba(201,169,110,.04) 0%, transparent 70%),
+        var(--color-bg);
+    }
 
-/* Stage canvas — always visible, singer composited on top */
-#stage-bg{position:fixed;inset:0;z-index:1;}
+    .wordmark {
+      position: relative; z-index: 10;
+      font-family: var(--font-display);
+      font-size: clamp(28px, 5vw, 52px);
+      font-weight: 300; letter-spacing: var(--tracking-widest);
+      color: var(--color-gold-bright); text-transform: uppercase;
+      margin-bottom: clamp(32px, 6vh, 64px); text-align: center;
+      opacity: 0; animation: fadeUp 0.7s 0.1s ease forwards;
+    }
+    .wordmark em {
+      font-style: italic; color: var(--color-text-faint);
+      font-size: 0.5em; letter-spacing: var(--tracking-wider);
+      display: block; margin-top: 6px;
+    }
 
-/* ── LYRICS overlay ── */
-#lw{position:fixed;bottom:17%;left:0;right:0;text-align:center;z-index:60;pointer-events:none;}
-#lm{font-family:'Cormorant Garamond',serif;font-size:clamp(20px,5vw,42px);font-weight:500;color:#fff;padding:0 5%;line-height:1.2;text-shadow:0 0 20px rgba(255,220,100,.9),0 0 40px rgba(255,180,60,.5),0 2px 6px #000;}
-#ln{font-family:'Cormorant Garamond',serif;font-size:clamp(13px,3vw,26px);font-weight:300;color:rgba(255,220,150,.4);padding:5px 8% 0;text-shadow:0 0 10px rgba(255,180,60,.3),0 1px 4px #000;}
+    .mode-grid {
+      position: relative; z-index: 10;
+      display: flex; gap: clamp(16px, 3vw, 32px);
+      align-items: stretch; flex-wrap: wrap;
+      justify-content: center; padding: 0 20px;
+      max-width: 900px; width: 100%;
+    }
 
-/* ── TOP STATUS BAR ── */
-#topbar{position:fixed;top:0;left:0;right:0;height:44px;background:linear-gradient(180deg,rgba(0,0,0,.75) 0%,transparent 100%);display:flex;align-items:center;justify-content:space-between;padding:0 14px;z-index:200;padding-top:env(safe-area-inset-top);}
-.dot{width:7px;height:7px;border-radius:50%;}
-.ok{background:#00e87a;box-shadow:0 0 5px #00e87a;}
-.ld{background:#f5c842;animation:blink 1s infinite;}
-.of{background:rgba(255,200,80,.3);}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-.bi{display:flex;align-items:center;gap:5px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.55);}
-#song-title{font-family:'Cormorant Garamond',serif;font-size:13px;font-style:italic;color:rgba(255,220,150,.7);text-align:center;flex:1;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .mode-tile {
+      flex: 1 1 280px; max-width: 380px;
+      min-height: clamp(200px, 40vh, 340px);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 16px; border: 1px solid var(--color-border-dim);
+      border-radius: var(--radius-xl); cursor: pointer;
+      position: relative; overflow: hidden;
+      transition: border-color 0.3s ease, transform 0.25s ease;
+      text-decoration: none; padding: 40px 32px;
+      opacity: 0; animation: fadeUp 0.6s ease forwards;
+    }
+    .mode-tile:nth-child(1) { animation-delay: 0.25s; }
+    .mode-tile:nth-child(2) { animation-delay: 0.38s; }
 
-/* ── PROGRESS ── */
-#prog{position:fixed;top:44px;left:0;right:0;height:2px;background:rgba(255,255,255,.05);z-index:200;}
-#pf{height:100%;background:linear-gradient(90deg,#ffd96e,#ff8c42);width:0%;transition:width .4s linear;}
+    .mode-tile--karaoke {
+      background: linear-gradient(145deg, rgba(20,12,8,.92) 0%, rgba(12,6,4,.96) 100%);
+    }
+    .mode-tile--karaoke::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse 70% 60% at 50% 80%, rgba(255,200,80,.07) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .mode-tile--karaoke:hover { border-color: var(--color-border-bright); transform: translateY(-3px); }
 
-/* ── REACTIONS ── */
-#rx{position:fixed;inset:0;z-index:50;pointer-events:none;overflow:hidden;}
-.rx-em{position:absolute;font-size:clamp(22px,6vw,48px);animation:float-up 2.6s ease-out forwards;pointer-events:none;}
-@keyframes float-up{0%{transform:translateY(0) scale(1);opacity:1}70%{opacity:1}100%{transform:translateY(-120px) scale(.7);opacity:0}}
+    .mode-tile--fashion {
+      background: linear-gradient(145deg, rgba(14,10,8,.94) 0%, rgba(8,5,4,.97) 100%);
+    }
+    .mode-tile--fashion::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse 70% 60% at 50% 80%, rgba(201,169,110,.07) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .mode-tile--fashion:hover { border-color: rgba(201,169,110,.55); transform: translateY(-3px); }
 
-/* ── COMMENT FEED ── */
-#comments{position:fixed;left:12px;bottom:24%;z-index:55;display:flex;flex-direction:column-reverse;gap:5px;max-height:25%;overflow:hidden;pointer-events:none;width:min(260px, 60vw);}
-.comment{font-size:12px;color:rgba(255,220,150,.9);background:rgba(0,0,0,.6);padding:5px 11px;border-radius:14px;border:1px solid rgba(255,200,80,.18);animation:cfade 7s ease-out forwards;word-break:break-word;backdrop-filter:blur(4px);}
-@keyframes cfade{0%{opacity:1}65%{opacity:1}100%{opacity:0}}
+    .tile-icon {
+      font-size: clamp(40px, 8vw, 64px); line-height: 1;
+      filter: saturate(0.7); transition: filter 0.25s ease, transform 0.25s ease;
+    }
+    .mode-tile:hover .tile-icon { filter: saturate(1.2); transform: scale(1.06); }
 
-/* ── BOTTOM CONTROLS ── */
-#bottom{
-  position:fixed;bottom:0;left:0;right:0;z-index:200;
-  background:linear-gradient(0deg,rgba(0,0,0,.88) 0%,rgba(0,0,0,.6) 60%,transparent 100%);
-  padding:10px 12px calc(10px + env(safe-area-inset-bottom));
-  display:flex;flex-direction:column;gap:8px;
-}
-#comment-row{display:flex;gap:8px;align-items:center;}
-#cmt-in{
-  flex:1;padding:9px 14px;
-  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:22px;
-  color:#fff;font-size:14px;font-family:'DM Mono',monospace;outline:none;
-  -webkit-appearance:none;min-width:0;
-}
-#cmt-in::placeholder{color:rgba(255,255,255,.35);}
-#cmt-send{padding:9px 16px;background:rgba(255,200,80,.2);border:1px solid rgba(255,200,80,.4);border-radius:22px;font-size:13px;color:rgba(255,220,150,.9);cursor:pointer;white-space:nowrap;font-family:'DM Mono',monospace;}
-#cmt-send:active{background:rgba(255,200,80,.35);}
+    .tile-label {
+      font-family: var(--font-display); font-size: clamp(24px, 4vw, 40px);
+      font-weight: 400; letter-spacing: var(--tracking-wide);
+      color: var(--color-gold-bright); text-align: center;
+    }
+    .mode-tile--fashion .tile-label { color: #F5ECD7; }
 
-#action-row{display:flex;gap:8px;justify-content:center;}
-.abt{
-  flex:1;max-width:90px;padding:10px 4px;
-  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:10px;
-  font-size:10px;letter-spacing:.04em;color:rgba(255,220,150,.6);
-  cursor:pointer;text-align:center;transition:all .12s;
-  -webkit-user-select:none;user-select:none;
-}
-.abt:active{transform:scale(.92);background:rgba(255,255,255,.15);}
-.abt.cheer{background:rgba(255,90,30,.15);border-color:rgba(255,110,40,.35);color:rgba(255,180,100,.85);}
-.abt.cheer:active{background:rgba(255,90,30,.3);}
-.abt-icon{font-size:22px;display:block;margin-bottom:3px;}
+    .tile-tagline {
+      font-family: var(--font-ui); font-size: var(--text-sm);
+      letter-spacing: var(--tracking-wider); text-transform: uppercase;
+      color: var(--color-text-faint); text-align: center;
+    }
 
-/* ── SEARCH OVERLAY (mirrors stage TV search) ── */
-#aud-search{
-  position:fixed;inset:0;z-index:250;background:rgba(4,2,6,.92);backdrop-filter:blur(8px);
-  display:none;flex-direction:column;align-items:center;justify-content:center;
-  padding:60px 20px 24px;gap:16px;
-}
-#aud-search-label{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,200,120,.4);font-family:'DM Mono',monospace;}
-#aud-search-query{font-family:'Cormorant Garamond',serif;font-size:clamp(24px,6vw,44px);color:rgba(255,220,150,.95);font-style:italic;text-align:center;}
-#aud-results-grid{
-  display:flex;flex-direction:row;gap:10px;
-  width:100%;overflow-x:auto;padding:4px 0 12px;
-  -webkit-overflow-scrolling:touch;
-  scrollbar-width:none;
-  justify-content:center;
-}
-#aud-results-grid::-webkit-scrollbar{display:none;}
-.aud-result{
-  flex:0 0 130px;background:rgba(255,200,80,.04);border:1px solid rgba(255,200,80,.1);
-  border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;
-}
-.aud-result.selected{border-color:rgba(255,200,80,.5);background:rgba(255,200,80,.1);}
-.aud-result-num{font-family:'Cormorant Garamond',serif;font-size:22px;color:rgba(255,200,80,.4);text-align:center;}
-.aud-result-thumb{width:100%;height:72px;border-radius:4px;object-fit:cover;background:rgba(255,200,80,.06);}
-.aud-result-info{flex:1;min-width:0;}
-.aud-result-title{font-size:11px;color:rgba(255,220,150,.85);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
-.aud-result-meta{font-size:9px;color:rgba(255,200,120,.4);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .tile-arrow {
+      margin-top: 12px; font-size: var(--text-sm);
+      letter-spacing: var(--tracking-wider);
+      color: var(--color-text-ghost);
+      transition: color 0.2s ease, transform 0.2s ease; display: inline-block;
+    }
+    .mode-tile:hover .tile-arrow { color: var(--color-text-dim); transform: translateX(4px); }
+    .mode-tile--fashion:hover .tile-arrow { color: rgba(201,169,110,.70); }
 
-/* ── SONG SELECTED CARD ── */
-#aud-song-card{
-  position:fixed;inset:0;z-index:250;background:rgba(4,2,6,.92);backdrop-filter:blur(8px);
-  display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;
-  padding:60px 24px 24px;
-}
-.aud-song-thumb{width:160px;height:110px;border-radius:8px;object-fit:cover;background:rgba(255,200,80,.06);border:1px solid rgba(255,200,80,.12);}
-.aud-song-title{font-family:'Cormorant Garamond',serif;font-size:clamp(22px,5vw,36px);color:rgba(255,220,150,.95);font-style:italic;text-align:center;}
-.aud-song-artist{font-size:11px;color:rgba(255,200,120,.45);letter-spacing:.1em;text-transform:uppercase;text-align:center;}
-.aud-song-ready{font-size:10px;color:rgba(0,232,122,.6);letter-spacing:.12em;text-transform:uppercase;margin-top:4px;}
+    .device-hint {
+      position: relative; z-index: 10;
+      margin-top: clamp(24px, 4vh, 48px);
+      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
+      color: var(--color-text-ghost); text-align: center;
+      opacity: 0; animation: fadeUp 0.5s 0.6s ease forwards;
+    }
 
-/* ── AUDIENCE VIDEO CHAT TILES ── */
-#aud-vc-wrap{
-  position:fixed;top:54px;right:10px;z-index:200;
-  display:flex;flex-direction:column;gap:8px;
-  pointer-events:none;
-}
-.aud-vc-tile{
-  width:120px;height:90px;border-radius:8px;overflow:hidden;
-  border:2px solid rgba(0,232,122,.4);background:#0a0508;
-  box-shadow:0 4px 16px rgba(0,0,0,.6);
-}
-.aud-vc-tile video{width:100%;height:100%;object-fit:cover;}
-#aud-countdown{
-  position:fixed;inset:0;z-index:260;background:rgba(4,2,6,.85);backdrop-filter:blur(8px);
-  display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;
-}
-#aud-cd-num{
-  font-family:'Cormorant Garamond',serif;font-size:clamp(100px,25vw,180px);
-  color:rgba(255,220,150,.95);font-style:italic;line-height:1;
-  text-shadow:0 0 60px rgba(255,180,60,.5);
-}
-#aud-cd-song{font-family:'Cormorant Garamond',serif;font-size:clamp(16px,3vw,24px);color:rgba(255,220,150,.5);font-style:italic;text-align:center;padding:0 24px;}
-#toast{
-  position:fixed;top:54px;left:50%;transform:translateX(-50%);
-  background:rgba(0,0,0,.88);border:1px solid rgba(255,200,80,.25);
-  border-radius:8px;padding:9px 18px;font-size:13px;color:rgba(255,220,150,.95);
-  z-index:300;display:none;pointer-events:none;white-space:nowrap;
-  backdrop-filter:blur(6px);max-width:90vw;text-overflow:ellipsis;overflow:hidden;
-}
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
 
-/* ── APPLAUSE ── */
-#ap{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:400;pointer-events:none;}
-#apt{font-family:'Cormorant Garamond',serif;font-size:clamp(48px,14vw,100px);color:rgba(255,220,150,.95);font-style:italic;text-shadow:0 0 60px rgba(255,180,60,.6);animation:apan 2.8s ease forwards;}
-@keyframes apan{0%{opacity:0;transform:scale(.8)}18%{opacity:1;transform:scale(1)}72%{opacity:1}100%{opacity:0;transform:translateY(-30px)}}
-
-/* ── JOIN SCREEN ── */
-#join{
-  position:fixed;inset:0;background:rgba(0,0,0,.97);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:14px;z-index:900;padding:32px;
-  padding-top:calc(32px + env(safe-area-inset-top));
-  padding-bottom:calc(32px + env(safe-area-inset-bottom));
-}
-#join h1{font-family:'Cormorant Garamond',serif;font-size:clamp(42px,10vw,72px);color:rgba(255,220,150,.92);font-style:italic;text-shadow:0 0 50px rgba(255,180,60,.35);}
-#join p{font-size:12px;color:rgba(255,200,120,.45);letter-spacing:.14em;text-transform:uppercase;text-align:center;line-height:1.8;max-width:280px;}
-#code-wrap{display:flex;border:1px solid rgba(255,200,80,.35);border-radius:8px;overflow:hidden;width:100%;max-width:320px;background:rgba(255,200,80,.04);}
-#code-in{
-  flex:1;padding:16px;
-  background:transparent;border:none;
-  color:rgba(255,220,150,.95);font-size:26px;letter-spacing:.32em;
-  font-family:'DM Mono',monospace;text-transform:uppercase;text-align:center;
-  outline:none;min-width:0;-webkit-appearance:none;
-}
-#code-in::placeholder{color:rgba(255,200,120,.2);font-size:13px;letter-spacing:.06em;}
-#join-go{
-  padding:16px 20px;background:rgba(255,200,80,.18);border:none;
-  border-left:1px solid rgba(255,200,80,.35);
-  font-size:14px;letter-spacing:.1em;color:rgba(255,220,150,.9);
-  cursor:pointer;font-family:'DM Mono',monospace;text-transform:uppercase;
-  white-space:nowrap;-webkit-appearance:none;
-}
-#join-go:active{background:rgba(255,200,80,.3);}
-#join-err{font-size:12px;color:rgba(196,122,107,.9);text-align:center;min-height:18px;letter-spacing:.04em;}
-#join-hint{font-size:10px;color:rgba(255,200,120,.22);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;max-width:280px;}
-
-/* ── MUTED NOTICE ── */
-#unmute-banner{
-  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
-  background:rgba(0,0,0,.9);border:1px solid rgba(255,200,80,.3);border-radius:10px;
-  padding:18px 24px;z-index:500;display:none;text-align:center;
-  backdrop-filter:blur(8px);
-}
-#unmute-banner p{font-size:13px;color:rgba(255,220,150,.85);margin-bottom:12px;line-height:1.6;}
-#unmute-btn{padding:10px 22px;background:rgba(255,200,80,.18);border:1px solid rgba(255,200,80,.4);border-radius:6px;font-size:13px;color:rgba(255,220,150,.9);cursor:pointer;font-family:'DM Mono',monospace;}
-#unmute-btn:active{background:rgba(255,200,80,.32);}
-</style>
+    @media (max-width: 600px) {
+      .mode-grid { flex-direction: column; align-items: center; }
+      .mode-tile  { min-height: 160px; }
+    }
+  </style>
 </head>
 <body>
+  <div class="bg-ambient"></div>
+  <div class="wordmark">Elsewhere<em>choose your experience</em></div>
 
-<!-- Animated stage background (shown while waiting) -->
-<canvas id="stage-bg"></canvas>
-<!-- YouTube player — 1x1 on-screen so browser allows autoplay -->
-<div id="yt-player" style="position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.01;z-index:1;pointer-events:none;"></div>
-
-<!-- Singer's composited stream — fills screen when connected -->
-<video id="stream" autoplay playsinline></video>
-
-<div id="rx"></div>
-<div id="comments"></div>
-
-<div id="lw"><div id="lm"></div><div id="ln"></div></div>
-
-<div id="topbar">
-  <div class="bi"><div class="dot of" id="cdot"></div><span id="clbl">Not connected</span></div>
-  <div id="song-title">Elsewhere</div>
-  <div id="room-indicator" onclick="changeRoom()" style="display:none;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.4);cursor:pointer;padding:2px 6px;border:1px solid rgba(255,200,80,.15);border-radius:4px;font-family:'DM Mono',monospace;" title="Tap to change room">Room: <span id="room-display">––––––</span></div>
-  <div class="bi" id="wcount"></div>
-  <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;white-space:nowrap;">v2.33</div>
-</div>
-<div id="prog"><div id="pf"></div></div>
-
-<div id="bottom">
-  <div id="comment-row">
-    <input id="cmt-in" type="text" placeholder="Say something..." maxlength="80" autocomplete="off" enterkeyhint="send">
-    <div id="cmt-send" onclick="sendComment()">Send</div>
+  <div class="mode-grid">
+    <a class="mode-tile mode-tile--karaoke" href="#" id="tile-karaoke">
+      <div class="tile-icon">🎤</div>
+      <div class="tile-label">Karaoke</div>
+      <div class="tile-tagline">Sing · Perform · Celebrate</div>
+      <div class="tile-arrow">Open →</div>
+    </a>
+    <a class="mode-tile mode-tile--fashion" href="fashion/stylist.html" id="tile-fashion">
+      <div class="tile-icon">✨</div>
+      <div class="tile-label">Fashion</div>
+      <div class="tile-tagline">Try On · Transform · Reveal</div>
+      <div class="tile-arrow">Open →</div>
+    </a>
   </div>
-  <div id="action-row">
-    <div class="abt cheer" onclick="sendCheer()"><span class="abt-icon">🔥</span>Fire</div>
-    <div class="abt" onclick="sendApplause()"><span class="abt-icon">👏</span>Applause</div>
-    <div class="abt" onclick="sendZoom()"><span class="abt-icon">🔍</span>Close-up</div>
-    <div class="abt" onclick="sendReact('⭐')"><span class="abt-icon">⭐</span>Star</div>
-    <div class="abt" onclick="sendReact('❤️')"><span class="abt-icon">❤️</span>Love</div>
-    <div class="abt" onclick="toggleFullscreen()" id="fs-btn"><span class="abt-icon">⛶</span>Full</div>
-  </div>
-</div>
 
-<div id="toast"></div>
-<div id="ap"><div id="apt">Bravo!</div></div>
+  <div class="device-hint">TV &amp; phone experiences available for each mode</div>
 
-<div id="aud-vc-wrap"></div>
-
-<!-- SEARCH OVERLAY -->
-<div id="aud-search">
-  <div id="aud-search-label">Searching for</div>
-  <div id="aud-search-query"></div>
-  <div id="aud-results-grid"></div>
-</div>
-
-<!-- SONG SELECTED CARD -->
-<div id="aud-song-card">
-  <img class="aud-song-thumb" id="aud-song-thumb" src="" onerror="this.style.display='none'">
-  <div class="aud-song-title" id="aud-song-title-big"></div>
-  <div class="aud-song-artist" id="aud-song-artist-big"></div>
-  <div class="aud-song-ready">Song selected — starting soon</div>
-</div>
-
-<!-- COUNTDOWN OVERLAY -->
-<div id="aud-countdown">
-  <div id="aud-cd-song"></div>
-  <div id="aud-cd-num">3</div>
-</div>
-
-<div id="unmute-banner">
-  <p>Tap below to hear the singer<br><small style="color:rgba(255,200,120,.4);font-size:10px">Browsers require a tap before playing audio</small></p>
-  <div id="unmute-btn" onclick="unmuteStream()">▶ Tap to Start</div>
-</div>
-
-<!-- JOIN SCREEN -->
-<div id="join">
-  <h1>Elsewhere</h1>
-  <p>Enter the room code shown at the top of the singer's screen</p>
-  <div id="code-wrap">
-    <input id="code-in" type="text" placeholder="Room code" maxlength="6" autocomplete="off" inputmode="text"
-      oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
-      onkeydown="if(event.key==='Enter')joinRoom()">
-    <button id="join-go" onclick="joinRoom()">Join →</button>
-  </div>
-  <div id="join-err"></div>
-  <div id="join-connecting" style="display:none;font-size:14px;color:rgba(255,200,120,.65);letter-spacing:.1em;text-align:center;animation:blink 1.2s infinite;">
-    Connecting to stage...
-  </div>
-  <div id="join-hint">
-    Works from anywhere in the world<br>
-    The code is 6 characters · letters and numbers
-  </div>
-  <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:'DM Mono',monospace;font-weight:bold;">v2.33</div>
-  <div id="https-notice" style="display:none;font-size:11px;color:rgba(255,120,80,.8);text-align:center;max-width:280px;line-height:1.8;border:1px solid rgba(255,120,80,.25);border-radius:6px;padding:10px 14px;">
-    ⚠️ This app requires HTTPS to work on mobile.<br>
-    Upload it to <strong>netlify.com/drop</strong> and open that link instead.
-  </div>
-</div>
-
-<!-- Agora SDK — try primary CDN, fallback to jsDelivr -->
-<script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
-<script>if(typeof AgoraRTC==='undefined'){document.write('<script src="https://cdn.jsdelivr.net/npm/agora-rtc-sdk-ng@4.20.0/AgoraRTC_N-4.20.0.js"><\/script>');}</script>
-<script src="https://www.youtube.com/iframe_api"></script>
-<script>
-// If primary CDN failed, try fallback
-if (typeof AgoraRTC === 'undefined') {
-  const s = document.createElement('script');
-  s.src = 'https://cdn.jsdelivr.net/npm/agora-rtc-sdk-ng@4.20.0/AgoraRTC_N-4.20.0.js';
-  s.onerror = () => {
-    document.getElementById('join-err').textContent =
-      'Could not load streaming SDK. This app requires HTTPS — open it via a web server, not as a local file.';
-  };
-  document.head.appendChild(s);
-}
-</script>
-
-<script>
-'use strict';
-
-const AGORA_APP_ID   = 'b2c6543a9ed946829e6526cb68c7efc9';
-const CHAN_PREFIX     = 'elsewhere_';
-
-// ═══════════════════════════════════════
-// BACKGROUND STAGE CANVAS
-// Draws the stage while waiting for the stream
-// Replaced by the video once connected
-// ═══════════════════════════════════════
-const bgC  = document.getElementById('stage-bg');
-const bctx = bgC.getContext('2d');
-function resizeBG(){ bgC.width=window.innerWidth; bgC.height=window.innerHeight; drawBG(); }
-resizeBG();
-window.addEventListener('resize', resizeBG);
-
-function drawBG(){
-  const W=bgC.width, H=bgC.height;
-  const bg=bctx.createLinearGradient(0,0,0,H);
-  bg.addColorStop(0,'#08020a'); bg.addColorStop(.45,'#0e0412'); bg.addColorStop(1,'#0c0608');
-  bctx.fillStyle=bg; bctx.fillRect(0,0,W,H);
-  // Subtle LED screen glow
-  const sg=bctx.createRadialGradient(W/2,H*.25,0,W/2,H*.25,W*.4);
-  sg.addColorStop(0,'rgba(255,100,50,.12)'); sg.addColorStop(1,'transparent');
-  bctx.fillStyle=sg; bctx.fillRect(0,0,W,H*.55);
-  // Stage lip
-  const el=bctx.createLinearGradient(0,0,W,0);
-  el.addColorStop(0,'transparent'); el.addColorStop(.05,'rgba(255,255,255,.6)');
-  el.addColorStop(.5,'rgba(255,255,255,.8)'); el.addColorStop(.95,'rgba(255,255,255,.6)'); el.addColorStop(1,'transparent');
-  bctx.fillStyle=el; bctx.fillRect(0,H*.76-2,W,4);
-  // Waiting text
-  bctx.save();
-  bctx.font='300 14px "Cormorant Garamond",Georgia';
-  bctx.textAlign='center'; bctx.fillStyle='rgba(255,200,120,.25)';
-  bctx.letterSpacing='0.2em';
-  bctx.fillText('WAITING FOR PERFORMER', W/2, H*.5);
-  bctx.restore();
-}
-
-// ═══════════════════════════════════════
-// AGORA — AUDIENCE SUBSCRIBER
-// ═══════════════════════════════════════
-let client     = null;
-let remoteUID  = null;
-let audioTrack = null;
-let streamEl   = document.getElementById('stream');
-
-async function joinRoom() {
-  // Check SDK loaded — fails if opened as file:// or CDN blocked
-  if (typeof AgoraRTC === 'undefined') {
-    document.getElementById('join-err').textContent =
-      'Streaming SDK did not load. This app must be opened via HTTPS — not as a local file. ' +
-      'Try uploading it to Netlify Drop (netlify.com/drop) and opening that URL on your phone.';
-    return;
-  }
-
-  const raw = document.getElementById('code-in').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
-  const err = document.getElementById('join-err');
-
-  if (raw.length < 4) { err.textContent = 'Please enter your 6-character room code'; return; }
-  err.textContent = '';
-  const fromURL = !!(new URLSearchParams(window.location.search).get('code'));
-  if (fromURL) {
-    document.getElementById('code-wrap').style.display = 'none';
-    document.getElementById('join-connecting').style.display = 'block';
-  } else {
-    document.getElementById('join-go').textContent = 'Joining...';
-    document.getElementById('join-go').style.opacity = '.6';
-  }
-
-  const channel = CHAN_PREFIX + raw;
-
-  try {
-    client = AgoraRTC.createClient({ mode:'live', codec:'vp8' });
-    // Low-latency audience mode (level 1 = ultra low latency)
-    await client.setClientRole('audience', { level: 1 });
-
-    // ── User published ──
-    client.on('user-published', async (user, mediaType) => {
-      await client.subscribe(user, mediaType);
-
-      if (mediaType === 'video') {
-        const track = user.videoTrack;
-        if(remoteUID === null || user.uid === remoteUID){
-          // This is the stage canvas feed
-          remoteUID = user.uid;
-          const ms = new MediaStream([track.getMediaStreamTrack()]);
-          streamEl.srcObject = ms;
-          streamEl.muted = true;
-          streamEl.play().catch(() => {});
-          streamEl.onloadedmetadata = () => { startRenderLoop(); };
-          document.getElementById('cdot').className = 'dot ok';
-          document.getElementById('clbl').textContent = 'Live 🔴';
-          showToast('🎤 Singer is performing!');
-        } else {
-          // Audience member video chat tile
-          addAudVideoChatTile(user.uid, track);
-        }
-      }
-
-      if (mediaType === 'audio') {
-        if(user.uid === remoteUID){
-          // Stage audio (singer mic + YT) — wait for user tap
-          audioTrack = user.audioTrack;
-          document.getElementById('unmute-banner').style.display = 'block';
-        } else {
-          // Audience member mic — play directly
-          try{ user.audioTrack.play(); }catch(e){}
-        }
-      }
-    });
-
-    client.on('user-unpublished', (user) => {
-      if(user.uid === remoteUID){
-        document.getElementById('cdot').className = 'dot of';
-        document.getElementById('clbl').textContent = 'Singer paused';
-      } else {
-        removeAudVideoChatTile(user.uid);
-      }
-    });
-
-    client.on('user-left', (user) => {
-      if(user.uid === remoteUID){
-        document.getElementById('cdot').className = 'dot of';
-        document.getElementById('clbl').textContent = 'Singer left';
-      } else {
-        removeAudVideoChatTile(user.uid);
-      }
-    });
-
-    // Data messages from singer
-    const audChunkBuf = {};
-    client.on('stream-message', (uid, data) => {
-      try {
-        const msg = JSON.parse(new TextDecoder().decode(data));
-        if(msg._chunk){
-          const {id,i,n,d} = msg;
-          if(!audChunkBuf[id]) audChunkBuf[id]={parts:new Array(n),received:0};
-          audChunkBuf[id].parts[i]=d;
-          audChunkBuf[id].received++;
-          if(audChunkBuf[id].received===n){
-            const full = JSON.parse(audChunkBuf[id].parts.join(''));
-            delete audChunkBuf[id];
-            handleMsg(full);
-          }
-        } else {
-          handleMsg(msg);
-        }
-      } catch(e) {}
-    });
-
-    await client.join(AGORA_APP_ID, channel, null, null);
-
-    // Joined! Hide the join screen, show room indicator
-    document.getElementById('join').style.display = 'none';
-    document.getElementById('room-display').textContent = raw;
-    document.getElementById('room-indicator').style.display = 'block';
-    document.getElementById('cdot').className = 'dot ld';
-    document.getElementById('clbl').textContent = 'Waiting for singer...';
-
-  } catch(e) {
-    console.warn('Join failed:', e);
-    let msg = 'Could not connect — check the code and try again';
-    if (String(e).includes('INVALID_VENDOR_KEY') || String(e).includes('invalid_vendor')) {
-      msg = 'App ID error — contact the developer';
-    } else if (String(e).includes('NETWORK')) {
-      msg = 'Network error — check your connection and retry';
-    }
-    document.getElementById('join-err').textContent = msg;
-    document.getElementById('join-go').textContent = 'Join →';
-    document.getElementById('join-go').style.opacity = '1';
-    document.getElementById('code-wrap').style.display = 'flex';
-    document.getElementById('join-connecting').style.display = 'none';
-  }
-}
-
-// ═══════════════════════════════════════
-// DISPLAY — just play the incoming stream full screen on canvas
-// The stage app sends an already-composited video (stage + singer)
-// No processing needed here at all
-// ═══════════════════════════════════════
-let renderRunning = false;
-
-function startRenderLoop(){
-  if(renderRunning) return;
-  renderRunning = true;
-  (function loop(){
-    requestAnimationFrame(loop);
-    if(streamEl && streamEl.readyState >= 2){
-      // Draw the incoming composited stream to fill the canvas
-      bgC.width  = window.innerWidth;
-      bgC.height = window.innerHeight;
-      bctx.drawImage(streamEl, 0, 0, bgC.width, bgC.height);
-    } else {
-      drawBG(); // waiting state
-    }
-  })();
-}
-
-function unmuteStream() {
-  if(audioTrack) audioTrack.play();
-  streamEl.muted = false;
-  document.getElementById('unmute-banner').style.display = 'none';
-}
-
-// ═══════════════════════════════════════
-// SINGER MESSAGE HANDLER
-// ═══════════════════════════════════════
-function handleMsg(msg) {
-  if (msg.type === 'lyric') {
-    document.getElementById('lm').textContent = msg.main || '';
-    document.getElementById('ln').textContent = msg.next || '';
-  }
-  if (msg.type === 'progress') {
-    document.getElementById('pf').style.width = (msg.pct||0) + '%';
-    // Keep YouTube in sync — if we drift more than 2 seconds, correct
-    if(ytLoaded && ytReady && msg.elapsed > 0){
-      try{
-        const yt = ytPlayer.getCurrentTime();
-        if(Math.abs(yt - msg.elapsed) > 2) ytPlayer.seekTo(msg.elapsed, true);
-      }catch(e){}
-    }
-  }
-  if (msg.type === 'tv-search') {
-    console.log('tv-search received:', msg.query, msg.results?.length, 'results');
-    showAudSearch(msg.query, msg.results||[]);
-  }
-  if (msg.type === 'tv-search-clear') {
-    hideAudSearch();
-  }
-  if (msg.type === 'tv-song-card') {
-    hideAudSearch();
-    showAudSongCard(msg.title, msg.artist, msg.thumb||'');
-  }
-  if (msg.type === 'tv-song-card-clear') {
-    hideAudSongCard();
-  }
-  if (msg.type === 'countdown-start') {
-    showAudCountdown(msg.song || '');
-  }
-  if (msg.type === 'song-announce') {
-    const title  = msg.title || '';
-    const artist = msg.artist || '';
-    document.getElementById('song-title').textContent = artist ? `${title} — ${artist}` : title;
-    if(msg.videoId && !msg.isDemo) ytLoad(msg.videoId);
-    showToast(`🎵 ${title}`);
-  }
-  if (msg.type === 'play-start') {
-    hideAudSearch(); hideAudSongCard(); hideAudCountdown();
-    pauseVideoChat();
-    const title  = msg.song || msg.title || '';
-    const artist = msg.artist || '';
-    if(title) document.getElementById('song-title').textContent = artist ? `${title} — ${artist}` : title;
-    // Reload video if needed (e.g. after stop which clears ytLoaded)
-    if(msg.videoId && !ytLoaded) ytLoad(msg.videoId);
-    setTimeout(()=> ytPlay(0), 400);
-    showToast(`▶ ${title}`);
-  }
-  if (msg.type === 'end') {
-    ytStop();
-    showApplause();
-    document.getElementById('lm').textContent = '';
-    document.getElementById('ln').textContent = '';
-    document.getElementById('pf').style.width = '0%';
-    resumeVideoChat();
-    // Do NOT auto-show video chat offer — only show when singer explicitly opens it
-  }
-  if (msg.type === 'pause') {
-    ytPauseVideo();
-    document.getElementById('clbl').textContent = 'Paused';
-  }
-  if (msg.type === 'resume') {
-    ytPlay(msg.elapsed || 0);
-    document.getElementById('clbl').textContent = '';
-  }
-  if (msg.type === 'restart-song') {
-    ytLoaded = true; // ensure restart works even after stop
-    ytRestart();
-  }
-  if (msg.type === 'video-chat-available') {
-    showVideoChatOffer();
-  }
-  if (msg.type === 'video-chat-ended') {
-    const p = document.getElementById('vc-preview');
-    if(p) p.remove();
-    const b = document.getElementById('vc-banner');
-    if(b) b.style.display = 'none';
-    showToast('Video chat ended by singer');
-  }
-  if (msg.type === 'cheer-bounce') {
-    spawnRx('🔥', Math.random()*80+10);
-    playCheerSound();
-  }
-}
-
-// ═══════════════════════════════════════
-// SEND TO SINGER
-// ═══════════════════════════════════════
-async function sendToSinger(obj) {
-  if (!client) return;
-  try {
-    await client.sendStreamMessage(new TextEncoder().encode(JSON.stringify(obj)), true);
-  } catch(e) {}
-}
-
-function sendZoom() {
-  sendToSinger({ type:'zoom' });
-  // Brief visual feedback on the button
-  const btn = document.querySelector('.abt:nth-child(2)');
-  if(btn){ btn.style.borderColor='rgba(100,200,255,.6)'; btn.style.color='rgba(150,220,255,.9)'; setTimeout(()=>{ btn.style.borderColor=''; btn.style.color=''; }, 1500); }
-}
-
-function sendCheer() {
-  spawnRx('🔥', Math.random()*75+12);
-  playCheerSound();
-  sendToSinger({ type:'cheer' });
-}
-
-function sendApplause() {
-  spawnRx('👏', Math.random()*75+12);
-  playApplauseSound();
-  sendToSinger({ type:'applause' });
-}
-
-// Distinct crowd applause — rhythmic clapping texture, different from cheer noise
-function playApplauseSound() {
-  try {
-    const c = new (window.AudioContext || window.webkitAudioContext)();
-    const sr = c.sampleRate;
-    const dur = 3.0;
-    const buf = c.createBuffer(2, sr * dur, sr);
-    for(let ch = 0; ch < 2; ch++){
-      const d = buf.getChannelData(ch);
-      for(let i = 0; i < d.length; i++){
-        const t = i / sr;
-        // Fade in then slow fade out
-        const env = Math.min(t * 3, 1) * Math.pow(1 - t / dur, 0.6);
-        // Rhythmic clap bursts at ~2.5 Hz
-        const clap = Math.abs(Math.sin(Math.PI * 2.5 * t));
-        const clapEnv = Math.pow(clap, 6); // sharp attack
-        // Broadband noise shaped by clap rhythm
-        const noise = (Math.random() * 2 - 1);
-        // Low crowd murmur underneath
-        const murmur = Math.sin(2 * Math.PI * 220 * t + Math.random()) * 0.08;
-        d[i] = (noise * clapEnv * 0.7 + murmur) * env * (ch === 0 ? 0.9 : 1.0);
-      }
-    }
-    const src = c.createBufferSource(); src.buffer = buf;
-    const g = c.createGain(); g.gain.value = 0.55;
-    const comp = c.createDynamicsCompressor();
-    src.connect(comp); comp.connect(g); g.connect(c.destination);
-    src.start();
-    setTimeout(() => c.close(), (dur + 0.5) * 1000);
-  } catch(e) {}
-}
-
-function sendReact(emoji) {
-  spawnRx(emoji, Math.random()*75+12);
-  sendToSinger({ type:'react', emoji });
-}
-
-function changeRoom(){
-  const newCode = prompt('Enter new room code:');
-  if(!newCode) return;
-  const clean = newCode.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
-  if(clean.length < 4){ showToast('Invalid room code'); return; }
-  if(client){ client.leave().catch(()=>{}); client=null; }
-  document.getElementById('code-in').value = clean;
-  document.getElementById('room-indicator').style.display = 'none';
-  document.getElementById('join').style.display = 'flex';
-  document.getElementById('cdot').className = 'dot of';
-  document.getElementById('clbl').textContent = 'Not connected';
-  joinRoom();
-}
-
-function sendComment() {
-  const inp  = document.getElementById('cmt-in');
-  const text = inp.value.trim();
-  if (!text) return;
-  inp.value = '';
-  addComment('You: ' + text);
-  sendToSinger({ type:'comment', text });
-}
-
-document.getElementById('cmt-in').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); sendComment(); }
-});
-
-// ═══════════════════════════════════════
-// REACTIONS + COMMENTS
-// ═══════════════════════════════════════
-function spawnRx(emoji, xPct) {
-  const el = document.createElement('div');
-  el.className = 'rx-em'; el.textContent = emoji;
-  el.style.left   = xPct + '%';
-  el.style.bottom = (8 + Math.random()*10) + '%';
-  el.style.animationDuration = (2.2 + Math.random()*.6) + 's';
-  document.getElementById('rx').appendChild(el);
-  el.addEventListener('animationend', () => el.remove());
-}
-
-function addComment(text) {
-  const feed = document.getElementById('comments');
-  const el   = document.createElement('div');
-  el.className = 'comment'; el.textContent = text;
-  feed.insertBefore(el, feed.firstChild);
-  el.addEventListener('animationend', () => el.remove());
-  while (feed.children.length > 5) feed.removeChild(feed.lastChild);
-}
-
-function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-// ── AUDIENCE SEARCH + SONG CARD ──
-function showAudSearch(query, results){
-  const el = document.getElementById('aud-search');
-  document.getElementById('aud-search-label').textContent = results.length ? 'Results for' : 'Searching for';
-  document.getElementById('aud-search-query').textContent = `"${query}"`;
-  const grid = document.getElementById('aud-results-grid');
-  if(!results.length){
-    grid.innerHTML = '<div style="color:rgba(255,220,150,.4);font-size:13px;letter-spacing:.08em;padding:20px;text-align:center;width:100%;">Searching...</div>';
-  } else {
-    grid.innerHTML = '';
-    results.slice(0,6).forEach((r,i)=>{
-      const d = document.createElement('div');
-      d.className = 'aud-result';
-      d.innerHTML = `<div class="aud-result-num">${i+1}</div>
-        <img class="aud-result-thumb" src="${r.thumb||''}" onerror="this.style.display='none'">
-        <div class="aud-result-info"><div class="aud-result-title">${escH(r.title||'')}</div><div class="aud-result-meta">${escH(r.artist||'')}</div></div>`;
-      grid.appendChild(d);
-    });
-  }
-  el.style.display = 'flex';
-  document.getElementById('aud-song-card').style.display = 'none';
-}
-function hideAudSearch(){ document.getElementById('aud-search').style.display = 'none'; }
-
-function showAudSongCard(title, artist, thumb){
-  document.getElementById('aud-song-thumb').src = thumb;
-  document.getElementById('aud-song-title-big').textContent = title;
-  document.getElementById('aud-song-artist-big').textContent = artist;
-  document.getElementById('aud-song-card').style.display = 'flex';
-  document.getElementById('aud-search').style.display = 'none';
-}
-function hideAudSongCard(){ document.getElementById('aud-song-card').style.display = 'none'; }
-
-// ── COUNTDOWN ──
-let audCdInterval = null;
-function showAudCountdown(songTitle){
-  hideAudSearch(); hideAudSongCard();
-  document.getElementById('aud-cd-song').textContent = songTitle;
-  document.getElementById('aud-cd-num').textContent = '3';
-  document.getElementById('aud-countdown').style.display = 'flex';
-  let c = 3;
-  clearInterval(audCdInterval);
-  audCdInterval = setInterval(()=>{
-    c--;
-    if(c === 0){ document.getElementById('aud-cd-num').textContent = 'Go!'; }
-    else if(c < 0){ clearInterval(audCdInterval); hideAudCountdown(); }
-    else { document.getElementById('aud-cd-num').textContent = c; }
-  }, 1000);
-}
-function hideAudCountdown(){
-  clearInterval(audCdInterval);
-  document.getElementById('aud-countdown').style.display = 'none';
-}
-
-// ── AUDIENCE VIDEO CHAT TILES ──
-const audVcTiles = {};
-function addAudVideoChatTile(uid, videoTrack){
-  if(audVcTiles[uid]) return;
-  const wrap = document.getElementById('aud-vc-wrap');
-  const tile = document.createElement('div'); tile.className='aud-vc-tile'; tile.id=`avc-${uid}`;
-  const vid = document.createElement('video'); vid.autoplay=true; vid.playsInline=true; vid.muted=true;
-  vid.srcObject = new MediaStream([videoTrack.getMediaStreamTrack()]);
-  tile.appendChild(vid); wrap.appendChild(tile);
-  audVcTiles[uid] = tile;
-}
-function removeAudVideoChatTile(uid){
-  if(!audVcTiles[uid]) return;
-  audVcTiles[uid].remove(); delete audVcTiles[uid];
-}
-let vcPreviewTrack = null; // stored so we can pause/resume
-function pauseVideoChat(){
-  const p = document.getElementById('vc-preview');
-  if(p) p.style.display = 'none';
-}
-function resumeVideoChat(){
-  const p = document.getElementById('vc-preview');
-  if(p) p.style.display = 'block';
-}
-
-// ── BETTER CHEER SOUND ──
-function playCheerSound() {
-  try {
-    const c = new (window.AudioContext || window.webkitAudioContext)();
-    const sr = c.sampleRate;
-    const dur = 2.5;
-    const buf = c.createBuffer(2, sr * dur, sr);
-    for(let ch = 0; ch < 2; ch++){
-      const d = buf.getChannelData(ch);
-      for(let i = 0; i < d.length; i++){
-        const t = i / sr;
-        const env = Math.min(t * 4, 1) * Math.pow(1 - t / dur, 0.8);
-        // Layered noise bands to simulate crowd
-        const noise = (Math.random() * 2 - 1);
-        const rumble = Math.sin(2 * Math.PI * 180 * t) * 0.15;
-        const hi = Math.sin(2 * Math.PI * 2400 * t) * 0.05 * Math.random();
-        d[i] = (noise * 0.5 + rumble + hi) * env * 0.7;
-      }
-    }
-    const src = c.createBufferSource(); src.buffer = buf;
-    const g = c.createGain(); g.gain.value = 0.5;
-    const comp = c.createDynamicsCompressor();
-    src.connect(comp); comp.connect(g); g.connect(c.destination);
-    src.start();
-    setTimeout(() => c.close(), (dur + 0.5) * 1000);
-  } catch(e) {}
-}
-
-// ═══════════════════════════════════════
-// TOAST + APPLAUSE
-// ═══════════════════════════════════════
-let toastTmr = null;
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.style.display = 'block';
-  if (toastTmr) clearTimeout(toastTmr);
-  toastTmr = setTimeout(() => { t.style.display='none'; }, 3500);
-}
-
-function showApplause() {
-  const a = document.getElementById('ap');
-  a.style.display = 'flex';
-  const msgs = ['Bravo!','Amazing!','Encore!','Wonderful!'];
-  document.getElementById('apt').textContent = msgs[Math.floor(Math.random()*msgs.length)];
-  ['🔥','⭐','👏','💫','❤️'].forEach((e,i) => {
-    setTimeout(() => spawnRx(e, Math.random()*85+5), i*220);
-  });
-  setTimeout(() => { a.style.display='none'; }, 2800);
-}
-
-// ═══════════════════════════════════════
-// FULLSCREEN
-// ═══════════════════════════════════════
-function toggleFullscreen(){
-  if(!document.fullscreenElement && !document.webkitFullscreenElement){
-    // Enter fullscreen — hide bottom controls for clean view
-    const el = document.documentElement;
-    if(el.requestFullscreen) el.requestFullscreen();
-    else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-    document.getElementById('bottom').style.display = 'none';
-    document.getElementById('fs-btn').querySelector('.abt-icon').textContent = '✕';
-    document.getElementById('fs-btn').querySelector('span:last-child') && null;
-    document.getElementById('fs-btn').lastChild.textContent = 'Exit';
-  } else {
-    // Exit fullscreen — show controls
-    if(document.exitFullscreen) document.exitFullscreen();
-    else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
-    document.getElementById('bottom').style.display = 'flex';
-    document.getElementById('fs-btn').querySelector('.abt-icon').textContent = '⛶';
-    document.getElementById('fs-btn').lastChild.textContent = 'Full';
-  }
-}
-
-// Double-tap stage to toggle fullscreen (natural phone gesture)
-let lastTap = 0;
-document.getElementById('stage-bg').addEventListener('touchend', e => {
-  const now = Date.now();
-  if(now - lastTap < 300){ toggleFullscreen(); e.preventDefault(); }
-  lastTap = now;
-});
-
-// Restore controls if user exits fullscreen via browser UI
-document.addEventListener('fullscreenchange', () => {
-  if(!document.fullscreenElement && !document.webkitFullscreenElement){
-    document.getElementById('bottom').style.display = 'flex';
-    document.getElementById('fs-btn').querySelector('.abt-icon').textContent = '⛶';
-    document.getElementById('fs-btn').lastChild.textContent = 'Full';
-  }
-});
-document.addEventListener('webkitfullscreenchange', () => {
-  if(!document.fullscreenElement && !document.webkitFullscreenElement){
-    document.getElementById('bottom').style.display = 'flex';
-  }
-});
-document.addEventListener('touchmove', e => {
-  if (!e.target.closest('#cmt-in, #comments')) e.preventDefault();
-}, { passive: false });
-
-// Read ?code= from URL and auto-join if present
-(function() {
-  const params = new URLSearchParams(window.location.search);
-  const code   = (params.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (code.length >= 4) {
-    document.getElementById('code-in').value = code;
-    // Auto-join after SDK has a moment to load
-    window.addEventListener('load', () => {
-      setTimeout(() => joinRoom(), 800);
-    });
-  } else {
-    // No code in URL — just focus the input
-    document.getElementById('code-in').focus();
-  }
-})();
-
-// ═══════════════════════════════════════
-// YOUTUBE PLAYER — synced backing track
-// ═══════════════════════════════════════
-let ytPlayer  = null;
-let ytReady   = false;
-let ytPending = null;
-let ytLoaded  = false;
-
-window.onYouTubeIframeAPIReady = function(){
-  ytPlayer = new YT.Player('yt-player', {
-    height:'1', width:'1',
-    playerVars:{ autoplay:0, controls:0, disablekb:1, fs:0, playsinline:1 },
-    events:{
-      onReady: (e)=>{
-        ytReady = true;
-        // Warm up — unlocks autoplay on iOS/Chrome for future calls
-        try{
-          e.target.mute();
-          e.target.playVideo();
-          setTimeout(()=>{ try{ e.target.pauseVideo(); e.target.unMute(); }catch(ex){} }, 200);
-        }catch(ex){}
-        if(ytPending){
-          setTimeout(()=>{
-            ytPlayer.loadVideoById({ videoId:ytPending.videoId, startSeconds:ytPending.seekTo||0 });
-            ytPending = null;
-          }, 300);
-        }
-      },
-      onError: e=>{ console.warn('Audience YT error:', e.data); }
-    }
-  });
-};
-
-function ytLoad(videoId){
-  if(!videoId || videoId.startsWith('d')) return; // skip demo IDs
-  ytLoaded = true;
-  if(ytReady){
-    ytPlayer.loadVideoById(videoId);
-    ytPlayer.pauseVideo(); // preload but wait for play-start signal
-  } else {
-    ytPending = { videoId, seekTo:0 };
-  }
-}
-
-function ytPlay(seekTo){
-  if(!ytLoaded) return;
-  if(!ytReady){ if(ytPending) ytPending.seekTo = seekTo||0; return; }
-  try{
-    if(seekTo > 1) ytPlayer.seekTo(seekTo, true);
-    ytPlayer.playVideo();
-  }catch(e){ console.warn('YT play:', e); }
-}
-
-function ytPauseVideo(){
-  if(!ytReady || !ytLoaded) return;
-  try{ ytPlayer.pauseVideo(); }catch(e){}
-}
-
-function ytRestart(){
-  if(!ytReady || !ytLoaded) return;
-  try{ ytPlayer.seekTo(0, true); ytPlayer.playVideo(); }catch(e){}
-}
-
-function ytStop(){
-  if(!ytReady || !ytLoaded) return;
-  try{ ytPlayer.stopVideo(); ytLoaded=false; }catch(e){}
-}
-
-// ═══════════════════════════════════════
-// VIDEO CHAT
-// ═══════════════════════════════════════
-function showVideoChatOffer(){
-  let b=document.getElementById('vc-banner');
-  if(b){ b.style.display='block'; return; }
-  b=document.createElement('div'); b.id='vc-banner';
-  b.style.cssText='position:fixed;bottom:140px;left:50%;transform:translateX(-50%);background:rgba(4,2,6,.95);border:1px solid rgba(0,232,122,.3);border-radius:10px;padding:14px 20px;z-index:300;text-align:center;backdrop-filter:blur(8px);font-family:"DM Mono",monospace;min-width:240px;';
-  b.innerHTML=`
-    <div style="font-size:11px;color:rgba(255,220,150,.7);letter-spacing:.08em;margin-bottom:10px;">📹 Video chat is now open</div>
-    <div onclick="joinVideoChat()" style="padding:10px 20px;background:rgba(0,232,122,.15);border:1px solid rgba(0,232,122,.4);border-radius:6px;font-size:12px;color:rgba(0,232,122,.9);cursor:pointer;letter-spacing:.08em;margin-bottom:8px;">Join Video Chat</div>
-    <div onclick="this.parentElement.style.display='none'" style="font-size:10px;color:rgba(255,200,120,.3);cursor:pointer;">Not now</div>
-  `;
-  document.body.appendChild(b);
-}
-
-async function joinVideoChat(){
-  const b=document.getElementById('vc-banner');
-  if(b) b.style.display='none';
-  try{
-    await client.setClientRole('host');
-    const [videoTrack, audioTrack] = await Promise.all([
-      AgoraRTC.createCameraVideoTrack(),
-      AgoraRTC.createMicrophoneAudioTrack()
-    ]);
-    await client.publish([videoTrack, audioTrack]);
-
-    // Show small local preview so audience knows their camera is live
-    let preview = document.getElementById('vc-preview');
-    if(!preview){
-      preview = document.createElement('div');
-      preview.id = 'vc-preview';
-      preview.style.cssText = 'position:fixed;bottom:80px;right:14px;width:120px;height:90px;border-radius:8px;overflow:hidden;border:2px solid rgba(0,232,122,.5);background:#0a0508;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.6);';
-      const vidWrap = document.createElement('div');
-      vidWrap.style.cssText = 'width:100%;height:100%;transform:scaleX(-1);';
-      const lbl = document.createElement('div');
-      lbl.style.cssText = 'position:absolute;bottom:0;left:0;right:0;padding:3px 6px;font-size:9px;color:rgba(0,232,122,.9);background:rgba(0,0,0,.6);text-align:center;letter-spacing:.06em;';
-      lbl.textContent = '● LIVE';
-      preview.appendChild(vidWrap); preview.appendChild(lbl);
-      document.body.appendChild(preview);
-      videoTrack.play(vidWrap);
-    }
-
-    sendToSinger({type:'video-chat-join', name:'Audience'});
-    showToast('📹 You are live on stage');
-  }catch(e){ showToast('Could not access camera/mic'); console.warn(e); }
-}
-
-if (window.location.protocol === 'file:') {
-  document.getElementById('https-notice').style.display = 'block';
-  document.getElementById('join-err').textContent =
-    'File opened locally — streaming requires HTTPS. See the notice below.';
-}
-</script>
+  <script>
+    const isMobile = window.innerWidth <= 768;
+    document.getElementById('tile-karaoke').href = isMobile ? 'singer.html' : 'stage.html';
+    document.getElementById('tile-fashion').href = isMobile ? 'fashion/stylist.html' : 'fashion/display.html';
+  </script>
 </body>
 </html>

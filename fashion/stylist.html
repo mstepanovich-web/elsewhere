@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Elsewhere Fashion — Stylist</title>
+  <link rel="stylesheet" href="/elsewhere/elsewhere-theme.css">
+  <style>
+    html, body {
+      height: 100%; overflow: hidden;
+      background: var(--color-bg);
+      touch-action: manipulation;
+    }
+    body {
+      display: flex; flex-direction: column;
+      min-height: 100dvh; position: relative;
+    }
+
+    /* ── Layout shell ───────────────────────────── */
+    .app-header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px 12px;
+      background: linear-gradient(to bottom, var(--color-bg) 60%, transparent);
+    }
+    .header-wordmark {
+      font-family: var(--font-display); font-size: 18px;
+      font-weight: 300; letter-spacing: var(--tracking-widest);
+      color: #C9A96E; text-transform: uppercase; text-decoration: none;
+    }
+    .header-wordmark span { color: rgba(245,236,215,.45); font-size: 13px; }
+    .header-back {
+      font-family: var(--font-ui); font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider); text-transform: uppercase;
+      color: var(--color-text-faint); cursor: pointer;
+      padding: 6px 0; background: none; border: none; display: none;
+    }
+    .header-back.visible { display: block; }
+
+    /* Progress dots */
+    .progress-dots {
+      position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+      z-index: 50; display: flex; gap: 6px; align-items: center;
+    }
+    .progress-dots .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: rgba(201,169,110,.2);
+      transition: background 0.3s ease, transform 0.3s ease;
+    }
+    .progress-dots .dot.active { background: #C9A96E; transform: scale(1.3); }
+    .progress-dots .dot.done   { background: rgba(201,169,110,.5); }
+
+    /* ── Screens ─────────────────────────────────── */
+    .screen {
+      position: absolute; inset: 0;
+      display: none; flex-direction: column;
+      padding: 90px 20px 32px;
+      overflow-y: auto;
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+    .screen.active { display: flex; }
+    .screen.visible { opacity: 1; }
+
+    /* ── Shared typography ─────────────────────── */
+    .screen-title {
+      font-family: var(--font-display); font-size: clamp(28px, 8vw, 40px);
+      font-weight: 300; letter-spacing: var(--tracking-wide);
+      color: #F5ECD7; margin-bottom: 6px; line-height: 1.2;
+    }
+    .screen-sub {
+      font-size: var(--text-sm); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+      margin-bottom: 28px;
+    }
+
+    /* ── Screen 1: Mode Select ───────────────────── */
+    .mode-card {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 18px; border-radius: var(--radius-lg);
+      border: 1px solid rgba(201,169,110,.18);
+      background: rgba(14,10,8,.85); cursor: pointer;
+      margin-bottom: 10px;
+      transition: border-color 0.2s ease, background 0.2s ease;
+      position: relative; overflow: hidden;
+    }
+    .mode-card:hover, .mode-card:active {
+      border-color: rgba(201,169,110,.45);
+      background: rgba(201,169,110,.06);
+    }
+    .mode-card.selected {
+      border-color: #C9A96E;
+      background: rgba(201,169,110,.10);
+    }
+    .mode-card-icon { font-size: 28px; flex-shrink: 0; }
+    .mode-card-info { flex: 1; }
+    .mode-card-label {
+      font-family: var(--font-display); font-size: 20px;
+      font-weight: 400; letter-spacing: var(--tracking-normal);
+      color: #F5ECD7; margin-bottom: 2px;
+    }
+    .mode-card-time {
+      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+    }
+    .mode-card-check {
+      width: 20px; height: 20px; border-radius: 50%;
+      border: 1.5px solid rgba(201,169,110,.3);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; color: #C9A96E; font-size: 11px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .mode-card.selected .mode-card-check {
+      background: #C9A96E; border-color: #C9A96E; color: #080504;
+    }
+
+    /* ── Screen 2: Capture ───────────────────────── */
+    .capture-wrap {
+      position: relative; width: 100%;
+      background: rgba(8,5,4,.8); border-radius: var(--radius-xl);
+      overflow: hidden; flex-shrink: 0;
+      aspect-ratio: 3/4;
+    }
+    #capture-video {
+      width: 100%; height: 100%; object-fit: cover;
+      transform: scaleX(-1); /* mirror */
+    }
+    .capture-overlay {
+      position: absolute; inset: 0;
+      pointer-events: none;
+    }
+    /* Body guide silhouette */
+    .body-guide {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: 55%; height: 85%; border: 1.5px dashed rgba(201,169,110,.35);
+      border-radius: 40% 40% 30% 30% / 20% 20% 10% 10%;
+      display: none;
+    }
+    .body-guide.full-body {
+      border-radius: 30% 30% 25% 25% / 15% 15% 10% 10%;
+      height: 90%;
+    }
+    .body-guide.torso { height: 55%; top: 30%; }
+
+    /* Capture confirm overlay */
+    .capture-confirm {
+      position: absolute; inset: 0;
+      background: rgba(4,2,6,.85);
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center; gap: 14px;
+    }
+    .capture-confirm.show { display: flex; }
+    .capture-confirm img {
+      max-width: 80%; max-height: 60%;
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(201,169,110,.3);
+    }
+    .capture-confirm-btns { display: flex; gap: 12px; margin-top: 8px; }
+
+    .capture-guidance {
+      margin-top: 14px; padding: 14px 16px;
+      background: rgba(201,169,110,.06);
+      border: 1px solid rgba(201,169,110,.15);
+      border-radius: var(--radius-md);
+    }
+    .capture-guidance p {
+      font-size: var(--text-sm); line-height: 1.6;
+      color: var(--color-text-dim); letter-spacing: var(--tracking-tight);
+    }
+
+    .capture-btn-row {
+      display: flex; justify-content: center; margin-top: 16px;
+    }
+    .capture-btn {
+      width: 68px; height: 68px; border-radius: 50%;
+      background: #C9A96E; border: 3px solid rgba(245,236,215,.3);
+      cursor: pointer; position: relative; flex-shrink: 0;
+      transition: transform 0.15s ease, background 0.15s ease;
+      box-shadow: 0 0 24px rgba(201,169,110,.25);
+    }
+    .capture-btn:active { transform: scale(0.92); }
+    .capture-btn::after {
+      content: ''; position: absolute;
+      inset: 6px; border-radius: 50%;
+      background: rgba(245,236,215,.9);
+    }
+
+    /* ── Screen 3: Garment Upload ────────────────── */
+    .upload-area {
+      border: 1.5px dashed rgba(201,169,110,.3);
+      border-radius: var(--radius-lg);
+      padding: 28px 20px; text-align: center; cursor: pointer;
+      transition: border-color 0.2s ease, background 0.2s ease;
+      margin-bottom: 16px; position: relative;
+    }
+    .upload-area:hover { border-color: rgba(201,169,110,.55); background: rgba(201,169,110,.04); }
+    .upload-area input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .upload-icon { font-size: 32px; margin-bottom: 8px; }
+    .upload-label {
+      font-family: var(--font-display); font-size: 18px;
+      font-weight: 300; color: #C9A96E; margin-bottom: 4px;
+    }
+    .upload-hint {
+      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+    }
+
+    .garment-list { display: flex; flex-direction: column; gap: 10px; }
+    .garment-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; border-radius: var(--radius-md);
+      background: rgba(201,169,110,.06);
+      border: 1px solid rgba(201,169,110,.18);
+    }
+    .garment-thumb {
+      width: 52px; height: 52px; border-radius: var(--radius-sm);
+      object-fit: cover; flex-shrink: 0;
+      border: 1px solid rgba(201,169,110,.2);
+    }
+    .garment-info { flex: 1; }
+    .garment-category {
+      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: #C9A96E; margin-bottom: 2px;
+    }
+    .garment-detecting {
+      font-size: var(--text-xs); color: var(--color-text-faint);
+      animation: el-pulse 1s infinite;
+    }
+    .garment-remove {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: none; border: 1px solid rgba(255,255,255,.12);
+      color: var(--color-text-faint); cursor: pointer;
+      font-size: 14px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .garment-remove:hover { border-color: rgba(232,25,44,.5); color: var(--color-red); }
+
+    /* ── Screen 4: Confirm ───────────────────────── */
+    .confirm-card {
+      background: rgba(14,10,8,.9);
+      border: 1px solid rgba(201,169,110,.25);
+      border-radius: var(--radius-xl);
+      padding: 28px 24px; margin-bottom: 20px;
+    }
+    .dev-badge {
+      display: inline-block; font-family: var(--font-mono);
+      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-green);
+      background: var(--color-green-faint);
+      border: 1px solid rgba(0,232,122,.2);
+      border-radius: var(--radius-pill); padding: 3px 10px; margin-bottom: 18px;
+    }
+    .confirm-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0; border-bottom: 1px solid rgba(201,169,110,.08);
+    }
+    .confirm-row:last-child { border-bottom: none; }
+    .confirm-key {
+      font-size: var(--text-sm); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+    }
+    .confirm-val {
+      font-family: var(--font-display); font-size: 18px;
+      font-weight: 400; color: #F5ECD7; letter-spacing: var(--tracking-normal);
+    }
+    .confirm-val.cost { color: #C9A96E; }
+
+    /* ── Screen 5: Rendering ─────────────────────── */
+    .render-stage {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      flex: 1; gap: 28px; padding-top: 20px;
+    }
+    .render-spinner {
+      width: 72px; height: 72px; border-radius: 50%;
+      border: 2px solid rgba(201,169,110,.15);
+      border-top-color: #C9A96E;
+      animation: spin 1.2s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .render-label {
+      font-family: var(--font-display); font-size: clamp(22px, 6vw, 32px);
+      font-weight: 300; letter-spacing: var(--tracking-wide);
+      color: #F5ECD7; text-align: center; min-height: 40px;
+    }
+    .render-elapsed {
+      font-family: var(--font-mono); font-size: var(--text-sm);
+      color: var(--color-text-faint); letter-spacing: var(--tracking-wider);
+    }
+
+    .render-progress-bar {
+      width: 100%; max-width: 280px; height: 2px;
+      background: rgba(201,169,110,.15); border-radius: var(--radius-pill); overflow: hidden;
+    }
+    .render-progress-fill {
+      height: 100%; background: #C9A96E; border-radius: var(--radius-pill);
+      width: 0%; transition: width 0.8s ease;
+      box-shadow: 0 0 8px rgba(201,169,110,.4);
+    }
+
+    /* ── Screen 6: Result ────────────────────────── */
+    .result-media {
+      width: 100%; border-radius: var(--radius-xl); overflow: hidden;
+      border: 1px solid rgba(201,169,110,.25); margin-bottom: 20px;
+      background: #080504; aspect-ratio: 3/4; position: relative;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .result-media img, .result-media video {
+      width: 100%; height: 100%; object-fit: contain;
+    }
+    .result-share-row {
+      display: flex; gap: 10px; flex-wrap: wrap;
+    }
+    .share-btn {
+      flex: 1 1 120px; padding: 12px 16px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(201,169,110,.3);
+      background: rgba(201,169,110,.06);
+      color: #C9A96E; font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider); text-transform: uppercase;
+      cursor: pointer; text-align: center;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .share-btn:hover { border-color: rgba(201,169,110,.6); background: rgba(201,169,110,.12); }
+    .share-btn.primary { background: rgba(201,169,110,.7); color: #080504; border-color: #C9A96E; font-weight: 600; }
+    .share-btn.primary:hover { background: #C9A96E; }
+    .result-again { margin-top: 14px; width: 100%; }
+
+    /* ── Universal button ────────────────────────── */
+    .action-btn {
+      width: 100%; padding: 16px 24px;
+      border-radius: var(--radius-pill);
+      font-family: var(--font-ui); font-size: var(--text-sm);
+      letter-spacing: var(--tracking-wider); text-transform: uppercase;
+      cursor: pointer; border: none; font-weight: 500;
+      transition: opacity 0.2s ease, transform 0.15s ease;
+    }
+    .action-btn:active { transform: scale(0.98); }
+    .action-btn-primary {
+      background: #C9A96E; color: #080504;
+      box-shadow: 0 4px 20px rgba(201,169,110,.2);
+    }
+    .action-btn-primary:disabled {
+      opacity: 0.35; cursor: not-allowed;
+    }
+    .action-btn-ghost {
+      background: transparent; color: var(--color-text-faint);
+      border: 1px solid rgba(201,169,110,.2);
+    }
+
+    /* ── Room code input ─────────────────────────── */
+    .room-row {
+      display: flex; gap: 10px; align-items: center; margin-bottom: 24px;
+    }
+    .room-input {
+      flex: 1; background: rgba(201,169,110,.06);
+      border: 1px solid rgba(201,169,110,.25);
+      border-radius: var(--radius-md);
+      padding: 12px 14px; color: #F5ECD7;
+      font-family: var(--font-mono); font-size: var(--text-md);
+      letter-spacing: var(--tracking-wider); text-transform: uppercase;
+      outline: none;
+    }
+    .room-input:focus { border-color: rgba(201,169,110,.55); }
+    .room-input::placeholder { color: var(--color-text-ghost); letter-spacing: var(--tracking-wider); }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="app-header">
+    <a class="header-wordmark" href="/elsewhere/index.html">
+      Elsewhere <span>/ Fashion</span>
+    </a>
+    <button class="header-back" id="back-btn">← Back</button>
+  </div>
+
+  <!-- Progress dots (screens 1-5, not 6) -->
+  <div class="progress-dots" id="progress-dots">
+    <div class="dot active" data-screen="1"></div>
+    <div class="dot" data-screen="2"></div>
+    <div class="dot" data-screen="3"></div>
+    <div class="dot" data-screen="4"></div>
+    <div class="dot" data-screen="5"></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- SCREEN 1: Mode Select                          -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="screen active" id="screen-1">
+    <div class="screen-title">Choose<br>Your Mode</div>
+    <div class="screen-sub">Select what you'd like to create</div>
+
+    <div id="mode-cards">
+      <div class="mode-card" data-mode="image">
+        <div class="mode-card-icon">🖼️</div>
+        <div class="mode-card-info">
+          <div class="mode-card-label">Image</div>
+          <div class="mode-card-time">Est. ~20 sec · $0.08</div>
+        </div>
+        <div class="mode-card-check">✓</div>
+      </div>
+      <div class="mode-card" data-mode="animated_still">
+        <div class="mode-card-icon">✨</div>
+        <div class="mode-card-info">
+          <div class="mode-card-label">Animated Still</div>
+          <div class="mode-card-time">Est. ~1 min · $0.33</div>
+        </div>
+        <div class="mode-card-check">✓</div>
+      </div>
+      <div class="mode-card" data-mode="multi_angle">
+        <div class="mode-card-icon">🎬</div>
+        <div class="mode-card-info">
+          <div class="mode-card-label">Multi-Angle Video</div>
+          <div class="mode-card-time">Est. ~2 min · $1.00</div>
+        </div>
+        <div class="mode-card-check">✓</div>
+      </div>
+      <div class="mode-card" data-mode="catwalk">
+        <div class="mode-card-icon">👠</div>
+        <div class="mode-card-info">
+          <div class="mode-card-label">Catwalk</div>
+          <div class="mode-card-time">Est. ~3–4 min · $0.65</div>
+        </div>
+        <div class="mode-card-check">✓</div>
+      </div>
+      <div class="mode-card" data-mode="multi_angle_catwalk">
+        <div class="mode-card-icon">🌟</div>
+        <div class="mode-card-info">
+          <div class="mode-card-label">Multi-Angle Catwalk</div>
+          <div class="mode-card-time">Est. ~4 min · $1.65</div>
+        </div>
+        <div class="mode-card-check">✓</div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px;">
+      <div class="screen-sub" style="margin-bottom:10px;">Session</div>
+      <div class="room-row">
+        <input class="room-input" id="room-input" type="text" maxlength="6"
+          placeholder="ROOM CODE" autocomplete="off" spellcheck="false">
+      </div>
+      <button class="action-btn action-btn-primary" id="s1-next" disabled>
+        Continue →
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- SCREEN 2: Capture                             -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="screen" id="screen-2">
+    <div class="screen-title">Your Photo</div>
+    <div class="screen-sub" id="capture-sub">Position yourself in frame</div>
+
+    <div class="capture-wrap">
+      <video id="capture-video" autoplay playsinline muted></video>
+      <div class="capture-overlay">
+        <div class="body-guide" id="body-guide"></div>
+      </div>
+      <div class="capture-confirm" id="capture-confirm">
+        <img id="confirm-preview" src="" alt="Preview">
+        <div class="capture-confirm-btns">
+          <button class="action-btn action-btn-ghost" id="retake-btn" style="width:auto;padding:12px 24px;">Retake</button>
+          <button class="action-btn action-btn-primary" id="use-photo-btn" style="width:auto;padding:12px 24px;">Use Photo →</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="capture-guidance">
+      <p id="capture-tips">Loading guidance...</p>
+    </div>
+
+    <div class="capture-btn-row">
+      <button class="capture-btn" id="capture-shutter" title="Take photo"></button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- SCREEN 3: Garment Upload                      -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="screen" id="screen-3">
+    <div class="screen-title">Add<br>Garments</div>
+    <div class="screen-sub">Upload items to try on (up to 3)</div>
+
+    <div class="upload-area" id="upload-area">
+      <input type="file" id="garment-file" accept="image/jpeg,image/png" multiple>
+      <div class="upload-icon">👗</div>
+      <div class="upload-label">Tap to upload</div>
+      <div class="upload-hint">JPG or PNG · Up to 3 items</div>
+    </div>
+
+    <div class="garment-list" id="garment-list"></div>
+
+    <div style="margin-top:auto;padding-top:24px;">
+      <button class="action-btn action-btn-primary" id="s3-next" disabled>
+        Confirm Garments →
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- SCREEN 4: Pre-Render Confirm                  -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="screen" id="screen-4">
+    <div class="screen-title">Ready<br>to Render</div>
+    <div class="screen-sub">Review before we begin</div>
+
+    <div class="confirm-card">
+      <div class="dev-badge">DEV Mode</div>
+      <div class="confirm-row">
+        <span class="confirm-key">Mode</span>
+        <span class="confirm-val" id="conf-mode">—</span>
+      </div>
+      <div class="confirm-row">
+        <span class="confirm-key">Garments</span>
+        <span class="confirm-val" id="conf-garments">—</span>
+      </div>
+      <div class="confirm-row">
+        <span class="confirm-key">Est. Time</span>
+        <span class="confirm-val" id="conf-time">—</span>
+      </div>
+      <div class="confirm-row">
+        <span class="confirm-key">Est. Cost</span>
+        <span class="confirm-val cost" id="conf-cost">—</span>
+      </div>
+    </div>
+
+    <button class="action-btn action-btn-primary" id="s4-render">
+      Confirm &amp; Render →
+    </button>
+    <button class="action-btn action-btn-ghost" id="s4-change" style="margin-top:10px;">
+      Change Mode
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- SCREEN 5: Rendering                           -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="screen" id="screen-5">
+    <div class="render-stage">
+      <div class="render-spinner"></div>
+      <div class="render-label" id="render-label">Generating your look...</div>
+      <div class="render-progress-bar">
+        <div class="render-progress-fill" id="render-fill"></div>
+      </div>
+      <div class="render-elapsed" id="render-elapsed">0:00</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- SCREEN 6: Result                              -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="screen" id="screen-6">
+    <div class="screen-title">Your<br>Look</div>
+    <div class="screen-sub">Rendered successfully</div>
+
+    <div class="result-media" id="result-media">
+      <!-- Populated by JS -->
+    </div>
+
+    <div class="result-share-row">
+      <button class="share-btn primary" id="share-save">Save</button>
+      <button class="share-btn" id="share-tiktok">TikTok</button>
+      <button class="share-btn" id="share-insta">Instagram</button>
+    </div>
+
+    <button class="action-btn action-btn-ghost result-again" id="start-again">
+      Start Again
+    </button>
+  </div>
+
+  <script>
+  // ═══════════════════════════════════════════════
+  //  Session state
+  // ═══════════════════════════════════════════════
+  const session = {
+    sessionId: crypto.randomUUID(),
+    mode: null,
+    roomCode: null,
+    userPhoto: null,    // base64
+    garments: [],       // [{ base64, category, dataUrl }]
+    renderConfig: {},
+    result: { stills: [], videoUrl: null, status: 'idle' }
+  };
+
+  const modeConfig = {
+    image:               { cost: '$0.08',  time: '~20 sec',   label: 'Image' },
+    animated_still:      { cost: '$0.33',  time: '~1 min',    label: 'Animated Still' },
+    multi_angle:         { cost: '$1.00',  time: '~2 min',    label: 'Multi-Angle Video' },
+    catwalk:             { cost: '$0.65',  time: '~3–4 min',  label: 'Catwalk' },
+    multi_angle_catwalk: { cost: '$1.65',  time: '~4 min',    label: 'Multi-Angle Catwalk' },
+  };
+
+  const modeGuide = {
+    image:               { tips: 'Any clear angle, good lighting. Upper body is fine.',       guide: 'torso' },
+    animated_still:      { tips: 'Front-facing, arms relaxed at your sides, waist-up is OK.', guide: 'torso' },
+    multi_angle:         { tips: 'Front-facing, neutral pose, arms slightly away from body. Full body preferred.', guide: 'full-body' },
+    catwalk:             { tips: 'Full body, straight confident pose, arms at sides. Make sure feet are visible.', guide: 'full-body' },
+    multi_angle_catwalk: { tips: 'Full body, neutral arms, feet visible. A solid-color underlayer helps results.', guide: 'full-body' },
+  };
+
+  const renderStages = {
+    image:               ['Generating your look...'],
+    animated_still:      ['Generating your look...', 'Adding motion...'],
+    multi_angle:         ['Generating your look...', 'Creating all angles...', 'Editing your video...'],
+    catwalk:             ['Generating your look...', 'Hitting the catwalk...'],
+    multi_angle_catwalk: ['Generating your look...', 'Creating all angles...', 'Hitting the catwalk...', 'Putting it all together...'],
+  };
+
+  // ═══════════════════════════════════════════════
+  //  Screen management
+  // ═══════════════════════════════════════════════
+  let currentScreen = 1;
+  const TOTAL = 6;
+
+  function goTo(n) {
+    const prev = document.getElementById('screen-' + currentScreen);
+    const next = document.getElementById('screen-' + n);
+    prev.classList.remove('visible');
+    setTimeout(() => {
+      prev.classList.remove('active');
+      next.classList.add('active');
+      requestAnimationFrame(() => next.classList.add('visible'));
+    }, 180);
+    currentScreen = n;
+    updateProgress(n);
+    document.getElementById('back-btn').classList.toggle('visible', n > 1 && n < 6);
+  }
+
+  function updateProgress(n) {
+    const dots = document.querySelectorAll('.progress-dots .dot');
+    dots.forEach((d, i) => {
+      d.classList.remove('active', 'done');
+      const s = i + 1;
+      if (s === n) d.classList.add('active');
+      else if (s < n) d.classList.add('done');
+    });
+    document.getElementById('progress-dots').style.display = n === 6 ? 'none' : 'flex';
+  }
+
+  document.getElementById('back-btn').addEventListener('click', () => {
+    if (currentScreen > 1) goTo(currentScreen - 1);
+  });
+
+  // Show first screen
+  setTimeout(() => document.getElementById('screen-1').classList.add('visible'), 50);
+
+  // ═══════════════════════════════════════════════
+  //  Screen 1: Mode + Room
+  // ═══════════════════════════════════════════════
+  document.querySelectorAll('.mode-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      session.mode = card.dataset.mode;
+      checkS1();
+    });
+  });
+
+  const roomInput = document.getElementById('room-input');
+  roomInput.addEventListener('input', () => {
+    roomInput.value = roomInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    session.roomCode = roomInput.value;
+    checkS1();
+  });
+
+  function checkS1() {
+    document.getElementById('s1-next').disabled = !(session.mode && session.roomCode && session.roomCode.length >= 4);
+  }
+
+  document.getElementById('s1-next').addEventListener('click', () => {
+    setupCapture();
+    goTo(2);
+  });
+
+  // ═══════════════════════════════════════════════
+  //  Screen 2: Camera capture
+  // ═══════════════════════════════════════════════
+  let videoStream = null;
+  const captureVideo = document.getElementById('capture-video');
+  const captureConfirm = document.getElementById('capture-confirm');
+  const confirmPreview = document.getElementById('confirm-preview');
+  let pendingPhotoBase64 = null;
+
+  function setupCapture() {
+    const guide = modeGuide[session.mode] || modeGuide.image;
+    document.getElementById('capture-sub').textContent = guide.guide === 'full-body'
+      ? 'Full body · Make sure feet are visible'
+      : 'Upper body · Good lighting';
+    document.getElementById('capture-tips').textContent = guide.tips;
+
+    const bg = document.getElementById('body-guide');
+    bg.className = 'body-guide';
+    if (guide.guide === 'full-body') bg.classList.add('full-body');
+    else if (guide.guide === 'torso') bg.classList.add('torso');
+    bg.style.display = 'block';
+
+    if (!videoStream) {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+        .then(stream => { videoStream = stream; captureVideo.srcObject = stream; })
+        .catch(() => console.warn('Camera not available'));
+    }
+  }
+
+  document.getElementById('capture-shutter').addEventListener('click', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width  = captureVideo.videoWidth  || 480;
+    canvas.height = captureVideo.videoHeight || 640;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(-1, 1);
+    ctx.drawImage(captureVideo, -canvas.width, 0, canvas.width, canvas.height);
+    pendingPhotoBase64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+    confirmPreview.src = canvas.toDataURL('image/jpeg', 0.92);
+    captureConfirm.classList.add('show');
+  });
+
+  document.getElementById('retake-btn').addEventListener('click', () => {
+    captureConfirm.classList.remove('show');
+    pendingPhotoBase64 = null;
+  });
+
+  document.getElementById('use-photo-btn').addEventListener('click', () => {
+    session.userPhoto = pendingPhotoBase64;
+    if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+    goTo(3);
+  });
+
+  // ═══════════════════════════════════════════════
+  //  Screen 3: Garment upload
+  // ═══════════════════════════════════════════════
+  const ANTHROPIC_KEY = ''; // Set server-side; category detection is best-effort
+
+  document.getElementById('garment-file').addEventListener('change', async e => {
+    const files = Array.from(e.target.files).slice(0, 3 - session.garments.length);
+    for (const file of files) {
+      if (session.garments.length >= 3) break;
+      const dataUrl = await readFileAsDataUrl(file);
+      const base64 = dataUrl.split(',')[1];
+      const item = { base64, category: 'detecting...', dataUrl };
+      session.garments.push(item);
+      renderGarmentList();
+      detectCategory(item, base64);
+    }
+    e.target.value = '';
+    updateS3State();
+  });
+
+  function readFileAsDataUrl(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function detectCategory(item, base64) {
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 50,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 }},
+              { type: 'text', text: 'Reply with exactly one of: top, bottom, full-body, accessory-hat, accessory-glasses, accessory-bag, accessory-jewelry' }
+            ]
+          }]
+        })
+      });
+      const data = await resp.json();
+      const cat = data.content?.[0]?.text?.trim() || 'garment';
+      item.category = cat;
+    } catch {
+      item.category = 'garment';
+    }
+    renderGarmentList();
+  }
+
+  function renderGarmentList() {
+    const list = document.getElementById('garment-list');
+    list.innerHTML = '';
+    session.garments.forEach((g, i) => {
+      const el = document.createElement('div');
+      el.className = 'garment-item';
+      el.innerHTML = `
+        <img class="garment-thumb" src="${g.dataUrl}" alt="Garment">
+        <div class="garment-info">
+          <div class="garment-category">${g.category === 'detecting...' ? '' : g.category}</div>
+          ${g.category === 'detecting...' ? '<div class="garment-detecting">Detecting category...</div>' : ''}
+        </div>
+        <button class="garment-remove" data-idx="${i}" title="Remove">✕</button>
+      `;
+      list.appendChild(el);
+    });
+    list.querySelectorAll('.garment-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        session.garments.splice(+btn.dataset.idx, 1);
+        renderGarmentList();
+        updateS3State();
+      });
+    });
+    // Show/hide upload area
+    document.getElementById('upload-area').style.display = session.garments.length >= 3 ? 'none' : '';
+    updateS3State();
+  }
+
+  function updateS3State() {
+    document.getElementById('s3-next').disabled = session.garments.length === 0;
+  }
+
+  document.getElementById('s3-next').addEventListener('click', () => {
+    populateConfirm();
+    goTo(4);
+  });
+
+  // ═══════════════════════════════════════════════
+  //  Screen 4: Confirm
+  // ═══════════════════════════════════════════════
+  function populateConfirm() {
+    const cfg = modeConfig[session.mode];
+    document.getElementById('conf-mode').textContent = cfg.label;
+    document.getElementById('conf-garments').textContent = session.garments.length + ' item' + (session.garments.length > 1 ? 's' : '');
+    document.getElementById('conf-time').textContent = cfg.time;
+    document.getElementById('conf-cost').textContent = cfg.cost;
+    session.renderConfig = {
+      estimatedCost: cfg.cost,
+      estimatedMinutes: cfg.time,
+    };
+  }
+
+  document.getElementById('s4-render').addEventListener('click', () => {
+    goTo(5);
+    startRender();
+  });
+
+  document.getElementById('s4-change').addEventListener('click', () => goTo(1));
+
+  // ═══════════════════════════════════════════════
+  //  Screen 5: Render simulation + API call
+  // ═══════════════════════════════════════════════
+  function startRender() {
+    const stages = renderStages[session.mode] || ['Generating your look...'];
+    const renderLabel = document.getElementById('render-label');
+    const renderFill  = document.getElementById('render-fill');
+    const renderElapsed = document.getElementById('render-elapsed');
+    const totalMs = parseDurationToMs(modeConfig[session.mode].time);
+
+    let stageIdx = 0;
+    renderLabel.textContent = stages[0];
+    renderFill.style.width = '5%';
+
+    const startTime = Date.now();
+
+    // Stage cycling
+    const stageInterval = stages.length > 1
+      ? setInterval(() => {
+          stageIdx = (stageIdx + 1) % stages.length;
+          renderLabel.textContent = stages[stageIdx];
+        }, totalMs / stages.length)
+      : null;
+
+    // Progress bar
+    const progressInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const pct = Math.min(92, (elapsed / totalMs) * 92);
+      renderFill.style.width = pct + '%';
+      const secs = Math.floor(elapsed / 1000);
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      renderElapsed.textContent = m + ':' + String(s).padStart(2, '0');
+    }, 500);
+
+    // Fire actual render request
+    callRenderAPI()
+      .then(result => {
+        if (stageInterval) clearInterval(stageInterval);
+        clearInterval(progressInterval);
+        renderFill.style.width = '100%';
+        renderLabel.textContent = 'Complete!';
+        session.result = result;
+        setTimeout(() => showResult(result), 800);
+      })
+      .catch(err => {
+        if (stageInterval) clearInterval(stageInterval);
+        clearInterval(progressInterval);
+        renderLabel.textContent = 'Error — please retry';
+        console.error(err);
+      });
+  }
+
+  function parseDurationToMs(timeStr) {
+    // Rough estimates from labels
+    if (timeStr.includes('20 sec')) return 25000;
+    if (timeStr.includes('1 min')) return 70000;
+    if (timeStr.includes('2 min')) return 130000;
+    if (timeStr.includes('3')) return 210000;
+    if (timeStr.includes('4 min')) return 260000;
+    return 60000;
+  }
+
+  async function callRenderAPI() {
+    // POST to render backend
+    const RENDER_API = window.ELSEWHERE_RENDER_API || 'https://render.elsewhere.app/api/fashion/render';
+    try {
+      const resp = await fetch(RENDER_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: session.sessionId,
+          roomCode: session.roomCode,
+          mode: session.mode,
+          userPhoto: session.userPhoto,
+          garments: session.garments.map(g => ({ base64: g.base64, category: g.category })),
+        })
+      });
+      if (!resp.ok) throw new Error('Render API error: ' + resp.status);
+      return await resp.json();
+    } catch (err) {
+      // DEV fallback: return mock result
+      console.warn('Render API unreachable — using mock result', err);
+      await new Promise(r => setTimeout(r, 3000));
+      return {
+        status: 'complete',
+        stills: [],
+        videoUrl: null,
+        mockResult: true,
+      };
+    }
+  }
+
+  function showResult(result) {
+    const mediaEl = document.getElementById('result-media');
+    if (result.videoUrl) {
+      mediaEl.innerHTML = `<video src="${result.videoUrl}" autoplay loop muted playsinline></video>`;
+    } else if (result.stills && result.stills.length > 0) {
+      mediaEl.innerHTML = `<img src="${result.stills[0]}" alt="Your look">`;
+    } else {
+      // Mock placeholder
+      mediaEl.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;height:100%;padding:32px;text-align:center;">
+          <div style="font-size:48px;">✨</div>
+          <div style="font-family:var(--font-display);font-size:22px;color:#F5ECD7;letter-spacing:.08em;">Render Complete</div>
+          <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-text-faint)">
+            ${modeConfig[session.mode]?.label} · ${session.garments.length} garment${session.garments.length !== 1 ? 's' : ''}
+          </div>
+          ${result.mockResult ? '<div style="font-size:11px;color:rgba(0,232,122,.6);letter-spacing:.1em;text-transform:uppercase;margin-top:8px;">Dev mock — no render API connected</div>' : ''}
+        </div>`;
+    }
+    session.result = result;
+    goTo(6);
+  }
+
+  // ═══════════════════════════════════════════════
+  //  Screen 6: Result actions
+  // ═══════════════════════════════════════════════
+  ['share-save','share-tiktok','share-insta'].forEach(id => {
+    document.getElementById(id).addEventListener('click', () => {
+      alert('Share: ' + id.replace('share-', '') + ' (stub — coming in Phase 2)');
+    });
+  });
+
+  document.getElementById('start-again').addEventListener('click', () => {
+    // Reset
+    session.mode = null;
+    session.userPhoto = null;
+    session.garments = [];
+    session.result = { stills: [], videoUrl: null, status: 'idle' };
+    document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById('garment-list').innerHTML = '';
+    document.getElementById('upload-area').style.display = '';
+    document.getElementById('s3-next').disabled = true;
+    document.getElementById('render-fill').style.width = '5%';
+    goTo(1);
+  });
+
+  </script>
+</body>
+</html>
