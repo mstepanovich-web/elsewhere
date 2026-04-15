@@ -314,7 +314,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.19</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.22</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -453,7 +453,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.19</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.22</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -656,7 +656,7 @@ let tourAnimFrame = null;
 
 function startVenueTour(){
   if(!venueMode || !panReady) return;
-  if(tourActive) { cancelVenueTour(); return; }
+  if(tourActive){ cancelVenueTour(); return; }
 
   const venue = VENUES.find(v=>v.id===selectedVenueId);
   if(!venue || !venue.skyboxId) return;
@@ -665,63 +665,54 @@ function startVenueTour(){
   document.getElementById('btn-360').style.opacity = '1';
   document.getElementById('btn-360').style.color = 'rgba(255,220,80,1)';
 
-  const originYaw   = venueYaw;
-  const originPitch = venuePitch;
-  const originFOV   = venueFOVTarget;
+  // Snapshot exact current state — bypass lerp by driving values directly
+  const originYaw = venueYaw;
+  const originFOV = venueFOV;
+  const FOV_TOUR  = 95;
 
-  // Phase 1: zoom out over 1.5s
-  // Phase 2: pan 360° over 12s
-  // Phase 3: return to origin yaw over 2s, zoom back in
+  const P1 = 2000;   // zoom out
+  const P2 = 22000;  // pan 360°
+  const P3 = 2000;   // zoom in
+  const TOTAL = P1 + P2 + P3;
 
-  const ZOOM_OUT_MS  = 1500;
-  const PAN_MS       = 22000;  // slower — was 12s
-  const RETURN_MS    = 2500;
-  const TOTAL_MS     = ZOOM_OUT_MS + PAN_MS + RETURN_MS;
-
-  const FOV_TOUR = Math.min(FOV_WIDE, 95);
+  function ease(t){ return t<0.5 ? 2*t*t : -1+(4-2*t)*t; }
 
   const startTime = performance.now();
 
   function tick(){
     if(!tourActive) return;
-    const elapsed = performance.now() - startTime;
+    const el = Math.min(performance.now() - startTime, TOTAL);
 
-    if(elapsed < ZOOM_OUT_MS){
-      // Phase 1 — zoom out
-      const p = elapsed / ZOOM_OUT_MS;
-      const ease = 1 - Math.pow(1 - p, 3);
-      venueFOVTarget = originFOV + (FOV_TOUR - originFOV) * ease;
-      venueFOV = venueFOVTarget;
-      panCamera3.fov = venueFOVTarget;
-      panCamera3.updateProjectionMatrix();
+    if(el <= P1){
+      // Zoom out — yaw stays fixed
+      const fov = originFOV + (FOV_TOUR - originFOV) * ease(el/P1);
+      venueFOV = venueFOVTarget = fov;
+      venueYaw = venueYawTarget = originYaw;
 
-    } else if(elapsed < ZOOM_OUT_MS + PAN_MS){
-      // Phase 2 — slow full 360 pan in one direction, stop exactly at origin+360
-      const p = (elapsed - ZOOM_OUT_MS) / PAN_MS;
-      // Ease in for first 5%, ease out for last 5%
-      const eased = p < 0.05 ? 0.5*(p/0.05)*(p/0.05) :
-                    p > 0.95 ? 1 - 0.5*((1-p)/0.05)*((1-p)/0.05) : p;
-      venueYawTarget = originYaw + 360 * eased;
-      venueYaw       = venueYawTarget;
-      panCamera3.rotation.y = -venueYaw * D2R;
-
-    } else if(elapsed < TOTAL_MS){
-      // Phase 3 — zoom back in, yaw already at origin+360 (same visual position)
-      const p = (elapsed - ZOOM_OUT_MS - PAN_MS) / RETURN_MS;
-      const ease = 1 - Math.pow(1 - p, 3);
-      venueFOVTarget = FOV_TOUR + (originFOV - FOV_TOUR) * ease;
-      venueFOV = venueFOVTarget;
-      panCamera3.fov = venueFOVTarget;
-      panCamera3.updateProjectionMatrix();
+    } else if(el <= P1+P2){
+      // Pan — FOV stays fixed at wide
+      const yaw = originYaw + 360 * ease((el-P1)/P2);
+      venueFOV = venueFOVTarget = FOV_TOUR;
+      venueYaw = venueYawTarget = yaw;
 
     } else {
-      // Done — snap clean
-      venueYawTarget = originYaw;
-      venueYaw       = originYaw;
-      venueFOVTarget = originFOV;
-      venueFOV       = originFOV;
-      panCamera3.rotation.y = -originYaw * D2R;
+      // Zoom in — yaw stays at origin+360 (same visual position)
+      const fov = FOV_TOUR + (originFOV - FOV_TOUR) * ease((el-P1-P2)/P3);
+      venueFOV = venueFOVTarget = fov;
+      venueYaw = venueYawTarget = originYaw + 360;
+    }
+
+    // Drive camera directly — skip lerp
+    panCamera3.fov = venueFOV;
+    panCamera3.rotation.y = -venueYaw * D2R;
+    panCamera3.updateProjectionMatrix();
+
+    if(el >= TOTAL){
+      // Clean snap back
+      venueFOV = venueFOVTarget = originFOV;
+      venueYaw = venueYawTarget = originYaw;
       panCamera3.fov = originFOV;
+      panCamera3.rotation.y = -originYaw * D2R;
       panCamera3.updateProjectionMatrix();
       cancelVenueTour();
       return;
@@ -863,13 +854,12 @@ function getEmojiImage(emoji, size=120){
 }
 
 function handleCostumeBtn(){
+  log('handleCostumeBtn: venueMode='+venueMode+' trayVisible='+trayVisible+' lyricsRunning='+lyricsRunning, 'info');
   if(venueMode && !lyricsRunning){
-    // In a venue — show or re-show the effect tray
     if(!trayVisible){
       resetTrayForNewVenue();
       showVenueEffectTray(selectedVenueId);
     }
-    // Also show the full picker beneath for PC testing
     showCostumePicker();
   } else {
     showCostumePicker();
@@ -1822,9 +1812,10 @@ let pushCooldown   = false;
 
 // ── Show/hide tray ──
 function showVenueEffectTray(venueId){
-  if(trayLocked) return;
+  if(trayLocked){ log('showVenueEffectTray: locked — skipping','warn'); return; }
   const slots = VENUE_EFFECTS[venueId];
-  if(!slots || !slots.length) return;
+  log('showVenueEffectTray: venueId='+venueId+' slots='+(slots?slots.length:'none'), 'info');
+  if(!slots || !slots.length){ log('showVenueEffectTray: no slots for this venue','warn'); return; }
 
   trayVenueId = venueId;
   traySlots   = slots.map(id => id ? DEEPAR_EFFECTS.find(e=>e.id===id)||null : null);
@@ -3707,15 +3698,18 @@ function renderLoop(){
     if(fc%300===0) log('renderLoop audience: venueMode='+venueMode+' panReady='+panReady+' panRenderer='+!!panRenderer+' viewMode='+viewMode+' segOk='+segOk+' segPending='+(segPending?'yes':'null')+' accessories='+activeAccessories.size, 'info');
     if(venueMode && panReady && panRenderer){
       // Venue panorama background + singer on top
-      venueFOV = lerp(venueFOV, venueFOVTarget, FOV_SMOOTH);
-      if(Math.abs(venueFOV - panCamera3.fov) > 0.05){
-        panCamera3.fov = venueFOV;
-        panCamera3.updateProjectionMatrix();
+      if(!tourActive){
+        // Normal lerp — only when tour isn't driving values directly
+        venueFOV = lerp(venueFOV, venueFOVTarget, FOV_SMOOTH);
+        if(Math.abs(venueFOV - panCamera3.fov) > 0.05){
+          panCamera3.fov = venueFOV;
+          panCamera3.updateProjectionMatrix();
+        }
+        venueYaw   = lerp(venueYaw,   venueYawTarget,   SMOOTH);
+        venuePitch = lerp(venuePitch, venuePitchTarget, SMOOTH);
+        panCamera3.rotation.y = -venueYaw   * D2R;
+        panCamera3.rotation.x = -venuePitch * D2R;
       }
-      venueYaw   = lerp(venueYaw,   venueYawTarget,   SMOOTH);
-      venuePitch = lerp(venuePitch, venuePitchTarget, SMOOTH);
-      panCamera3.rotation.y = -venueYaw   * D2R;
-      panCamera3.rotation.x = -venuePitch * D2R;
       // Update 3D venue effects before rendering
       if(venueEffects3D) venueEffects3D.update();
       panRenderer.render(panScene, panCamera3);
