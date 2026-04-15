@@ -285,7 +285,7 @@
 
       <!-- Non-manager waiting message -->
       <div id="waiting-msg" style="padding:24px 16px;text-align:center;">
-        <div style="font-size:var(--text-sm);color:var(--color-text-faint);letter-spacing:var(--tracking-wider);">Waiting for manager to start...</div>
+        <div style="font-size:var(--text-sm);color:var(--color-text-faint);letter-spacing:var(--tracking-wider);">Waiting for <span id="manager-name-display" style="color:var(--color-gold-dim);">the manager</span> to start the game</div>
       </div>
     </div>
 
@@ -341,7 +341,7 @@
 </div>
 
 <button id="last-card-btn" onclick="lcDeclareLastCard()">Last Card!</button>
-<div class="ver">v2.49</div>
+<div class="ver">v2.50</div>
 
 <script>
 'use strict';
@@ -414,8 +414,9 @@ async function doJoin() {
     catch(e) { streamId = null; }
     agoraReady = true;
 
-    // First to join = manager
-    isManager = agoraClient.remoteUsers.length === 0;
+    // Manager = whoever scanned the original Games QR from tv.html (?mgr=1)
+    // Invited players arrive via invite link which never has mgr=1
+    isManager = urlP.get('mgr') === '1';
     if (isManager) {
       document.getElementById('manager-bar').classList.add('visible');
     }
@@ -457,6 +458,11 @@ function handleMessage(uid, data) {
         const active = lobbyPlayers.filter(p => p.status === 'active').length;
         const status = active < playerLimit ? 'active' : 'queue';
         lobbyPlayers.push({ uid, name: msg.name, isManager: msg.isManager, status });
+      }
+      // Update manager name in waiting message
+      if (msg.isManager) {
+        const el = document.getElementById('manager-name-display');
+        if (el) el.textContent = msg.name;
       }
       renderRoster();
       // Send my info back so they know about me
@@ -613,12 +619,19 @@ function getInviteLink() {
 }
 
 function shareInvite() {
-  const link = getInviteLink();
-  const text = `Join my ${currentGame === 'lastcard' ? 'Last Card' : 'game'} on Elsewhere!\n${link}`;
+  const link     = getInviteLink();
+  const gameName = currentGame === 'lastcard' ? 'Last Card' : currentGame === 'trivia' ? 'Trivia Night' : 'a game';
+  const subject  = `${myName} has invited you to play ${gameName} — JOIN NOW!`;
+  const body     = `Tap the link to join:\n${link}`;
   if (navigator.share) {
-    navigator.share({ title: 'Join Elsewhere Games', text, url: link }).catch(()=>{});
+    // Use title only for subject — don't include link in both text AND url
+    navigator.share({ title: subject, text: body, url: link }).catch(() => {
+      // Fallback if share fails
+      navigator.clipboard.writeText(link).then(() => showToast('Link copied!'));
+    });
   } else {
-    navigator.clipboard.writeText(link).then(() => showToast('Link copied!'));
+    // Desktop: copy link only
+    navigator.clipboard.writeText(link).then(() => showToast('Link copied!')).catch(()=>{});
   }
 }
 
@@ -633,8 +646,9 @@ function sendCalendarInvite() {
   const end    = new Date(start.getTime() + 60 * 60 * 1000); // 1hr
   const fmt    = d => d.toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z';
   const link   = getInviteLink();
-  const title  = encodeURIComponent('Elsewhere Games — ' + (currentGame === 'lastcard' ? 'Last Card' : 'Trivia Night'));
-  const detail = encodeURIComponent('Join the game: ' + link);
+  const gameName = currentGame === 'lastcard' ? 'Last Card' : currentGame === 'trivia' ? 'Trivia Night' : 'Games';
+  const title  = encodeURIComponent(myName + ' has invited you to play ' + gameName + ' — JOIN NOW!');
+  const detail = encodeURIComponent('Tap to join: ' + link);
   const cal    = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${detail}&location=${encodeURIComponent(link)}`;
   window.open(cal, '_blank');
 }
