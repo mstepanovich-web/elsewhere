@@ -264,6 +264,8 @@
 
     <div class="qr-header">Scan a code on your phone to begin</div>
 
+    <div id="tv-debug" style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--color-green);letter-spacing:var(--tracking-normal);margin-bottom:16px;text-align:center;min-height:20px;"></div>
+
     <div class="qr-grid">
 
       <div class="qr-tile qr-tile--karaoke" id="qr-tile-karaoke" style="cursor:pointer;" title="Click to open Stage on this TV">
@@ -424,15 +426,20 @@
     // singer.html posts 'karaoke-scanned' when it loads with the room code
     // fashion/stylist.html posts 'fashion-scanned' when it loads with the room code
     const bc = new BroadcastChannel('elsewhere_tv_' + roomCode);
+    tvLog('Listening on channel: elsewhere_tv_' + roomCode);
     bc.onmessage = (e) => {
+      tvLog('Received: ' + e.data.type);
       if (e.data.type === 'karaoke-scanned') {
+        tvLog('→ Navigating to stage...');
         bc.close();
         window.location.href = stageUrl;
       } else if (e.data.type === 'fashion-scanned') {
+        tvLog('→ Navigating to fashion display...');
         bc.close();
         window.location.href = fashionUrl;
       }
     };
+    bc.onerror = (e) => tvLog('BroadcastChannel error: ' + e);
   });
 
   // ═══════════════════════════════════════
@@ -479,6 +486,11 @@
     ctx.textAlign = 'center';
     ctx.fillText('QR loading…', size / 2, size / 2 - 6);
     ctx.fillText(url.slice(0, 32), size / 2, size / 2 + 12);
+  }
+  function tvLog(msg) {
+    console.log('[TV]', msg);
+    const el = document.getElementById('tv-debug');
+    if (el) el.textContent = msg;
   }
   </script>
 
