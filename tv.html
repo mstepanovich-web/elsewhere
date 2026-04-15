@@ -253,7 +253,7 @@
     </div>
 
     <button class="setup-btn" id="setup-continue">Continue →</button>
-    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.38</div>
+    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.39</div>
 
   </div>
 
@@ -487,13 +487,50 @@
     ctx.fillText('QR loading…', size / 2, size / 2 - 6);
     ctx.fillText(url.slice(0, 32), size / 2, size / 2 + 12);
   }
+  const _logs = [];
   function tvLog(msg) {
+    const ts = new Date().toISOString().slice(11,19);
+    const line = ts + ' ' + msg;
+    _logs.push(line);
     console.log('[TV]', msg);
+    // Update status line on QR screen
     const el = document.getElementById('tv-debug');
     if (el) el.textContent = msg;
+    // Append to log panel
+    const panel = document.getElementById('log-lines');
+    if (panel) {
+      const div = document.createElement('div');
+      div.style.borderBottom = '1px solid rgba(255,255,255,.06)';
+      div.style.padding = '3px 0';
+      div.textContent = line;
+      panel.appendChild(div);
+      panel.scrollTop = panel.scrollHeight;
+    }
+  }
+  function toggleLog() {
+    const p = document.getElementById('log-panel');
+    p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  }
+  function copyLog() {
+    navigator.clipboard.writeText(_logs.join('\n')).then(() => {
+      const btn = document.querySelector('#log-panel span:last-child');
+      if (btn) { btn.textContent = 'COPIED ✓'; setTimeout(() => btn.textContent = 'COPY', 2000); }
+    });
   }
   </script>
 
+
+
+  <!-- Debug log panel -->
+  <div id="log-toggle" onclick="toggleLog()" style="position:fixed;bottom:16px;left:20px;z-index:999;font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);cursor:pointer;padding:4px 8px;border:1px solid var(--color-border-dim);border-radius:var(--radius-sm);">LOG</div>
+
+  <div id="log-panel" style="display:none;position:fixed;bottom:40px;left:20px;right:20px;z-index:998;background:var(--color-overlay);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;font-family:var(--font-mono);font-size:11px;color:var(--color-green);max-height:40vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+      <span style="color:var(--color-text-faint);letter-spacing:var(--tracking-wider);text-transform:uppercase;font-size:10px;">Debug Log</span>
+      <span onclick="copyLog()" style="color:var(--color-gold-dim);cursor:pointer;letter-spacing:var(--tracking-wider);font-size:10px;">COPY</span>
+    </div>
+    <div id="log-lines"></div>
+  </div>
 
 </body>
 </html>
