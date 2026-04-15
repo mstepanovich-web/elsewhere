@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Elsewhere · Games</title>
+  <link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
+  <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--color-bg); color: var(--color-text); font-family: var(--font-ui); overflow: hidden; height: 100dvh; display: flex; flex-direction: column; }
+    .screen { position: fixed; inset: 0; display: none; flex-direction: column; overflow-y: auto; padding: env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0); }
+    .screen.active { display: flex; }
+
+    /* ── Manager bar ── */
+    #manager-bar { display: none; flex-direction: row; gap: 8px; padding: 10px 16px; background: rgba(255,200,80,.08); border-bottom: 1px solid var(--color-border); flex-shrink: 0; flex-wrap: wrap; align-items: center; }
+    #manager-bar.visible { display: flex; }
+    .mgr-label { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-gold); font-family: var(--font-mono); width: 100%; }
+    .mgr-btn { padding: 7px 14px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; cursor: pointer; font-family: var(--font-ui); transition: all var(--transition-fast); }
+    .mgr-btn:active { background: var(--color-gold-faint); }
+    .mgr-btn.danger { border-color: var(--color-red-faint); color: var(--color-red); }
+
+    /* ── Join screen ── */
+    #screen-join { align-items: center; justify-content: center; gap: 20px; padding: 40px 24px; }
+    .join-title { font-family: var(--font-display); font-size: clamp(38px,12vw,64px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text); font-style: italic; }
+    .join-sub { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); }
+    .join-field { width: 100%; max-width: 300px; display: flex; flex-direction: column; gap: 6px; }
+    .join-label { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-text-faint); font-family: var(--font-mono); }
+    .join-input { background: var(--color-gold-ghost); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xl); padding: 12px 16px; letter-spacing: .2em; text-transform: uppercase; text-align: center; outline: none; width: 100%; }
+    .join-input:focus { border-color: var(--color-border-bright); }
+    .join-btn { width: 100%; max-width: 300px; padding: 16px; border-radius: var(--radius-pill); background: var(--color-gold-dim); border: none; color: var(--color-bg); font-size: var(--text-sm); letter-spacing: var(--tracking-wider); text-transform: uppercase; font-weight: 600; cursor: pointer; }
+    .join-btn:disabled { opacity: .35; }
+
+    /* ── Lobby (game picker) ── */
+    #screen-lobby { padding: 20px 16px; gap: 12px; }
+    .lobby-title { font-family: var(--font-display); font-size: 28px; font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text); padding: 8px 0; }
+    .lobby-sub { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); margin-bottom: 8px; }
+    .game-card { padding: 16px 18px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-dim); background: var(--color-surface); cursor: pointer; transition: all var(--transition-fast); display: flex; align-items: center; gap: 14px; }
+    .game-card:active { background: var(--color-gold-faint); border-color: var(--color-border); }
+    .game-card-icon { font-size: 28px; flex-shrink: 0; }
+    .game-card-name { font-family: var(--font-display); font-size: 20px; font-weight: 300; letter-spacing: var(--tracking-normal); color: var(--color-text); }
+    .game-card-desc { font-size: var(--text-xs); color: var(--color-text-faint); letter-spacing: var(--tracking-normal); margin-top: 2px; }
+    .game-card.disabled { opacity: .4; pointer-events: none; }
+    .home-btn { margin-top: auto; padding: 14px; text-align: center; font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-text-faint); cursor: pointer; }
+
+    /* ── Waiting for game ── */
+    #screen-waiting { align-items: center; justify-content: center; gap: 16px; padding: 40px 24px; }
+    .wait-title { font-family: var(--font-display); font-size: clamp(28px,8vw,48px); font-weight: 300; color: var(--color-text); text-align: center; }
+    .wait-sub { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); text-align: center; }
+    .wait-players { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; }
+    .wait-player { padding: 10px 16px; border-radius: var(--radius-md); border: 1px solid var(--color-border-dim); background: var(--color-surface); font-size: var(--text-sm); color: var(--color-text-dim); display: flex; align-items: center; justify-content: space-between; }
+    .wait-player.me { border-color: var(--color-gold-dim); color: var(--color-text); }
+
+    /* ── Last Card ── */
+    #screen-lastcard { padding: 0; gap: 0; }
+    .lc-hand-label { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); padding: 12px 16px 4px; }
+    .lc-hand { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px 12px; flex: 1; align-content: flex-start; overflow-y: auto; }
+    .lc-card { width: 58px; height: 86px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,.15); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 15px; font-weight: 400; cursor: pointer; transition: all 0.2s; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,.4); -webkit-user-select: none; }
+    .lc-card.red   { background: #c0392b; color: #fff; }
+    .lc-card.black { background: #1a1a2e; color: #eee; }
+    .lc-card.wild  { background: linear-gradient(135deg,#8e44ad,#c0392b,#27ae60,#2980b9); color: #ffd700; }
+    .lc-card.playable { border-color: var(--color-gold); box-shadow: 0 0 12px rgba(255,200,80,.3); transform: translateY(-4px); }
+    .lc-card.selected { border-color: var(--color-green); box-shadow: 0 0 16px rgba(0,232,122,.4); transform: translateY(-8px); }
+    .lc-card.disabled { opacity: 0.35; cursor: default; transform: none; }
+    .lc-actions { display: flex; gap: 8px; padding: 10px 16px; flex-shrink: 0; border-top: 1px solid var(--color-border-dim); }
+    .lc-action-btn { flex: 1; padding: 13px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; cursor: pointer; text-align: center; transition: all var(--transition-fast); }
+    .lc-action-btn.primary { background: var(--color-gold-dim); color: var(--color-bg); border-color: var(--color-gold); font-weight: 600; }
+    .lc-action-btn:disabled { opacity: .35; pointer-events: none; }
+    .lc-status { padding: 8px 16px; font-size: var(--text-sm); color: var(--color-text-faint); letter-spacing: var(--tracking-normal); text-align: center; }
+    .lc-status.your-turn { color: var(--color-gold); font-weight: 500; }
+
+    /* Suit chooser */
+    #suit-chooser { display: none; position: fixed; inset: 0; background: var(--color-overlay); align-items: center; justify-content: center; z-index: 500; }
+    #suit-chooser.show { display: flex; }
+    .suit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 32px; background: var(--color-surface); border-radius: var(--radius-xl); border: 1px solid var(--color-border); }
+    .suit-choice { width: 80px; height: 80px; border-radius: var(--radius-lg); border: 1.5px solid var(--color-border); background: var(--color-bg-mid); font-size: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+    .suit-choice:active { background: var(--color-gold-faint); border-color: var(--color-gold); transform: scale(1.05); }
+
+    /* Last Card button */
+    #last-card-btn { display: none; position: fixed; bottom: 100px; right: 16px; z-index: 400; padding: 12px 20px; border-radius: var(--radius-pill); background: var(--color-red); border: none; color: #fff; font-size: var(--text-sm); letter-spacing: var(--tracking-wider); text-transform: uppercase; font-weight: 600; cursor: pointer; box-shadow: 0 4px 20px rgba(232,25,44,.4); animation: lc-pulse 1s infinite; }
+    @keyframes lc-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(232,25,44,.5)} 50%{box-shadow:0 0 0 8px rgba(232,25,44,0)} }
+
+    /* ── Trivia ── */
+    #screen-trivia { padding: 0; gap: 0; }
+    .trivia-setup { padding: 20px 16px; display: flex; flex-direction: column; gap: 14px; }
+    .trivia-question-screen { padding: 20px 16px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+    .trivia-q-text { font-family: var(--font-display); font-size: clamp(18px,5vw,26px); font-weight: 300; letter-spacing: var(--tracking-tight); color: var(--color-text); line-height: 1.35; }
+    .trivia-options { display: flex; flex-direction: column; gap: 10px; }
+    .trivia-opt { padding: 14px 16px; border-radius: var(--radius-md); border: 1.5px solid var(--color-border-dim); background: var(--color-surface); display: flex; align-items: center; gap: 12px; cursor: pointer; transition: all 0.2s; -webkit-user-select: none; }
+    .trivia-opt:active { background: var(--color-gold-faint); }
+    .trivia-opt.selected { border-color: var(--color-gold); background: var(--color-gold-faint); }
+    .trivia-opt.correct { border-color: var(--color-green); background: var(--color-green-faint); }
+    .trivia-opt.wrong   { opacity: .45; }
+    .trivia-opt-letter { font-family: var(--font-mono); font-size: var(--text-md); font-weight: 500; color: var(--color-gold); min-width: 24px; }
+    .trivia-opt-text   { font-size: var(--text-sm); color: var(--color-text-dim); }
+    .trivia-timer-bar { height: 4px; background: var(--color-surface); border-radius: var(--radius-pill); overflow: hidden; width: 100%; }
+    .trivia-timer-fill { height: 100%; background: var(--color-gold); border-radius: var(--radius-pill); transition: width 1s linear; }
+    .trivia-status { font-size: var(--text-sm); color: var(--color-text-faint); text-align: center; padding: 8px 0; }
+    .trivia-status.answered { color: var(--color-green); }
+
+    /* Category picker */
+    .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .cat-card { padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--color-border-dim); background: var(--color-surface); text-align: center; cursor: pointer; transition: all 0.2s; }
+    .cat-card:active, .cat-card.selected { border-color: var(--color-gold); background: var(--color-gold-faint); }
+    .cat-icon { font-size: 24px; margin-bottom: 4px; }
+    .cat-name { font-size: var(--text-xs); letter-spacing: var(--tracking-normal); color: var(--color-text-dim); }
+
+    /* ── Version ── */
+    .ver { position: fixed; bottom: 8px; right: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--tracking-wider); color: var(--color-gold); z-index: 50; pointer-events: none; }
+  </style>
+</head>
+<body>
+
+<!-- Manager bar (shown only to manager) -->
+<div id="manager-bar">
+  <div class="mgr-label">★ Manager</div>
+  <button class="mgr-btn" id="mgr-start" onclick="managerStart()">Start</button>
+  <button class="mgr-btn" id="mgr-skip" onclick="managerSkip()" style="display:none">Skip</button>
+  <button class="mgr-btn" id="mgr-next" onclick="managerNext()" style="display:none">Next →</button>
+  <button class="mgr-btn" onclick="showLobby()">Switch Game</button>
+  <button class="mgr-btn danger" onclick="managerEndSession()">End</button>
+</div>
+
+<!-- ── JOIN ── -->
+<div id="screen-join" class="screen active">
+  <div class="join-title">Games</div>
+  <div class="join-sub">Enter your name and room code</div>
+  <div class="join-field">
+    <div class="join-label">Your Name</div>
+    <input class="join-input" id="join-name" type="text" placeholder="Name" maxlength="12" style="text-transform:none;letter-spacing:normal;font-size:var(--text-lg);">
+  </div>
+  <div class="join-field">
+    <div class="join-label">Room Code</div>
+    <input class="join-input" id="join-code" type="text" placeholder="ABCDEF" maxlength="6" autocomplete="off" spellcheck="false">
+  </div>
+  <button class="join-btn" id="join-btn" onclick="doJoin()" disabled>Join →</button>
+</div>
+
+<!-- ── LOBBY (game picker) ── -->
+<div id="screen-lobby" class="screen">
+  <div class="lobby-title">Choose a Game</div>
+  <div class="lobby-sub">All players switch at the same time</div>
+
+  <div class="game-card" onclick="selectGame('lastcard')">
+    <div class="game-card-icon">🃏</div>
+    <div>
+      <div class="game-card-name">Last Card</div>
+      <div class="game-card-desc">Uno-compatible · 2–8 players · Elsewhere rules</div>
+    </div>
+  </div>
+
+  <div class="game-card" onclick="selectGame('trivia')">
+    <div class="game-card-icon">🧠</div>
+    <div>
+      <div class="game-card-name">Trivia Night</div>
+      <div class="game-card-desc">AI-generated questions · 2–10 players</div>
+    </div>
+  </div>
+
+  <div class="game-card disabled">
+    <div class="game-card-icon">🎵</div>
+    <div>
+      <div class="game-card-name">Name That Tune</div>
+      <div class="game-card-desc">Coming soon</div>
+    </div>
+  </div>
+
+  <div class="game-card disabled">
+    <div class="game-card-icon">⚡</div>
+    <div>
+      <div class="game-card-name">Speed Quiz</div>
+      <div class="game-card-desc">Coming soon</div>
+    </div>
+  </div>
+
+  <div class="home-btn" onclick="window.location.href='https://mstepanovich-web.github.io/elsewhere/tv.html'">⌂ Back to Home</div>
+</div>
+
+<!-- ── WAITING ── -->
+<div id="screen-waiting" class="screen">
+  <div class="wait-title" id="wait-game-name">Waiting...</div>
+  <div class="wait-sub" id="wait-sub">Waiting for manager to start</div>
+  <div class="wait-players" id="wait-players"></div>
+</div>
+
+<!-- ── LAST CARD ── -->
+<div id="screen-lastcard" class="screen">
+  <div class="lc-status" id="lc-status">Waiting...</div>
+  <div class="lc-hand-label">Your Hand</div>
+  <div class="lc-hand" id="lc-hand"></div>
+  <div class="lc-actions">
+    <button class="lc-action-btn" id="lc-draw-btn" onclick="lcDraw()">Draw Card</button>
+    <button class="lc-action-btn primary" id="lc-play-btn" onclick="lcPlay()" disabled>Play Card</button>
+  </div>
+</div>
+
+<!-- ── TRIVIA ── -->
+<div id="screen-trivia" class="screen">
+  <!-- Setup (manager only) -->
+  <div class="trivia-setup" id="trivia-setup" style="display:none;">
+    <div class="lobby-title">Trivia Setup</div>
+    <div class="join-label">Category</div>
+    <div class="cat-grid" id="cat-grid"></div>
+    <div class="join-label" style="margin-top:8px;">Difficulty</div>
+    <div style="display:flex;gap:8px;" id="diff-row"></div>
+    <button class="join-btn" id="trivia-generate-btn" onclick="triviaGenerate()">Generate Questions →</button>
+    <div id="trivia-gen-status" style="font-size:var(--text-xs);color:var(--color-text-faint);text-align:center;min-height:20px;"></div>
+  </div>
+
+  <!-- Question screen -->
+  <div class="trivia-question-screen" id="trivia-game" style="display:none;">
+    <div class="trivia-timer-bar"><div class="trivia-timer-fill" id="trivia-timer-fill" style="width:100%"></div></div>
+    <div class="trivia-q-text" id="trivia-q-text">—</div>
+    <div class="trivia-options" id="trivia-options"></div>
+    <div class="trivia-status" id="trivia-status"></div>
+  </div>
+
+  <!-- Waiting for question -->
+  <div id="trivia-waiting" style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:40px;">
+    <div style="font-family:var(--font-display);font-size:28px;color:var(--color-text-faint);">Waiting...</div>
+    <div style="font-size:var(--text-xs);letter-spacing:.15em;text-transform:uppercase;color:var(--color-text-faint);">Manager is setting up</div>
+  </div>
+</div>
+
+<!-- Suit chooser overlay -->
+<div id="suit-chooser">
+  <div class="suit-grid">
+    <div class="suit-choice" onclick="lcChooseSuit('♠')">♠</div>
+    <div class="suit-choice" onclick="lcChooseSuit('♥')">♥</div>
+    <div class="suit-choice" onclick="lcChooseSuit('♦')">♦</div>
+    <div class="suit-choice" onclick="lcChooseSuit('♣')">♣</div>
+  </div>
+</div>
+
+<!-- Last Card declaration button -->
+<button id="last-card-btn" onclick="lcDeclareLastCard()">Last Card!</button>
+
+<div class="ver">v2.45</div>
+
+<script>
+'use strict';
+
+// ── Config ──────────────────────────────────────────────────
+const AGORA_APP_ID = 'b2c6543a9ed946829e6526cb68c7efc9';
+const CHAN_PREFIX  = 'elsewhere_g';
+const BASE_URL     = 'https://mstepanovich-web.github.io/elsewhere';
+const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
+
+// ── State ───────────────────────────────────────────────────
+const urlParams  = new URLSearchParams(location.search);
+let roomCode     = (urlParams.get('room') || '').toUpperCase();
+let myName       = '';
+let isManager    = false;
+let agoraClient  = null;
+let streamId     = null;
+let agoraReady   = false;
+let currentGame  = null;
+let gameState    = null;
+let myHand       = [];
+let selectedCard = null;
+let players      = {};   // uid → name
+let triviaCategory = 'general';
+let triviaDiff     = 'Medium';
+let timerInterval  = null;
+
+// ── Join screen validation ──────────────────────────────────
+const nameInput = document.getElementById('join-name');
+const codeInput = document.getElementById('join-code');
+const joinBtn   = document.getElementById('join-btn');
+
+nameInput.addEventListener('input', checkJoin);
+codeInput.addEventListener('input', () => {
+  codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  checkJoin();
+});
+
+function checkJoin() {
+  joinBtn.disabled = !(nameInput.value.trim().length >= 1 && codeInput.value.length >= 4);
+}
+
+// Pre-fill room code from URL
+if (roomCode) { codeInput.value = roomCode; checkJoin(); }
+
+// ── Join ────────────────────────────────────────────────────
+async function doJoin() {
+  myName   = nameInput.value.trim();
+  roomCode = codeInput.value.toUpperCase();
+  joinBtn.disabled = true;
+  joinBtn.textContent = 'Joining...';
+
+  agoraClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+
+  agoraClient.on('user-joined', u => {
+    log('User joined: ' + u.uid);
+  });
+  agoraClient.on('user-left', u => {
+    delete players[u.uid];
+    renderWaitPlayers();
+    log('User left: ' + u.uid);
+  });
+  agoraClient.on('stream-message', (uid, data) => {
+    handleMessage(uid, data);
+  });
+
+  try {
+    await agoraClient.join(AGORA_APP_ID, CHAN_PREFIX + roomCode, null, null);
+    const myUid = agoraClient.uid;
+    log('Joined as uid:' + myUid);
+
+    try {
+      streamId = await agoraClient.createDataStream({ reliable: true, ordered: true });
+    } catch(e) { streamId = null; }
+
+    agoraReady = true;
+
+    // First to join is manager
+    const existingUsers = agoraClient.remoteUsers;
+    isManager = existingUsers.length === 0;
+
+    if (isManager) {
+      document.getElementById('manager-bar').classList.add('visible');
+      showLobby();
+    } else {
+      goTo('screen-waiting');
+      document.getElementById('wait-sub').textContent = 'Waiting for manager to start a game';
+    }
+
+    // Announce join
+    send({ type: 'player-join', name: myName, isManager });
+
+    players[myUid] = myName;
+    renderWaitPlayers();
+
+  } catch(e) {
+    log('Join error: ' + e.message);
+    joinBtn.disabled = false;
+    joinBtn.textContent = 'Join →';
+  }
+}
+
+// ── Messaging ───────────────────────────────────────────────
+function send(obj) {
+  if (!agoraReady || streamId === null) return;
+  const msg   = JSON.stringify({ ...obj, _from: agoraClient.uid, _name: myName });
+  const bytes = new TextEncoder().encode(msg);
+  agoraClient.sendStreamMessage(streamId, bytes).catch(() => {});
+}
+
+function handleMessage(uid, data) {
+  try {
+    const text = new TextDecoder().decode(data);
+    const msg  = JSON.parse(text);
+    log('← ' + msg.type);
+
+    if (msg.type === 'player-join') {
+      players[uid] = msg.name;
+      renderWaitPlayers();
+    }
+
+    if (msg.type === 'game-selected') {
+      currentGame = msg.game;
+      document.getElementById('wait-game-name').textContent =
+        msg.game === 'lastcard' ? 'Last Card' : 'Trivia Night';
+      goTo('screen-waiting');
+      if (isManager) {
+        document.getElementById('wait-sub').textContent = 'Tap Start when everyone is ready';
+        document.getElementById('mgr-start').style.display = 'block';
+      }
+    }
+
+    if (msg.type === 'game-start') {
+      gameState = msg.state;
+      if (currentGame === 'lastcard') startLastCard();
+      if (currentGame === 'trivia')   startTrivia(msg.state);
+    }
+
+    if (msg.type === 'game-state') {
+      gameState = msg.state;
+      if (currentGame === 'lastcard') renderLastCard();
+      if (currentGame === 'trivia')   renderTrivia();
+    }
+
+    if (msg.type === 'switch-game') {
+      showLobby();
+    }
+
+    if (msg.type === 'trivia-questions-ready') {
+      if (isManager) {
+        document.getElementById('trivia-gen-status').textContent = '✓ Ready! Tap Start.';
+        document.getElementById('mgr-start').style.display = 'block';
+      }
+    }
+
+  } catch(e) { log('Parse error: ' + e.message); }
+}
+
+// ── Screen management ────────────────────────────────────────
+function goTo(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  // Manager bar context
+  document.getElementById('mgr-start').style.display = 'none';
+  document.getElementById('mgr-skip').style.display  = 'none';
+  document.getElementById('mgr-next').style.display  = 'none';
+}
+
+function showLobby() {
+  if (isManager) {
+    goTo('screen-lobby');
+  }
+}
+
+// ── Game selection ───────────────────────────────────────────
+function selectGame(game) {
+  if (!isManager) return;
+  currentGame = game;
+  send({ type: 'game-selected', game });
+  goTo('screen-waiting');
+
+  if (game === 'trivia') {
+    // Manager sets up trivia
+    setTimeout(() => {
+      goTo('screen-trivia');
+      showTriviaSetup();
+    }, 500);
+  } else {
+    document.getElementById('wait-game-name').textContent =
+      game === 'lastcard' ? 'Last Card' : game;
+    document.getElementById('mgr-start').style.display = 'block';
+  }
+}
+
+// ── Manager controls ─────────────────────────────────────────
+function managerStart() {
+  if (currentGame === 'lastcard') managerStartLastCard();
+  if (currentGame === 'trivia')   managerStartTrivia();
+}
+
+function managerSkip() {
+  if (currentGame === 'lastcard') {
+    // Force current player to draw
+    if (!gameState) return;
+    gameState = lcApplyDraw();
+    broadcastState();
+    renderLastCard();
+  }
+  if (currentGame === 'trivia') {
+    send({ type: 'trivia-action', action: { type: 'reveal' } });
+  }
+}
+
+function managerNext() {
+  if (currentGame === 'trivia') {
+    send({ type: 'trivia-action', action: { type: 'next-question' } });
+  }
+}
+
+function managerEndSession() {
+  send({ type: 'switch-game' });
+  showLobby();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LAST CARD
+// ═══════════════════════════════════════════════════════════
+
+const SUITS   = ['♠','♥','♦','♣'];
+const VALUES  = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+
+function buildDeck() {
+  const deck = [];
+  for (const s of SUITS) for (const v of VALUES) deck.push({ suit:s, value:v, id:v+s });
+  deck.push({ suit:null, value:'W',  id:'W1' });
+  deck.push({ suit:null, value:'W',  id:'W2' });
+  deck.push({ suit:null, value:'W4', id:'W4-1' });
+  deck.push({ suit:null, value:'W4', id:'W4-2' });
+  return deck;
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i=a.length-1;i>0;i--) { const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+
+function managerStartLastCard() {
+  const playerNames = [myName, ...Object.values(players).filter(n => n !== myName)];
+  const deck = shuffle(buildDeck());
+  const hands = {};
+  playerNames.forEach(n => { hands[n] = []; });
+
+  let idx = 0;
+  for (let c=0;c<7;c++) for (const n of playerNames) hands[n].push(deck[idx++]);
+
+  let topCard;
+  while (true) { topCard = deck[idx++]; if (!topCard.value.startsWith('W')) break; }
+
+  gameState = {
+    phase: 'playing',
+    players: playerNames,
+    hands,
+    drawPile: deck.slice(idx),
+    discardPile: [topCard],
+    currentSuit: topCard.suit,
+    currentValue: topCard.value,
+    currentPlayerIdx: 0,
+    direction: 1,
+    pendingDraw: 0,
+    lastCard: {},
+    scores: Object.fromEntries(playerNames.map(n => [n,0])),
+    log: [],
+  };
+
+  myHand = [...(gameState.hands[myName] || [])];
+  broadcastState();
+  startLastCard();
+}
+
+function startLastCard() {
+  goTo('screen-lastcard');
+  document.getElementById('mgr-skip').style.display = isManager ? 'block' : 'none';
+  renderLastCard();
+}
+
+function renderLastCard() {
+  if (!gameState) return;
+  const s = gameState;
+  const myTurn = s.players[s.currentPlayerIdx] === myName;
+
+  // Update my hand from state
+  if (s.hands[myName]) myHand = [...s.hands[myName]];
+
+  // Status
+  const statusEl = document.getElementById('lc-status');
+  if (s.phase === 'round-end') {
+    statusEl.textContent = (s.winner === myName ? '🎉 You win!' : s.winner + ' wins!') + ' Round over.';
+    statusEl.className = 'lc-status';
+    if (isManager) {
+      document.getElementById('mgr-next').style.display = 'block';
+      document.getElementById('mgr-next').onclick = () => managerNextRound();
+    }
+  } else if (myTurn) {
+    const pending = s.pendingDraw > 0;
+    statusEl.textContent = pending ? `Draw ${s.pendingDraw} or stack!` : 'Your turn!';
+    statusEl.className = 'lc-status your-turn';
+  } else {
+    statusEl.textContent = (s.players[s.currentPlayerIdx] || '?') + "'s turn";
+    statusEl.className = 'lc-status';
+  }
+
+  // Last Card button
+  const lcBtn = document.getElementById('last-card-btn');
+  lcBtn.style.display = (myHand.length === 1 && !s.lastCard[myName]) ? 'block' : 'none';
+
+  // Hand
+  renderHand(myTurn, s);
+
+  // Action buttons
+  document.getElementById('lc-draw-btn').disabled = !myTurn;
+  document.getElementById('lc-play-btn').disabled = !(myTurn && selectedCard);
+}
+
+function renderHand(myTurn, s) {
+  const handEl = document.getElementById('lc-hand');
+  handEl.innerHTML = '';
+  selectedCard = null;
+  document.getElementById('lc-play-btn').disabled = true;
+
+  myHand.forEach(card => {
+    const playable = myTurn && canPlay(s, card);
+    const isRed  = card.suit === '♥' || card.suit === '♦';
+    const isWild = !card.suit;
+    const cls    = isWild ? 'wild' : isRed ? 'red' : 'black';
+    const label  = card.value + (card.suit || '');
+
+    const el = document.createElement('div');
+    el.className = `lc-card ${cls} ${playable ? 'playable' : 'disabled'}`;
+    el.textContent = label;
+    el.dataset.id  = card.id;
+
+    if (playable) {
+      el.onclick = () => {
+        document.querySelectorAll('.lc-card.selected').forEach(c => c.classList.remove('selected'));
+        el.classList.add('selected');
+        selectedCard = card;
+        document.getElementById('lc-play-btn').disabled = false;
+      };
+    }
+    handEl.appendChild(el);
+  });
+}
+
+function canPlay(s, card) {
+  if (s.pendingDraw > 0) return card.value === '2' || card.value === 'W4';
+  if (card.value.startsWith('W')) return true;
+  return card.suit === s.currentSuit || card.value === s.currentValue;
+}
+
+function lcPlay() {
+  if (!selectedCard || !gameState) return;
+  if (selectedCard.value.startsWith('W')) {
+    document.getElementById('suit-chooser').classList.add('show');
+  } else {
+    doPlayCard(selectedCard, null);
+  }
+}
+
+function lcChooseSuit(suit) {
+  document.getElementById('suit-chooser').classList.remove('show');
+  if (selectedCard) doPlayCard(selectedCard, suit);
+}
+
+function doPlayCard(card, chosenSuit) {
+  const s = JSON.parse(JSON.stringify(gameState));
+  const pid = myName;
+
+  // Remove from hand
+  s.hands[pid] = s.hands[pid].filter(c => c.id !== card.id);
+  s.discardPile.push(card);
+  s.currentValue = card.value;
+
+  if (card.value === '2') {
+    s.pendingDraw += 2; s.currentSuit = card.suit; advance(s);
+  } else if (card.value === 'W4') {
+    s.pendingDraw += 4; s.currentSuit = chosenSuit || s.currentSuit; advance(s);
+  } else if (card.value === 'W') {
+    s.currentSuit = chosenSuit || s.currentSuit; advance(s);
+  } else if (card.value === 'A') {
+    s.currentSuit = card.suit; advance(s); advance(s);
+  } else if (card.value === 'J') {
+    s.direction *= -1; s.currentSuit = card.suit; advance(s);
+  } else {
+    s.currentSuit = card.suit; advance(s);
+  }
+
+  if (s.hands[pid].length === 0) {
+    s.phase = 'round-end'; s.winner = pid;
+    let pts = 0;
+    for (const [p, hand] of Object.entries(s.hands)) {
+      if (p === pid) continue;
+      pts += hand.reduce((acc, c) => acc + cardPoints(c), 0);
+    }
+    s.scores[pid] = (s.scores[pid] || 0) + pts;
+  }
+
+  selectedCard = null;
+  gameState = s;
+  broadcastState();
+  renderLastCard();
+}
+
+function lcDraw() {
+  if (!gameState) return;
+  const s = JSON.parse(JSON.stringify(gameState));
+  const pid = myName;
+  const count = s.pendingDraw > 0 ? s.pendingDraw : 1;
+  s.pendingDraw = 0;
+  for (let i=0;i<count;i++) {
+    if (s.drawPile.length === 0) reshuffleDeck(s);
+    if (s.drawPile.length > 0) s.hands[pid].push(s.drawPile.pop());
+  }
+  advance(s);
+  gameState = s;
+  myHand = [...s.hands[myName]];
+  broadcastState();
+  renderLastCard();
+}
+
+function lcApplyDraw() {
+  const s = JSON.parse(JSON.stringify(gameState));
+  const pid = s.players[s.currentPlayerIdx];
+  const count = s.pendingDraw > 0 ? s.pendingDraw : 1;
+  s.pendingDraw = 0;
+  for (let i=0;i<count;i++) {
+    if (s.drawPile.length === 0) reshuffleDeck(s);
+    if (s.drawPile.length > 0) s.hands[pid].push(s.drawPile.pop());
+  }
+  advance(s);
+  return s;
+}
+
+function lcDeclareLastCard() {
+  const s = JSON.parse(JSON.stringify(gameState));
+  s.lastCard[myName] = true;
+  gameState = s;
+  broadcastState();
+  document.getElementById('last-card-btn').style.display = 'none';
+  log('Called Last Card!');
+}
+
+function managerNextRound() {
+  if (!gameState) return;
+  const s = JSON.parse(JSON.stringify(gameState));
+  const playerNames = s.players;
+  const deck = shuffle(buildDeck());
+  const hands = {};
+  playerNames.forEach(n => { hands[n] = []; });
+  let idx = 0;
+  for (let c=0;c<7;c++) for (const n of playerNames) hands[n].push(deck[idx++]);
+  let topCard;
+  while (true) { topCard = deck[idx++]; if (!topCard.value.startsWith('W')) break; }
+
+  gameState = { ...s, phase:'playing', hands, drawPile:deck.slice(idx),
+    discardPile:[topCard], currentSuit:topCard.suit, currentValue:topCard.value,
+    currentPlayerIdx:0, direction:1, pendingDraw:0, lastCard:{}, winner:null };
+
+  myHand = [...gameState.hands[myName]];
+  broadcastState();
+  document.getElementById('mgr-next').style.display = 'none';
+  renderLastCard();
+}
+
+function advance(s) {
+  s.currentPlayerIdx = (s.currentPlayerIdx + s.direction + s.players.length) % s.players.length;
+}
+
+function reshuffleDeck(s) {
+  const top = s.discardPile.pop();
+  s.drawPile = shuffle(s.discardPile);
+  s.discardPile = [top];
+}
+
+function cardPoints(card) {
+  if (['J','Q','K','A'].includes(card.value) || card.value === '10') return 10;
+  if (card.value.startsWith('W')) return 20;
+  return parseInt(card.value) || 0;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TRIVIA
+// ═══════════════════════════════════════════════════════════
+
+const CATEGORIES = [
+  { id:'general',   label:'General',    emoji:'🧠' },
+  { id:'music',     label:'Music',      emoji:'🎵' },
+  { id:'movies',    label:'Movies & TV',emoji:'🎬' },
+  { id:'sports',    label:'Sports',     emoji:'⚽' },
+  { id:'science',   label:'Science',    emoji:'🔬' },
+  { id:'history',   label:'History',    emoji:'📜' },
+  { id:'food',      label:'Food',       emoji:'🍕' },
+  { id:'geography', label:'Geography',  emoji:'🌍' },
+  { id:'pop',       label:'Pop Culture',emoji:'⭐' },
+  { id:'tech',      label:'Tech',       emoji:'💻' },
+];
+
+function showTriviaSetup() {
+  document.getElementById('trivia-setup').style.display  = 'flex';
+  document.getElementById('trivia-game').style.display   = 'none';
+  document.getElementById('trivia-waiting').style.display = 'none';
+
+  // Category grid
+  const catGrid = document.getElementById('cat-grid');
+  catGrid.innerHTML = CATEGORIES.map(c =>
+    `<div class="cat-card ${c.id===triviaCategory?'selected':''}" onclick="selectCat('${c.id}')">
+      <div class="cat-icon">${c.emoji}</div>
+      <div class="cat-name">${c.label}</div>
+    </div>`
+  ).join('');
+
+  // Difficulty row
+  const diffRow = document.getElementById('diff-row');
+  diffRow.innerHTML = ['Easy','Medium','Hard'].map(d =>
+    `<div class="cat-card ${d===triviaDiff?'selected':''}" style="flex:1;padding:8px 4px;" onclick="selectDiff('${d}')">
+      <div class="cat-name">${d}</div>
+    </div>`
+  ).join('');
+}
+
+function selectCat(id) {
+  triviaCategory = id;
+  showTriviaSetup();
+}
+
+function selectDiff(d) {
+  triviaDiff = d;
+  showTriviaSetup();
+}
+
+async function triviaGenerate() {
+  const statusEl = document.getElementById('trivia-gen-status');
+  const btn = document.getElementById('trivia-generate-btn');
+  statusEl.textContent = 'Generating questions...';
+  btn.disabled = true;
+
+  const cat = CATEGORIES.find(c => c.id === triviaCategory) || CATEGORIES[0];
+  const prompt = `Generate 10 trivia questions for a party game.
+Category: ${cat.label}
+Difficulty: ${triviaDiff}
+Return ONLY valid JSON with no markdown:
+{"questions":[{"id":"q1","question":"...?","options":["A) ...","B) ...","C) ...","D) ..."],"correct":"A","fun_fact":"..."}]}
+Rules: unambiguous questions, one correct answer, plausible wrong options, fun_fact max 1 sentence.`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        max_tokens: 3000,
+        messages: [{ role:'user', content: prompt }]
+      })
+    });
+    if (!resp.ok) throw new Error('API error ' + resp.status);
+    const data = await resp.json();
+    const text = (data.content?.[0]?.text || '').replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(text);
+    const questions = parsed.questions;
+
+    // Store on gameState
+    gameState = {
+      phase: 'waiting',
+      players: [myName, ...Object.values(players).filter(n=>n!==myName)],
+      questions,
+      currentQuestionIdx: 0,
+      timePerQuestion: 20,
+      timer: 0,
+      answers: {},
+      scores: {},
+      streak: {},
+    };
+    gameState.players.forEach(p => { gameState.scores[p]=0; gameState.streak[p]=0; });
+
+    send({ type: 'trivia-questions-ready' });
+    statusEl.textContent = '✓ ' + questions.length + ' questions ready! Tap Start.';
+    document.getElementById('mgr-start').style.display = 'block';
+    log('Trivia questions generated: ' + questions.length);
+  } catch(e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+    log('Trivia gen error: ' + e.message);
+  }
+}
+
+function managerStartTrivia() {
+  if (!gameState || !gameState.questions) return;
+  const state = JSON.parse(JSON.stringify(gameState));
+  state.phase = 'question';
+  state.timer = state.timePerQuestion;
+  gameState = state;
+
+  send({ type: 'game-start', state: stripHands(state) });
+  startTrivia(state);
+}
+
+function startTrivia(state) {
+  gameState = state;
+  goTo('screen-trivia');
+  document.getElementById('trivia-setup').style.display   = 'none';
+  document.getElementById('trivia-game').style.display    = 'flex';
+  document.getElementById('trivia-waiting').style.display = 'none';
+  if (isManager) {
+    document.getElementById('mgr-skip').style.display = 'block';
+    document.getElementById('mgr-next').style.display = 'block';
+    document.getElementById('mgr-skip').textContent   = 'Reveal';
+    document.getElementById('mgr-next').textContent   = 'Next →';
+    document.getElementById('mgr-skip').onclick  = () => triviaReveal();
+    document.getElementById('mgr-next').onclick  = () => triviaNext();
+  }
+  renderTrivia();
+  startTriviaTimer();
+}
+
+function renderTrivia() {
+  if (!gameState) return;
+  const s = gameState;
+  const q = s.questions[s.currentQuestionIdx];
+  if (!q) return;
+
+  document.getElementById('trivia-q-text').textContent = q.question;
+
+  const myAnswer = s.answers?.[myName];
+  const revealed = s.phase === 'reveal';
+  const letters  = ['A','B','C','D'];
+
+  document.getElementById('trivia-options').innerHTML = (q.options||[]).map((opt, i) => {
+    const letter = letters[i];
+    let cls = '';
+    if (revealed) {
+      cls = letter === q.correct ? 'correct' : (myAnswer?.answer === letter ? 'wrong' : '');
+    } else if (myAnswer?.answer === letter) {
+      cls = 'selected';
+    }
+    const locked = !!myAnswer || revealed;
+    return `<div class="trivia-opt ${cls}" onclick="${locked?'':'triviaAnswer(\''+letter+'\')'}" style="${locked&&!cls?'opacity:.5':''}">
+      <div class="trivia-opt-letter">${letter}</div>
+      <div class="trivia-opt-text">${opt}</div>
+    </div>`;
+  }).join('');
+
+  const statusEl = document.getElementById('trivia-status');
+  if (revealed) {
+    const correct = myAnswer?.answer === q.correct;
+    statusEl.textContent = correct ? '✓ Correct!' : (q.correct + ') ' + (q.options?.[letters.indexOf(q.correct)] || ''));
+    statusEl.className = 'trivia-status ' + (correct ? 'answered' : '');
+  } else if (myAnswer) {
+    statusEl.textContent = 'Answer submitted — waiting for others';
+    statusEl.className = 'trivia-status answered';
+  } else {
+    statusEl.textContent = '';
+    statusEl.className = 'trivia-status';
+  }
+}
+
+function triviaAnswer(letter) {
+  if (!gameState || gameState.answers?.[myName]) return;
+  const s = JSON.parse(JSON.stringify(gameState));
+  if (!s.answers) s.answers = {};
+  s.answers[myName] = { answer: letter, timeRemaining: s.timer || 0 };
+  gameState = s;
+  send({ type: 'trivia-answer', answer: letter, timeRemaining: s.timer || 0 });
+  renderTrivia();
+  // If manager also broadcasts state
+  if (isManager) broadcastState();
+}
+
+function triviaReveal() {
+  if (!gameState) return;
+  const s = JSON.parse(JSON.stringify(gameState));
+  s.phase = 'reveal';
+  const q = s.questions[s.currentQuestionIdx];
+  const letters = ['A','B','C','D'];
+  for (const [pid, ans] of Object.entries(s.answers||{})) {
+    if (ans.answer === q.correct) {
+      const timeBonus  = Math.round(((ans.timeRemaining||0) / s.timePerQuestion) * 50);
+      const streakBonus = Math.min((s.streak[pid]||0) * 10, 50);
+      const pts = 100 + timeBonus + streakBonus;
+      s.scores[pid] = (s.scores[pid]||0) + pts;
+      s.streak[pid] = (s.streak[pid]||0) + 1;
+    } else {
+      s.streak[pid] = 0;
+    }
+  }
+  stopTriviaTimer();
+  gameState = s;
+  broadcastState();
+  renderTrivia();
+}
+
+function triviaNext() {
+  if (!gameState) return;
+  const s = JSON.parse(JSON.stringify(gameState));
+  s.currentQuestionIdx++;
+  if (s.currentQuestionIdx >= s.questions.length) {
+    s.phase = 'game-end';
+  } else {
+    s.phase = 'question';
+    s.answers = {};
+    s.timer = s.timePerQuestion;
+  }
+  gameState = s;
+  broadcastState();
+  renderTrivia();
+  if (s.phase === 'question') startTriviaTimer();
+}
+
+function startTriviaTimer() {
+  stopTriviaTimer();
+  if (!gameState) return;
+  timerInterval = setInterval(() => {
+    if (!gameState) return;
+    gameState.timer = Math.max(0, (gameState.timer||0) - 1);
+    const pct = (gameState.timer / gameState.timePerQuestion) * 100;
+    const fill = document.getElementById('trivia-timer-fill');
+    if (fill) fill.style.width = pct + '%';
+    if (gameState.timer <= 0) {
+      stopTriviaTimer();
+      if (isManager) triviaReveal();
+    }
+  }, 1000);
+}
+
+function stopTriviaTimer() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+}
+
+// ── Shared helpers ───────────────────────────────────────────
+function broadcastState() {
+  if (!isManager) return;
+  send({ type: 'game-state', state: stripHands(gameState) });
+}
+
+function stripHands(state) {
+  // Don't broadcast other players' hands — each player sees only their own
+  if (!state || !state.hands) return state;
+  const s = JSON.parse(JSON.stringify(state));
+  // Keep only card counts for other players
+  for (const pid of Object.keys(s.hands)) {
+    if (pid !== myName) s.hands[pid] = s.hands[pid].map(() => ({ id:'?', value:'?', suit:'?' }));
+  }
+  return s;
+}
+
+function renderWaitPlayers() {
+  const el = document.getElementById('wait-players');
+  const all = { [agoraClient?.uid||'me']: myName, ...players };
+  el.innerHTML = Object.entries(all).map(([uid, name]) =>
+    `<div class="wait-player ${name===myName?'me':''}">
+      <span>${name}</span>
+      ${name===myName ? '<span style="font-size:10px;color:var(--color-text-faint);">You</span>' : ''}
+    </div>`
+  ).join('');
+}
+
+// ── Log ──────────────────────────────────────────────────────
+function log(msg) { console.log('[Games Player]', msg); }
+</script>
+</body>
+</html>

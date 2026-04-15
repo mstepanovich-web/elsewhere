@@ -254,7 +254,7 @@
     </div>
 
     <button class="setup-btn" id="setup-continue">Continue →</button>
-    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.44</div>
+    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.45</div>
 
   </div>
 
@@ -303,7 +303,9 @@
   // ═══════════════════════════════════════
   const BASE_URL   = 'https://mstepanovich-web.github.io/elsewhere';
   const STAGE_URL  = BASE_URL + '/stage.html';
-  const SINGER_URL = BASE_URL + '/singer.html';
+  const SINGER_URL  = BASE_URL + '/singer.html';
+  const GAMES_URL   = BASE_URL + '/games/player.html';
+  const GAMES_TV_URL = BASE_URL + '/games/tv.html';
   const FASHION_URL    = BASE_URL + '/fashion/display.html';
   const STYLIST_URL    = BASE_URL + '/fashion/stylist.html';
 
@@ -404,6 +406,8 @@
     // Karaoke QR → singer.html on the performer's phone
     // TV navigates itself to stage.html with camera/res params
     const karaokeUrl = `${SINGER_URL}?code=${roomCode}`;
+    const gamesUrl    = `${GAMES_URL}?room=${roomCode}`;
+    const gamesTvUrl  = `${GAMES_TV_URL}?room=${roomCode}`;
     const fashionUrl  = `${FASHION_URL}?room=${roomCode}`;
     const stylistUrl  = `${STYLIST_URL}?room=${roomCode}`;
 
@@ -445,6 +449,17 @@
     agoraWatcher.join(AGORA_APP_ID, CHAN_PREFIX + roomCode, null, null)
       .then(() => tvLog('Agora watching channel: ' + CHAN_PREFIX + roomCode))
       .catch(e => tvLog('Agora error: ' + e.message));
+
+    // Watch games channel
+    const agoraGamesWatcher = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+    agoraGamesWatcher.on('user-joined', (user) => {
+      tvLog('Games user joined — navigating to games TV...');
+      agoraGamesWatcher.leave().catch(()=>{});
+      window.location.href = gamesTvUrl;
+    });
+    agoraGamesWatcher.join(AGORA_APP_ID, CHAN_PREFIX + 'g' + roomCode, null, null)
+      .then(() => tvLog('Agora watching games channel: ' + CHAN_PREFIX + 'g' + roomCode))
+      .catch(e => tvLog('Agora games error: ' + e.message));
 
     // Also watch fashion channel
     const agoraFashionWatcher = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
