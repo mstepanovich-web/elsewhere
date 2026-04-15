@@ -314,7 +314,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.29</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.31</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -402,18 +402,18 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 </div>
 
 <!-- Costume Picker Overlay -->
-<div id="costume-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(4,2,6,.97);flex-direction:column;overflow:hidden;">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:40px 20px 12px;flex-shrink:0;border-bottom:1px solid rgba(255,200,80,.15);">
-    <div style="font-family:var(--font-display);font-size:22px;color:var(--color-text);font-style:italic;">Accessories</div>
-    <div onclick="hideCostumePicker()" style="font-size:22px;cursor:pointer;color:rgba(255,200,120,.5);padding:4px 10px;">✕</div>
+<div id="costume-overlay" style="display:none;position:fixed;top:0;left:0;bottom:0;width:300px;z-index:600;background:rgba(4,2,6,.96);flex-direction:column;overflow:hidden;border-right:1px solid rgba(255,200,80,.15);">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;flex-shrink:0;border-bottom:1px solid rgba(255,200,80,.15);">
+    <div style="font-family:var(--font-display);font-size:16px;color:var(--color-text);font-style:italic;">All Effects</div>
+    <div onclick="hideCostumePicker()" style="font-size:18px;cursor:pointer;color:rgba(255,200,120,.5);padding:2px 8px;">✕</div>
   </div>
   <div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
-    <div style="font-size:10px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:var(--font-mono);padding:12px 20px 8px;text-transform:uppercase;">AR Filters (DeepAR)</div>
-    <div id="stage-deepar-grid" style="padding:0 20px 8px;"></div>
-    <div style="margin:8px 20px;border-top:1px solid rgba(255,255,255,.08);"></div>
-    <div style="font-size:10px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:var(--font-mono);padding:0 20px 8px;text-transform:uppercase;">Basic Overlays</div>
-    <div id="costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:0 20px 16px;align-content:start;"></div>
-    <div onclick="clearAllAccessories()" style="margin:8px 20px 20px;padding:12px;text-align:center;font-size:12px;color:rgba(196,122,107,.7);font-family:var(--font-mono);cursor:pointer;border:1px solid rgba(196,122,107,.2);border-radius:6px;">✕ Remove All Accessories</div>
+    <div style="font-size:9px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:var(--font-mono);padding:10px 14px 6px;text-transform:uppercase;">AR Filters</div>
+    <div id="stage-deepar-grid" style="padding:0 14px 8px;"></div>
+    <div style="margin:6px 14px;border-top:1px solid rgba(255,255,255,.08);"></div>
+    <div style="font-size:9px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:var(--font-mono);padding:0 14px 6px;text-transform:uppercase;">Basic Overlays</div>
+    <div id="costume-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 14px 14px;align-content:start;"></div>
+    <div onclick="clearAllAccessories()" style="margin:6px 14px 16px;padding:10px;text-align:center;font-size:11px;color:rgba(196,122,107,.7);font-family:var(--font-mono);cursor:pointer;border:1px solid rgba(196,122,107,.2);border-radius:6px;">✕ Remove All</div>
   </div>
 </div>
 
@@ -464,7 +464,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.29</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.31</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -874,7 +874,7 @@ function handleCostumeBtn(){
       resetTrayForNewVenue();
       showVenueEffectTray(selectedVenueId);
     }
-    showCostumePicker();
+    // tray already visible — do nothing
   } else {
     showCostumePicker();
   }
@@ -1790,21 +1790,32 @@ const VENUE_EFFECTS = {
 };
 
 // Tray state
-let trayAllEffectsZone = null; // {x,y,w,h} of "All Effects" link hit area
+let trayAllEffectsZone = null;
+let trayCloseZone      = null;
+let trayLeftZone       = null;
+let trayRightZone      = null;
 
 // Handle clicks on the audience canvas for tray All Effects link
 function initTrayCanvasClick(){
   const canvas = document.getElementById('aud-layer');
   if(!canvas) return;
   canvas.addEventListener('click', e=>{
-    if(!trayVisible || !trayAllEffectsZone) return;
+    if(!trayVisible) return;
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     const cx = (e.clientX - rect.left) * scaleX;
     const cy = (e.clientY - rect.top)  * scaleY;
-    const z = trayAllEffectsZone;
-    if(cx >= z.x && cx <= z.x+z.w && cy >= z.y && cy <= z.y+z.h){
+
+    const hit = (z) => z && cx >= z.x && cx <= z.x+z.w && cy >= z.y && cy <= z.y+z.h;
+
+    if(hit(trayCloseZone)){
+      hideVenueEffectTray(false);
+    } else if(hit(trayLeftZone)){
+      traySwipe(-1);
+    } else if(hit(trayRightZone)){
+      traySwipe(1);
+    } else if(hit(trayAllEffectsZone)){
       showCostumePicker();
     }
   });
@@ -1920,47 +1931,60 @@ function drawVenueEffectTray(){
 function _drawVenueEffectTray(){
 
   const W = AC.width, H = AC.height;
-  const SLOT_W = 110, SLOT_H = 120, RADIUS = 18;
-  const TRAY_H = SLOT_H + 32;
+  const SLOT_W = 100, SLOT_H = 110, RADIUS = 14;
+  const TRAY_H = SLOT_H + 28;
   const visibleSlots = 5;
-  const trayW = SLOT_W * visibleSlots + 32;
-  const trayX = (W - trayW) / 2;        // centered horizontally
-  const trayY = H - TRAY_H - 60;        // near bottom of screen
+  const trayW = SLOT_W * visibleSlots + 24;
+  // Position: 75% from left (25% from right), 75% up from bottom
+  const trayX = W * 0.75 - trayW / 2;
+  const trayY = H * 0.25 - TRAY_H / 2;
+
+  // Store click zones for mouse/touch interaction
+  trayCloseZone  = { x: trayX + trayW + 8, y: trayY - 28, w: 28, h: 28 };
+  trayLeftZone   = { x: trayX - 36, y: trayY + TRAY_H/2 - 20, w: 36, h: 40 };
+  trayRightZone  = { x: trayX + trayW + 2, y: trayY + TRAY_H/2 - 20, w: 36, h: 40 };
+  trayAllEffectsZone = { x: trayX, y: trayY + TRAY_H + 8, w: trayW, h: 24 };
 
   ctx.save();
   ctx.globalAlpha = trayOpacity;
 
-  // Tray background — use roundRect if available, fallback to rect
+  // Tray background
   ctx.beginPath();
   if(ctx.roundRect){
-    ctx.roundRect(trayX - 16, trayY - 12, trayW + 32, TRAY_H + 16, RADIUS);
+    ctx.roundRect(trayX - 8, trayY - 8, trayW + 16, TRAY_H + 16, RADIUS);
   } else {
-    ctx.rect(trayX - 16, trayY - 12, trayW + 32, TRAY_H + 16);
+    ctx.rect(trayX - 8, trayY - 8, trayW + 16, TRAY_H + 16);
   }
-  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.fillStyle = 'rgba(0,0,0,0.78)';
   ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,0.12)';
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // Label above tray
-  ctx.font = 'bold 13px Inter, sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  // Title
+  ctx.font = 'bold 11px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.textAlign = 'center';
-  ctx.fillText('✦ VENUE EFFECTS — SWIPE TO TRY', trayX + trayW/2, trayY - 20);
+  ctx.fillText('✦ VENUE EFFECTS', trayX + trayW/2, trayY - 14);
+
+  // ✕ close button
+  ctx.font = 'bold 16px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.textAlign = 'center';
+  ctx.fillText('✕', trayX + trayW + 22, trayY - 10);
 
   // Slots
   for(let i = -2; i <= 2; i++){
     const slotIdx = trayIndex + i;
     if(slotIdx < 0 || slotIdx >= traySlots.length) continue;
 
-    const slot   = traySlots[slotIdx];
-    const cx     = trayX + trayW/2 + i * SLOT_W;
-    const cy     = trayY + TRAY_H/2;
+    const slot      = traySlots[slotIdx];
+    const cx        = trayX + trayW/2 + i * SLOT_W;
+    const cy        = trayY + TRAY_H/2;
     const isCurrent = i === 0;
-    const dist   = Math.abs(i);
-    const scale  = isCurrent ? 1 : 1 - dist * 0.15;
-    const alpha  = isCurrent ? 1 : 1 - dist * 0.3;
+    const dist      = Math.abs(i);
+    const scale     = isCurrent ? 1 : 1 - dist * 0.15;
+    const alpha     = isCurrent ? 1 : 1 - dist * 0.3;
 
     ctx.save();
     ctx.globalAlpha *= alpha;
@@ -1970,76 +1994,65 @@ function _drawVenueEffectTray(){
     // Slot background
     ctx.beginPath();
     if(ctx.roundRect){
-      ctx.roundRect(-SLOT_W/2+6, -SLOT_H/2+4, SLOT_W-12, SLOT_H-8, 12);
+      ctx.roundRect(-SLOT_W/2+4, -SLOT_H/2+4, SLOT_W-8, SLOT_H-8, 10);
     } else {
-      ctx.rect(-SLOT_W/2+6, -SLOT_H/2+4, SLOT_W-12, SLOT_H-8);
+      ctx.rect(-SLOT_W/2+4, -SLOT_H/2+4, SLOT_W-8, SLOT_H-8);
     }
-    if(isCurrent){
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.strokeStyle = 'rgba(255,220,80,0.9)';
-      ctx.lineWidth = 2.5;
-    } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-      ctx.lineWidth = 1;
-    }
-    ctx.fill();
-    ctx.stroke();
+    ctx.fillStyle  = isCurrent ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)';
+    ctx.strokeStyle= isCurrent ? 'rgba(255,220,80,0.9)'   : 'rgba(255,255,255,0.12)';
+    ctx.lineWidth  = isCurrent ? 2 : 1;
+    ctx.fill(); ctx.stroke();
 
     // Emoji
-    ctx.font = isCurrent ? '42px serif' : '32px serif';
+    ctx.font = isCurrent ? '38px serif' : '28px serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'white';
-    ctx.fillText(slot ? slot.emoji : '✕', 0, -8);
+    ctx.fillText(slot ? slot.emoji : '✕', 0, -6);
 
     // Label
-    ctx.font = `${isCurrent ? 'bold ' : ''}${isCurrent ? 12 : 10}px Inter, sans-serif`;
+    ctx.font = `${isCurrent ? 'bold ' : ''}${isCurrent ? 11 : 9}px Inter, sans-serif`;
     ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = isCurrent ? 'rgba(255,220,80,1)' : 'rgba(255,255,255,0.7)';
-    ctx.fillText(slot ? slot.label : 'No Effect', 0, SLOT_H/2 - 14);
+    ctx.fillStyle = isCurrent ? 'rgba(255,220,80,1)' : 'rgba(255,255,255,0.65)';
+    ctx.fillText(slot ? slot.label : 'No Effect', 0, SLOT_H/2 - 10);
 
     ctx.restore();
   }
 
-  // All Effects link — opens full costume picker
-  ctx.font = 'bold 11px Inter, sans-serif';
-  ctx.fillStyle = 'rgba(255,220,80,0.7)';
-  ctx.textAlign = 'right';
-  ctx.fillText('All Effects ›', W - 20, trayY - 20);
-  // Store click zone for All Effects link
-  trayAllEffectsZone = { x: W - 130, y: trayY - 34, w: 110, h: 20 };
-
-  // Swipe hint arrows
+  // Clickable left/right arrows
+  ctx.font = '22px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   if(trayIndex > 0){
-    ctx.font = '20px serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.textAlign = 'center';
-    ctx.fillText('‹', trayX, trayY + TRAY_H/2 + 6);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillText('‹', trayX - 18, trayY + TRAY_H/2);
   }
   if(trayIndex < traySlots.length - 1){
-    ctx.fillText('›', trayX + trayW + 32, trayY + TRAY_H/2 + 6);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillText('›', trayX + trayW + 20, trayY + TRAY_H/2);
   }
 
-  // Dynamic hint — turns yellow when arm is in swipe-ready position
+  // All Effects link below tray
+  ctx.font = 'bold 11px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(255,220,80,0.8)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('All Effects ›', trayX + trayW/2, trayY + TRAY_H + 22);
+
+  // Gesture hint
   const _rW = lastPoseLandmarks ? lastPoseLandmarks[16] : null;
   const _rS = lastPoseLandmarks ? lastPoseLandmarks[12] : null;
   const _lW = lastPoseLandmarks ? lastPoseLandmarks[15] : null;
   const _lS = lastPoseLandmarks ? lastPoseLandmarks[11] : null;
   const _armReady = _rW && _rS && Math.abs(_rW.y - _rS.y) < 0.18 && _rW.y > (_rS.y - 0.12) && _rW.y < 0.75;
   const _bothUp   = _rW && _rS && _lW && _lS && _rW.y < _rS.y - 0.18 && _lW.y < _lS.y - 0.18;
-  ctx.font = '11px Inter, sans-serif';
+  ctx.font = '10px Inter, sans-serif';
   ctx.textAlign = 'center';
-  if(_bothUp){
-    ctx.fillStyle = 'rgba(255,100,80,0.9)';
-    ctx.fillText('🙌 releasing tray...', W/2, H - 10);
-  } else if(_armReady){
-    ctx.fillStyle = 'rgba(255,220,80,0.9)';
-    ctx.fillText('👋 swipe left = next  ·  swipe right = prev  ·  both hands up = close', W/2, H - 10);
-  } else {
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.fillText('right arm to side to swipe  ·  both hands up to close', W/2, H - 10);
-  }
+  ctx.fillStyle = _bothUp ? 'rgba(255,100,80,0.9)' : _armReady ? 'rgba(255,220,80,0.9)' : 'rgba(255,255,255,0.3)';
+  ctx.fillText(
+    _bothUp ? '🙌 releasing...' : _armReady ? '👋 swipe left/right · both hands up = close' : 'raise right arm to swipe',
+    trayX + trayW/2, trayY + TRAY_H + 40
+  );
 
   ctx.restore();
 }
