@@ -254,7 +254,7 @@
     </div>
 
     <button class="setup-btn" id="setup-continue">Continue →</button>
-    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.46</div>
+    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.47</div>
 
   </div>
 
@@ -264,8 +264,6 @@
   <div class="screen" id="screen-qr">
 
     <div class="qr-header">Scan a code on your phone to begin</div>
-
-    <div id="tv-debug" style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--color-green);letter-spacing:var(--tracking-normal);margin-bottom:16px;text-align:center;min-height:20px;"></div>
 
     <div class="qr-grid">
 
@@ -287,6 +285,15 @@
         <div class="qr-hint">Scan to select Fashion</div>
       </div>
 
+      <div class="qr-tile" style="border-color:rgba(124,77,255,.22);background:linear-gradient(160deg,rgba(12,8,18,.94) 0%,rgba(6,4,10,.97) 100%);">
+        <div class="qr-mode-label" style="color:rgba(200,180,255,.9);">🎮 Games</div>
+        <div class="qr-box">
+          <canvas id="qr-games" width="200" height="200"></canvas>
+        </div>
+        <div class="qr-url" id="qr-games-url" style="color:rgba(160,130,255,.4);">—</div>
+        <div class="qr-hint" style="color:rgba(160,130,255,.35);">Scan to select Games</div>
+      </div>
+
     </div>
 
   </div>
@@ -304,7 +311,7 @@
   const BASE_URL   = 'https://mstepanovich-web.github.io/elsewhere';
   const STAGE_URL  = BASE_URL + '/stage.html';
   const SINGER_URL  = BASE_URL + '/singer.html';
-  const GAMES_URL   = BASE_URL + '/games/player.html';
+  const GAMES_URL    = BASE_URL + '/games/player.html';
   const GAMES_TV_URL = BASE_URL + '/games/tv.html';
   const FASHION_URL    = BASE_URL + '/fashion/display.html';
   const STYLIST_URL    = BASE_URL + '/fashion/stylist.html';
@@ -424,6 +431,8 @@
     // Show URLs
     document.getElementById('qr-karaoke-url').textContent = karaokeUrl;
     document.getElementById('qr-fashion-url').textContent  = stylistUrl;
+    renderQR('qr-games', gamesUrl);
+    document.getElementById('qr-games-url').textContent = gamesUrl;
 
     goTo('screen-qr');
 
