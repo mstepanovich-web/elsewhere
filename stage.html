@@ -314,7 +314,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.15</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.17</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -453,7 +453,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.15</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.17</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -624,9 +624,12 @@ function initVenueMode(){
     panCamera3.updateProjectionMatrix();
   }
   if(viewMode === 'audience'){
-    document.getElementById('pan-layer').style.opacity='1';
-    document.getElementById('pan-layer').style.zIndex='1';
-    document.getElementById('aud-layer').style.zIndex='2';
+    const pl = document.getElementById('pan-layer');
+    const al = document.getElementById('aud-layer');
+    pl.style.opacity='1';
+    pl.style.zIndex='1';
+    al.style.zIndex='2';
+    log('initVenueMode — pan-layer opacity=1 zIndex=1, aud-layer zIndex=2','info');
   }
   log('initVenueMode — venueMode=true yaw:'+venueYaw+' pitch:'+venuePitch+' panReady:'+panReady, 'ok');
   // Start ambient audio/animation for this venue
@@ -2363,14 +2366,19 @@ function showVenueTransition(venue){
   document.getElementById('venue-transition-name').textContent = venue.name || '';
   el.style.display = 'flex';
   el.style.opacity = '1';
+  log('showVenueTransition: shown for '+venue.name,'info');
 }
 
 function hideVenueTransition(){
   const el = document.getElementById('venue-transition');
-  if(!el){ log('hideVenueTransition: element not found!','err'); return; }
-  log('hideVenueTransition: hiding overlay','info');
+  if(!el){ log('hideVenueTransition: element NOT FOUND','err'); return; }
+  log('hideVenueTransition: called — display='+el.style.display+' opacity='+el.style.opacity,'info');
   el.style.opacity = '0';
-  setTimeout(()=>{ el.style.display = 'none'; el.style.opacity = '1'; }, 350);
+  setTimeout(()=>{
+    el.style.display = 'none';
+    el.style.opacity = '1';
+    log('hideVenueTransition: done ✓','ok');
+  }, 350);
 }
 
 function buildPanorama(){
@@ -3715,7 +3723,10 @@ function renderLoop(){
       if(venueEffects3D) venueEffects3D.update();
       panRenderer.render(panScene, panCamera3);
       const pl = document.getElementById('pan-layer');
-      pl.style.opacity = '1';
+      if(pl.style.opacity !== '1'){
+        log('pan-layer: setting opacity to 1','ok');
+        pl.style.opacity = '1';
+      }
       pl.style.pointerEvents = 'auto'; // allow drag on pan-layer in venue mode
       ctx.clearRect(0, 0, AC.width, AC.height);
     } else {
