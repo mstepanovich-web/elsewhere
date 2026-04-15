@@ -264,9 +264,13 @@
 
     <div class="qr-header">Scan a code on your phone to begin</div>
 
+    <div class="qr-header" id="tv-countdown-msg" style="margin-bottom:16px;font-size:var(--text-sm);">
+      Scan Karaoke on your phone — TV switching to stage in <span id="tv-countdown">4</span>s
+    </div>
+
     <div class="qr-grid">
 
-      <div class="qr-tile qr-tile--karaoke">
+      <div class="qr-tile qr-tile--karaoke" id="qr-tile-karaoke" style="cursor:pointer;" title="Click to open Stage on this TV">
         <div class="qr-mode-label">🎤 Karaoke</div>
         <div class="qr-box">
           <canvas id="qr-karaoke" width="200" height="200"></canvas>
@@ -300,6 +304,7 @@
   // ═══════════════════════════════════════
   const BASE_URL   = 'https://mstepanovich-web.github.io/elsewhere';
   const STAGE_URL  = BASE_URL + '/stage.html';
+  const SINGER_URL = BASE_URL + '/singer.html';
   const FASHION_URL = BASE_URL + '/fashion/display.html';
 
   // Generate room code — same charset as stage.html
@@ -396,9 +401,13 @@
     const selectedCam = camSelect.value;
     const selectedRes = document.getElementById('res-select').value;
 
-    // Build URLs with room code + camera/res params so stage.html can pick them up
-    const karaokeUrl = `${STAGE_URL}?room=${roomCode}&cam=${encodeURIComponent(selectedCam)}&res=${selectedRes}`;
+    // Karaoke QR → singer.html on the performer's phone
+    // TV navigates itself to stage.html with camera/res params
+    const karaokeUrl = `${SINGER_URL}?code=${roomCode}`;
     const fashionUrl  = `${FASHION_URL}?room=${roomCode}`;
+
+    // TV goes to stage immediately after showing QR
+    const stageUrl = `${STAGE_URL}?room=${roomCode}&cam=${encodeURIComponent(selectedCam)}&res=${selectedRes}`;
 
     // Set room badge
     document.getElementById('room-badge-code').textContent = roomCode;
@@ -412,6 +421,18 @@
     document.getElementById('qr-fashion-url').textContent  = fashionUrl;
 
     goTo('screen-qr');
+
+    // Countdown then TV navigates to stage.html
+    let secs = 4;
+    const countEl = document.getElementById('tv-countdown');
+    const ticker = setInterval(() => {
+      secs--;
+      if (countEl) countEl.textContent = secs;
+      if (secs <= 0) {
+        clearInterval(ticker);
+        window.location.href = stageUrl;
+      }
+    }, 1000);
   });
 
   // ═══════════════════════════════════════
