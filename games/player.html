@@ -235,6 +235,15 @@
         <div class="page-sub" id="lobby-sub">Waiting for players</div>
       </div>
 
+      <!-- Manager is a player checkbox -->
+      <div id="mgr-player-section" style="display:none;padding:12px 16px 0;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <input type="checkbox" id="mgr-is-player" checked onchange="toggleManagerAsPlayer(this.checked)"
+            style="width:18px;height:18px;accent-color:var(--color-gold);cursor:pointer;">
+          <span style="font-size:var(--text-sm);color:var(--color-text-dim);">I'm playing in this game too</span>
+        </label>
+      </div>
+
       <!-- Player limit stepper (manager only) -->
       <div id="limit-section" style="display:none;padding:0 16px;">
         <div class="lobby-section-label">Player limit</div>
@@ -341,7 +350,17 @@
 </div>
 
 <button id="last-card-btn" onclick="lcDeclareLastCard()">Last Card!</button>
-<div class="ver">v2.50</div>
+
+<div id="game-log-toggle" onclick="toggleGameLog()" style="position:fixed;bottom:32px;left:12px;z-index:999;font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;color:var(--color-gold-dim);cursor:pointer;padding:3px 8px;border:1px solid var(--color-border-dim);border-radius:var(--radius-sm);">LOG</div>
+<div id="game-log-panel" style="display:none;position:fixed;bottom:56px;left:12px;right:12px;z-index:998;background:var(--color-overlay);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:10px;max-height:40vh;overflow-y:auto;">
+  <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+    <span style="color:var(--color-text-faint);font-size:10px;letter-spacing:.1em;text-transform:uppercase;">Debug</span>
+    <span onclick="copyGameLog()" style="color:var(--color-gold-dim);cursor:pointer;font-size:10px;letter-spacing:.1em;">COPY</span>
+  </div>
+  <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);"></div>
+</div>
+
+<div class="ver">v2.51</div>
 
 <script>
 'use strict';
@@ -355,8 +374,10 @@ const CLAUDE_MODEL  = 'claude-sonnet-4-20250514';
 const GAME_LIMITS   = { lastcard: { min:2, max:8, default:6 }, trivia: { min:2, max:20, default:10 } };
 
 // ── State ───────────────────────────────────────────────────
-const urlP   = new URLSearchParams(location.search);
-let roomCode = (urlP.get('room') || '').toUpperCase();
+const urlP      = new URLSearchParams(location.search);
+let roomCode    = (urlP.get('room') || '').toUpperCase();
+const urlGame   = urlP.get('game') || null;
+const urlMgrName = decodeURIComponent(urlP.get('mgrname') || '');
 let myName   = '';
 let myUid    = null;
 let isManager = false;
@@ -413,10 +434,12 @@ async function doJoin() {
     try { streamId = await agoraClient.createDataStream({ reliable:true, ordered:true }); }
     catch(e) { streamId = null; }
     agoraReady = true;
+    log('Agora joined uid:' + myUid + ' channel:' + CHAN_PREFIX + roomCode);
 
     // Manager = whoever scanned the original Games QR from tv.html (?mgr=1)
     // Invited players arrive via invite link which never has mgr=1
     isManager = urlP.get('mgr') === '1';
+    log('isManager: ' + isManager);
     if (isManager) {
       document.getElementById('manager-bar').classList.add('visible');
     }
@@ -424,12 +447,35 @@ async function doJoin() {
     // Add myself to lobby
     lobbyPlayers.push({ uid: myUid, name: myName, isManager, status: 'active' });
 
-    // Announce
-    send({ type:'player-join', name:myName, isManager });
+    // Announce with retry — stream may not be ready on remote end immediately
+    let announceAcked = false;
+    function announceJoin() {
+      if (announceAcked) return;
+      log('Announcing join...');
+      send({ type:'player-join', name:myName, isManager });
+    }
+    announceJoin();
+    const announceRetry = setInterval(() => {
+      if (announceAcked) { clearInterval(announceRetry); return; }
+      announceJoin();
+    }, 3000);
+    // Stop retrying after 30s
+    setTimeout(() => clearInterval(announceRetry), 30000);
 
     if (isManager) {
       goToLobby();
     } else {
+      // Invited player — pre-populate game and manager name from URL
+      if (urlGame) {
+        currentGame = urlGame;
+        playerLimit = GAME_LIMITS[urlGame]?.default || 6;
+        const gameTitle = urlGame === 'lastcard' ? 'Last Card' : urlGame === 'trivia' ? 'Trivia Night' : urlGame;
+        document.getElementById('lobby-game-title').textContent = gameTitle;
+      }
+      if (urlMgrName) {
+        const el = document.getElementById('manager-name-display');
+        if (el) el.textContent = urlMgrName;
+      }
       goTo('screen-game-lobby');
       updateLobbyUI();
     }
@@ -443,7 +489,7 @@ async function doJoin() {
 
 // ── Messaging ───────────────────────────────────────────────
 function send(obj) {
-  if (!agoraReady || streamId === null) return;
+  if (!agoraReady || streamId === null) { log('send skipped — not ready: ' + obj.type); return; }
   const bytes = new TextEncoder().encode(JSON.stringify({ ...obj, _uid: myUid, _name: myName }));
   agoraClient.sendStreamMessage(streamId, bytes).catch(()=>{});
 }
@@ -454,6 +500,7 @@ function handleMessage(uid, data) {
     log('← ' + msg.type);
 
     if (msg.type === 'player-join') {
+      log('player-join from uid:' + uid + ' name:' + msg.name);
       if (!lobbyPlayers.find(p => p.uid === uid)) {
         const active = lobbyPlayers.filter(p => p.status === 'active').length;
         const status = active < playerLimit ? 'active' : 'queue';
@@ -470,6 +517,8 @@ function handleMessage(uid, data) {
     }
 
     if (msg.type === 'player-join-ack') {
+      announceAcked = true;
+      log('player-join-ack from uid:' + uid + ' name:' + msg.name);
       if (!lobbyPlayers.find(p => p.uid === uid)) {
         const active = lobbyPlayers.filter(p => p.status === 'active').length;
         lobbyPlayers.push({ uid, name: msg.name, isManager: msg.isManager, status: active < playerLimit ? 'active' : 'queue' });
@@ -484,6 +533,7 @@ function handleMessage(uid, data) {
     }
 
     if (msg.type === 'game-selected') {
+      log('game-selected: ' + msg.game);
       currentGame  = msg.game;
       playerLimit  = GAME_LIMITS[msg.game]?.default || 6;
       goTo('screen-game-lobby');
@@ -493,12 +543,14 @@ function handleMessage(uid, data) {
     }
 
     if (msg.type === 'game-start') {
+      log('game-start received');
       gameState = msg.state;
       if (currentGame === 'lastcard') startLastCard();
       if (currentGame === 'trivia')   startTrivia(msg.state);
     }
 
     if (msg.type === 'game-state') {
+      log('game-state received phase:' + msg.state?.phase);
       gameState = msg.state;
       if (currentGame === 'lastcard') renderLastCard();
       if (currentGame === 'trivia')   renderTrivia();
@@ -551,6 +603,7 @@ function updateLobbyUI() {
   const manager = isManager;
 
   // Show/hide manager-only sections
+  document.getElementById('mgr-player-section').style.display = manager ? 'block' : 'none';
   document.getElementById('limit-section').style.display   = manager ? 'block' : 'none';
   document.getElementById('invite-section').style.display  = manager ? 'block' : 'none';
   document.getElementById('start-section').style.display   = manager ? 'block' : 'none';
@@ -561,6 +614,17 @@ function updateLobbyUI() {
 
   document.getElementById('limit-val').textContent = playerLimit;
   renderRoster();
+}
+
+let managerIsPlayer = true;
+function toggleManagerAsPlayer(checked) {
+  managerIsPlayer = checked;
+  // Update manager's own entry in lobby
+  const me = lobbyPlayers.find(p => p.uid === myUid);
+  if (me) me.isPlayer = checked;
+  renderRoster();
+  send({ type:'manager-player-status', isPlayer: checked });
+  log('Manager is player: ' + checked);
 }
 
 function changeLimit(delta) {
@@ -615,24 +679,17 @@ function renderRoster() {
 
 // ── Invite ───────────────────────────────────────────────────
 function getInviteLink() {
-  return `${BASE_URL}/games/player.html?room=${roomCode}`;
+  const game = currentGame || 'lastcard';
+  return `${BASE_URL}/games/player.html?room=${roomCode}&game=${game}&mgrname=${encodeURIComponent(myName)}`;
 }
 
 function shareInvite() {
   const link     = getInviteLink();
   const gameName = currentGame === 'lastcard' ? 'Last Card' : currentGame === 'trivia' ? 'Trivia Night' : 'a game';
-  const subject  = `${myName} has invited you to play ${gameName} — JOIN NOW!`;
-  const body     = `Tap the link to join:\n${link}`;
-  if (navigator.share) {
-    // Use title only for subject — don't include link in both text AND url
-    navigator.share({ title: subject, text: body, url: link }).catch(() => {
-      // Fallback if share fails
-      navigator.clipboard.writeText(link).then(() => showToast('Link copied!'));
-    });
-  } else {
-    // Desktop: copy link only
-    navigator.clipboard.writeText(link).then(() => showToast('Link copied!')).catch(()=>{});
-  }
+  const subject  = encodeURIComponent(`${myName} has invited you to play ${gameName} — JOIN NOW!`);
+  const body     = encodeURIComponent(`Join the game here:\n\n${link}`);
+  // mailto always sets subject correctly in any email client
+  window.location.href = `mailto:?subject=${subject}&body=${body}`;
 }
 
 function copyInvite() {
@@ -1109,7 +1166,31 @@ function stripHands(state) {
   return s;
 }
 
-function log(msg) { console.log('[Games]', msg); }
+const _gameLogs = [];
+function log(msg) {
+  const ts   = new Date().toISOString().slice(11,19);
+  const line = ts + ' ' + msg;
+  _gameLogs.push(line);
+  console.log('[Games]', msg);
+  const panel = document.getElementById('game-log-lines');
+  if (panel) {
+    const d = document.createElement('div');
+    d.style.cssText = 'border-bottom:1px solid rgba(255,255,255,.06);padding:3px 0;font-size:10px;';
+    d.textContent = line;
+    panel.appendChild(d);
+    panel.scrollTop = panel.scrollHeight;
+  }
+}
+function toggleGameLog() {
+  const p = document.getElementById('game-log-panel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+function copyGameLog() {
+  navigator.clipboard.writeText(_gameLogs.join('\n')).then(() => {
+    const btn = document.querySelector('#game-log-panel span:last-child');
+    if (btn) { btn.textContent = 'COPIED ✓'; setTimeout(()=>btn.textContent='COPY',2000); }
+  });
+}
 </script>
 </body>
 </html>
