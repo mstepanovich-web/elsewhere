@@ -314,7 +314,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.10</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.12</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -333,6 +333,18 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   <div class="btn" onclick="showQualityPicker()">⚙️ Quality</div>
   <div class="btn danger" id="stage-stop-btn" onclick="doEnd()" style="display:none;">■ Stop</div>
 </div>
+
+<!-- 360 Tour button — bottom right, transparent overlay for testing -->
+<div id="btn-360" onclick="startVenueTour()" style="
+  position:fixed; bottom:18px; right:18px; z-index:200;
+  width:48px; height:48px; border-radius:50%;
+  background:rgba(0,0,0,0.45); border:1.5px solid rgba(255,255,255,0.25);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; opacity:0.35; color:rgba(255,255,255,0.8);
+  font-size:11px; font-weight:bold; letter-spacing:0.04em;
+  font-family:var(--font-mono); transition:opacity 0.2s, color 0.2s;
+  user-select:none;
+" title="360° venue tour">360°</div>
 <div id="prog"><div id="pf"></div></div>
 
 <div class="panel" id="sp" style="min-width:min(400px,90vw);display:none;flex-direction:column;align-items:center;gap:20px;padding:32px;">
@@ -441,7 +453,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.10</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.12</div>
 </div>
 
 <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.23.2.js"></script>
@@ -574,6 +586,7 @@ function showStageVenuePicker(){
 function applyStageVenue(v){
   selectedVenueId = v.id;
   panReady = false;
+  cancelVenueTour();
   if(panScene) while(panScene.children.length) panScene.remove(panScene.children[0]);
   buildPanorama();
   tYaw = v.startYaw || 0; cYaw = v.startYaw || 0;
@@ -632,6 +645,105 @@ function zoomVenueOut(){
 }
 function zoomVenueIn(){
   venueFOVTarget = FOV_NARROW;
+}
+
+// ── 360 Venue Tour ────────────────────────────────────────────────────────────
+let tourActive = false;
+let tourAnimFrame = null;
+
+function startVenueTour(){
+  if(!venueMode || !panReady) return;
+  if(tourActive) { cancelVenueTour(); return; }
+
+  const venue = VENUES.find(v=>v.id===selectedVenueId);
+  if(!venue || !venue.skyboxId) return;
+
+  tourActive = true;
+  document.getElementById('btn-360').style.opacity = '1';
+  document.getElementById('btn-360').style.color = 'rgba(255,220,80,1)';
+
+  const originYaw   = venueYaw;
+  const originPitch = venuePitch;
+  const originFOV   = venueFOVTarget;
+
+  // Phase 1: zoom out over 1.5s
+  // Phase 2: pan 360° over 12s
+  // Phase 3: return to origin yaw over 2s, zoom back in
+
+  const ZOOM_OUT_MS  = 1500;
+  const PAN_MS       = 12000;
+  const RETURN_MS    = 2000;
+  const TOTAL_MS     = ZOOM_OUT_MS + PAN_MS + RETURN_MS;
+
+  const FOV_TOUR = Math.min(FOV_WIDE, 95); // wide but not distorted
+
+  const startTime = performance.now();
+
+  function tick(){
+    if(!tourActive) return;
+    const elapsed = performance.now() - startTime;
+    const t = Math.min(elapsed / TOTAL_MS, 1);
+
+    if(elapsed < ZOOM_OUT_MS){
+      // Phase 1 — zoom out
+      const p = elapsed / ZOOM_OUT_MS;
+      const ease = 1 - Math.pow(1 - p, 3);
+      venueFOVTarget = originFOV + (FOV_TOUR - originFOV) * ease;
+      venueFOV = venueFOVTarget;
+      panCamera3.fov = venueFOVTarget;
+      panCamera3.updateProjectionMatrix();
+
+    } else if(elapsed < ZOOM_OUT_MS + PAN_MS){
+      // Phase 2 — slow 360 pan
+      const p = (elapsed - ZOOM_OUT_MS) / PAN_MS;
+      const ease = p < 0.05 ? p/0.05 * p/0.05 : p > 0.95 ? 1-(p-0.95)/0.05 : 1; // ease in/out at edges
+      venueYawTarget = originYaw + 360 * p;
+      venueYaw       = venueYawTarget;
+      panCamera3.rotation.y = -venueYaw * D2R;
+
+    } else if(elapsed < TOTAL_MS){
+      // Phase 3 — return to origin, zoom in
+      const p = (elapsed - ZOOM_OUT_MS - PAN_MS) / RETURN_MS;
+      const ease = 1 - Math.pow(1 - p, 3);
+
+      // Snap yaw back to origin (wrapped)
+      const currentYaw = originYaw + 360;
+      venueYawTarget = currentYaw + (originYaw - currentYaw) * ease;
+      venueYaw       = venueYawTarget;
+      panCamera3.rotation.y = -venueYaw * D2R;
+
+      // Zoom back in
+      venueFOVTarget = FOV_TOUR + (originFOV - FOV_TOUR) * ease;
+      venueFOV = venueFOVTarget;
+      panCamera3.fov = venueFOVTarget;
+      panCamera3.updateProjectionMatrix();
+
+    } else {
+      // Done — snap back to clean origin values
+      venueYawTarget = originYaw;
+      venueYaw       = originYaw;
+      venueFOVTarget = originFOV;
+      venueFOV       = originFOV;
+      panCamera3.rotation.y = -originYaw * D2R;
+      panCamera3.fov = originFOV;
+      panCamera3.updateProjectionMatrix();
+      cancelVenueTour();
+      return;
+    }
+
+    tourAnimFrame = requestAnimationFrame(tick);
+  }
+
+  tourAnimFrame = requestAnimationFrame(tick);
+  log('Venue 360 tour started — venue:'+selectedVenueId, 'ok');
+}
+
+function cancelVenueTour(){
+  tourActive = false;
+  if(tourAnimFrame){ cancelAnimationFrame(tourAnimFrame); tourAnimFrame=null; }
+  const btn = document.getElementById('btn-360');
+  if(btn){ btn.style.opacity='0.35'; btn.style.color='rgba(255,255,255,0.8)'; }
+  log('Venue 360 tour ended', 'info');
 }
 function panVenue(yawDelta){
   venueYawTarget += yawDelta;
@@ -1607,7 +1719,7 @@ function startSegmentation(vid){
   async function poseLoop(){
     poseFrameCount++;
     if(poseFrameCount % 6 === 0 && vid.readyState >= 2 &&
-       (guideActive || activeAccessories.size > 0) && poseInst && !mediapipeBusy){
+       (guideActive || activeAccessories.size > 0 || trayVisible) && poseInst && !mediapipeBusy){
       mediapipeBusy = true;
       try{ await poseInst.send({image:vid}); }catch(e){}
       mediapipeBusy = false;
@@ -1628,10 +1740,14 @@ function startPoseDetection(vid){
   });
   poseInst.onResults(res=>{
     if(!res.poseLandmarks) return;
-    lastPoseLandmarks = res.poseLandmarks; // store globally for accessories
-    // Process tray gestures from pose landmarks
+    lastPoseLandmarks = res.poseLandmarks;
+    // Confirm pose is active for tray (log once)
+    if(trayVisible && !poseInst._trayLoggedOnce){
+      poseInst._trayLoggedOnce = true;
+      log('Pose: running for tray gesture detection ✓', 'ok');
+    }
     processTrayGesture(res.poseLandmarks);
-    if(!guideActive) return; // only use for hand-raise during guide
+    if(!guideActive) return;
     const ls=res.poseLandmarks[11], rs=res.poseLandmarks[12];
     const lw=res.poseLandmarks[15], rw=res.poseLandmarks[16];
     if(!ls||!rs||!lw||!rw) return;
@@ -2944,6 +3060,7 @@ function handleAudienceMsg(msg){
   if(msg.type==='zoom'){ triggerZoom(); }
   if(msg.type==='zoom-in'){ triggerZoom(); if(venueMode) zoomVenueIn(); }
   if(msg.type==='zoom-out'){ releaseZoom(); if(venueMode) zoomVenueOut(); }
+  if(msg.type==='venue-tour'){ startVenueTour(); }
   if(msg.type==='venue-pan'){
     if(venueMode) panVenue(msg.delta);
     else { tYaw += msg.delta; manualYaw += msg.delta; }

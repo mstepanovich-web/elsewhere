@@ -185,7 +185,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.10</div>
+  <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.12</div>
 </div>
 
 <!-- HOME -->
@@ -195,7 +195,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.10</div>
+      <div style="font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.12</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -1604,8 +1604,12 @@ function showStageOverlay(){
       venueGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;';
       cat.venues.forEach(v=>{
         const card = document.createElement('div');
-        card.style.cssText = `padding:12px 8px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${v.id===currentVenueId?'var(--color-gold-dim)':'var(--color-white-soft)'};background:${v.id===currentVenueId?'var(--color-gold-faint)':'var(--color-white-ghost)'};-webkit-user-select:none;`;
-        card.innerHTML = `<div style="font-size:24px;margin-bottom:4px;">${v.icon}</div><div style="font-size:10px;color:rgba(255,220,150,.8);font-family:var(--font-mono);letter-spacing:.04em;">${v.name}</div>`;
+        card.style.cssText = `padding:12px 8px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${v.id===currentVenueId?'var(--color-gold-dim)':'var(--color-white-soft)'};background:${v.id===currentVenueId?'var(--color-gold-faint)':'var(--color-white-ghost)'};-webkit-user-select:none;position:relative;`;
+        card.innerHTML = `
+          <div style="font-size:24px;margin-bottom:4px;">${v.icon}</div>
+          <div style="font-size:10px;color:rgba(255,220,150,.8);font-family:var(--font-mono);letter-spacing:.04em;">${v.name}</div>
+          ${v.skyboxId ? `<div class="btn-360-singer" onclick="event.stopPropagation();requestVenueTour('${v.id}')" style="position:absolute;top:5px;right:5px;font-size:8px;font-family:var(--font-mono);font-weight:bold;color:rgba(255,220,80,0.7);border:1px solid rgba(255,220,80,0.3);border-radius:4px;padding:1px 4px;background:rgba(0,0,0,0.3);letter-spacing:0.04em;">360°</div>` : ''}
+        `;
         card.onclick = ()=>{ selectVenue(v); };
         venueGrid.appendChild(card);
       });
@@ -1618,6 +1622,20 @@ function showStageOverlay(){
 
 function hideStageOverlay(){
   document.getElementById('stage-overlay').style.display = 'none';
+}
+
+function requestVenueTour(venueId){
+  // Switch to venue first if not already on it, then trigger tour
+  const v = VENUES ? VENUES.find(x=>x.id===venueId) : null;
+  if(v && currentVenueId !== venueId){
+    selectVenue(v);
+    // Small delay to let venue load before tour starts
+    setTimeout(()=>{ sendToStage({type:'venue-tour'}); }, 3500);
+  } else {
+    sendToStage({type:'venue-tour'});
+  }
+  showToast('360° tour ▶');
+  hideStageOverlay();
 }
 
 function selectVenue(v){
