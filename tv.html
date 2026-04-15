@@ -264,10 +264,6 @@
 
     <div class="qr-header">Scan a code on your phone to begin</div>
 
-    <div class="qr-header" id="tv-countdown-msg" style="margin-bottom:16px;font-size:var(--text-sm);">
-      Scan Karaoke on your phone — TV switching to stage in <span id="tv-countdown">4</span>s
-    </div>
-
     <div class="qr-grid">
 
       <div class="qr-tile qr-tile--karaoke" id="qr-tile-karaoke" style="cursor:pointer;" title="Click to open Stage on this TV">
@@ -276,7 +272,7 @@
           <canvas id="qr-karaoke" width="200" height="200"></canvas>
         </div>
         <div class="qr-url" id="qr-karaoke-url">—</div>
-        <div class="qr-hint">Performer · Audience</div>
+        <div class="qr-hint">Scan on phone · Click here to open Stage on TV</div>
       </div>
 
       <div class="qr-tile qr-tile--fashion">
@@ -422,17 +418,10 @@
 
     goTo('screen-qr');
 
-    // Countdown then TV navigates to stage.html
-    let secs = 4;
-    const countEl = document.getElementById('tv-countdown');
-    const ticker = setInterval(() => {
-      secs--;
-      if (countEl) countEl.textContent = secs;
-      if (secs <= 0) {
-        clearInterval(ticker);
-        window.location.href = stageUrl;
-      }
-    }, 1000);
+    // TV navigates to stage.html only when Karaoke tile is clicked
+    document.getElementById('qr-tile-karaoke').addEventListener('click', () => {
+      window.location.href = stageUrl;
+    });
   });
 
   // ═══════════════════════════════════════
