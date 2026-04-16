@@ -315,7 +315,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.54</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.55</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -466,7 +466,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.54</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.55</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -2374,28 +2374,35 @@ function runGuideLoop(gc, W, H){
 // VENUES
 // ═══════════════════════════════════════
 const VENUES = [
-  { id:'default',    name:'Classic Stage',     icon:'🎤', skyboxId:null,          startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'stadium',    name:'Stadium',           icon:'🏟️', skyboxId:'stadium',    startYaw:-45,  staticYaw:151,  staticPitch:-17 },
-  { id:'speakeasy',  name:'Speakeasy',         icon:'🥃', skyboxId:'speakeasy',  startYaw:66,   staticYaw:201,  staticPitch:-1  },
-  { id:'disco',      name:'Disco Club',        icon:'🪩', skyboxId:'disco',      startYaw:-200, staticYaw:23,   staticPitch:0   },
-  { id:'honkytonk',  name:'Honky Tonk',        icon:'🤠', skyboxId:'honkytonk',  startYaw:168,  staticYaw:-71,  staticPitch:6   },
-  { id:'festival',   name:'Festival',          icon:'🎪', skyboxId:'festival',   startYaw:358,  staticYaw:109,  staticPitch:-6  },
-  { id:'vegas',      name:'Las Vegas',         icon:'🎰', skyboxId:'vegas',      startYaw:79,   staticYaw:-150, staticPitch:2   },
-  { id:'jazz',       name:'Jazz Club',         icon:'🎷', skyboxId:'jazz',       startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'broadway',   name:'Broadway',          icon:'🎭', skyboxId:'broadway',   startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'forest',     name:'Enchanted Forest',  icon:'🌲', skyboxId:'forest',     startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'space',      name:'Space Station',     icon:'🚀', skyboxId:'space',      startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'dragonlair', name:"Dragon's Lair",     icon:'🐉', skyboxId:'dragonlair', startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'underwater', name:'Underwater',        icon:'🐠', skyboxId:'underwater', startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'divebar',    name:'Dive Bar',          icon:'🍺', skyboxId:'divebar',    startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'supperclub', name:'Supper Club',       icon:'🍷', skyboxId:'supperclub', startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'bourbon',    name:'Bourbon Street',    icon:'🎺', skyboxId:'bourbon',    startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'cabaret',    name:'Cabaret',           icon:'🪗', skyboxId:'cabaret',    startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'rooftop',    name:'Rooftop Party',     icon:'🌆', skyboxId:'rooftop',    startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'artdeco',    name:'Art Deco Ballroom', icon:'✨', skyboxId:'artdeco',    startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'skiodge',    name:'Après-Ski Lodge',   icon:'⛷️', skyboxId:'skiodge',   startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'tikibar',    name:'Tiki Bar',          icon:'🌺', skyboxId:'tikibar',    startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'wildwest',   name:'Wild West',         icon:'🤠', skyboxId:'wildwest',   startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'default',       name:'Classic Stage',     icon:'🎤', skyboxId:null,                startYaw:0,    staticYaw:0,    staticPitch:0  },
+  // ── Existing tuned venues ──────────────────────────────────────────────────────
+  { id:'stadium',       name:'Stadium',           icon:'🏟️', skyboxId:'stadium',           startYaw:-45,  staticYaw:151,  staticPitch:-17 },
+  { id:'speakeasy',     name:'Speakeasy',         icon:'🥃', skyboxId:'speakeasy',         startYaw:66,   staticYaw:201,  staticPitch:-1  },
+  { id:'disco',         name:'Disco Club',        icon:'🪩', skyboxId:'disco',             startYaw:-200, staticYaw:23,   staticPitch:0   },
+  { id:'honkytonk',     name:'Honky Tonk',        icon:'🤠', skyboxId:'honkytonk',         startYaw:168,  staticYaw:-71,  staticPitch:6   },
+  { id:'festival',      name:'Festival',          icon:'🎪', skyboxId:'festival',          startYaw:358,  staticYaw:109,  staticPitch:-6  },
+  { id:'vegas',         name:'Las Vegas',         icon:'🎰', skyboxId:'vegas',             startYaw:79,   staticYaw:-150, staticPitch:2   },
+  // ── New venues — skyboxId matches actual filename ──────────────────────────────
+  { id:'broadway',      name:'Broadway',          icon:'🎭', skyboxId:'broadway',          startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'rooftop',       name:'Rooftop Party',     icon:'🌆', skyboxId:'rooftop',           startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'supperclub',    name:'Supper Club',       icon:'🍷', skyboxId:'supperclub',        startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'cabaret',       name:'Cabaret',           icon:'🪗', skyboxId:'cabaret',           startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'dragonlair',    name:"Dragon's Lair",     icon:'🐉', skyboxId:'dragonlair',        startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'enchantedforest',name:'Enchanted Forest', icon:'🌲', skyboxId:'enchantedforest',   startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'spacestation',  name:'Space Station',     icon:'🚀', skyboxId:'spacestation',      startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'hollywoodbowl', name:'Hollywood Bowl',    icon:'🎬', skyboxId:'hollywoodbowl',     startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'amphitheater',  name:'Amphitheater',      icon:'🏛️', skyboxId:'amphitheater',     startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'colosseum',     name:'Colosseum',         icon:'⚔️', skyboxId:'colosseum',        startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'bourbonstreet', name:'Bourbon Street',    icon:'🎺', skyboxId:'bourbonstreet',     startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'saloon',        name:'Saloon',            icon:'🍺', skyboxId:'saloon',            startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'drivein',       name:'Drive-In',          icon:'🚗', skyboxId:'drivein',           startYaw:0,    staticYaw:0,    staticPitch:0   },
+  // ── Kids venues ────────────────────────────────────────────────────────────────
+  { id:'kids-candy',    name:'Candy Land',        icon:'🍬', skyboxId:'kids-candy',        startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'kids-dino',     name:'Dinosaur World',    icon:'🦕', skyboxId:'kids-dino',         startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'kids-dino2',    name:'Dino Adventure',    icon:'🦖', skyboxId:'kids-dino2',        startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'kids-northpole',name:'North Pole',        icon:'🎅', skyboxId:'kids-northpole',    startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'kids-princess', name:'Princess Palace',   icon:'👸', skyboxId:'kids-princess',     startYaw:0,    staticYaw:0,    staticPitch:0   },
+  { id:'kids-winter',   name:'Winter Wonderland', icon:'⛄', skyboxId:'kids-winter',       startYaw:0,    staticYaw:0,    staticPitch:0   },
 ];
 
 const VENUE_BASE_URL = 'https://mstepanovich-web.github.io/elsewhere/venues/';
