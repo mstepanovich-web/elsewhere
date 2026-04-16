@@ -224,77 +224,123 @@
     </div>
 
     <!-- ══════════════════════════════════════════ -->
-    <!-- GAME LOBBY (waiting room + invite)         -->
+    <!-- SCREEN 2b: GAME INFO                       -->
+    <!-- Manager only — explains game + set limit   -->
     <!-- ══════════════════════════════════════════ -->
-    <div id="screen-game-lobby" class="screen">
+    <div id="screen-game-info" class="screen">
+      <div style="padding:24px 16px 0;">
+        <div style="font-size:var(--text-xs);letter-spacing:var(--tracking-wider);text-transform:uppercase;color:var(--color-text-faint);cursor:pointer;margin-bottom:16px;" onclick="goToLobby()">← Games</div>
+        <div class="page-title" id="info-game-title">Last Card</div>
+      </div>
+
+      <!-- Game description — set per game -->
+      <div id="info-description" style="padding:16px 16px 0;font-size:var(--text-sm);color:var(--color-text-dim);line-height:1.7;letter-spacing:var(--tracking-tight);"></div>
+
+      <!-- Rules summary -->
+      <div id="info-rules" style="padding:12px 16px 0;display:flex;flex-direction:column;gap:6px;"></div>
+
+      <!-- Player limit -->
       <div style="padding:20px 16px 0;">
-        <div class="lobby-header">
-          <div class="lobby-game-title" id="lobby-game-title">Last Card</div>
-          <div class="lobby-limit-badge" id="lobby-limit-badge">0 / 6</div>
-        </div>
-        <div class="page-sub" id="lobby-sub">Waiting for players</div>
-      </div>
-
-      <!-- Manager is a player checkbox -->
-      <div id="mgr-player-section" style="display:none;padding:12px 16px 0;">
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-          <input type="checkbox" id="mgr-is-player" checked onchange="toggleManagerAsPlayer(this.checked)"
-            style="width:18px;height:18px;accent-color:var(--color-gold);cursor:pointer;">
-          <span style="font-size:var(--text-sm);color:var(--color-text-dim);">I'm playing in this game too</span>
-        </label>
-      </div>
-
-      <!-- Player limit stepper (manager only) -->
-      <div id="limit-section" style="display:none;padding:0 16px;">
-        <div class="lobby-section-label">Player limit</div>
+        <div class="lobby-section-label">Max players</div>
         <div class="limit-row">
           <div class="limit-stepper">
             <div class="limit-btn" onclick="changeLimit(-1)">−</div>
             <div class="limit-val" id="limit-val">6</div>
             <div class="limit-btn" onclick="changeLimit(1)">+</div>
           </div>
-          <div class="limit-label">max players (others join queue)</div>
+          <div class="limit-label" id="limit-range-label">2 – 8 players</div>
         </div>
       </div>
 
-      <!-- Invite section (manager only) -->
-      <div id="invite-section" style="display:none;padding:0 16px;">
-        <div class="lobby-section-label">Invite players</div>
-        <div class="invite-card">
-          <div class="invite-card-title">Instant invite</div>
-          <div class="invite-btns">
-            <div class="invite-btn" onclick="shareInvite()">📤 Share Link</div>
-            <div class="invite-btn" onclick="copyInvite()">📋 Copy Link</div>
+      <div style="padding:24px 16px 32px;">
+        <button class="action-btn" onclick="goToCreateGame()">Create Game →</button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- SCREEN 3: CREATE GAME (invite)             -->
+    <!-- Manager sets up and invites               -->
+    <!-- ══════════════════════════════════════════ -->
+    <div id="screen-create-game" class="screen">
+      <div style="padding:20px 16px 0;">
+        <div style="font-size:var(--text-xs);letter-spacing:var(--tracking-wider);text-transform:uppercase;color:var(--color-text-faint);cursor:pointer;margin-bottom:16px;" onclick="goTo('screen-game-info')">← Back</div>
+        <div class="page-title" style="font-size:clamp(26px,7vw,40px);" id="create-game-title">Last Card</div>
+        <div class="page-sub" style="margin-top:4px;">Room <span id="create-room-code" style="color:var(--color-gold);letter-spacing:.2em;font-family:var(--font-mono);"></span></div>
+      </div>
+
+      <!-- I'm playing checkbox -->
+      <div style="padding:16px 16px 0;">
+        <label style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:14px;border-radius:var(--radius-md);border:1px solid var(--color-border-dim);background:var(--color-surface);">
+          <input type="checkbox" id="mgr-is-player" checked onchange="toggleManagerAsPlayer(this.checked)"
+            style="width:20px;height:20px;accent-color:var(--color-gold);cursor:pointer;flex-shrink:0;">
+          <div>
+            <div style="font-size:var(--text-sm);color:var(--color-text);">I'm playing in this game</div>
+            <div style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:2px;">Your name will appear first in the lobby</div>
           </div>
-          <div style="margin-top:14px;">
-            <div class="invite-card-title">Schedule a game</div>
-            <div class="schedule-row">
-              <input class="schedule-input" type="datetime-local" id="schedule-time">
-              <div class="invite-btn" onclick="sendCalendarInvite()" style="white-space:nowrap;">📅 Send</div>
-            </div>
+        </label>
+      </div>
+
+      <!-- Invite -->
+      <div style="padding:16px 16px 0;">
+        <div class="lobby-section-label">Invite players</div>
+        <div class="invite-btns" style="margin-bottom:10px;">
+          <div class="invite-btn" onclick="shareInvite()">📤 Share Link</div>
+          <div class="invite-btn" onclick="copyInvite()">📋 Copy Link</div>
+        </div>
+        <!-- Invited list -->
+        <div id="invited-list" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
+        <!-- Schedule link -->
+        <div style="margin-top:14px;">
+          <div class="lobby-section-label">Schedule a game</div>
+          <div class="schedule-row">
+            <input class="schedule-input" type="datetime-local" id="schedule-time">
+            <div class="invite-btn" onclick="sendCalendarInvite()" style="white-space:nowrap;flex-shrink:0;">📅 Calendar</div>
           </div>
         </div>
+      </div>
+
+      <!-- Go to lobby -->
+      <div style="padding:20px 16px 32px;">
+        <button class="action-btn" onclick="goToGameLobby()">See Who's Joined →</button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- SCREEN 4: GAME LOBBY                       -->
+    <!-- Everyone sees this — roster + start        -->
+    <!-- ══════════════════════════════════════════ -->
+    <div id="screen-game-lobby" class="screen">
+      <div style="padding:20px 16px 0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div class="lobby-game-title" id="lobby-game-title">Last Card</div>
+          <div class="lobby-limit-badge" id="lobby-limit-badge">0 / 6</div>
+        </div>
+        <div class="page-sub" style="margin-top:4px;" id="lobby-room-sub">Room —</div>
       </div>
 
       <!-- Player roster -->
       <div style="padding:0 16px;">
         <div class="lobby-section-label">In the lobby</div>
         <div class="player-roster" id="lobby-roster"></div>
-        <div class="lobby-section-label" id="queue-label" style="display:none;">In the queue</div>
+        <div class="lobby-section-label" id="queue-label" style="display:none;">Waiting in queue</div>
         <div class="player-roster" id="lobby-queue"></div>
       </div>
 
-      <!-- Start section (manager only) -->
-      <div id="start-section" class="start-section" style="display:none;padding:0 16px 24px;">
-        <button class="action-btn" id="lobby-start-btn" onclick="managerStart()">▶ Start Game</button>
-        <div style="margin-top:8px;text-align:center;font-size:var(--text-xs);color:var(--color-text-faint);">
-          Starts for all players simultaneously
+      <!-- Manager: back to invite + start -->
+      <div id="lobby-manager-actions" style="display:none;padding:16px 16px 8px;">
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <div class="invite-btn" onclick="shareInvite()" style="flex:1;">📤 Invite More</div>
+          <div class="invite-btn" onclick="goTo('screen-create-game')" style="flex:1;">← Setup</div>
         </div>
+        <button class="action-btn" id="lobby-start-btn" onclick="managerStart()">▶ Start New Game</button>
+        <div style="margin-top:6px;text-align:center;font-size:var(--text-xs);color:var(--color-text-faint);">Starts for all players at the same time</div>
       </div>
 
-      <!-- Non-manager waiting message -->
-      <div id="waiting-msg" style="padding:24px 16px;text-align:center;">
-        <div style="font-size:var(--text-sm);color:var(--color-text-faint);letter-spacing:var(--tracking-wider);">Waiting for <span id="manager-name-display" style="color:var(--color-gold-dim);">the manager</span> to start the game</div>
+      <!-- Player: waiting message -->
+      <div id="waiting-msg" style="padding:20px 16px;text-align:center;">
+        <div style="font-size:var(--text-sm);color:var(--color-text-faint);line-height:1.8;">
+          Waiting for <span id="manager-name-display" style="color:var(--color-gold-dim);font-weight:500;">the manager</span> to start the game
+        </div>
       </div>
     </div>
 
@@ -360,7 +406,7 @@
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);"></div>
 </div>
 
-<div class="ver">v2.52</div>
+<div class="ver">v2.53</div>
 
 <script>
 'use strict';
@@ -469,15 +515,13 @@ async function doJoin() {
       if (urlGame) {
         currentGame = urlGame;
         playerLimit = GAME_LIMITS[urlGame]?.default || 6;
-        const gameTitle = urlGame === 'lastcard' ? 'Last Card' : urlGame === 'trivia' ? 'Trivia Night' : urlGame;
-        document.getElementById('lobby-game-title').textContent = gameTitle;
       }
       if (urlMgrName) {
         const el = document.getElementById('manager-name-display');
         if (el) el.textContent = urlMgrName;
       }
-      goTo('screen-game-lobby');
-      updateLobbyUI();
+      // Invited players go straight to lobby
+      goToGameLobby();
     }
 
   } catch(e) {
@@ -545,12 +589,11 @@ function handleMessage(uid, data) {
 
     if (msg.type === 'game-selected') {
       log('game-selected: ' + msg.game);
-      currentGame  = msg.game;
-      playerLimit  = GAME_LIMITS[msg.game]?.default || 6;
-      goTo('screen-game-lobby');
-      document.getElementById('lobby-game-title').textContent =
-        msg.game === 'lastcard' ? 'Last Card' : 'Trivia Night';
-      updateLobbyUI();
+      currentGame = msg.game;
+      playerLimit = GAME_LIMITS[msg.game]?.default || 6;
+      if (!isManager) {
+        goToGameLobby();
+      }
     }
 
     if (msg.type === 'game-start') {
@@ -597,17 +640,75 @@ function goToLobby() {
 // ── Lobby ────────────────────────────────────────────────────
 function selectGame(game) {
   if (!isManager) return;
-  currentGame  = game;
-  playerLimit  = GAME_LIMITS[game]?.default || 6;
-  send({ type:'game-selected', game });
-  goTo('screen-game-lobby');
-  document.getElementById('lobby-game-title').textContent =
-    game === 'lastcard' ? 'Last Card' : 'Trivia Night';
-  updateLobbyUI();
+  currentGame = game;
+  playerLimit = GAME_LIMITS[game]?.default || 6;
+  goToGameInfo(game);
+}
 
-  if (game === 'trivia') {
-    setTimeout(() => showTriviaSetup(), 300);
-  }
+const GAME_INFO = {
+  lastcard: {
+    title: 'Last Card',
+    description: 'An Uno-compatible card game with Elsewhere rules. Be the first to empty your hand to win. Each card played must match the top of the discard pile by suit or value.',
+    rules: [
+      '🃏  Deal 7 cards to each player',
+      '2  Next player draws 2 cards',
+      'A  Skip the next player',
+      'J  Reverse direction',
+      '★  Wild — choose any suit',
+      '★+4  Wild — next player draws 4',
+      '⚠️  Call "Last Card!" when you have 1 card left or draw 2 penalty',
+    ],
+    minPlayers: 2, maxPlayers: 8, defaultLimit: 6,
+  },
+  trivia: {
+    title: 'Trivia Night',
+    description: 'AI-generated trivia questions across any category you choose. Answer on your phone before the timer runs out. Bonus points for speed and streaks.',
+    rules: [
+      '🧠  10 questions per round',
+      '⏱  20 seconds to answer each',
+      '🎯  100 pts base + time bonus + streak bonus',
+      '📊  Leaderboard shown after each answer',
+    ],
+    minPlayers: 2, maxPlayers: 20, defaultLimit: 10,
+  },
+};
+
+function goToGameInfo(game) {
+  const info = GAME_INFO[game] || GAME_INFO.lastcard;
+  const limits = GAME_LIMITS[game] || { min:2, max:8, default:6 };
+  playerLimit = limits.default;
+
+  document.getElementById('info-game-title').textContent = info.title;
+  document.getElementById('info-description').textContent = info.description;
+  document.getElementById('limit-val').textContent = playerLimit;
+  document.getElementById('limit-range-label').textContent = limits.min + ' – ' + limits.max + ' players · min ' + limits.min;
+
+  const rulesEl = document.getElementById('info-rules');
+  rulesEl.innerHTML = info.rules.map(r =>
+    `<div style="display:flex;align-items:flex-start;gap:10px;font-size:var(--text-sm);color:var(--color-text-dim);padding:6px 0;border-bottom:1px solid var(--color-border-dim);">${r}</div>`
+  ).join('');
+
+  goTo('screen-game-info');
+}
+
+function goToCreateGame() {
+  const info = GAME_INFO[currentGame] || GAME_INFO.lastcard;
+  document.getElementById('create-game-title').textContent = info.title;
+  document.getElementById('create-room-code').textContent = roomCode;
+  // Announce game selected to others
+  send({ type:'game-selected', game: currentGame });
+  goTo('screen-create-game');
+}
+
+function goToGameLobby() {
+  const info = GAME_INFO[currentGame] || GAME_INFO.lastcard;
+  document.getElementById('lobby-game-title').textContent = info.title;
+  document.getElementById('lobby-room-sub').textContent = 'Room ' + roomCode;
+  document.getElementById('lobby-limit-badge').textContent = lobbyPlayers.filter(p=>p.status==='active').length + ' / ' + playerLimit;
+  document.getElementById('lobby-manager-actions').style.display = isManager ? 'block' : 'none';
+  document.getElementById('waiting-msg').style.display = isManager ? 'none' : 'block';
+  renderRoster();
+  goTo('screen-game-lobby');
 }
 
 function updateLobbyUI() {
@@ -657,7 +758,27 @@ function recomputeQueue() {
   });
 }
 
+function renderInvitedList() {
+  const el = document.getElementById('invited-list');
+  if (!el) return;
+  const others = lobbyPlayers.filter(p => p.uid !== myUid);
+  if (others.length === 0) {
+    el.innerHTML = '<div style="font-size:var(--text-xs);color:var(--color-text-faint);padding:4px 0;">No one has joined yet</div>';
+    return;
+  }
+  el.innerHTML = others.map(p => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius-md);background:var(--color-surface);border:1px solid var(--color-border-dim);">
+      <div style="width:7px;height:7px;border-radius:50%;background:var(--color-green);box-shadow:0 0 5px var(--color-green);flex-shrink:0;"></div>
+      <span style="font-size:var(--text-sm);color:var(--color-text-dim);">${p.name}</span>
+      ${p.isManager ? '<span style="font-size:10px;color:var(--color-gold);margin-left:auto;">Manager</span>' : ''}
+    </div>`).join('');
+}
+
 function renderRoster() {
+  renderInvitedList();
+  // Also update lobby limit badge
+  const limitBadge = document.getElementById('lobby-limit-badge');
+  if (limitBadge) limitBadge.textContent = lobbyPlayers.filter(p=>p.status==='active').length + ' / ' + playerLimit;
   const active = lobbyPlayers.filter(p => p.status === 'active');
   const queue  = lobbyPlayers.filter(p => p.status === 'queue');
 
