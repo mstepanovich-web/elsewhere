@@ -543,7 +543,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.80</div>
+<div class="ver">v2.81</div>
 
 <script>
 'use strict';
@@ -755,7 +755,7 @@ function updateLobbyCamera(uid, on) {
 }
 
 // ── Messaging ────────────────────────────────────────────────
-const CHUNK_SIZE = 800; // Agora limit is 1KB, use 800 to be safe
+const CHUNK_SIZE = 700; // Agora limit is 1KB, chunk wrapper adds ~50b overhead
 
 async function sendRaw(bytes) {
   if (streamId !== null) {
@@ -1240,7 +1240,7 @@ function managerStartLastCard() {
   };
   myHand=[...(gameState.hands[myName]||[])];
   gameInProgress=true;
-  send({type:'game-start', state: gameState}); // full state — each player reads their own hand
+  send({type:'game-start', state: compressState(gameState)}); // compressed — drawPile sent as count only
   startLastCard();
 }
 
@@ -1298,7 +1298,7 @@ function renderLastCard() {
   const ssm=document.getElementById('lc-suit-sm');
   if (ssm) ssm.textContent=s.currentColor||'—';
   const dsm=document.getElementById('lc-draw-count-sm');
-  if (dsm) dsm.textContent=s.drawPile?.length||0;
+  if (dsm) dsm.textContent=s.drawPileCount!==undefined?s.drawPileCount:(s.drawPile?.length||0);
   const turn=document.getElementById('lc-turn-sm');
   if (turn) {
     turn.style.display='block'; // always show turn info
@@ -1493,7 +1493,7 @@ function managerNextRound() {
     currentColor:top.color,currentValue:top.value,currentPlayerIdx:0,direction:1,pendingDraw:0,lastCard:{},winner:null};
   myHand=[...gameState.hands[myName]];
   document.getElementById('mgr-next').style.display='none';
-  broadcastState(); renderLastCard();
+  broadcastState(); renderLastCard(); // broadcastState uses compressState internally
 }
 
 function advance(s){s.currentPlayerIdx=(s.currentPlayerIdx+s.direction+s.players.length)%s.players.length;}
@@ -1727,14 +1727,20 @@ function stopTriviaTimer(){if(timerInterval){clearInterval(timerInterval);timerI
 // ── Shared helpers ────────────────────────────────────────────
 function broadcastState() {
   if (!isManager) return;
-  // Send full state — all players need their own hand data
-  // Card values for other players are hidden in the UI, not the data
-  send({type:'game-state', state: gameState});
+  send({type:'game-state', state: compressState(gameState)});
 }
 
 function stripHands(state) {
-  // No longer stripping — full state broadcast so each player gets their cards
-  return state;
+  return compressState(state);
+}
+
+function compressState(state) {
+  if (!state) return state;
+  const s = JSON.parse(JSON.stringify(state));
+  // Replace drawPile array with just a count — receivers don't need the actual cards
+  s.drawPileCount = s.drawPile ? s.drawPile.length : 0;
+  s.drawPile = []; // empty array instead of 80+ cards
+  return s;
 }
 
 // ── Log ───────────────────────────────────────────────────────

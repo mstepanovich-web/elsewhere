@@ -211,7 +211,7 @@
   </div>
   <div id="log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.80</div>
+<div class="ver">v2.81</div>
 
 <script>
 'use strict';
@@ -511,7 +511,7 @@ function renderLastCard() {
   if (dotEl) dotEl.style.background = COLOR_BG[s.currentColor] || '#888';
 
   const drawEl = document.getElementById('centre-draw');
-  if (drawEl) drawEl.textContent = s.drawPile?.length || 0;
+  if (drawEl) drawEl.textContent = s.drawPileCount!==undefined?s.drawPileCount:(s.drawPile?.length||0);
 
   const dirEl = document.getElementById('centre-dir');
   if (dirEl) dirEl.textContent = s.direction === 1 ? '▶' : '◀';
