@@ -547,7 +547,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.83</div>
+<div class="ver">v2.84</div>
 
 <script>
 'use strict';
@@ -946,12 +946,30 @@ function handleMessage(uid, data) {
       doPlayCard(card, msg.chosenSuit);
     } else if (msg.action==='draw') {
       const s=JSON.parse(JSON.stringify(gameState));
-      const cnt=s.pendingDraw>0?s.pendingDraw:1;
+      const isPenalty = s.pendingDraw > 0;
+      const cnt = isPenalty ? s.pendingDraw : 1;
       s.pendingDraw=0;
       for(let i=0;i<cnt;i++){
         if(s.drawPile.length===0) reshuffleDeck(s);
         if(s.drawPile.length>0) s.hands[msg._name].push(s.drawPile.pop());
       }
+      // If drew exactly 1 card and it's playable, allow the player to play it
+      if (!isPenalty && cnt===1) {
+        const drawnCard = s.hands[msg._name][s.hands[msg._name].length-1];
+        if (canPlay(s, drawnCard)) {
+          // Mark state as awaiting play-or-pass — don't advance yet
+          s.awaitingPlayAfterDraw = msg._name;
+          gameState=s;
+          broadcastState(); renderLastCard();
+          return; // manager waits for player-action 'play' or 'pass'
+        }
+      }
+      advance(s); gameState=s;
+      broadcastState(); renderLastCard();
+    } else if (msg.action==='pass') {
+      // Player drew a card and chose not to play it (or drew unplayable)
+      const s=JSON.parse(JSON.stringify(gameState));
+      s.awaitingPlayAfterDraw = null;
       advance(s); gameState=s;
       broadcastState(); renderLastCard();
     } else if (msg.action==='declare-last-card') {
@@ -1406,8 +1424,30 @@ function renderHand(myTurn, s, handId, drawId, playId) {
   selectedCard=null;
   const drawBtn=document.getElementById(drawId);
   const playBtn=document.getElementById(playId);
-  if (drawBtn) drawBtn.disabled=!myTurn;
   if (playBtn) playBtn.disabled=true;
+
+  // Handle draw button state
+  const awaitingMe = s.awaitingPlayAfterDraw === myName;
+  if (drawBtn) {
+    if (awaitingMe) {
+      drawBtn.textContent = 'Pass Turn';
+      drawBtn.disabled = false;
+      drawBtn.onclick = () => {
+        if (isManager) {
+          const st=JSON.parse(JSON.stringify(gameState));
+          st.awaitingPlayAfterDraw=null; advance(st); gameState=st;
+          myHand=[...gameState.hands[myName]];
+          broadcastState(); renderLastCard();
+        } else {
+          send({type:'player-action', action:'pass'});
+        }
+      };
+    } else {
+      drawBtn.textContent = drawId==='lc-draw-btn' ? 'Draw Card' : 'Draw';
+      drawBtn.disabled = !myTurn;
+      drawBtn.onclick = lcDraw;
+    }
+  }
 
   myHand.forEach(card=>{
     const playable=myTurn&&canPlay(s,card);
@@ -1522,23 +1562,26 @@ function lcDraw() {
   if (!gameState) return;
   if (isManager) {
     const s=JSON.parse(JSON.stringify(gameState));
-    const cnt=s.pendingDraw>0?s.pendingDraw:1;
+    const isPenalty = s.pendingDraw > 0;
+    const cnt = isPenalty ? s.pendingDraw : 1;
     s.pendingDraw=0;
-    // Manager draws from actual drawPile
-    const fullDeck = gameState._fullDrawPile || [];
     for(let i=0;i<cnt;i++){
-      if(s.drawPile.length===0 && fullDeck.length>0){
-        // Reshuffle from discard
-        reshuffleDeck(s);
-      }
+      if(s.drawPile.length===0) reshuffleDeck(s);
       if(s.drawPile.length>0) s.hands[myName].push(s.drawPile.pop());
       else {
-        // Draw pile exhausted — create fresh cards as fallback
-        const colors=['red','yellow','blue','green'];
-        const vals=['1','2','3','4','5','6','7','8','9'];
-        const c=colors[Math.floor(Math.random()*4)];
-        const v=vals[Math.floor(Math.random()*9)];
+        const colors=['red','yellow','blue','green'],vals=['1','2','3','4','5','6','7','8','9'];
+        const c=colors[Math.floor(Math.random()*4)],v=vals[Math.floor(Math.random()*9)];
         s.hands[myName].push({color:c,value:v,id:c+v+Date.now(),action:false});
+      }
+    }
+    // If drew exactly 1 card and it's playable, allow playing it before advancing
+    if (!isPenalty && cnt===1) {
+      const drawnCard = s.hands[myName][s.hands[myName].length-1];
+      if (canPlay(s, drawnCard)) {
+        gameState=s; myHand=[...s.hands[myName]];
+        broadcastState(); renderLastCard();
+        showToast('You drew a playable card — play it or tap Draw again to pass');
+        return; // don't advance yet
       }
     }
     advance(s); gameState=s; myHand=[...s.hands[myName]];
