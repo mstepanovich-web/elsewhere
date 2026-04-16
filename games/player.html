@@ -395,7 +395,13 @@
         <div id="lc-notv-btn" onclick="setTVMode(false)" style="padding:4px 12px;border-radius:var(--radius-pill);border:1px solid var(--color-gold);background:var(--color-gold-faint);font-size:var(--text-xs);cursor:pointer;letter-spacing:.08em;text-transform:uppercase;">📱 No TV</div>
       </div>
 
-      <!-- Phone-only top strip -->
+      <!-- Turn indicator — always visible, independent of TV mode -->
+      <div id="lc-turn-bar" style="padding:6px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--color-border-dim);flex-shrink:0;">
+        <div class="lc-turn-label" id="lc-turn-sm" style="display:block;">—</div>
+        <div id="lc-pending-sm" style="display:none;font-size:var(--text-xs);color:var(--color-red);letter-spacing:.1em;">Draw pending!</div>
+      </div>
+
+      <!-- Discard + draw pile strip — always visible -->
       <div id="lc-top-strip">
         <div class="lc-top-row">
           <div class="lc-discard-area">
@@ -409,9 +415,7 @@
               <div class="lc-pile-val" id="lc-draw-count-sm">—</div>
             </div>
           </div>
-          <div class="lc-turn-label" id="lc-turn-sm">—</div>
         </div>
-        <div id="lc-pending-sm" style="display:none;font-size:var(--text-xs);color:var(--color-red);letter-spacing:.1em;text-align:center;padding:2px 0;">Draw pending!</div>
       </div>
 
       <!-- Other players strip (phone-only) -->
@@ -543,7 +547,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.81</div>
+<div class="ver">v2.82</div>
 
 <script>
 'use strict';
@@ -879,7 +883,14 @@ function handleMessage(uid, data) {
     const activeScreen = document.querySelector('.screen.active')?.id;
     if (currentGame==='lastcard') {
       if (activeScreen !== 'screen-lastcard') startLastCard();
-      else renderLastCard();
+      else {
+        // Make sure End Game stays visible for manager during game
+        if (isManager) {
+          const eg = document.getElementById('mgr-endgame');
+          if (eg) eg.style.display='block';
+        }
+        renderLastCard();
+      }
     }
     if (currentGame==='trivia') {
       if (activeScreen !== 'screen-trivia') startTrivia(msg.state);
