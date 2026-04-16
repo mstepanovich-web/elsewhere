@@ -538,7 +538,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.76</div>
+<div class="ver">v2.77</div>
 
 <script>
 'use strict';
@@ -1096,6 +1096,13 @@ function managerSkip()   {
     gameState=lcApplyDraw(gameState); broadcastState(); renderLastCard();
   }
 }
+function managerEndGame() {
+  // End game after a round — show scores and play again option
+  const scores = gameState?.scores || {};
+  send({type:'game-over', scores});
+  showGameOver(scores);
+}
+
 function managerEnd() {
   if (!confirm('End this game for all players?')) return;
   send({type:'switch-game'}); gameInProgress=false; goToLobby();
@@ -1254,6 +1261,10 @@ function renderLastCard() {
       document.getElementById('mgr-next').style.display='block';
       document.getElementById('mgr-next').textContent='Next Round →';
       document.getElementById('mgr-next').onclick=managerNextRound;
+      // Also show End Game option in manager bar
+      document.getElementById('mgr-reveal').style.display='block';
+      document.getElementById('mgr-reveal').textContent='End Game';
+      document.getElementById('mgr-reveal').onclick=managerEndGame;
     }
   }
 
