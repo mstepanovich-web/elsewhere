@@ -95,9 +95,11 @@
       font-size: clamp(16px,2.2vw,32px); box-shadow: 0 4px 20px rgba(0,0,0,.6);
       transition: all 0.3s;
     }
-    .tv-card.red   { background: #c0392b; color: #fff; }
-    .tv-card.black { background: #1a1a2e; color: #eee; }
-    .tv-card.wild  { background: linear-gradient(135deg,#8e44ad,#c0392b,#27ae60,#2980b9); color: #ffd700; }
+    .tv-card.color-red    { background: linear-gradient(160deg,#e74c3c,#c0392b); color: #fff; }
+    .tv-card.color-yellow { background: linear-gradient(160deg,#f1c40f,#d4ac0d); color: #1a1a1a; }
+    .tv-card.color-blue   { background: linear-gradient(160deg,#2980b9,#1a5276); color: #fff; }
+    .tv-card.color-green  { background: linear-gradient(160deg,#27ae60,#1e8449); color: #fff; }
+    .tv-card.color-wild   { background: linear-gradient(160deg,#1a1a1a,#2c2c2c); color: #ffd700; border-color:rgba(255,215,0,.4); }
 
     .centre-suit { font-size: clamp(20px,3vw,44px); }
     .centre-meta { display: flex; gap: 16px; }
@@ -202,7 +204,7 @@
   </div>
   <div id="log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.74</div>
+<div class="ver">v2.75</div>
 
 <script>
 'use strict';
@@ -409,11 +411,10 @@ function updateCentrePanel() {
   if (!gameState) return;
   const s = gameState;
   const top = s.discardPile?.[s.discardPile.length-1];
-  const isRed  = top&&(top.suit==='♥'||top.suit==='♦');
-  const isWild = top&&!top.suit;
+  const topLabel = top?(top.value==='Wild Draw 4'?'★+4':top.value==='Wild'?'★':top.value==='Draw 2'?'+2':top.value==='Skip'?'⊘':top.value==='Reverse'?'⇄':top.value):'—';
   const cardEl = document.getElementById('centre-card');
-  if (cardEl) { cardEl.textContent=top?(top.value+(top.suit||'')):'—'; cardEl.className='tv-card '+(isWild?'wild':isRed?'red':'black'); }
-  const suitEl=document.getElementById('centre-suit'); if(suitEl) suitEl.textContent=s.currentSuit||'★';
+  if (cardEl) { cardEl.textContent=topLabel; cardEl.className='tv-card color-'+(top?top.color:'wild'); }
+  const suitEl=document.getElementById('centre-suit'); if(suitEl) suitEl.textContent=(s.currentColor||'—').toUpperCase();
   const drawEl=document.getElementById('centre-draw'); if(drawEl) drawEl.textContent=s.drawPile?.length||0;
   const dirEl=document.getElementById('centre-dir');   if(dirEl)  dirEl.textContent=s.direction===1?'▶':'◀';
   const pendEl=document.getElementById('centre-pending');

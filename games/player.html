@@ -159,9 +159,11 @@
     .lc-hand-label { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); padding: 8px 14px 4px; flex-shrink: 0; }
     .lc-hand { display: flex; flex-wrap: wrap; gap: 7px; padding: 6px 14px 10px; align-content: flex-start; overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
     .lc-card { width: 64px; height: 96px; border-radius: 10px; border: 2px solid rgba(255,255,255,.2); display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 6px 4px; cursor: pointer; transition: all 0.18s; flex-shrink: 0; box-shadow: 0 2px 12px rgba(0,0,0,.5); -webkit-user-select: none; position: relative; overflow: hidden; }
-    .lc-card.red   { background: linear-gradient(160deg,#e74c3c,#c0392b); color: #fff; }
-    .lc-card.black { background: linear-gradient(160deg,#2c3e50,#1a1a2e); color: #e8e8e8; }
-    .lc-card.wild  { background: linear-gradient(135deg,#6c3483,#e74c3c,#27ae60,#2471a3); color: #ffd700; }
+    .lc-card.color-red    { background: linear-gradient(160deg,#e74c3c,#c0392b); color: #fff; }
+    .lc-card.color-yellow { background: linear-gradient(160deg,#f1c40f,#d4ac0d); color: #1a1a1a; }
+    .lc-card.color-blue   { background: linear-gradient(160deg,#2980b9,#1a5276); color: #fff; }
+    .lc-card.color-green  { background: linear-gradient(160deg,#27ae60,#1e8449); color: #fff; }
+    .lc-card.color-wild   { background: linear-gradient(160deg,#1a1a1a,#2c2c2c); color: #ffd700; border-color: rgba(255,215,0,.4); }
     .lc-card.playable { border-color: #ffd700; border-width: 2.5px; box-shadow: 0 0 16px rgba(255,215,0,.5); transform: translateY(-6px); }
     .lc-card.selected { border-color: var(--color-green); box-shadow: 0 0 16px rgba(0,232,122,.4); transform: translateY(-8px); }
     .lc-card.disabled { opacity: 0.5; cursor: default; transform: none !important; filter: grayscale(30%); }
@@ -398,7 +400,7 @@
           <div class="lc-discard-area">
             <div class="lc-card-sm" id="lc-top-card-sm">—</div>
             <div class="lc-pile-info">
-              <div class="lc-pile-label">Suit</div>
+              <div class="lc-pile-label">Color</div>
               <div class="lc-pile-val" id="lc-suit-sm">—</div>
             </div>
             <div class="lc-pile-info" style="margin-left:8px;">
@@ -513,13 +515,16 @@
   </div><!-- end screen-wrap -->
 </div><!-- end app -->
 
-<!-- Suit chooser -->
+<!-- Color chooser -->
 <div id="suit-chooser">
-  <div class="suit-grid">
-    <div class="suit-choice" onclick="lcChooseSuit('♠')">♠</div>
-    <div class="suit-choice" onclick="lcChooseSuit('♥')">♥</div>
-    <div class="suit-choice" onclick="lcChooseSuit('♦')">♦</div>
-    <div class="suit-choice" onclick="lcChooseSuit('♣')">♣</div>
+  <div style="background:var(--color-surface);border-radius:var(--radius-xl);border:1px solid var(--color-border);padding:24px;display:flex;flex-direction:column;align-items:center;gap:12px;">
+    <div style="font-size:var(--text-xs);letter-spacing:.15em;text-transform:uppercase;color:var(--color-text-faint);margin-bottom:4px;">Choose a color</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div onclick="lcChooseSuit('red')"    style="width:72px;height:72px;border-radius:12px;background:linear-gradient(160deg,#e74c3c,#c0392b);cursor:pointer;box-shadow:0 4px 16px rgba(231,76,60,.4);"></div>
+      <div onclick="lcChooseSuit('yellow')" style="width:72px;height:72px;border-radius:12px;background:linear-gradient(160deg,#f1c40f,#d4ac0d);cursor:pointer;box-shadow:0 4px 16px rgba(241,196,15,.4);"></div>
+      <div onclick="lcChooseSuit('blue')"   style="width:72px;height:72px;border-radius:12px;background:linear-gradient(160deg,#2980b9,#1a5276);cursor:pointer;box-shadow:0 4px 16px rgba(41,128,185,.4);"></div>
+      <div onclick="lcChooseSuit('green')"  style="width:72px;height:72px;border-radius:12px;background:linear-gradient(160deg,#27ae60,#1e8449);cursor:pointer;box-shadow:0 4px 16px rgba(39,174,96,.4);"></div>
+    </div>
   </div>
 </div>
 <button id="last-card-btn" onclick="lcDeclareLastCard()">Last Card!</button>
@@ -533,7 +538,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.74</div>
+<div class="ver">v2.75</div>
 
 <script>
 'use strict';
@@ -1097,13 +1102,28 @@ function managerEnd() {
 }
 
 // ── LAST CARD ─────────────────────────────────────────────────
-const SUITS=['♠','♥','♦','♣'], VALUES=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+const COLORS = ['red','yellow','blue','green'];
 
 function buildDeck() {
-  const d=[];
-  for(const s of SUITS) for(const v of VALUES) d.push({suit:s,value:v,id:v+s});
-  d.push({suit:null,value:'W',id:'W1'},{suit:null,value:'W',id:'W2'},
-         {suit:null,value:'W4',id:'W4-1'},{suit:null,value:'W4',id:'W4-2'});
+  const d = [];
+  // Number cards: one 0 per color, two 1-9 per color
+  for (const color of COLORS) {
+    d.push({ color, value:'0', id:color+'-0-a', action:false });
+    for (let n=1; n<=9; n++) {
+      d.push({ color, value:String(n), id:color+'-'+n+'-a', action:false });
+      d.push({ color, value:String(n), id:color+'-'+n+'-b', action:false });
+    }
+    // Action cards: 2x Draw Two, 2x Skip, 2x Reverse per color
+    d.push({ color, value:'Draw 2', id:color+'-d2-a', action:true });
+    d.push({ color, value:'Draw 2', id:color+'-d2-b', action:true });
+    d.push({ color, value:'Skip',   id:color+'-sk-a', action:true });
+    d.push({ color, value:'Skip',   id:color+'-sk-b', action:true });
+    d.push({ color, value:'Reverse',id:color+'-rv-a', action:true });
+    d.push({ color, value:'Reverse',id:color+'-rv-b', action:true });
+  }
+  // Wild cards
+  for (let i=1; i<=4; i++) d.push({ color:'wild', value:'Wild',      id:'wild-'+i,  action:true });
+  for (let i=1; i<=4; i++) d.push({ color:'wild', value:'Wild Draw 4',id:'wild4-'+i, action:true });
   return d;
 }
 
@@ -1133,7 +1153,7 @@ function managerStartLastCard() {
   gameState={
     phase:'playing', players:playerNames, hands,
     drawPile:deck.slice(idx), discardPile:[top],
-    currentSuit:top.suit, currentValue:top.value,
+    currentColor:top.color, currentValue:top.value,
     currentPlayerIdx:0, direction:1, pendingDraw:0,
     lastCard:{}, scores:Object.fromEntries(playerNames.map(n=>[n,0])), log:[],
   };
@@ -1183,16 +1203,15 @@ function renderLastCard() {
 
   // Top card
   const top=s.discardPile[s.discardPile.length-1];
-  const isRed=top&&(top.suit==='♥'||top.suit==='♦');
-  const isWild=top&&!top.suit;
-  const cardCls=isWild?'wild':isRed?'red':'black';
-  const cardLabel=top?(top.value+(top.suit||'')):'—';
+  const isWild=top&&top.color==='wild';
+  const cardCls=top?('color-'+top.color):'color-wild';
+  const cardLabel=top?(top.value==='Wild Draw 4'?'★+4':top.value==='Wild'?'★':top.value==='Draw 2'?'+2':top.value==='Skip'?'⊘':top.value==='Reverse'?'⇄':top.value):'—';
 
   // Phone strip
   const tsm=document.getElementById('lc-top-card-sm');
   if (tsm) { tsm.textContent=cardLabel; tsm.className='lc-card-sm '+cardCls+(myTurn?' glow':''); }
   const ssm=document.getElementById('lc-suit-sm');
-  if (ssm) ssm.textContent=s.currentSuit||'★';
+  if (ssm) ssm.textContent=s.currentColor||'—';
   const dsm=document.getElementById('lc-draw-count-sm');
   if (dsm) dsm.textContent=s.drawPile?.length||0;
   const turn=document.getElementById('lc-turn-sm');
@@ -1218,7 +1237,7 @@ function renderLastCard() {
   const ic=document.getElementById('lc-ipad-card');
   if (ic) { ic.textContent=cardLabel; ic.className='lc-card-sm '+cardCls; }
   const is=document.getElementById('lc-ipad-suit');
-  if (is) is.textContent=s.currentSuit||'★';
+  if (is) is.textContent=s.currentColor||'—';
   const id=document.getElementById('lc-ipad-draw');
   if (id) id.textContent=s.drawPile?.length||0;
 
@@ -1255,24 +1274,23 @@ function renderHand(myTurn, s, handId, drawId, playId) {
 
   myHand.forEach(card=>{
     const playable=myTurn&&canPlay(s,card);
-    const isR=card.suit==='♥'||card.suit==='♦';
-    const isW=!card.suit;
-    const colorCls=isW?'wild':isR?'red':'black';
+    const isWild=card.color==='wild';
     const stateCls=playable?'playable':'disabled';
     const div=document.createElement('div');
-    div.className=`lc-card ${colorCls} ${stateCls}`;
+    div.className='lc-card color-' + card.color + ' ' + stateCls;
     div.dataset.id=card.id;
 
-    // Card layout: value top-left, suit centre big, value bottom-right (rotated)
-    const suitDisplay = card.suit || '★';
-    const valDisplay  = card.value === 'W4' ? '+4' : card.value === 'W' ? '★' : card.value;
-    const suitBig     = isW ? '★' : card.suit;
-    const suitSize    = isW ? '22px' : '26px';
+    // Card label
+    const label = card.value;
+    // Centre icon for action cards
+    const centreIcon = card.value==='Skip'?'⊘': card.value==='Reverse'?'⇄': card.value==='Draw 2'?'+2': card.value==='Wild'?'★': card.value==='Wild Draw 4'?'★+4': card.value;
+    const centreSize = card.action ? '13px' : '22px';
+    const topLabel   = card.action ? (card.value==='Draw 2'?'+2': card.value==='Skip'?'⊘': card.value==='Reverse'?'⇄': card.value==='Wild'?'★': card.value==='Wild Draw 4'?'★4': '') : card.value;
 
     div.innerHTML =
-      '<div style="font-size:13px;font-weight:700;line-height:1;align-self:flex-start;font-family:monospace;">' + valDisplay + '</div>' +
-      '<div style="font-size:' + suitSize + ';line-height:1;">' + suitBig + '</div>' +
-      '<div style="font-size:13px;font-weight:700;line-height:1;align-self:flex-end;transform:rotate(180deg);font-family:monospace;">' + valDisplay + '</div>';
+      '<div style="font-size:11px;font-weight:800;line-height:1;align-self:flex-start;font-family:monospace;letter-spacing:-.02em;">' + topLabel + '</div>' +
+      '<div style="font-size:' + centreSize + ';line-height:1;text-align:center;font-weight:700;">' + centreIcon + '</div>' +
+      '<div style="font-size:11px;font-weight:800;line-height:1;align-self:flex-end;transform:rotate(180deg);font-family:monospace;">' + topLabel + '</div>';
 
     if (playable) {
       div.onclick=()=>{
@@ -1290,14 +1308,14 @@ function renderHand(myTurn, s, handId, drawId, playId) {
 }
 
 function canPlay(s,card) {
-  if (s.pendingDraw>0) return card.value==='2'||card.value==='W4';
-  if (card.value.startsWith('W')) return true;
-  return card.suit===s.currentSuit||card.value===s.currentValue;
+  if (s.pendingDraw>0) return card.value==='Draw 2'||card.value==='Wild Draw 4';
+  if (card.color==='wild') return true;
+  return card.color===s.currentColor||card.value===s.currentValue;
 }
 
 function lcPlay() {
   if (!selectedCard||!gameState) return;
-  if (selectedCard.value.startsWith('W')) document.getElementById('suit-chooser').classList.add('show');
+  if (selectedCard.color==='wild') document.getElementById('suit-chooser').classList.add('show');
   else doPlayCard(selectedCard,null);
 }
 
@@ -1312,12 +1330,12 @@ function doPlayCard(card,chosenSuit) {
   s.hands[pid]=s.hands[pid].filter(c=>c.id!==card.id);
   s.discardPile.push(card);
   s.currentValue=card.value;
-  if      (card.value==='2') {s.pendingDraw+=2;s.currentSuit=card.suit;advance(s);}
-  else if (card.value==='W4'){s.pendingDraw+=4;s.currentSuit=chosenSuit||s.currentSuit;advance(s);}
-  else if (card.value==='W') {s.currentSuit=chosenSuit||s.currentSuit;advance(s);}
-  else if (card.value==='A') {s.currentSuit=card.suit;advance(s);advance(s);}
-  else if (card.value==='J') {s.direction*=-1;s.currentSuit=card.suit;advance(s);}
-  else                       {s.currentSuit=card.suit;advance(s);}
+  if      (card.value==='Draw 2')    {s.pendingDraw+=2; s.currentColor=card.color; advance(s);}
+  else if (card.value==='Wild Draw 4'){s.pendingDraw+=4; s.currentColor=chosenSuit||s.currentColor; advance(s);}
+  else if (card.value==='Wild')      {s.currentColor=chosenSuit||s.currentColor; advance(s);}
+  else if (card.value==='Skip')      {s.currentColor=card.color; advance(s); advance(s);}
+  else if (card.value==='Reverse')   {s.direction*=-1; s.currentColor=card.color; advance(s);}
+  else                               {s.currentColor=card.color; advance(s);}
 
   if (s.hands[pid].length===0) {
     s.phase='round-end'; s.winner=pid;
@@ -1332,7 +1350,7 @@ function doPlayCard(card,chosenSuit) {
 function lcDraw() {
   if (!gameState) return;
   const s=JSON.parse(JSON.stringify(gameState));
-  const cnt=s.pendingDraw>0?s.pendingDraw:1;
+  const cnt=s.pendingDraw>0?s.pendingDraw:1; // draw pending amount or 1
   s.pendingDraw=0;
   for(let i=0;i<cnt;i++){if(s.drawPile.length===0)reshuffleDeck(s);if(s.drawPile.length>0)s.hands[myName].push(s.drawPile.pop());}
   advance(s); gameState=s; myHand=[...s.hands[myName]];
@@ -1342,7 +1360,7 @@ function lcDraw() {
 function lcApplyDraw(state) {
   const s=JSON.parse(JSON.stringify(state));
   const pid=s.players[s.currentPlayerIdx];
-  const cnt=s.pendingDraw>0?s.pendingDraw:1;
+  const cnt=s.pendingDraw>0?s.pendingDraw:1; // draw pending amount or 1
   s.pendingDraw=0;
   for(let i=0;i<cnt;i++){if(s.drawPile.length===0)reshuffleDeck(s);if(s.drawPile.length>0)s.hands[pid].push(s.drawPile.pop());}
   advance(s); return s;
@@ -1363,7 +1381,7 @@ function managerNextRound() {
   for(let c=0;c<7;c++) for(const n of s.players) hands[n].push(deck[idx++]);
   let top; while(true){top=deck[idx++];if(!top.value.startsWith('W'))break;}
   gameState={...s,phase:'playing',hands,drawPile:deck.slice(idx),discardPile:[top],
-    currentSuit:top.suit,currentValue:top.value,currentPlayerIdx:0,direction:1,pendingDraw:0,lastCard:{},winner:null};
+    currentColor:top.color,currentValue:top.value,currentPlayerIdx:0,direction:1,pendingDraw:0,lastCard:{},winner:null};
   myHand=[...gameState.hands[myName]];
   document.getElementById('mgr-next').style.display='none';
   broadcastState(); renderLastCard();
