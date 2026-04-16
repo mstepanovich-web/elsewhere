@@ -10,179 +10,188 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #080508; color: var(--color-text); font-family: var(--font-ui); overflow: hidden; height: 100vh; width: 100vw; }
 
-    /* ── Waiting screen ── */
-    #screen-waiting { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 10; }
-    .tv-title { font-family: var(--font-display); font-size: clamp(48px,8vw,96px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text); }
-    .tv-sub   { font-size: var(--text-sm); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); }
-    .room-code { font-family: var(--font-mono); font-size: clamp(28px,4vw,52px); font-weight: 500; letter-spacing: .3em; color: var(--color-gold); margin-top: 8px; }
+    /* ── Screens ── */
+    .tv-screen { position: fixed; inset: 0; display: none; }
+    .tv-screen.active { display: flex; }
 
-    /* ── Main game screen ── */
-    #screen-game { position: fixed; inset: 0; display: none; }
-    #screen-game.active { display: block; }
+    /* ── LOBBY SCREEN ── */
+    #screen-lobby { flex-direction: column; align-items: center; justify-content: center; gap: 0; padding: 40px 60px; }
+    .lobby-game-name { font-family: var(--font-display); font-size: clamp(36px,5vw,72px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text); margin-bottom: 8px; text-align: center; }
+    .lobby-room { font-family: var(--font-mono); font-size: clamp(14px,1.5vw,20px); letter-spacing: .3em; color: var(--color-gold); margin-bottom: 40px; }
+    .lobby-columns { display: flex; gap: clamp(40px,6vw,100px); width: 100%; max-width: 1100px; align-items: flex-start; justify-content: center; }
+    .lobby-col { flex: 1; max-width: 440px; }
+    .lobby-col-title { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--color-border-dim); }
+    .lobby-player-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+    .lobby-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .dot-green  { background: var(--color-green); box-shadow: 0 0 8px var(--color-green); }
+    .dot-gold   { background: var(--color-gold); box-shadow: 0 0 8px var(--color-gold); }
+    .dot-dim    { background: var(--color-text-ghost); }
+    .lobby-player-name { font-size: clamp(14px,1.6vw,20px); color: var(--color-text-dim); flex: 1; }
+    .lobby-player-video { width: clamp(48px,5vw,72px); height: clamp(36px,3.8vw,54px); border-radius: 6px; object-fit: cover; transform: scaleX(-1); border: 1px solid var(--color-border); flex-shrink: 0; }
+    .lobby-badge { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; padding: 3px 10px; border-radius: var(--radius-pill); }
+    .badge-mgr    { background: rgba(255,200,80,.15); color: var(--color-gold); border: 1px solid rgba(255,200,80,.25); }
+    .badge-invite { background: rgba(255,255,255,.06); color: var(--color-text-faint); border: 1px solid var(--color-border-dim); font-style: italic; }
+    .lobby-empty  { font-size: var(--text-sm); color: var(--color-text-faint); font-style: italic; padding: 12px 0; }
 
-    /* ── Poker table layout ── */
-    /* Player tiles arranged around the table */
-    #player-grid {
-      position: absolute; inset: 0;
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      grid-template-rows: repeat(3, 1fr);
-      gap: 8px; padding: 8px;
-    }
+    /* ── GAME SCREEN (Last Card) ── */
+    #screen-game { flex-direction: column; }
 
-    .player-tile {
-      position: relative; border-radius: 12px; overflow: hidden;
-      background: rgba(20,12,8,.9); border: 1px solid var(--color-border-dim);
-      display: flex; align-items: center; justify-content: center;
-      transition: border-color 0.3s, box-shadow 0.3s;
-    }
-    .player-tile.active-turn {
-      border-color: var(--color-gold);
-      box-shadow: 0 0 20px rgba(255,200,80,.2), inset 0 0 20px rgba(255,200,80,.05);
-    }
-    .player-tile.last-card {
-      border-color: var(--color-red);
-      animation: tv-pulse 0.8s infinite;
-    }
-    @keyframes tv-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(232,25,44,.4)} 50%{box-shadow:0 0 0 12px rgba(232,25,44,0)} }
+    /* Game title bar */
+    #game-title-bar { display: flex; align-items: center; justify-content: space-between; padding: clamp(8px,1.2vh,16px) clamp(16px,2vw,32px); border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; background: rgba(4,2,6,.8); }
+    .game-bar-title { font-family: var(--font-display); font-size: clamp(16px,2vw,28px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-gold); }
+    .game-bar-room  { font-family: var(--font-mono); font-size: clamp(11px,1.2vw,16px); letter-spacing: .2em; color: var(--color-text-faint); }
 
-    /* Video fill */
-    .player-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    /* Players in a circle around centre */
+    #game-main { flex: 1; position: relative; overflow: hidden; }
 
-    /* Avatar (no camera) */
-    .player-avatar {
-      width: clamp(48px,6vw,80px); height: clamp(48px,6vw,80px); border-radius: 50%;
-      background: var(--color-surface); border: 2px solid var(--color-border);
-      display: flex; align-items: center; justify-content: center;
-      font-family: var(--font-display); font-size: clamp(18px,2.5vw,32px);
-      color: var(--color-text-dim); font-weight: 300;
-    }
-
-    /* Player overlay info */
-    .player-overlay {
-      position: absolute; bottom: 0; left: 0; right: 0;
-      background: linear-gradient(to top, rgba(0,0,0,.85) 0%, transparent 100%);
-      padding: clamp(8px,1.2vw,16px);
-      display: flex; align-items: flex-end; justify-content: space-between;
-    }
-    .player-name { font-size: clamp(11px,1.3vw,18px); font-weight: 500; color: #fff; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
-    .player-cards-count { font-family: var(--font-mono); font-size: clamp(18px,2.5vw,36px); color: var(--color-gold); font-weight: 500; line-height: 1; }
-    .player-score { position: absolute; top: 8px; right: 10px; font-family: var(--font-mono); font-size: clamp(9px,1vw,13px); color: rgba(255,200,80,.6); }
-    .player-badge { position: absolute; top: 8px; left: 8px; font-size: clamp(8px,.9vw,11px); letter-spacing: .1em; text-transform: uppercase; padding: 2px 8px; border-radius: var(--radius-pill); background: rgba(255,200,80,.15); color: var(--color-gold); border: 1px solid rgba(255,200,80,.2); }
-    .last-card-badge { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: clamp(14px,2vw,24px); font-weight: 700; color: var(--color-red); text-transform: uppercase; letter-spacing: .1em; text-shadow: 0 0 20px rgba(232,25,44,.8); animation: tv-pulse 0.8s infinite; pointer-events: none; }
-
-    /* ── Centre panel (game state) ── */
+    /* Centre panel */
     #centre-panel {
-      position: absolute;
-      top: 50%; left: 50%; transform: translate(-50%,-50%);
-      grid-column: 2; grid-row: 2;
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: clamp(8px,1.2vw,16px);
-      background: rgba(4,2,6,.92); backdrop-filter: blur(8px);
-      border-radius: 16px; border: 1px solid var(--color-border-dim);
-      padding: clamp(12px,2vw,24px) clamp(16px,2.5vw,32px);
-      min-width: clamp(140px,18vw,240px);
-      z-index: 20;
+      gap: clamp(6px,1vh,14px);
+      background: rgba(4,2,6,.92); backdrop-filter: blur(10px);
+      border-radius: 20px; border: 1px solid var(--color-border-dim);
+      padding: clamp(12px,2vw,28px) clamp(16px,2.5vw,36px);
+      min-width: clamp(130px,16vw,220px);
+      z-index: 20; box-shadow: 0 0 60px rgba(0,0,0,.6);
     }
-
-    .centre-game-title { font-family: var(--font-display); font-size: clamp(14px,1.8vw,24px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text-faint); text-align: center; }
-
-    /* Discard pile */
-    .tv-card {
-      width: clamp(56px,7vw,96px); aspect-ratio: 2/3; border-radius: 8px;
-      border: 2px solid rgba(255,255,255,.15); display: flex; align-items: center;
-      justify-content: center; font-family: var(--font-display);
-      font-size: clamp(16px,2.2vw,32px); box-shadow: 0 4px 20px rgba(0,0,0,.6);
-      transition: all 0.3s;
-    }
+    .centre-game-title { font-family: var(--font-display); font-size: clamp(12px,1.4vw,20px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text-faint); text-align: center; }
+    .tv-card { width: clamp(54px,7vw,96px); aspect-ratio: 2/3; border-radius: 10px; border: 2px solid rgba(255,255,255,.2); display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 8px 5px; box-shadow: 0 4px 20px rgba(0,0,0,.6); transition: all 0.3s; font-weight: 800; }
+    .tv-card-val { font-family: monospace; font-size: clamp(10px,1.2vw,16px); line-height: 1; }
+    .tv-card-centre { font-size: clamp(14px,2vw,28px); line-height: 1; }
     .tv-card.color-red    { background: linear-gradient(160deg,#e74c3c,#c0392b); color: #fff; }
     .tv-card.color-yellow { background: linear-gradient(160deg,#f1c40f,#d4ac0d); color: #1a1a1a; }
     .tv-card.color-blue   { background: linear-gradient(160deg,#2980b9,#1a5276); color: #fff; }
     .tv-card.color-green  { background: linear-gradient(160deg,#27ae60,#1e8449); color: #fff; }
-    .tv-card.color-wild   { background: linear-gradient(160deg,#1a1a1a,#2c2c2c); color: #ffd700; border-color:rgba(255,215,0,.4); }
-
-    .centre-suit { font-size: clamp(20px,3vw,44px); }
-    .centre-meta { display: flex; gap: 16px; }
+    .tv-card.color-wild   { background: linear-gradient(160deg,#1a1a1a,#2c2c2c); color: #ffd700; border-color: rgba(255,215,0,.4); }
+    .centre-color-dot { width: clamp(16px,2vw,28px); height: clamp(16px,2vw,28px); border-radius: 50%; border: 2px solid rgba(255,255,255,.3); }
+    .centre-meta { display: flex; gap: clamp(10px,1.5vw,20px); }
     .centre-stat { text-align: center; }
-    .centre-stat-val { font-family: var(--font-mono); font-size: clamp(14px,1.8vw,24px); color: var(--color-text-dim); }
-    .centre-stat-label { font-size: clamp(8px,.9vw,11px); letter-spacing: .12em; text-transform: uppercase; color: var(--color-text-faint); }
-    .centre-direction { font-size: clamp(10px,1.1vw,15px); letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-faint); }
-    .centre-turn { font-family: var(--font-display); font-size: clamp(12px,1.4vw,20px); color: var(--color-gold); text-align: center; letter-spacing: .04em; }
+    .centre-stat-val   { font-family: var(--font-mono); font-size: clamp(12px,1.6vw,22px); color: var(--color-text-dim); }
+    .centre-stat-label { font-size: clamp(7px,.8vw,11px); letter-spacing: .12em; text-transform: uppercase; color: var(--color-text-faint); }
+    .centre-draw-pending { padding: 3px 12px; border-radius: var(--radius-pill); background: var(--color-red-faint); border: 1px solid var(--color-red); font-size: clamp(8px,.9vw,12px); color: var(--color-red); letter-spacing: .08em; }
+    .centre-turn { font-family: var(--font-display); font-size: clamp(11px,1.3vw,18px); color: var(--color-gold); text-align: center; letter-spacing: .04em; }
+    .centre-direction { font-size: clamp(8px,.9vw,12px); color: var(--color-text-faint); letter-spacing: .1em; }
 
-    /* Draw pending badge */
-    .centre-draw-pending { padding: 4px 12px; border-radius: var(--radius-pill); background: var(--color-red-faint); border: 1px solid var(--color-red); font-size: clamp(9px,1vw,13px); color: var(--color-red); letter-spacing: .08em; }
+    /* Player tiles — positioned absolutely around the centre */
+    .player-tile {
+      position: absolute;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      transition: all 0.3s;
+    }
+    .player-video-wrap {
+      width: clamp(80px,10vw,150px); height: clamp(60px,7.5vw,112px);
+      border-radius: 10px; overflow: hidden; position: relative;
+      background: var(--color-surface); border: 2px solid var(--color-border-dim);
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .player-video-wrap.active-turn { border-color: var(--color-gold); box-shadow: 0 0 20px rgba(255,200,80,.25); }
+    .player-video-wrap.last-card   { border-color: var(--color-red); animation: lc-pulse 0.8s infinite; }
+    @keyframes lc-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(232,25,44,.4)} 50%{box-shadow:0 0 0 10px rgba(232,25,44,0)} }
+    .player-avatar { font-family: var(--font-display); font-size: clamp(16px,2vw,28px); color: var(--color-text-faint); font-weight: 300; }
+    .player-video-el { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    .player-name  { font-size: clamp(10px,1.1vw,15px); color: var(--color-text-dim); letter-spacing: .04em; white-space: nowrap; max-width: clamp(90px,11vw,160px); overflow: hidden; text-overflow: ellipsis; text-align: center; }
+    .player-cards { font-family: var(--font-mono); font-size: clamp(14px,1.8vw,26px); color: var(--color-gold); font-weight: 500; }
+    .player-score { font-size: clamp(8px,.9vw,12px); color: var(--color-text-faint); }
+    .player-badge-mgr { position: absolute; top: 4px; left: 4px; font-size: 9px; letter-spacing: .08em; padding: 1px 6px; border-radius: var(--radius-pill); background: rgba(255,200,80,.2); color: var(--color-gold); }
+    .last-card-alert { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; font-size: clamp(8px,.9vw,11px); font-weight: 700; color: var(--color-red); text-transform: uppercase; letter-spacing: .08em; text-shadow: 0 0 12px rgba(232,25,44,.8); }
 
-    /* ── Trivia TV layout ── */
-    #screen-trivia-tv { position: fixed; inset: 0; display: none; flex-direction: column; padding: clamp(32px,5vh,64px) clamp(40px,7vw,100px); }
-    #screen-trivia-tv.active { display: flex; }
-    .tv-q-meta { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; }
-    .tv-q-cat  { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-gold); padding: 4px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); }
-    .tv-q-num  { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-text-faint); }
-    .tv-timer  { flex: 1; height: 4px; background: var(--color-surface); border-radius: var(--radius-pill); overflow: hidden; }
-    .tv-timer-fill { height: 100%; background: var(--color-gold); border-radius: var(--radius-pill); transition: width 1s linear; box-shadow: var(--shadow-gold); }
-    .tv-question { font-family: var(--font-display); font-size: clamp(28px,4.5vw,64px); font-weight: 300; color: var(--color-text); text-align: center; margin-bottom: 32px; line-height: 1.25; }
-    .tv-options  { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 900px; margin: 0 auto; width: 100%; margin-bottom: 28px; }
-    .tv-option   { padding: 18px 24px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-dim); background: var(--color-surface); display: flex; align-items: center; gap: 14px; transition: all 0.4s; }
+    /* ── TRIVIA ── */
+    #screen-trivia { flex-direction: column; padding: clamp(28px,4vh,56px) clamp(40px,6vw,90px); }
+    .tv-q-meta   { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; }
+    .tv-q-cat    { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-gold); padding: 4px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); }
+    .tv-q-num    { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-text-faint); }
+    .tv-timer    { flex: 1; height: 4px; background: var(--color-surface); border-radius: var(--radius-pill); overflow: hidden; }
+    .tv-timer-fill { height: 100%; background: var(--color-gold); border-radius: var(--radius-pill); transition: width 1s linear; }
+    .tv-question { font-family: var(--font-display); font-size: clamp(26px,4vw,56px); font-weight: 300; color: var(--color-text); text-align: center; margin-bottom: 28px; line-height: 1.25; }
+    .tv-options  { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 860px; margin: 0 auto; width: 100%; margin-bottom: 24px; }
+    .tv-option   { padding: 16px 22px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-dim); background: var(--color-surface); display: flex; align-items: center; gap: 12px; transition: all 0.4s; }
     .tv-option.correct { border-color: var(--color-green); background: var(--color-green-faint); }
     .tv-option.wrong   { opacity: .35; }
-    .tv-opt-letter { font-family: var(--font-mono); font-size: var(--text-xl); font-weight: 500; color: var(--color-gold); min-width: 28px; }
-    .tv-opt-text   { font-size: clamp(14px,1.8vw,22px); color: var(--color-text-dim); flex: 1; }
+    .tv-opt-letter { font-family: var(--font-mono); font-size: var(--text-xl); font-weight: 500; color: var(--color-gold); min-width: 26px; }
+    .tv-opt-text   { font-size: clamp(13px,1.6vw,20px); color: var(--color-text-dim); flex: 1; }
     .tv-opt-count  { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-faint); }
-    .tv-leaderboard { display: flex; gap: 12px; justify-content: center; max-width: 700px; margin: 0 auto; }
-    .tv-lb-entry { flex: 1; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--color-border-dim); background: var(--color-surface); text-align: center; }
+    .tv-leaderboard { display: flex; gap: 10px; justify-content: center; max-width: 660px; margin: 0 auto; }
+    .tv-lb-entry { flex: 1; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--color-border-dim); background: var(--color-surface); text-align: center; }
     .tv-lb-entry.first { border-color: var(--color-gold); }
     .tv-lb-pos   { font-size: var(--text-xs); color: var(--color-text-faint); margin-bottom: 2px; }
     .tv-lb-name  { font-size: var(--text-sm); color: var(--color-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
     .tv-lb-score { font-family: var(--font-mono); font-size: var(--text-xl); color: var(--color-gold); font-weight: 500; }
-    .tv-fun-fact { font-size: clamp(12px,1.3vw,17px); color: var(--color-text-faint); text-align: center; font-style: italic; max-width: 700px; margin: 8px auto 0; }
 
-    /* ── Wordmark ── */
-    .tv-wordmark { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); font-family: var(--font-display); font-size: clamp(13px,1.5vw,20px); font-weight: 300; letter-spacing: var(--tracking-widest); color: rgba(255,200,80,.3); text-transform: uppercase; z-index: 50; pointer-events: none; }
-    .tv-room { position: fixed; bottom: 14px; right: 20px; font-family: var(--font-mono); font-size: clamp(10px,1vw,14px); letter-spacing: .2em; color: rgba(255,200,80,.25); z-index: 50; }
+    /* ── Wordmark + room ── */
+    .tv-wordmark { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); font-family: var(--font-display); font-size: clamp(12px,1.3vw,18px); font-weight: 300; letter-spacing: var(--tracking-widest); color: rgba(255,200,80,.25); z-index: 50; pointer-events: none; text-transform: uppercase; }
+    .tv-room-badge { position: fixed; bottom: 12px; right: 18px; font-family: var(--font-mono); font-size: clamp(9px,.9vw,13px); letter-spacing: .2em; color: rgba(255,200,80,.2); z-index: 50; }
 
-    /* Log */
-    #log-toggle { position: fixed; bottom: 14px; left: 16px; z-index: 999; font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; color: var(--color-gold-dim); cursor: pointer; padding: 3px 8px; border: 1px solid var(--color-border-dim); border-radius: var(--radius-sm); }
-    #log-panel  { display: none; position: fixed; bottom: 40px; left: 16px; right: 16px; z-index: 998; background: var(--color-overlay); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px; max-height: 35vh; overflow-y: auto; }
-
-    .ver { position: fixed; bottom: 14px; right: 60px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; color: var(--color-gold); z-index: 50; }
+    /* ── Log ── */
+    #log-toggle { position: fixed; bottom: 12px; left: 14px; z-index: 999; font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: var(--color-gold-dim); cursor: pointer; padding: 3px 8px; border: 1px solid var(--color-border-dim); border-radius: var(--radius-sm); }
+    #log-panel  { display: none; position: fixed; bottom: 36px; left: 14px; right: 14px; z-index: 998; background: var(--color-overlay); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px; max-height: 35vh; overflow-y: auto; }
+    .ver { position: fixed; bottom: 12px; right: 60px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; color: var(--color-gold); z-index: 50; }
   </style>
 </head>
 <body>
 
 <div class="tv-wordmark">Elsewhere · Games</div>
 
-<!-- WAITING -->
-<div id="screen-waiting">
-  <div class="tv-title">Games</div>
-  <div class="tv-sub">Scan to join on your phone</div>
-  <div class="room-code" id="room-display">——</div>
-  <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:12px;" id="player-chips"></div>
-</div>
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- LOBBY SCREEN — shown before game starts               -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div id="screen-lobby" class="tv-screen active" style="flex-direction:column;align-items:center;justify-content:center;padding:40px 60px;gap:0;">
+  <div class="lobby-game-name" id="lobby-game-name">Games</div>
+  <div class="lobby-room" id="lobby-room-code">——</div>
 
-<!-- LAST CARD TV -->
-<div id="screen-game">
-  <div id="player-grid"></div>
-  <div id="centre-panel">
-    <div class="centre-game-title" id="centre-title">Last Card</div>
-    <div class="tv-card" id="centre-card">—</div>
-    <div class="centre-suit" id="centre-suit">—</div>
-    <div class="centre-meta">
-      <div class="centre-stat">
-        <div class="centre-stat-val" id="centre-draw">52</div>
-        <div class="centre-stat-label">Draw pile</div>
-      </div>
-      <div class="centre-stat">
-        <div class="centre-stat-val" id="centre-dir">▶</div>
-        <div class="centre-stat-label">Direction</div>
-      </div>
+  <div class="lobby-columns">
+    <!-- In the lobby -->
+    <div class="lobby-col">
+      <div class="lobby-col-title">In the Lobby</div>
+      <div id="tv-lobby-list"><div class="lobby-empty">Waiting for players...</div></div>
     </div>
-    <div class="centre-draw-pending" id="centre-pending" style="display:none;">Draw pending!</div>
-    <div class="centre-turn" id="centre-turn">—</div>
+    <!-- Invited -->
+    <div class="lobby-col">
+      <div class="lobby-col-title">Invited — Not Yet Joined</div>
+      <div id="tv-invited-list"><div class="lobby-empty">No invites sent yet</div></div>
+    </div>
   </div>
 </div>
 
-<!-- TRIVIA TV -->
-<div id="screen-trivia-tv">
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- LAST CARD GAME SCREEN                                  -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div id="screen-game" class="tv-screen" style="flex-direction:column;">
+  <div id="game-title-bar">
+    <div class="game-bar-title" id="game-bar-title">Last Card</div>
+    <div class="game-bar-room" id="game-bar-room">——</div>
+  </div>
+  <div id="game-main">
+    <div id="player-tiles"></div>
+    <div id="centre-panel">
+      <div class="centre-game-title" id="centre-title">Last Card</div>
+      <div class="tv-card color-wild" id="centre-card">
+        <div class="tv-card-val">—</div>
+        <div class="tv-card-centre">—</div>
+        <div class="tv-card-val" style="transform:rotate(180deg)">—</div>
+      </div>
+      <div class="centre-color-dot" id="centre-color-dot" style="background:#888;"></div>
+      <div class="centre-meta">
+        <div class="centre-stat">
+          <div class="centre-stat-val" id="centre-draw">—</div>
+          <div class="centre-stat-label">Draw pile</div>
+        </div>
+        <div class="centre-stat">
+          <div class="centre-stat-val" id="centre-dir">▶</div>
+          <div class="centre-stat-label">Direction</div>
+        </div>
+      </div>
+      <div class="centre-draw-pending" id="centre-pending" style="display:none;">Draw pending!</div>
+      <div class="centre-turn" id="centre-turn">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- TRIVIA SCREEN                                          -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div id="screen-trivia" class="tv-screen">
   <div class="tv-q-meta">
     <div class="tv-q-cat" id="tv-q-cat">General</div>
     <div class="tv-q-num" id="tv-q-num">Q 1/10</div>
@@ -191,11 +200,9 @@
   <div class="tv-question" id="tv-question">—</div>
   <div class="tv-options" id="tv-options"></div>
   <div class="tv-leaderboard" id="tv-leaderboard"></div>
-  <div class="tv-fun-fact" id="tv-fun-fact"></div>
 </div>
 
-<div class="tv-room" id="tv-room-badge">——</div>
-
+<div class="tv-room-badge" id="tv-room-badge">——</div>
 <div id="log-toggle" onclick="toggleLog()">LOG</div>
 <div id="log-panel">
   <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
@@ -204,7 +211,7 @@
   </div>
   <div id="log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.75</div>
+<div class="ver">v2.76</div>
 
 <script>
 'use strict';
@@ -214,13 +221,29 @@ const CHAN_PREFIX   = 'elsewhere_g';
 const urlParams    = new URLSearchParams(location.search);
 const roomCode     = (urlParams.get('room')||'').toUpperCase();
 
-document.getElementById('room-display').textContent  = roomCode||'——';
-document.getElementById('tv-room-badge').textContent = 'Room '+roomCode;
+document.getElementById('lobby-room-code').textContent = roomCode || '——';
+document.getElementById('game-bar-room').textContent   = 'Room ' + roomCode;
+document.getElementById('tv-room-badge').textContent   = 'Room ' + roomCode;
 
 let agoraClient = null;
 let currentGame = null;
 let gameState   = null;
 let players     = {};   // uid → { name, isManager, hasCamera, videoTrack }
+let invitedList = [];   // names invited but not yet joined
+
+// ── Color helpers ────────────────────────────────────────────
+const COLOR_BG = { red:'#c0392b', yellow:'#d4ac0d', blue:'#1a5276', green:'#1e8449', wild:'#1a1a1a' };
+const COLOR_TEXT = { red:'#fff', yellow:'#1a1a1a', blue:'#fff', green:'#fff', wild:'#ffd700' };
+
+function cardLabel(card) {
+  if (!card || card.value==='?') return '?';
+  if (card.value==='Wild Draw 4') return '★+4';
+  if (card.value==='Wild')        return '★';
+  if (card.value==='Draw 2')      return '+2';
+  if (card.value==='Skip')        return '⊘';
+  if (card.value==='Reverse')     return '⇄';
+  return card.value;
+}
 
 // ── Agora ────────────────────────────────────────────────────
 async function initAgora() {
@@ -229,16 +252,15 @@ async function initAgora() {
 
   agoraClient.on('user-joined', u => {
     tvLog('user-joined: '+u.uid);
-    // May not have name yet — will update on player-join message
     if (!players[u.uid]) players[u.uid] = { name:'...', isManager:false, hasCamera:false };
-    renderChips();
+    renderLobby();
   });
 
   agoraClient.on('user-left', u => {
     tvLog('user-left: '+u.uid);
     delete players[u.uid];
-    renderChips();
-    renderPlayerGrid();
+    renderLobby();
+    renderPlayerTiles();
   });
 
   agoraClient.on('stream-message', (uid, data) => handleMessage(uid, data));
@@ -247,50 +269,61 @@ async function initAgora() {
     if (mediaType === 'video') {
       await agoraClient.subscribe(user, 'video');
       if (!players[user.uid]) players[user.uid] = { name:'...', isManager:false, hasCamera:false };
-      players[user.uid].hasCamera = true;
+      players[user.uid].hasCamera  = true;
       players[user.uid].videoTrack = user.videoTrack;
-      tvLog('video subscribed from: '+user.uid);
-      renderPlayerGrid();
+      tvLog('video from: '+user.uid);
+      renderLobby();
+      renderPlayerTiles();
     }
   });
 
-  agoraClient.on('user-unpublished', (user, mediaType) => {
-    if (mediaType === 'video') {
-      if (players[user.uid]) { players[user.uid].hasCamera=false; players[user.uid].videoTrack=null; }
-      renderPlayerGrid();
-    }
+  agoraClient.on('user-unpublished', (user) => {
+    if (players[user.uid]) { players[user.uid].hasCamera=false; players[user.uid].videoTrack=null; }
+    renderLobby();
+    renderPlayerTiles();
   });
 
   await agoraClient.join(AGORA_APP_ID, CHAN_PREFIX+roomCode, null, null);
   tvLog('TV joined: '+CHAN_PREFIX+roomCode);
 }
 
-// ── Message handling ─────────────────────────────────────────
+// ── Messages ─────────────────────────────────────────────────
 function handleMessage(uid, data) {
   try {
     const msg = JSON.parse(new TextDecoder().decode(data));
     tvLog('← '+msg.type+' '+(msg._name||''));
 
-    if (msg.type==='player-join'||msg.type==='player-join-ack') {
-      if (!players[uid]) players[uid]={hasCamera:false};
+    if (msg.type==='player-join' || msg.type==='player-join-ack') {
+      if (!players[uid]) players[uid] = { hasCamera:false };
       players[uid].name      = msg.name;
       players[uid].isManager = msg.isManager;
-      renderChips();
-      renderPlayerGrid();
+      // Remove from invited if they joined
+      invitedList = invitedList.filter(n => n.toLowerCase() !== msg.name.toLowerCase());
+      renderLobby();
     }
 
-    if (msg.type==='camera-on')  { if(players[uid]) players[uid].hasCamera=true; renderPlayerGrid(); }
-    if (msg.type==='camera-off') { if(players[uid]) { players[uid].hasCamera=false; players[uid].videoTrack=null; } renderPlayerGrid(); }
+    if (msg.type==='invite-sent') {
+      // Track invite count — we don't know name yet
+      tvLog('Invite sent, count: '+msg.count);
+      renderLobby();
+    }
 
     if (msg.type==='game-selected') {
       currentGame = msg.game;
+      const name = msg.game==='lastcard' ? 'Last Card' : msg.game==='trivia' ? 'Trivia Night' : msg.game;
+      document.getElementById('lobby-game-name').textContent = name;
+      document.getElementById('game-bar-title').textContent  = name;
+      document.getElementById('centre-title').textContent    = name;
       tvLog('game-selected: '+msg.game);
     }
+
+    if (msg.type==='camera-on')  { if(players[uid]) players[uid].hasCamera=true; renderLobby(); renderPlayerTiles(); }
+    if (msg.type==='camera-off') { if(players[uid]) { players[uid].hasCamera=false; players[uid].videoTrack=null; } renderLobby(); renderPlayerTiles(); }
 
     if (msg.type==='game-start') {
       gameState = msg.state;
       currentGame = currentGame || 'lastcard';
-      if (currentGame==='lastcard') showLastCard();
+      if (currentGame==='lastcard') showGame();
       if (currentGame==='trivia')   showTrivia();
     }
 
@@ -300,183 +333,238 @@ function handleMessage(uid, data) {
       if (currentGame==='trivia')   renderTrivia();
     }
 
-    if (msg.type==='game-over') {
-      showGameOver(msg.scores);
-    }
-
-    if (msg.type==='game-restart'||msg.type==='switch-game') {
-      showWaiting();
-    }
+    if (msg.type==='game-over')     { showLobby(); }
+    if (msg.type==='game-restart')  { showLobby(); }
+    if (msg.type==='switch-game')   { showLobby(); }
 
   } catch(e) { tvLog('msg error: '+e); }
 }
 
-// ── Screens ───────────────────────────────────────────────────
-function showWaiting() {
-  document.getElementById('screen-waiting').style.display='flex';
-  document.getElementById('screen-game').classList.remove('active');
-  document.getElementById('screen-trivia-tv').classList.remove('active');
+// ── Screen management ─────────────────────────────────────────
+function showLobby() {
+  document.querySelectorAll('.tv-screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-lobby').classList.add('active');
+  renderLobby();
 }
 
-function showLastCard() {
-  document.getElementById('screen-waiting').style.display='none';
+function showGame() {
+  document.querySelectorAll('.tv-screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-game').classList.add('active');
-  document.getElementById('screen-trivia-tv').classList.remove('active');
-  renderPlayerGrid();
+  renderPlayerTiles();
   renderLastCard();
 }
 
 function showTrivia() {
-  document.getElementById('screen-waiting').style.display='none';
-  document.getElementById('screen-game').classList.remove('active');
-  document.getElementById('screen-trivia-tv').classList.add('active');
+  document.querySelectorAll('.tv-screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-trivia').classList.add('active');
   renderTrivia();
 }
 
-function showGameOver(scores) {
-  // Show game over on trivia screen or last card screen
-  const title = document.getElementById('centre-turn') || document.getElementById('tv-question');
-  if (title) title.textContent = 'Game Over!';
-}
+// ── Lobby rendering ───────────────────────────────────────────
+function renderLobby() {
+  const lobbyList   = document.getElementById('tv-lobby-list');
+  const invitedEl   = document.getElementById('tv-invited-list');
+  const playerList  = Object.entries(players);
 
-// ── Chips (waiting screen) ────────────────────────────────────
-function renderChips() {
-  document.getElementById('player-chips').innerHTML =
-    Object.values(players).map(p=>
-      `<div style="padding:8px 18px;border-radius:var(--radius-pill);border:1px solid ${p.isManager?'var(--color-gold)':'var(--color-border-dim)'};background:var(--color-surface);font-size:var(--text-sm);color:${p.isManager?'var(--color-gold)':'var(--color-text-dim)'};">
-        ${p.isManager?'★ ':''}${p.name}
+  if (playerList.length === 0) {
+    lobbyList.innerHTML = '<div class="lobby-empty">Waiting for players...</div>';
+  } else {
+    lobbyList.innerHTML = playerList.map(([uid, p]) => {
+      const videoHtml = p.hasCamera && p.videoTrack
+        ? '<video class="lobby-player-video" id="tv-vid-'+uid+'" autoplay muted playsinline></video>'
+        : '';
+      return `<div class="lobby-player-row">
+        <div class="lobby-dot ${p.isManager?'dot-gold':'dot-green'}"></div>
+        <div class="lobby-player-name">${p.name}</div>
+        ${p.isManager ? '<div class="lobby-badge badge-mgr">Host</div>' : ''}
+        ${p.hasCamera ? '<span style="font-size:14px;">📷</span>' : ''}
+        ${videoHtml}
+      </div>`;
+    }).join('');
+
+    // Attach video tracks
+    playerList.forEach(([uid, p]) => {
+      if (p.hasCamera && p.videoTrack) {
+        const el = document.getElementById('tv-vid-'+uid);
+        if (el) p.videoTrack.play(el);
+      }
+    });
+  }
+
+  if (invitedList.length === 0) {
+    invitedEl.innerHTML = '<div class="lobby-empty">No invites sent yet</div>';
+  } else {
+    invitedEl.innerHTML = invitedList.map(n =>
+      `<div class="lobby-player-row">
+        <div class="lobby-dot dot-dim"></div>
+        <div class="lobby-player-name" style="opacity:.6;">${n}</div>
+        <div class="lobby-badge badge-invite">Invited</div>
       </div>`
     ).join('');
+  }
 }
 
-// ── Last Card TV ──────────────────────────────────────────────
-function renderPlayerGrid() {
-  if (!currentGame || currentGame!=='lastcard') return;
-  const grid = document.getElementById('player-grid');
-  const playerList = Object.entries(players);
-  if (playerList.length===0) return;
+// ── Last Card rendering ───────────────────────────────────────
+function renderPlayerTiles() {
+  if (!currentGame || currentGame !== 'lastcard') return;
+  const container = document.getElementById('player-tiles');
+  const main      = document.getElementById('game-main');
+  const W = main.offsetWidth, H = main.offsetHeight;
+  const cx = W/2, cy = H/2;
 
-  // 6 slots max, arranged in grid
-  // Positions: top-left, top-centre, top-right, bottom-left, bottom-centre, bottom-right
-  // Centre (pos [1][1]) is reserved for the game state panel
-  const positions = [
-    {col:1,row:1}, {col:2,row:1}, {col:3,row:1},
-    {col:1,row:3}, {col:2,row:3}, {col:3,row:3},
-  ];
+  // Get players from gameState or from connected players
+  const playerNames = gameState?.players || Object.values(players).map(p=>p.name);
+  const n = playerNames.length;
+  if (n === 0) { container.innerHTML = ''; return; }
 
-  grid.innerHTML = '';
+  // Radius for player placement (avoid centre panel ~220px wide)
+  const rx = Math.min(W*0.38, 320);
+  const ry = Math.min(H*0.38, 240);
 
-  playerList.slice(0,6).forEach(([uid,p], idx) => {
-    const pos = positions[idx];
-    const isActive = gameState && gameState.players &&
-      gameState.players[gameState.currentPlayerIdx]===p.name;
-    const handCount = gameState?.hands?.[p.name]?.length ?? '?';
-    const isLast = handCount===1;
-    const score  = gameState?.scores?.[p.name]||0;
+  container.innerHTML = '';
+  playerNames.forEach((name, i) => {
+    const angle = (i / n) * 2 * Math.PI - Math.PI/2; // start from top
+    const px = cx + rx * Math.cos(angle);
+    const py = cy + ry * Math.sin(angle);
+
+    const handCount  = gameState?.hands?.[name]?.length ?? '?';
+    const score      = gameState?.scores?.[name] || 0;
+    const isActive   = gameState && gameState.players[gameState.currentPlayerIdx] === name;
+    const isLastCard = handCount === 1;
+    const pInfo      = Object.values(players).find(p => p.name === name) || {};
 
     const tile = document.createElement('div');
-    tile.className = `player-tile ${isActive?'active-turn':''} ${isLast?'last-card':''}`;
-    tile.style.cssText = `grid-column:${pos.col};grid-row:${pos.row};`;
+    tile.className = 'player-tile';
+    tile.style.cssText = `left:${px}px;top:${py}px;transform:translate(-50%,-50%);`;
 
-    if (p.hasCamera && p.videoTrack) {
-      const vid = document.createElement('video');
-      vid.autoplay=true; vid.muted=true; vid.playsInline=true;
-      vid.className='player-video';
-      p.videoTrack.play(vid);
-      tile.appendChild(vid);
+    // Video or avatar
+    const vidWrapCls = 'player-video-wrap' + (isActive?' active-turn':'') + (isLastCard?' last-card':'');
+    let mediaHtml = '';
+    if (pInfo.hasCamera && pInfo.videoTrack) {
+      mediaHtml = `<div class="${vidWrapCls}" id="ptile-wrap-${i}">
+        ${pInfo.isManager ? '<div class="player-badge-mgr">Host</div>' : ''}
+        <video class="player-video-el" id="ptile-vid-${i}" autoplay muted playsinline></video>
+        ${isLastCard ? '<div class="last-card-alert">Last Card!</div>' : ''}
+      </div>`;
     } else {
-      const av = document.createElement('div');
-      av.className='player-avatar';
-      av.textContent=(p.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
-      tile.appendChild(av);
+      const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+      mediaHtml = `<div class="${vidWrapCls}">
+        ${pInfo.isManager ? '<div class="player-badge-mgr">Host</div>' : ''}
+        <div class="player-avatar">${initials}</div>
+        ${isLastCard ? '<div class="last-card-alert">Last Card!</div>' : ''}
+      </div>`;
     }
 
-    tile.innerHTML += `
-      ${p.isManager?'<div class="player-badge">Manager</div>':''}
-      ${isLast?'<div class="last-card-badge">Last Card!</div>':''}
+    tile.innerHTML = `
+      ${mediaHtml}
+      <div class="player-name">${name}</div>
+      <div class="player-cards">${handCount} <span style="font-size:.6em;opacity:.6;">cards</span></div>
       <div class="player-score">${score} pts</div>
-      <div class="player-overlay">
-        <div class="player-name">${p.name}</div>
-        <div class="player-cards-count">${handCount}<span style="font-size:.5em;opacity:.6;"> 🃏</span></div>
-      </div>`;
+    `;
+    container.appendChild(tile);
 
-    grid.appendChild(tile);
+    // Attach video
+    if (pInfo.hasCamera && pInfo.videoTrack) {
+      const vidEl = document.getElementById('ptile-vid-'+i);
+      if (vidEl) pInfo.videoTrack.play(vidEl);
+    }
   });
-
-  // Centre panel stays on top
-  updateCentrePanel();
-}
-
-function updateCentrePanel() {
-  if (!gameState) return;
-  const s = gameState;
-  const top = s.discardPile?.[s.discardPile.length-1];
-  const topLabel = top?(top.value==='Wild Draw 4'?'★+4':top.value==='Wild'?'★':top.value==='Draw 2'?'+2':top.value==='Skip'?'⊘':top.value==='Reverse'?'⇄':top.value):'—';
-  const cardEl = document.getElementById('centre-card');
-  if (cardEl) { cardEl.textContent=topLabel; cardEl.className='tv-card color-'+(top?top.color:'wild'); }
-  const suitEl=document.getElementById('centre-suit'); if(suitEl) suitEl.textContent=(s.currentColor||'—').toUpperCase();
-  const drawEl=document.getElementById('centre-draw'); if(drawEl) drawEl.textContent=s.drawPile?.length||0;
-  const dirEl=document.getElementById('centre-dir');   if(dirEl)  dirEl.textContent=s.direction===1?'▶':'◀';
-  const pendEl=document.getElementById('centre-pending');
-  if(pendEl){ pendEl.style.display=s.pendingDraw>0?'block':'none'; pendEl.textContent='Draw '+s.pendingDraw+' pending!'; }
-  const turnEl=document.getElementById('centre-turn');
-  if(turnEl) turnEl.textContent=(s.players?.[s.currentPlayerIdx]||'?')+"'s turn";
 }
 
 function renderLastCard() {
-  renderPlayerGrid();
-  updateCentrePanel();
+  if (!gameState) return;
+  const s = gameState;
+
+  const top = s.discardPile?.[s.discardPile.length-1];
+  const lbl = top ? cardLabel(top) : '—';
+  const col = top?.color || 'wild';
+
+  const cardEl = document.getElementById('centre-card');
+  if (cardEl) {
+    cardEl.className = 'tv-card color-' + col;
+    cardEl.innerHTML =
+      '<div class="tv-card-val">' + lbl + '</div>' +
+      '<div class="tv-card-centre">' + lbl + '</div>' +
+      '<div class="tv-card-val" style="transform:rotate(180deg)">' + lbl + '</div>';
+  }
+
+  const dotEl = document.getElementById('centre-color-dot');
+  if (dotEl) dotEl.style.background = COLOR_BG[s.currentColor] || '#888';
+
+  const drawEl = document.getElementById('centre-draw');
+  if (drawEl) drawEl.textContent = s.drawPile?.length || 0;
+
+  const dirEl = document.getElementById('centre-dir');
+  if (dirEl) dirEl.textContent = s.direction === 1 ? '▶' : '◀';
+
+  const pendEl = document.getElementById('centre-pending');
+  if (pendEl) {
+    pendEl.style.display = s.pendingDraw > 0 ? 'block' : 'none';
+    pendEl.textContent   = 'Draw ' + s.pendingDraw + ' pending!';
+  }
+
+  const turnEl = document.getElementById('centre-turn');
+  if (turnEl) {
+    if (s.phase === 'round-end') {
+      turnEl.textContent = (s.winner || '?') + ' wins the round!';
+    } else {
+      turnEl.textContent = (s.players?.[s.currentPlayerIdx] || '?') + "'s turn";
+    }
+  }
+
+  renderPlayerTiles();
 }
 
-// ── Trivia TV ─────────────────────────────────────────────────
+// ── Trivia rendering ──────────────────────────────────────────
 function renderTrivia() {
   if (!gameState) return;
-  const s=gameState, q=s.questions?.[s.currentQuestionIdx];
+  const s = gameState;
+  const q = s.questions?.[s.currentQuestionIdx];
   if (!q) return;
 
-  document.getElementById('tv-q-num').textContent='Q '+(s.currentQuestionIdx+1)+'/'+(s.questions?.length||10);
-  document.getElementById('tv-q-cat').textContent=s.category||'Trivia';
-  document.getElementById('tv-question').textContent=q.question;
-  document.getElementById('tv-fun-fact').textContent=s.phase==='reveal'?(q.fun_fact||''):'';
+  document.getElementById('tv-q-num').textContent = 'Q '+(s.currentQuestionIdx+1)+'/'+(s.questions?.length||10);
+  document.getElementById('tv-q-cat').textContent = s.category || 'Trivia';
+  document.getElementById('tv-question').textContent = q.question;
 
-  const letters=['A','B','C','D'];
-  document.getElementById('tv-options').innerHTML=(q.options||[]).map((opt,i)=>{
-    const L=letters[i];
-    const cnt=Object.values(s.answers||{}).filter(a=>a.answer===L).length;
-    let cls='';
-    if(s.phase==='reveal') cls=L===q.correct?'correct':'wrong';
-    else if(cnt>0) cls='answered';
+  const letters = ['A','B','C','D'];
+  document.getElementById('tv-options').innerHTML = (q.options||[]).map((opt,i) => {
+    const L   = letters[i];
+    const cnt = Object.values(s.answers||{}).filter(a=>a.answer===L).length;
+    let cls = '';
+    if (s.phase==='reveal') cls = L===q.correct?'correct':'wrong';
     return `<div class="tv-option ${cls}">
       <div class="tv-opt-letter">${L}</div>
       <div class="tv-opt-text">${opt}</div>
-      ${cnt>0||s.phase==='reveal'?`<div class="tv-opt-count">${cnt||''}</div>`:''}
+      ${cnt>0||s.phase==='reveal' ? `<div class="tv-opt-count">${cnt||''}</div>` : ''}
     </div>`;
   }).join('');
 
-  const lb=Object.entries(s.scores||{}).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  document.getElementById('tv-leaderboard').innerHTML=lb.map(([n,sc],i)=>
+  const lb = Object.entries(s.scores||{}).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  document.getElementById('tv-leaderboard').innerHTML = lb.map(([n,sc],i) =>
     `<div class="tv-lb-entry ${i===0?'first':''}">
       <div class="tv-lb-pos">${['🥇','🥈','🥉','4th','5th'][i]}</div>
       <div class="tv-lb-name">${n}</div>
       <div class="tv-lb-score">${sc}</div>
-    </div>`).join('');
+    </div>`
+  ).join('');
 
-  if(s.phase==='question'){
-    const pct=(s.timer/s.timePerQuestion)*100;
-    document.getElementById('tv-timer-fill').style.width=pct+'%';
+  if (s.phase==='question') {
+    const pct = (s.timer / s.timePerQuestion) * 100;
+    document.getElementById('tv-timer-fill').style.width = pct + '%';
   }
 }
 
 // ── Log ───────────────────────────────────────────────────────
-const _logs=[];
-function tvLog(msg){
-  const ts=new Date().toISOString().slice(11,19), line=ts+' '+msg;
-  _logs.push(line); console.log('[Games TV]',msg);
-  const p=document.getElementById('log-lines');
-  if(p){const d=document.createElement('div');d.style.cssText='border-bottom:1px solid rgba(255,255,255,.06);padding:2px 0;';d.textContent=line;p.appendChild(d);p.scrollTop=p.scrollHeight;}
+const _logs = [];
+function tvLog(msg) {
+  const ts = new Date().toISOString().slice(11,19);
+  const line = ts + ' ' + msg;
+  _logs.push(line); console.log('[Games TV]', msg);
+  const p = document.getElementById('log-lines');
+  if (p) { const d=document.createElement('div'); d.style.cssText='border-bottom:1px solid rgba(255,255,255,.06);padding:2px 0;'; d.textContent=line; p.appendChild(d); p.scrollTop=p.scrollHeight; }
 }
-function toggleLog(){const p=document.getElementById('log-panel');p.style.display=p.style.display==='none'?'block':'none';}
-function copyLog(){navigator.clipboard.writeText(_logs.join('\n')).then(()=>{const b=document.querySelector('#log-panel span:last-child');if(b){b.textContent='COPIED ✓';setTimeout(()=>b.textContent='COPY',2000);}});}
+function toggleLog() { const p=document.getElementById('log-panel'); p.style.display=p.style.display==='none'?'block':'none'; }
+function copyLog()   { navigator.clipboard.writeText(_logs.join('\n')).then(()=>{ const b=document.querySelector('#log-panel span:last-child'); if(b){b.textContent='COPIED ✓';setTimeout(()=>b.textContent='COPY',2000);} }); }
 
 // ── Boot ──────────────────────────────────────────────────────
 initAgora();
