@@ -211,7 +211,7 @@
   </div>
   <div id="log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.79</div>
+<div class="ver">v2.80</div>
 
 <script>
 'use strict';
@@ -288,9 +288,24 @@ async function initAgora() {
 }
 
 // ── Messages ─────────────────────────────────────────────────
+const _tvChunkBuf = {};
+function handleChunk(msg) {
+  const { id, i, n, d } = msg;
+  if (!_tvChunkBuf[id]) _tvChunkBuf[id] = { parts: new Array(n), received: 0 };
+  _tvChunkBuf[id].parts[i] = d;
+  _tvChunkBuf[id].received++;
+  if (_tvChunkBuf[id].received === n) {
+    const full = _tvChunkBuf[id].parts.join('');
+    delete _tvChunkBuf[id];
+    try { return JSON.parse(full); } catch(e) { return null; }
+  }
+  return null;
+}
+
 function handleMessage(uid, data) {
   try {
-    const msg = JSON.parse(new TextDecoder().decode(data));
+    let msg = JSON.parse(new TextDecoder().decode(data));
+    if (msg._chunk) { msg = handleChunk(msg); if (!msg) return; }
     tvLog('← '+msg.type+' '+(msg._name||''));
 
     if (msg.type==='player-join' || msg.type==='player-join-ack') {

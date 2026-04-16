@@ -543,7 +543,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.79</div>
+<div class="ver">v2.80</div>
 
 <script>
 'use strict';
@@ -755,20 +755,56 @@ function updateLobbyCamera(uid, on) {
 }
 
 // ── Messaging ────────────────────────────────────────────────
-function send(obj) {
+const CHUNK_SIZE = 800; // Agora limit is 1KB, use 800 to be safe
+
+async function sendRaw(bytes) {
+  if (streamId !== null) {
+    await agoraClient.sendStreamMessage(streamId, bytes);
+  } else {
+    await agoraClient.sendStreamMessage(bytes, true);
+  }
+}
+
+async function send(obj) {
   if (!agoraReady || !agoraClient) { log('send skipped — not ready: '+obj.type); return; }
-  const bytes = new TextEncoder().encode(JSON.stringify({...obj, _uid:myUid, _name:myName}));
+  const str   = JSON.stringify({...obj, _uid:myUid, _name:myName});
+  const bytes = new TextEncoder().encode(str);
   try {
-    if (streamId!==null) {
-      agoraClient.sendStreamMessage(streamId, bytes)
-        .then(()=>log('sent: '+obj.type))
-        .catch(e=>log('send err: '+e.message));
+    if (bytes.length <= CHUNK_SIZE) {
+      await sendRaw(bytes);
+      log('sent: '+obj.type+' ('+bytes.length+'b)');
     } else {
-      agoraClient.sendStreamMessage(bytes, true)
-        .then(()=>log('sent(fb): '+obj.type))
-        .catch(e=>log('send fb err: '+e.message));
+      // Chunk large messages
+      const id = Date.now().toString(36);
+      const chunks = [];
+      for (let i=0; i<str.length; i+=CHUNK_SIZE) chunks.push(str.slice(i,i+CHUNK_SIZE));
+      log('chunking: '+obj.type+' '+bytes.length+'b → '+chunks.length+' chunks');
+      for (let i=0; i<chunks.length; i++) {
+        const pkt = JSON.stringify({_chunk:true, id, i, n:chunks.length, d:chunks[i]});
+        await sendRaw(new TextEncoder().encode(pkt));
+        await new Promise(r=>setTimeout(r,30)); // small delay between chunks
+      }
+      log('sent chunked: '+obj.type);
     }
   } catch(e) { log('send exception: '+e.message); }
+}
+
+// Chunk reassembly buffer
+const _chunkBuf = {};
+
+function handleChunk(msg) {
+  const { id, i, n, d } = msg;
+  if (!_chunkBuf[id]) _chunkBuf[id] = { parts: new Array(n), received: 0 };
+  _chunkBuf[id].parts[i] = d;
+  _chunkBuf[id].received++;
+  if (_chunkBuf[id].received === n) {
+    const full = _chunkBuf[id].parts.join('');
+    delete _chunkBuf[id];
+    try {
+      return JSON.parse(full);
+    } catch(e) { log('chunk reassembly error: '+e.message); return null; }
+  }
+  return null; // not complete yet
 }
 
 function parseMsg(data) {
@@ -776,8 +812,13 @@ function parseMsg(data) {
 }
 
 function handleMessage(uid, data) {
-  const msg = parseMsg(data);
+  let msg = parseMsg(data);
   if (!msg) return;
+  // Handle chunked messages
+  if (msg._chunk) {
+    msg = handleChunk(msg);
+    if (!msg) return; // not complete yet
+  }
   log('← '+msg.type+' from '+(msg._name||uid));
 
   if (msg.type==='player-join') {
