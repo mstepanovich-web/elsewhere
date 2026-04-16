@@ -3,134 +3,184 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Elsewhere · Games</title>
+  <title>Elsewhere · Games TV</title>
   <link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
   <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--color-bg); color: var(--color-text); font-family: var(--font-ui); overflow: hidden; height: 100vh; }
+    body { background: #080508; color: var(--color-text); font-family: var(--font-ui); overflow: hidden; height: 100vh; width: 100vw; }
 
-    /* ── Screens ── */
-    .screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 40px; }
-    .screen.active { display: flex; }
+    /* ── Waiting screen ── */
+    #screen-waiting { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 10; }
+    .tv-title { font-family: var(--font-display); font-size: clamp(48px,8vw,96px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text); }
+    .tv-sub   { font-size: var(--text-sm); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); }
+    .room-code { font-family: var(--font-mono); font-size: clamp(28px,4vw,52px); font-weight: 500; letter-spacing: .3em; color: var(--color-gold); margin-top: 8px; }
 
-    /* ── Waiting ── */
-    #screen-waiting { gap: 20px; }
-    .waiting-title { font-family: var(--font-display); font-size: clamp(48px,8vw,96px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text); text-align: center; }
-    .waiting-sub   { font-size: var(--text-sm); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); }
-    .player-chips  { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
-    .player-chip   { padding: 8px 20px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-surface); font-size: var(--text-sm); letter-spacing: var(--tracking-normal); color: var(--color-text-dim); }
-    .player-chip.manager { border-color: var(--color-gold); color: var(--color-gold); }
-    .room-code     { font-family: var(--font-mono); font-size: clamp(28px,4vw,52px); font-weight: 500; letter-spacing: .3em; color: var(--color-gold); margin-top: 8px; }
+    /* ── Main game screen ── */
+    #screen-game { position: fixed; inset: 0; display: none; }
+    #screen-game.active { display: block; }
 
-    /* ── Last Card TV ── */
-    #screen-lastcard { gap: 0; padding: 24px 40px; }
-    .lc-top    { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 20px; }
-    .lc-title  { font-family: var(--font-display); font-size: clamp(22px,3vw,40px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-gold); }
-    .lc-center { display: flex; flex-direction: column; align-items: center; gap: 16px; flex: 1; justify-content: center; }
-    .lc-discard-label { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); }
-    .card-tv   { width: clamp(100px,14vw,180px); aspect-ratio: 2/3; border-radius: 12px; border: 2px solid rgba(255,255,255,.15); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: clamp(28px,5vw,64px); font-weight: 400; letter-spacing: .02em; box-shadow: var(--shadow-card); transition: all 0.3s ease; }
-    .card-tv.red   { background: #c0392b; color: #fff; }
-    .card-tv.black { background: #1a1a2e; color: #eee; }
-    .card-tv.wild  { background: linear-gradient(135deg,#c0392b,#1a1a2e,#27ae60,#2980b9); color: #ffd700; }
-    .lc-suit-row { display: flex; gap: 12px; align-items: center; }
-    .suit-btn  { width: 52px; height: 52px; border-radius: 50%; border: 2px solid var(--color-border); background: var(--color-surface); font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
-    .suit-btn.active { border-color: var(--color-gold); background: var(--color-gold-faint); }
+    /* ── Poker table layout ── */
+    /* Player tiles arranged around the table */
+    #player-grid {
+      position: absolute; inset: 0;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 8px; padding: 8px;
+    }
 
-    /* Player slots around the table */
-    .lc-players { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; width: 100%; }
-    .lc-player  { padding: 12px 20px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-dim); background: var(--color-surface); min-width: 130px; text-align: center; transition: all 0.3s; }
-    .lc-player.active { border-color: var(--color-gold); background: var(--color-gold-faint); box-shadow: var(--shadow-gold); }
-    .lc-player.last-card { border-color: var(--color-red); animation: lc-pulse 0.8s infinite; }
-    @keyframes lc-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(232,25,44,.4)} 50%{box-shadow:0 0 0 12px rgba(232,25,44,0)} }
-    .lc-player-name  { font-size: var(--text-sm); letter-spacing: var(--tracking-normal); color: var(--color-text-dim); margin-bottom: 4px; }
-    .lc-player-cards { font-family: var(--font-mono); font-size: var(--text-xl); color: var(--color-text); font-weight: 500; }
-    .lc-player-score { font-size: var(--text-xs); color: var(--color-text-faint); margin-top: 2px; }
-    .lc-player-badge { font-size: 10px; letter-spacing: .1em; color: var(--color-green); text-transform: uppercase; }
+    .player-tile {
+      position: relative; border-radius: 12px; overflow: hidden;
+      background: rgba(20,12,8,.9); border: 1px solid var(--color-border-dim);
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .player-tile.active-turn {
+      border-color: var(--color-gold);
+      box-shadow: 0 0 20px rgba(255,200,80,.2), inset 0 0 20px rgba(255,200,80,.05);
+    }
+    .player-tile.last-card {
+      border-color: var(--color-red);
+      animation: tv-pulse 0.8s infinite;
+    }
+    @keyframes tv-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(232,25,44,.4)} 50%{box-shadow:0 0 0 12px rgba(232,25,44,0)} }
 
-    .lc-draw-pile { text-align: center; }
-    .lc-draw-count { font-family: var(--font-mono); font-size: var(--text-xl); color: var(--color-text-faint); margin-top: 4px; }
+    /* Video fill */
+    .player-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 
-    /* ── Trivia TV ── */
-    #screen-trivia { gap: 0; padding: 48px 80px; }
-    .tv-q-meta   { display: flex; gap: 16px; align-items: center; margin-bottom: 24px; width: 100%; }
-    .tv-q-cat    { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-gold); padding: 4px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); }
-    .tv-q-num    { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-text-faint); }
-    .tv-timer    { flex: 1; height: 4px; background: var(--color-surface); border-radius: var(--radius-pill); overflow: hidden; }
+    /* Avatar (no camera) */
+    .player-avatar {
+      width: clamp(48px,6vw,80px); height: clamp(48px,6vw,80px); border-radius: 50%;
+      background: var(--color-surface); border: 2px solid var(--color-border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-size: clamp(18px,2.5vw,32px);
+      color: var(--color-text-dim); font-weight: 300;
+    }
+
+    /* Player overlay info */
+    .player-overlay {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: linear-gradient(to top, rgba(0,0,0,.85) 0%, transparent 100%);
+      padding: clamp(8px,1.2vw,16px);
+      display: flex; align-items: flex-end; justify-content: space-between;
+    }
+    .player-name { font-size: clamp(11px,1.3vw,18px); font-weight: 500; color: #fff; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+    .player-cards-count { font-family: var(--font-mono); font-size: clamp(18px,2.5vw,36px); color: var(--color-gold); font-weight: 500; line-height: 1; }
+    .player-score { position: absolute; top: 8px; right: 10px; font-family: var(--font-mono); font-size: clamp(9px,1vw,13px); color: rgba(255,200,80,.6); }
+    .player-badge { position: absolute; top: 8px; left: 8px; font-size: clamp(8px,.9vw,11px); letter-spacing: .1em; text-transform: uppercase; padding: 2px 8px; border-radius: var(--radius-pill); background: rgba(255,200,80,.15); color: var(--color-gold); border: 1px solid rgba(255,200,80,.2); }
+    .last-card-badge { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: clamp(14px,2vw,24px); font-weight: 700; color: var(--color-red); text-transform: uppercase; letter-spacing: .1em; text-shadow: 0 0 20px rgba(232,25,44,.8); animation: tv-pulse 0.8s infinite; pointer-events: none; }
+
+    /* ── Centre panel (game state) ── */
+    #centre-panel {
+      position: absolute;
+      top: 50%; left: 50%; transform: translate(-50%,-50%);
+      grid-column: 2; grid-row: 2;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: clamp(8px,1.2vw,16px);
+      background: rgba(4,2,6,.92); backdrop-filter: blur(8px);
+      border-radius: 16px; border: 1px solid var(--color-border-dim);
+      padding: clamp(12px,2vw,24px) clamp(16px,2.5vw,32px);
+      min-width: clamp(140px,18vw,240px);
+      z-index: 20;
+    }
+
+    .centre-game-title { font-family: var(--font-display); font-size: clamp(14px,1.8vw,24px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text-faint); text-align: center; }
+
+    /* Discard pile */
+    .tv-card {
+      width: clamp(56px,7vw,96px); aspect-ratio: 2/3; border-radius: 8px;
+      border: 2px solid rgba(255,255,255,.15); display: flex; align-items: center;
+      justify-content: center; font-family: var(--font-display);
+      font-size: clamp(16px,2.2vw,32px); box-shadow: 0 4px 20px rgba(0,0,0,.6);
+      transition: all 0.3s;
+    }
+    .tv-card.red   { background: #c0392b; color: #fff; }
+    .tv-card.black { background: #1a1a2e; color: #eee; }
+    .tv-card.wild  { background: linear-gradient(135deg,#8e44ad,#c0392b,#27ae60,#2980b9); color: #ffd700; }
+
+    .centre-suit { font-size: clamp(20px,3vw,44px); }
+    .centre-meta { display: flex; gap: 16px; }
+    .centre-stat { text-align: center; }
+    .centre-stat-val { font-family: var(--font-mono); font-size: clamp(14px,1.8vw,24px); color: var(--color-text-dim); }
+    .centre-stat-label { font-size: clamp(8px,.9vw,11px); letter-spacing: .12em; text-transform: uppercase; color: var(--color-text-faint); }
+    .centre-direction { font-size: clamp(10px,1.1vw,15px); letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-faint); }
+    .centre-turn { font-family: var(--font-display); font-size: clamp(12px,1.4vw,20px); color: var(--color-gold); text-align: center; letter-spacing: .04em; }
+
+    /* Draw pending badge */
+    .centre-draw-pending { padding: 4px 12px; border-radius: var(--radius-pill); background: var(--color-red-faint); border: 1px solid var(--color-red); font-size: clamp(9px,1vw,13px); color: var(--color-red); letter-spacing: .08em; }
+
+    /* ── Trivia TV layout ── */
+    #screen-trivia-tv { position: fixed; inset: 0; display: none; flex-direction: column; padding: clamp(32px,5vh,64px) clamp(40px,7vw,100px); }
+    #screen-trivia-tv.active { display: flex; }
+    .tv-q-meta { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; }
+    .tv-q-cat  { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-gold); padding: 4px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); }
+    .tv-q-num  { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-text-faint); }
+    .tv-timer  { flex: 1; height: 4px; background: var(--color-surface); border-radius: var(--radius-pill); overflow: hidden; }
     .tv-timer-fill { height: 100%; background: var(--color-gold); border-radius: var(--radius-pill); transition: width 1s linear; box-shadow: var(--shadow-gold); }
-
-    .tv-question { font-family: var(--font-display); font-size: clamp(28px,4.5vw,64px); font-weight: 300; letter-spacing: var(--tracking-tight); color: var(--color-text); text-align: center; margin-bottom: 40px; line-height: 1.25; max-width: 900px; }
-
-    .tv-options  { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; max-width: 900px; margin-bottom: 32px; }
-    .tv-option   { padding: 20px 28px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-dim); background: var(--color-surface); display: flex; align-items: center; gap: 16px; transition: all 0.4s; }
+    .tv-question { font-family: var(--font-display); font-size: clamp(28px,4.5vw,64px); font-weight: 300; color: var(--color-text); text-align: center; margin-bottom: 32px; line-height: 1.25; }
+    .tv-options  { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 900px; margin: 0 auto; width: 100%; margin-bottom: 28px; }
+    .tv-option   { padding: 18px 24px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-dim); background: var(--color-surface); display: flex; align-items: center; gap: 14px; transition: all 0.4s; }
     .tv-option.correct { border-color: var(--color-green); background: var(--color-green-faint); }
-    .tv-option.wrong   { opacity: 0.35; }
-    .tv-option.answered { border-color: var(--color-gold-dim); }
-    .tv-opt-letter { font-family: var(--font-mono); font-size: var(--text-xl); font-weight: 500; color: var(--color-gold); min-width: 32px; }
-    .tv-opt-text   { font-size: clamp(14px,1.8vw,22px); color: var(--color-text-dim); }
-    .tv-opt-count  { margin-left: auto; font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-faint); }
-
-    .tv-leaderboard { display: flex; gap: 12px; width: 100%; max-width: 700px; justify-content: center; }
-    .tv-lb-entry    { flex: 1; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--color-border-dim); background: var(--color-surface); text-align: center; }
+    .tv-option.wrong   { opacity: .35; }
+    .tv-opt-letter { font-family: var(--font-mono); font-size: var(--text-xl); font-weight: 500; color: var(--color-gold); min-width: 28px; }
+    .tv-opt-text   { font-size: clamp(14px,1.8vw,22px); color: var(--color-text-dim); flex: 1; }
+    .tv-opt-count  { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-faint); }
+    .tv-leaderboard { display: flex; gap: 12px; justify-content: center; max-width: 700px; margin: 0 auto; }
+    .tv-lb-entry { flex: 1; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--color-border-dim); background: var(--color-surface); text-align: center; }
     .tv-lb-entry.first { border-color: var(--color-gold); }
     .tv-lb-pos   { font-size: var(--text-xs); color: var(--color-text-faint); margin-bottom: 2px; }
-    .tv-lb-name  { font-size: var(--text-sm); color: var(--color-text-dim); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tv-lb-name  { font-size: var(--text-sm); color: var(--color-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
     .tv-lb-score { font-family: var(--font-mono); font-size: var(--text-xl); color: var(--color-gold); font-weight: 500; }
+    .tv-fun-fact { font-size: clamp(12px,1.3vw,17px); color: var(--color-text-faint); text-align: center; font-style: italic; max-width: 700px; margin: 8px auto 0; }
 
-    .tv-fun-fact { font-size: clamp(13px,1.4vw,18px); color: var(--color-text-faint); text-align: center; font-style: italic; max-width: 700px; margin-top: 8px; }
+    /* ── Wordmark ── */
+    .tv-wordmark { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); font-family: var(--font-display); font-size: clamp(13px,1.5vw,20px); font-weight: 300; letter-spacing: var(--tracking-widest); color: rgba(255,200,80,.3); text-transform: uppercase; z-index: 50; pointer-events: none; }
+    .tv-room { position: fixed; bottom: 14px; right: 20px; font-family: var(--font-mono); font-size: clamp(10px,1vw,14px); letter-spacing: .2em; color: rgba(255,200,80,.25); z-index: 50; }
 
-    /* ── Transition ── */
-    #screen-transition { gap: 16px; }
-    .trans-title { font-family: var(--font-display); font-size: clamp(48px,8vw,96px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text); }
-    .trans-sub   { font-size: var(--text-sm); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); }
+    /* Log */
+    #log-toggle { position: fixed; bottom: 14px; left: 16px; z-index: 999; font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; color: var(--color-gold-dim); cursor: pointer; padding: 3px 8px; border: 1px solid var(--color-border-dim); border-radius: var(--radius-sm); }
+    #log-panel  { display: none; position: fixed; bottom: 40px; left: 16px; right: 16px; z-index: 998; background: var(--color-overlay); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px; max-height: 35vh; overflow-y: auto; }
 
-    /* ── Log ── */
-    #log-toggle { position: fixed; bottom: 16px; left: 20px; z-index: 999; font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); color: var(--color-gold-dim); cursor: pointer; padding: 4px 8px; border: 1px solid var(--color-border-dim); border-radius: var(--radius-sm); }
-    #log-panel  { display: none; position: fixed; bottom: 40px; left: 20px; right: 20px; z-index: 998; background: var(--color-overlay); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--color-green); max-height: 35vh; overflow-y: auto; }
-
-    /* ── Version ── */
-    .ver { position: fixed; bottom: 16px; right: 20px; font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); color: var(--color-gold); z-index: 50; }
+    .ver { position: fixed; bottom: 14px; right: 60px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; color: var(--color-gold); z-index: 50; }
   </style>
 </head>
 <body>
 
-<!-- ── WAITING SCREEN ── -->
-<div id="screen-waiting" class="screen active">
-  <div class="waiting-title">Games</div>
-  <div class="waiting-sub">Scan to join on your phone</div>
+<div class="tv-wordmark">Elsewhere · Games</div>
+
+<!-- WAITING -->
+<div id="screen-waiting">
+  <div class="tv-title">Games</div>
+  <div class="tv-sub">Scan to join on your phone</div>
   <div class="room-code" id="room-display">——</div>
-  <div class="player-chips" id="player-chips"></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:12px;" id="player-chips"></div>
 </div>
 
-<!-- ── TRANSITION SCREEN ── -->
-<div id="screen-transition" class="screen">
-  <div class="trans-title" id="trans-title">—</div>
-  <div class="trans-sub"  id="trans-sub">Loading...</div>
-</div>
-
-<!-- ── LAST CARD TV ── -->
-<div id="screen-lastcard" class="screen">
-  <div class="lc-top">
-    <div class="lc-title">Last Card</div>
-    <div id="lc-direction" style="font-size:var(--text-sm);color:var(--color-text-faint);letter-spacing:.1em;">▶ Clockwise</div>
-    <div id="lc-pending" style="display:none;padding:6px 16px;border-radius:var(--radius-pill);background:var(--color-red-faint);border:1px solid var(--color-red);font-size:var(--text-sm);color:var(--color-red);">Draw pending!</div>
-  </div>
-
-  <div class="lc-center">
-    <div class="lc-discard-label">Discard pile</div>
-    <div class="card-tv" id="lc-top-card">—</div>
-    <div id="lc-current-suit" style="font-size:clamp(24px,3vw,40px);letter-spacing:.05em;">—</div>
-    <div class="lc-draw-pile">
-      <div class="lc-discard-label">Draw pile</div>
-      <div class="lc-draw-count" id="lc-draw-count">52</div>
+<!-- LAST CARD TV -->
+<div id="screen-game">
+  <div id="player-grid"></div>
+  <div id="centre-panel">
+    <div class="centre-game-title" id="centre-title">Last Card</div>
+    <div class="tv-card" id="centre-card">—</div>
+    <div class="centre-suit" id="centre-suit">—</div>
+    <div class="centre-meta">
+      <div class="centre-stat">
+        <div class="centre-stat-val" id="centre-draw">52</div>
+        <div class="centre-stat-label">Draw pile</div>
+      </div>
+      <div class="centre-stat">
+        <div class="centre-stat-val" id="centre-dir">▶</div>
+        <div class="centre-stat-label">Direction</div>
+      </div>
     </div>
+    <div class="centre-draw-pending" id="centre-pending" style="display:none;">Draw pending!</div>
+    <div class="centre-turn" id="centre-turn">—</div>
   </div>
-
-  <div class="lc-players" id="lc-players"></div>
 </div>
 
-<!-- ── TRIVIA TV ── -->
-<div id="screen-trivia" class="screen">
+<!-- TRIVIA TV -->
+<div id="screen-trivia-tv">
   <div class="tv-q-meta">
     <div class="tv-q-cat" id="tv-q-cat">General</div>
     <div class="tv-q-num" id="tv-q-num">Q 1/10</div>
@@ -142,238 +192,292 @@
   <div class="tv-fun-fact" id="tv-fun-fact"></div>
 </div>
 
+<div class="tv-room" id="tv-room-badge">——</div>
+
 <div id="log-toggle" onclick="toggleLog()">LOG</div>
 <div id="log-panel">
-  <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-    <span style="color:var(--color-text-faint);font-size:10px;letter-spacing:.1em;text-transform:uppercase;">Debug</span>
+  <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+    <span style="color:var(--color-text-faint);font-size:10px;text-transform:uppercase;letter-spacing:.1em;">Debug</span>
     <span onclick="copyLog()" style="color:var(--color-gold-dim);cursor:pointer;font-size:10px;letter-spacing:.1em;">COPY</span>
   </div>
-  <div id="log-lines"></div>
+  <div id="log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.53</div>
+<div class="ver">v2.54</div>
 
 <script>
 'use strict';
 
-// ── Config ──────────────────────────────────────────────────
 const AGORA_APP_ID = 'b2c6543a9ed946829e6526cb68c7efc9';
-const CHAN_PREFIX  = 'elsewhere_g';
-const BASE_URL     = 'https://mstepanovich-web.github.io/elsewhere';
+const CHAN_PREFIX   = 'elsewhere_g';
+const urlParams    = new URLSearchParams(location.search);
+const roomCode     = (urlParams.get('room')||'').toUpperCase();
 
-const urlParams = new URLSearchParams(location.search);
-const roomCode  = (urlParams.get('room') || '').toUpperCase();
-document.getElementById('room-display').textContent = roomCode || '——';
+document.getElementById('room-display').textContent  = roomCode||'——';
+document.getElementById('tv-room-badge').textContent = 'Room '+roomCode;
 
-// ── State ───────────────────────────────────────────────────
-let agoraClient = null, streamId = null;
-let currentGame = null;   // 'lastcard' | 'trivia'
+let agoraClient = null;
+let currentGame = null;
 let gameState   = null;
-let players     = {};     // uid → { name, isManager }
-let timerInterval = null;
-let triviaTimer   = 0;
+let players     = {};   // uid → { name, isManager, hasCamera, videoTrack }
 
-// ── Agora ───────────────────────────────────────────────────
+// ── Agora ────────────────────────────────────────────────────
 async function initAgora() {
-  if (!roomCode) { tvLog('No room code — waiting'); return; }
-  agoraClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+  if (!roomCode) { tvLog('No room code'); return; }
+  agoraClient = AgoraRTC.createClient({ mode:'rtc', codec:'vp8' });
 
   agoraClient.on('user-joined', u => {
-    tvLog('User joined: ' + u.uid);
-  });
-  agoraClient.on('user-left', u => {
-    tvLog('User left: ' + u.uid);
-    delete players[u.uid];
-    renderPlayerChips();
-  });
-  agoraClient.on('stream-message', (uid, data) => {
-    handleMessage(uid, data);
+    tvLog('user-joined: '+u.uid);
+    // May not have name yet — will update on player-join message
+    if (!players[u.uid]) players[u.uid] = { name:'...', isManager:false, hasCamera:false };
+    renderChips();
   });
 
-  await agoraClient.join(AGORA_APP_ID, CHAN_PREFIX + roomCode, null, null);
-  tvLog('TV joined channel: ' + CHAN_PREFIX + roomCode);
+  agoraClient.on('user-left', u => {
+    tvLog('user-left: '+u.uid);
+    delete players[u.uid];
+    renderChips();
+    renderPlayerGrid();
+  });
+
+  agoraClient.on('stream-message', (uid, data) => handleMessage(uid, data));
+
+  agoraClient.on('user-published', async (user, mediaType) => {
+    if (mediaType === 'video') {
+      await agoraClient.subscribe(user, 'video');
+      if (!players[user.uid]) players[user.uid] = { name:'...', isManager:false, hasCamera:false };
+      players[user.uid].hasCamera = true;
+      players[user.uid].videoTrack = user.videoTrack;
+      tvLog('video subscribed from: '+user.uid);
+      renderPlayerGrid();
+    }
+  });
+
+  agoraClient.on('user-unpublished', (user, mediaType) => {
+    if (mediaType === 'video') {
+      if (players[user.uid]) { players[user.uid].hasCamera=false; players[user.uid].videoTrack=null; }
+      renderPlayerGrid();
+    }
+  });
+
+  await agoraClient.join(AGORA_APP_ID, CHAN_PREFIX+roomCode, null, null);
+  tvLog('TV joined: '+CHAN_PREFIX+roomCode);
 }
 
+// ── Message handling ─────────────────────────────────────────
 function handleMessage(uid, data) {
   try {
-    const text = new TextDecoder().decode(data);
-    const msg  = JSON.parse(text);
-    tvLog('← ' + msg.type + ' from ' + uid);
+    const msg = JSON.parse(new TextDecoder().decode(data));
+    tvLog('← '+msg.type+' '+(msg._name||''));
 
-    if (msg.type === 'player-join') {
-      players[uid] = { name: msg.name, isManager: msg.isManager };
-      renderPlayerChips();
+    if (msg.type==='player-join'||msg.type==='player-join-ack') {
+      if (!players[uid]) players[uid]={hasCamera:false};
+      players[uid].name      = msg.name;
+      players[uid].isManager = msg.isManager;
+      renderChips();
+      renderPlayerGrid();
     }
 
-    if (msg.type === 'game-selected') {
-      showTransition(msg.game);
-      setTimeout(() => startGame(msg.game, msg.config), 2000);
+    if (msg.type==='camera-on')  { if(players[uid]) players[uid].hasCamera=true; renderPlayerGrid(); }
+    if (msg.type==='camera-off') { if(players[uid]) { players[uid].hasCamera=false; players[uid].videoTrack=null; } renderPlayerGrid(); }
+
+    if (msg.type==='game-selected') {
+      currentGame = msg.game;
+      tvLog('game-selected: '+msg.game);
     }
 
-    if (msg.type === 'game-state') {
+    if (msg.type==='game-start') {
       gameState = msg.state;
-      renderGame();
+      currentGame = currentGame || 'lastcard';
+      if (currentGame==='lastcard') showLastCard();
+      if (currentGame==='trivia')   showTrivia();
     }
 
-    if (msg.type === 'switch-game') {
-      goTo('screen-waiting');
+    if (msg.type==='game-state') {
+      gameState = msg.state;
+      if (currentGame==='lastcard') renderLastCard();
+      if (currentGame==='trivia')   renderTrivia();
     }
 
-  } catch (e) { tvLog('Parse error: ' + e.message); }
+    if (msg.type==='game-over') {
+      showGameOver(msg.scores);
+    }
+
+    if (msg.type==='game-restart'||msg.type==='switch-game') {
+      showWaiting();
+    }
+
+  } catch(e) { tvLog('msg error: '+e); }
 }
 
-// ── Screen management ────────────────────────────────────────
-function goTo(id) {
-  document.querySelectorAll('.screen').forEach(s => {
-    s.classList.remove('active');
+// ── Screens ───────────────────────────────────────────────────
+function showWaiting() {
+  document.getElementById('screen-waiting').style.display='flex';
+  document.getElementById('screen-game').classList.remove('active');
+  document.getElementById('screen-trivia-tv').classList.remove('active');
+}
+
+function showLastCard() {
+  document.getElementById('screen-waiting').style.display='none';
+  document.getElementById('screen-game').classList.add('active');
+  document.getElementById('screen-trivia-tv').classList.remove('active');
+  renderPlayerGrid();
+  renderLastCard();
+}
+
+function showTrivia() {
+  document.getElementById('screen-waiting').style.display='none';
+  document.getElementById('screen-game').classList.remove('active');
+  document.getElementById('screen-trivia-tv').classList.add('active');
+  renderTrivia();
+}
+
+function showGameOver(scores) {
+  // Show game over on trivia screen or last card screen
+  const title = document.getElementById('centre-turn') || document.getElementById('tv-question');
+  if (title) title.textContent = 'Game Over!';
+}
+
+// ── Chips (waiting screen) ────────────────────────────────────
+function renderChips() {
+  document.getElementById('player-chips').innerHTML =
+    Object.values(players).map(p=>
+      `<div style="padding:8px 18px;border-radius:var(--radius-pill);border:1px solid ${p.isManager?'var(--color-gold)':'var(--color-border-dim)'};background:var(--color-surface);font-size:var(--text-sm);color:${p.isManager?'var(--color-gold)':'var(--color-text-dim)'};">
+        ${p.isManager?'★ ':''}${p.name}
+      </div>`
+    ).join('');
+}
+
+// ── Last Card TV ──────────────────────────────────────────────
+function renderPlayerGrid() {
+  if (!currentGame || currentGame!=='lastcard') return;
+  const grid = document.getElementById('player-grid');
+  const playerList = Object.entries(players);
+  if (playerList.length===0) return;
+
+  // 6 slots max, arranged in grid
+  // Positions: top-left, top-centre, top-right, bottom-left, bottom-centre, bottom-right
+  // Centre (pos [1][1]) is reserved for the game state panel
+  const positions = [
+    {col:1,row:1}, {col:2,row:1}, {col:3,row:1},
+    {col:1,row:3}, {col:2,row:3}, {col:3,row:3},
+  ];
+
+  grid.innerHTML = '';
+
+  playerList.slice(0,6).forEach(([uid,p], idx) => {
+    const pos = positions[idx];
+    const isActive = gameState && gameState.players &&
+      gameState.players[gameState.currentPlayerIdx]===p.name;
+    const handCount = gameState?.hands?.[p.name]?.length ?? '?';
+    const isLast = handCount===1;
+    const score  = gameState?.scores?.[p.name]||0;
+
+    const tile = document.createElement('div');
+    tile.className = `player-tile ${isActive?'active-turn':''} ${isLast?'last-card':''}`;
+    tile.style.cssText = `grid-column:${pos.col};grid-row:${pos.row};`;
+
+    if (p.hasCamera && p.videoTrack) {
+      const vid = document.createElement('video');
+      vid.autoplay=true; vid.muted=true; vid.playsInline=true;
+      vid.className='player-video';
+      p.videoTrack.play(vid);
+      tile.appendChild(vid);
+    } else {
+      const av = document.createElement('div');
+      av.className='player-avatar';
+      av.textContent=(p.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+      tile.appendChild(av);
+    }
+
+    tile.innerHTML += `
+      ${p.isManager?'<div class="player-badge">Manager</div>':''}
+      ${isLast?'<div class="last-card-badge">Last Card!</div>':''}
+      <div class="player-score">${score} pts</div>
+      <div class="player-overlay">
+        <div class="player-name">${p.name}</div>
+        <div class="player-cards-count">${handCount}<span style="font-size:.5em;opacity:.6;"> 🃏</span></div>
+      </div>`;
+
+    grid.appendChild(tile);
   });
-  document.getElementById(id).classList.add('active');
+
+  // Centre panel stays on top
+  updateCentrePanel();
 }
 
-function showTransition(game) {
-  const labels = { lastcard: 'Last Card', trivia: 'Trivia Night' };
-  document.getElementById('trans-title').textContent = labels[game] || game;
-  document.getElementById('trans-sub').textContent = 'Get ready...';
-  goTo('screen-transition');
-}
-
-function startGame(game, config) {
-  currentGame = game;
-  if (game === 'lastcard') goTo('screen-lastcard');
-  if (game === 'trivia')   goTo('screen-trivia');
-}
-
-// ── Render: Player chips (waiting screen) ────────────────────
-function renderPlayerChips() {
-  const el = document.getElementById('player-chips');
-  el.innerHTML = Object.entries(players).map(([uid, p]) =>
-    `<div class="player-chip ${p.isManager ? 'manager' : ''}">${p.isManager ? '★ ' : ''}${p.name}</div>`
-  ).join('');
-}
-
-// ── Render: Game state ───────────────────────────────────────
-function renderGame() {
-  if (currentGame === 'lastcard') renderLastCard();
-  if (currentGame === 'trivia')   renderTrivia();
-}
-
-// ── Render: Last Card ────────────────────────────────────────
-function renderLastCard() {
+function updateCentrePanel() {
   if (!gameState) return;
   const s = gameState;
-
-  // Top card
-  const top = s.discardPile[s.discardPile.length - 1];
-  const cardEl = document.getElementById('lc-top-card');
-  cardEl.textContent = top ? (top.value + (top.suit || '')) : '—';
-  const isRed = top && (top.suit === '♥' || top.suit === '♦');
-  const isWild = top && !top.suit;
-  cardEl.className = 'card-tv ' + (isWild ? 'wild' : isRed ? 'red' : 'black');
-
-  document.getElementById('lc-current-suit').textContent = s.currentSuit || '';
-  document.getElementById('lc-draw-count').textContent   = s.drawPile?.length || 0;
-  document.getElementById('lc-direction').textContent    = s.direction === 1 ? '▶ Clockwise' : '◀ Counter-clockwise';
-
-  const pendEl = document.getElementById('lc-pending');
-  if (s.pendingDraw > 0) {
-    pendEl.style.display = 'block';
-    pendEl.textContent = 'Draw ' + s.pendingDraw + ' pending!';
-  } else {
-    pendEl.style.display = 'none';
-  }
-
-  // Players
-  const plEl = document.getElementById('lc-players');
-  const currentPlayer = s.players[s.currentPlayerIdx];
-  plEl.innerHTML = s.players.map(pid => {
-    const handCount = (s.hands[pid] || []).length;
-    const isActive  = pid === currentPlayer;
-    const isLast    = handCount === 1;
-    const pInfo     = Object.values(players).find(p => p.name === pid) || { name: pid };
-    return `<div class="lc-player ${isActive ? 'active' : ''} ${isLast ? 'last-card' : ''}">
-      <div class="lc-player-name">${pid}</div>
-      <div class="lc-player-cards">${handCount} 🃏</div>
-      <div class="lc-player-score">${s.scores[pid] || 0} pts</div>
-      ${isLast ? '<div class="lc-player-badge">LAST CARD!</div>' : ''}
-    </div>`;
-  }).join('');
+  const top = s.discardPile?.[s.discardPile.length-1];
+  const isRed  = top&&(top.suit==='♥'||top.suit==='♦');
+  const isWild = top&&!top.suit;
+  const cardEl = document.getElementById('centre-card');
+  if (cardEl) { cardEl.textContent=top?(top.value+(top.suit||'')):'—'; cardEl.className='tv-card '+(isWild?'wild':isRed?'red':'black'); }
+  const suitEl=document.getElementById('centre-suit'); if(suitEl) suitEl.textContent=s.currentSuit||'★';
+  const drawEl=document.getElementById('centre-draw'); if(drawEl) drawEl.textContent=s.drawPile?.length||0;
+  const dirEl=document.getElementById('centre-dir');   if(dirEl)  dirEl.textContent=s.direction===1?'▶':'◀';
+  const pendEl=document.getElementById('centre-pending');
+  if(pendEl){ pendEl.style.display=s.pendingDraw>0?'block':'none'; pendEl.textContent='Draw '+s.pendingDraw+' pending!'; }
+  const turnEl=document.getElementById('centre-turn');
+  if(turnEl) turnEl.textContent=(s.players?.[s.currentPlayerIdx]||'?')+"'s turn";
 }
 
-// ── Render: Trivia ───────────────────────────────────────────
+function renderLastCard() {
+  renderPlayerGrid();
+  updateCentrePanel();
+}
+
+// ── Trivia TV ─────────────────────────────────────────────────
 function renderTrivia() {
   if (!gameState) return;
-  const s = gameState;
-  const q = s.questions[s.currentQuestionIdx];
+  const s=gameState, q=s.questions?.[s.currentQuestionIdx];
   if (!q) return;
 
-  document.getElementById('tv-q-num').textContent = `Q ${s.currentQuestionIdx + 1}/${s.questions.length}`;
-  document.getElementById('tv-question').textContent = q.question;
-  document.getElementById('tv-fun-fact').textContent = s.phase === 'reveal' ? (q.fun_fact || '') : '';
+  document.getElementById('tv-q-num').textContent='Q '+(s.currentQuestionIdx+1)+'/'+(s.questions?.length||10);
+  document.getElementById('tv-q-cat').textContent=s.category||'Trivia';
+  document.getElementById('tv-question').textContent=q.question;
+  document.getElementById('tv-fun-fact').textContent=s.phase==='reveal'?(q.fun_fact||''):'';
 
-  // Options
-  const letters = ['A','B','C','D'];
-  const opts = document.getElementById('tv-options');
-  opts.innerHTML = (q.options || []).map((opt, i) => {
-    const letter = letters[i];
-    const answerCount = Object.values(s.answers || {}).filter(a => a.answer === letter).length;
-    let cls = '';
-    if (s.phase === 'reveal') {
-      cls = letter === q.correct ? 'correct' : 'wrong';
-    } else if (answerCount > 0) {
-      cls = 'answered';
-    }
+  const letters=['A','B','C','D'];
+  document.getElementById('tv-options').innerHTML=(q.options||[]).map((opt,i)=>{
+    const L=letters[i];
+    const cnt=Object.values(s.answers||{}).filter(a=>a.answer===L).length;
+    let cls='';
+    if(s.phase==='reveal') cls=L===q.correct?'correct':'wrong';
+    else if(cnt>0) cls='answered';
     return `<div class="tv-option ${cls}">
-      <div class="tv-opt-letter">${letter}</div>
+      <div class="tv-opt-letter">${L}</div>
       <div class="tv-opt-text">${opt}</div>
-      ${s.phase === 'reveal' || answerCount > 0 ? `<div class="tv-opt-count">${answerCount || ''}</div>` : ''}
+      ${cnt>0||s.phase==='reveal'?`<div class="tv-opt-count">${cnt||''}</div>`:''}
     </div>`;
   }).join('');
 
-  // Leaderboard
-  const lb = Object.entries(s.scores || {})
-    .sort((a,b) => b[1]-a[1]).slice(0,5);
-  document.getElementById('tv-leaderboard').innerHTML = lb.map(([pid, score], i) =>
+  const lb=Object.entries(s.scores||{}).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  document.getElementById('tv-leaderboard').innerHTML=lb.map(([n,sc],i)=>
     `<div class="tv-lb-entry ${i===0?'first':''}">
       <div class="tv-lb-pos">${['🥇','🥈','🥉','4th','5th'][i]}</div>
-      <div class="tv-lb-name">${pid}</div>
-      <div class="tv-lb-score">${score}</div>
-    </div>`
-  ).join('');
+      <div class="tv-lb-name">${n}</div>
+      <div class="tv-lb-score">${sc}</div>
+    </div>`).join('');
 
-  // Timer bar
-  if (s.phase === 'question') {
-    const pct = (s.timer / s.timePerQuestion) * 100;
-    document.getElementById('tv-timer-fill').style.width = pct + '%';
+  if(s.phase==='question'){
+    const pct=(s.timer/s.timePerQuestion)*100;
+    document.getElementById('tv-timer-fill').style.width=pct+'%';
   }
 }
 
-// ── Log ──────────────────────────────────────────────────────
-const _logs = [];
-function tvLog(msg) {
-  const ts = new Date().toISOString().slice(11,19);
-  const line = ts + ' ' + msg;
-  _logs.push(line);
-  console.log('[Games TV]', msg);
-  const panel = document.getElementById('log-lines');
-  if (panel) {
-    const div = document.createElement('div');
-    div.style.cssText = 'border-bottom:1px solid rgba(255,255,255,.06);padding:3px 0;';
-    div.textContent = line;
-    panel.appendChild(div);
-    panel.scrollTop = panel.scrollHeight;
-  }
+// ── Log ───────────────────────────────────────────────────────
+const _logs=[];
+function tvLog(msg){
+  const ts=new Date().toISOString().slice(11,19), line=ts+' '+msg;
+  _logs.push(line); console.log('[Games TV]',msg);
+  const p=document.getElementById('log-lines');
+  if(p){const d=document.createElement('div');d.style.cssText='border-bottom:1px solid rgba(255,255,255,.06);padding:2px 0;';d.textContent=line;p.appendChild(d);p.scrollTop=p.scrollHeight;}
 }
-function toggleLog() {
-  const p = document.getElementById('log-panel');
-  p.style.display = p.style.display === 'none' ? 'block' : 'none';
-}
-function copyLog() {
-  navigator.clipboard.writeText(_logs.join('\n')).then(() => {
-    const btn = document.querySelector('#log-panel span:last-child');
-    if (btn) { btn.textContent = 'COPIED ✓'; setTimeout(()=>btn.textContent='COPY',2000); }
-  });
-}
+function toggleLog(){const p=document.getElementById('log-panel');p.style.display=p.style.display==='none'?'block':'none';}
+function copyLog(){navigator.clipboard.writeText(_logs.join('\n')).then(()=>{const b=document.querySelector('#log-panel span:last-child');if(b){b.textContent='COPIED ✓';setTimeout(()=>b.textContent='COPY',2000);}});}
 
-// ── Boot ────────────────────────────────────────────────────
+// ── Boot ──────────────────────────────────────────────────────
 initAgora();
 </script>
 </body>
