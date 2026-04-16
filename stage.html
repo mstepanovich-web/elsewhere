@@ -316,7 +316,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.63</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.64</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -467,7 +467,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.63</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.64</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -1312,14 +1312,33 @@ async function populateCameraList(){
     if (ARRIVED_VIA_QR) enterStage();
   }
 }
+// ── Debug overlay — writes to page so we can see errors even if log panel broken
+const _dbgEl = document.createElement('div');
+_dbgEl.id = 'qr-debug';
+_dbgEl.style.cssText = 'position:fixed;top:40px;left:10px;right:10px;z-index:9999;background:rgba(0,0,0,.85);color:#0f0;font-family:monospace;font-size:11px;padding:8px;border:1px solid #0f0;border-radius:4px;max-height:60vh;overflow-y:auto;pointer-events:none;';
+document.body.appendChild(_dbgEl);
+function dbg(msg) {
+  const ts = new Date().toISOString().slice(11,19);
+  _dbgEl.innerHTML += ts + ' ' + msg + '<br>';
+  console.log('[QR-DEBUG]', msg);
+}
+
 if (ARRIVED_VIA_QR) {
-  // Camera already selected on tv2.html — skip camera list, go straight to stage
   const _urlCam = _urlParams.get('cam') || '';
   const _urlRes = _urlParams.get('res') || '';
-  if (_urlCam) selectedCameraId = _urlCam;
-  if (_urlRes) setResolution(_urlRes);
-  enterStage();
+  dbg('ARRIVED_VIA_QR=true room=' + ROOM_CODE);
+  dbg('cam=' + _urlCam.slice(0,20) + ' res=' + _urlRes);
+  if (_urlCam) { selectedCameraId = _urlCam; dbg('selectedCameraId set'); }
+  if (_urlRes) { setResolution(_urlRes); dbg('resolution set: ' + _urlRes); }
+  dbg('calling enterStage()...');
+  try {
+    enterStage();
+    dbg('enterStage() called OK');
+  } catch(e) {
+    dbg('enterStage() ERROR: ' + e.message);
+  }
 } else {
+  dbg('ARRIVED_VIA_QR=false — showing camera picker');
   populateCameraList();
 }
 
@@ -3843,6 +3862,7 @@ function renderLoop(){
 // ENTER STAGE — single entry point
 // ═══════════════════════════════════════
 function enterStage(){
+  console.log('[Elsewhere] enterStage() fired');
   log('enterStage called','info');
   document.getElementById('start').style.display='none';
   const res = RESOLUTIONS[currentResolution] || RESOLUTIONS.hd;
@@ -3850,8 +3870,10 @@ function enterStage(){
   const videoConstraints = selectedCameraId
     ? { deviceId:{ exact:selectedCameraId }, width:{ideal:res.w}, height:{ideal:res.h} }
     : { width:{ideal:res.w}, height:{ideal:res.h}, facingMode:'user' };
+  console.log('[Elsewhere] calling getUserMedia with constraints:', JSON.stringify(videoConstraints));
   navigator.mediaDevices.getUserMedia({ video:videoConstraints, audio:false })
   .then(stream=>{
+    console.log('[Elsewhere] getUserMedia SUCCESS');
     camStream = stream;
     camVideo  = document.getElementById('webcam');
     camVideo.srcObject = stream;
