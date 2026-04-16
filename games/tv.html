@@ -211,7 +211,7 @@
   </div>
   <div id="log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.77</div>
+<div class="ver">v2.78</div>
 
 <script>
 'use strict';
@@ -297,14 +297,18 @@ function handleMessage(uid, data) {
       if (!players[uid]) players[uid] = { hasCamera:false };
       players[uid].name      = msg.name;
       players[uid].isManager = msg.isManager;
-      // Remove from invited if they joined
-      invitedList = invitedList.filter(n => n.toLowerCase() !== msg.name.toLowerCase());
+      // Remove from invited when they join lobby
+      if (msg.name) invitedList = invitedList.filter(n => n.toLowerCase() !== msg.name.toLowerCase());
       renderLobby();
     }
 
     if (msg.type==='invite-sent') {
-      // Track invite count — we don't know name yet
-      tvLog('Invite sent, count: '+msg.count);
+      if (msg.names) {
+        invitedList = msg.names.filter(n => !Object.values(players).find(p=>p.name===n));
+      } else if (msg.name && !invitedList.includes(msg.name)) {
+        invitedList.push(msg.name);
+      }
+      tvLog('Invite sent to: '+msg.name);
       renderLobby();
     }
 

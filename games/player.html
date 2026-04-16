@@ -166,7 +166,7 @@
     .lc-card.color-wild   { background: linear-gradient(160deg,#1a1a1a,#2c2c2c); color: #ffd700; border-color: rgba(255,215,0,.4); }
     .lc-card.playable { border-color: #ffd700; border-width: 2.5px; box-shadow: 0 0 16px rgba(255,215,0,.5); transform: translateY(-6px); }
     .lc-card.selected { border-color: var(--color-green); box-shadow: 0 0 16px rgba(0,232,122,.4); transform: translateY(-8px); }
-    .lc-card.disabled { opacity: 0.5; cursor: default; transform: none !important; filter: grayscale(30%); }
+    .lc-card.disabled { opacity: 0.75; cursor: default; transform: none !important; }
     .lc-actions { display: flex; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--color-border-dim); flex-shrink: 0; }
     .lc-action-btn { flex: 1; padding: 13px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; cursor: pointer; text-align: center; transition: all var(--transition-fast); }
     .lc-action-btn.primary { background: var(--color-gold-dim); color: var(--color-bg); border-color: var(--color-gold); font-weight: 600; }
@@ -229,7 +229,8 @@
     <button class="mgr-btn"         id="mgr-next"   onclick="managerNext()"   style="display:none">Next →</button>
     <button class="mgr-btn"         id="mgr-skip"   onclick="managerSkip()"   style="display:none">Skip</button>
     <button class="mgr-btn"                         onclick="goToLobby()">☰ Games</button>
-    <button class="mgr-btn danger"                  onclick="managerEnd()">End</button>
+    <button class="mgr-btn"    id="mgr-endgame"       onclick="managerEndGame()" style="display:none">End Game</button>
+    <button class="mgr-btn danger"                  onclick="managerEnd()">End Session</button>
   </div>
 
   <div id="screen-wrap">
@@ -334,7 +335,7 @@
         <div class="section-label">Invite players</div>
         <div class="invite-btns">
           <div class="invite-btn" onclick="shareInvite()">📤 Share Link</div>
-          <div class="invite-btn" onclick="copyInvite()">📋 Copy Link</div>
+          <div class="invite-btn" onclick="copyInviteFor()">📋 Copy Link</div>
         </div>
         <div style="margin-top:8px;">
           <span class="schedule-link" onclick="toggleSchedule()">📅 Schedule a game</span>
@@ -538,7 +539,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.77</div>
+<div class="ver">v2.78</div>
 
 <script>
 'use strict';
@@ -630,7 +631,8 @@ async function doJoin() {
     agoraReady = true;
 
     isManager = urlP.get('mgr') === '1';
-    log('isManager:'+isManager);
+    userTVMode = isManager; // manager defaults to TV On, players to No TV
+    log('isManager:'+isManager+' userTVMode:'+userTVMode);
     if (isManager) document.getElementById('manager-bar').classList.add('visible');
 
     // Check if TV is present (non-player watcher on channel)
@@ -795,9 +797,15 @@ function handleMessage(uid, data) {
   }
 
   if (msg.type==='invite-sent') {
-    // Show invite count on all screens
-    const el = document.getElementById('invited-count');
-    if (el) el.textContent = msg.count + ' invite' + (msg.count===1?'':'s') + ' sent';
+    // Update invited names from broadcast
+    if (msg.names) {
+      msg.names.forEach(n => { if (!invitedNames.includes(n)) invitedNames.push(n); });
+    } else if (msg.name && !invitedNames.includes(msg.name)) {
+      invitedNames.push(msg.name);
+    }
+    // Remove anyone already in lobby
+    lobbyPlayers.forEach(p => { invitedNames = invitedNames.filter(n=>n!==p.name); });
+    renderInvited();
   }
 
   if (msg.type==='camera-on')  { updateLobbyCamera(uid, true); }
@@ -851,9 +859,11 @@ function handleMessage(uid, data) {
 
   if (msg.type==='game-restart') {
     gameInProgress=false; gameState=null;
-    // Remove non-restarting players
+    currentGame = msg.game || currentGame;
+    playerLimit = GAME_LIMITS[currentGame]?.default || 6;
+    // Remove non-restarting players from lobby
     if (msg.playerNames) {
-      lobbyPlayers = lobbyPlayers.filter(p=>msg.playerNames.includes(p.name));
+      lobbyPlayers = lobbyPlayers.filter(p=>msg.playerNames.includes(p.name)||p.uid===myUid);
     }
     goToGameRoom();
   }
@@ -881,7 +891,11 @@ function goTo(id) {
   });
 }
 
-function goToLobby()     { goTo('screen-lobby'); }
+function goToLobby()     {
+  goTo('screen-lobby');
+  const eg = document.getElementById('mgr-endgame');
+  if (eg) eg.style.display='none';
+}
 
 function selectGame(game) {
   if (!isManager) return;
@@ -1048,17 +1062,31 @@ function getInviteLink() {
 }
 
 function shareInvite() {
+  const inviteName = prompt('Who are you inviting? (their name)');
+  if (!inviteName || !inviteName.trim()) return;
+  const name = inviteName.trim();
   const link=getInviteLink();
   const gameName=GAME_INFO[currentGame]?.title||currentGame;
-  const subject=encodeURIComponent(`${myName} has invited you to play ${gameName} — JOIN NOW!`);
-  const body=encodeURIComponent(`Join the game here:\n\n${link}`);
-  window.location.href=`mailto:?subject=${subject}&body=${body}`;
-  // Track invite sent and broadcast so all screens show it
-  const inviteEntry = { time: Date.now() };
-  if (!window._invitesSent) window._invitesSent = 0;
-  window._invitesSent++;
-  send({ type:'invite-sent', count: window._invitesSent });
-  showToast('Invite sent!');
+  const subject=encodeURIComponent(myName+' has invited you to play '+gameName+' — JOIN NOW!');
+  const body=encodeURIComponent('Join the game here:\n\n'+link);
+  window.location.href='mailto:?subject='+subject+'&body='+body;
+  // Add to invited list and broadcast
+  if (!invitedNames.includes(name)) invitedNames.push(name);
+  send({ type:'invite-sent', name, names: invitedNames });
+  renderInvited();
+  showToast(name+' invited!');
+}
+
+function copyInviteFor() {
+  const inviteName = prompt('Who are you inviting? (their name)');
+  if (!inviteName || !inviteName.trim()) return;
+  const name = inviteName.trim();
+  navigator.clipboard.writeText(getInviteLink()).then(()=>{
+    if (!invitedNames.includes(name)) invitedNames.push(name);
+    send({ type:'invite-sent', name, names: invitedNames });
+    renderInvited();
+    showToast('Link copied for '+name+'!');
+  }).catch(()=>{});
 }
 
 function copyInvite() {
@@ -1173,11 +1201,14 @@ function managerStartLastCard() {
 function startLastCard() {
   goTo('screen-lastcard');
   setupLastCardLayout();
-  if (isManager) document.getElementById('mgr-skip').style.display='block';
+  if (isManager) {
+    document.getElementById('mgr-skip').style.display='block';
+    document.getElementById('mgr-endgame').style.display='block';
+  }
   renderLastCard();
 }
 
-let userTVMode = false; // explicit TV mode set by user toggle
+let userTVMode = false; // set properly after join based on isManager
 
 function setTVMode(on) {
   userTVMode = on;
@@ -1194,10 +1225,10 @@ function setupLastCardLayout() {
   // TV mode = user toggled TV On
   // No TV mode = user toggled No TV (default)
   document.getElementById('lc-tv-status').style.display   = userTVMode ? 'block' : 'none';
-  document.getElementById('lc-top-strip').classList.toggle('visible', !userTVMode);
+  document.getElementById('lc-top-strip').classList.toggle('visible', true);    // always show discard + draw pile
   document.getElementById('lc-others-strip').classList.toggle('visible', true); // always show others
-  document.getElementById('lc-ipad-wrap').classList.toggle('visible', false);   // never use iPad layout on phone
-  document.getElementById('lc-phone-hand-wrap').style.display = 'flex';          // always show phone hand
+  document.getElementById('lc-ipad-wrap').classList.toggle('visible', false);
+  document.getElementById('lc-phone-hand-wrap').style.display = 'flex';
 
   log('layout: tvMode='+userTVMode);
 }
@@ -1262,9 +1293,7 @@ function renderLastCard() {
       document.getElementById('mgr-next').textContent='Next Round →';
       document.getElementById('mgr-next').onclick=managerNextRound;
       // Also show End Game option in manager bar
-      document.getElementById('mgr-reveal').style.display='block';
-      document.getElementById('mgr-reveal').textContent='End Game';
-      document.getElementById('mgr-reveal').onclick=managerEndGame;
+      // End Game button is always visible in manager bar during game
     }
   }
 
@@ -1309,6 +1338,7 @@ function renderHand(myTurn, s, handId, drawId, playId) {
         div.classList.add('selected');
         selectedCard=card;
         if(playBtn) playBtn.disabled=false;
+        showSelectedPreview(card);
       };
     } else {
       // Still allow tapping disabled cards to show a "can't play" hint
@@ -1316,6 +1346,24 @@ function renderHand(myTurn, s, handId, drawId, playId) {
     }
     el.appendChild(div);
   });
+}
+
+function showSelectedPreview(card) {
+  const wrap = document.getElementById('lc-selected-preview');
+  const disp = document.getElementById('lc-selected-card-display');
+  if (!wrap || !disp) return;
+  const lbl = card.value==='Wild Draw 4'?'★+4':card.value==='Wild'?'★':card.value==='Draw 2'?'+2':card.value==='Skip'?'⊘':card.value==='Reverse'?'⇄':card.value;
+  const bgMap = { red:'linear-gradient(160deg,#e74c3c,#c0392b)', yellow:'linear-gradient(160deg,#f1c40f,#d4ac0d)', blue:'linear-gradient(160deg,#2980b9,#1a5276)', green:'linear-gradient(160deg,#27ae60,#1e8449)', wild:'linear-gradient(160deg,#1a1a1a,#2c2c2c)' };
+  const txMap = { red:'#fff', yellow:'#1a1a1a', blue:'#fff', green:'#fff', wild:'#ffd700' };
+  disp.style.background = bgMap[card.color] || '#333';
+  disp.style.color = txMap[card.color] || '#fff';
+  disp.innerHTML = '<span>'+lbl+'</span><span style="font-size:14px;">'+lbl+'</span><span style="transform:rotate(180deg)">'+lbl+'</span>';
+  wrap.style.display = 'flex';
+}
+
+function hideSelectedPreview() {
+  const wrap = document.getElementById('lc-selected-preview');
+  if (wrap) wrap.style.display = 'none';
 }
 
 function canPlay(s,card) {
@@ -1336,6 +1384,7 @@ function lcChooseSuit(suit) {
 }
 
 function doPlayCard(card,chosenSuit) {
+  hideSelectedPreview();
   const s=JSON.parse(JSON.stringify(gameState));
   const pid=myName;
   s.hands[pid]=s.hands[pid].filter(c=>c.id!==card.id);
@@ -1359,6 +1408,7 @@ function doPlayCard(card,chosenSuit) {
 }
 
 function lcDraw() {
+  hideSelectedPreview();
   if (!gameState) return;
   const s=JSON.parse(JSON.stringify(gameState));
   const cnt=s.pendingDraw>0?s.pendingDraw:1; // draw pending amount or 1
