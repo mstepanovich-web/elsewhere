@@ -158,13 +158,13 @@
     .lc-hand-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; min-height: 120px; }
     .lc-hand-label { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); padding: 8px 14px 4px; flex-shrink: 0; }
     .lc-hand { display: flex; flex-wrap: wrap; gap: 7px; padding: 6px 14px 10px; align-content: flex-start; overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
-    .lc-card { width: 58px; height: 86px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,.15); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 15px; cursor: pointer; transition: all 0.18s; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,.4); -webkit-user-select: none; }
-    .lc-card.red   { background: #c0392b; color: #fff; }
-    .lc-card.black { background: #1a1a2e; color: #eee; }
-    .lc-card.wild  { background: linear-gradient(135deg,#8e44ad,#c0392b,#27ae60,#2980b9); color: #ffd700; }
-    .lc-card.playable { border-color: var(--color-gold); box-shadow: 0 0 12px rgba(255,200,80,.3); transform: translateY(-4px); }
+    .lc-card { width: 64px; height: 96px; border-radius: 10px; border: 2px solid rgba(255,255,255,.2); display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 6px 4px; cursor: pointer; transition: all 0.18s; flex-shrink: 0; box-shadow: 0 2px 12px rgba(0,0,0,.5); -webkit-user-select: none; position: relative; overflow: hidden; }
+    .lc-card.red   { background: linear-gradient(160deg,#e74c3c,#c0392b); color: #fff; }
+    .lc-card.black { background: linear-gradient(160deg,#2c3e50,#1a1a2e); color: #e8e8e8; }
+    .lc-card.wild  { background: linear-gradient(135deg,#6c3483,#e74c3c,#27ae60,#2471a3); color: #ffd700; }
+    .lc-card.playable { border-color: #ffd700; border-width: 2.5px; box-shadow: 0 0 16px rgba(255,215,0,.5); transform: translateY(-6px); }
     .lc-card.selected { border-color: var(--color-green); box-shadow: 0 0 16px rgba(0,232,122,.4); transform: translateY(-8px); }
-    .lc-card.disabled { opacity: 0.35; cursor: default; transform: none !important; }
+    .lc-card.disabled { opacity: 0.5; cursor: default; transform: none !important; filter: grayscale(30%); }
     .lc-actions { display: flex; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--color-border-dim); flex-shrink: 0; }
     .lc-action-btn { flex: 1; padding: 13px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; cursor: pointer; text-align: center; transition: all var(--transition-fast); }
     .lc-action-btn.primary { background: var(--color-gold-dim); color: var(--color-bg); border-color: var(--color-gold); font-weight: 600; }
@@ -533,7 +533,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.73</div>
+<div class="ver">v2.74</div>
 
 <script>
 'use strict';
@@ -1257,11 +1257,34 @@ function renderHand(myTurn, s, handId, drawId, playId) {
     const playable=myTurn&&canPlay(s,card);
     const isR=card.suit==='♥'||card.suit==='♦';
     const isW=!card.suit;
+    const colorCls=isW?'wild':isR?'red':'black';
+    const stateCls=playable?'playable':'disabled';
     const div=document.createElement('div');
-    div.className=`lc-card ${isW?'wild':isR?'red':'black'} ${playable?'playable':'disabled'}`;
-    div.textContent=card.value+(card.suit||'');
+    div.className=`lc-card ${colorCls} ${stateCls}`;
     div.dataset.id=card.id;
-    if (playable) div.onclick=()=>{ document.querySelectorAll('.lc-card.selected').forEach(c=>c.classList.remove('selected')); div.classList.add('selected'); selectedCard=card; if(playBtn)playBtn.disabled=false; };
+
+    // Card layout: value top-left, suit centre big, value bottom-right (rotated)
+    const suitDisplay = card.suit || '★';
+    const valDisplay  = card.value === 'W4' ? '+4' : card.value === 'W' ? '★' : card.value;
+    const suitBig     = isW ? '★' : card.suit;
+    const suitSize    = isW ? '22px' : '26px';
+
+    div.innerHTML =
+      '<div style="font-size:13px;font-weight:700;line-height:1;align-self:flex-start;font-family:monospace;">' + valDisplay + '</div>' +
+      '<div style="font-size:' + suitSize + ';line-height:1;">' + suitBig + '</div>' +
+      '<div style="font-size:13px;font-weight:700;line-height:1;align-self:flex-end;transform:rotate(180deg);font-family:monospace;">' + valDisplay + '</div>';
+
+    if (playable) {
+      div.onclick=()=>{
+        document.querySelectorAll('.lc-card.selected').forEach(c=>c.classList.remove('selected'));
+        div.classList.add('selected');
+        selectedCard=card;
+        if(playBtn) playBtn.disabled=false;
+      };
+    } else {
+      // Still allow tapping disabled cards to show a "can't play" hint
+      div.onclick=()=>{ if(!myTurn) showToast("It's not your turn"); else showToast("Can't play that card"); };
+    }
     el.appendChild(div);
   });
 }
