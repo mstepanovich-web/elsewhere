@@ -191,6 +191,46 @@
 <!-- ══════════════════════════════════════════════════════ -->
 <!-- TRIVIA SCREEN                                          -->
 <!-- ══════════════════════════════════════════════════════ -->
+<!-- EUCHRE SCREEN -->
+<div id="screen-euchre" class="tv-screen" style="flex-direction:column;">
+  <div id="eu-title-bar" style="display:flex;align-items:center;justify-content:space-between;padding:clamp(8px,1.2vh,16px) clamp(16px,2vw,32px);border-bottom:1px solid var(--color-border-dim);flex-shrink:0;background:rgba(4,2,6,.8);">
+    <div style="font-family:var(--font-display);font-size:clamp(16px,2vw,28px);color:var(--color-gold);">Euchre</div>
+    <div style="font-family:var(--font-mono);font-size:clamp(11px,1.2vw,16px);letter-spacing:.2em;color:var(--color-text-faint);" id="eu-title-room">——</div>
+  </div>
+  <div id="eu-main" style="flex:1;display:flex;flex-direction:column;padding:clamp(16px,2vh,32px);gap:clamp(16px,2vh,24px);">
+    <!-- Scores + trump -->
+    <div style="display:flex;gap:clamp(20px,3vw,40px);justify-content:center;align-items:center;">
+      <div style="text-align:center;">
+        <div style="font-size:clamp(10px,1vw,14px);letter-spacing:.15em;text-transform:uppercase;color:var(--color-text-faint);">Team 1</div>
+        <div id="eu-tv-score-1" style="font-family:var(--font-mono);font-size:clamp(40px,5vw,72px);color:var(--color-gold);font-weight:700;line-height:1;">0</div>
+        <div id="eu-tv-team-1" style="font-size:clamp(11px,1.1vw,15px);color:var(--color-text-dim);"></div>
+      </div>
+      <div style="text-align:center;padding:0 clamp(20px,3vw,40px);border-left:1px solid var(--color-border-dim);border-right:1px solid var(--color-border-dim);">
+        <div style="font-size:clamp(10px,1vw,14px);letter-spacing:.15em;text-transform:uppercase;color:var(--color-text-faint);">Trump</div>
+        <div id="eu-tv-trump" style="font-family:var(--font-display);font-size:clamp(40px,5vw,72px);color:var(--color-text);font-style:italic;line-height:1;">—</div>
+        <div id="eu-tv-tricks" style="font-size:clamp(11px,1.1vw,15px);color:var(--color-text-faint);letter-spacing:.1em;">Tricks: 0 / 0</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:clamp(10px,1vw,14px);letter-spacing:.15em;text-transform:uppercase;color:var(--color-text-faint);">Team 2</div>
+        <div id="eu-tv-score-2" style="font-family:var(--font-mono);font-size:clamp(40px,5vw,72px);color:var(--color-gold);font-weight:700;line-height:1;">0</div>
+        <div id="eu-tv-team-2" style="font-size:clamp(11px,1.1vw,15px);color:var(--color-text-dim);"></div>
+      </div>
+    </div>
+
+    <!-- Phase label -->
+    <div id="eu-tv-phase" style="text-align:center;font-size:clamp(14px,1.6vw,22px);color:var(--color-text);font-family:var(--font-display);font-style:italic;"></div>
+
+    <!-- Trick area -->
+    <div id="eu-tv-trick" style="display:flex;gap:clamp(10px,1.5vw,24px);justify-content:center;align-items:center;min-height:clamp(130px,14vw,220px);"></div>
+
+    <!-- Turn / message -->
+    <div id="eu-tv-message" style="text-align:center;font-size:clamp(16px,1.8vw,26px);color:var(--color-gold);font-family:var(--font-display);min-height:clamp(28px,3vh,44px);"></div>
+
+    <!-- Players -->
+    <div id="eu-tv-players" style="display:flex;gap:clamp(12px,1.5vw,24px);justify-content:center;flex-wrap:wrap;"></div>
+  </div>
+</div>
+
 <div id="screen-trivia" class="tv-screen">
   <div class="tv-q-meta">
     <div class="tv-q-cat" id="tv-q-cat">General</div>
@@ -211,7 +251,7 @@
   </div>
   <div id="log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.86</div>
+<div class="ver">v2.87</div>
 
 <script>
 'use strict';
@@ -329,7 +369,7 @@ function handleMessage(uid, data) {
 
     if (msg.type==='game-selected') {
       currentGame = msg.game;
-      const name = msg.game==='lastcard' ? 'Last Card' : msg.game==='trivia' ? 'Trivia Night' : msg.game;
+      const name = msg.game==='lastcard' ? 'Last Card' : msg.game==='trivia' ? 'Trivia Night' : msg.game==='euchre' ? 'Euchre' : msg.game;
       document.getElementById('lobby-game-name').textContent = name;
       document.getElementById('game-bar-title').textContent  = name;
       document.getElementById('centre-title').textContent    = name;
@@ -344,12 +384,14 @@ function handleMessage(uid, data) {
       currentGame = currentGame || 'lastcard';
       if (currentGame==='lastcard') showGame();
       if (currentGame==='trivia')   showTrivia();
+      if (currentGame==='euchre')   showEuchre();
     }
 
     if (msg.type==='game-state') {
       gameState = msg.state;
       if (currentGame==='lastcard') renderLastCard();
       if (currentGame==='trivia')   renderTrivia();
+      if (currentGame==='euchre')   renderEuchreTV();
     }
 
     if (msg.type==='game-over')     { showLobby(); }
@@ -535,6 +577,112 @@ function renderLastCard() {
 }
 
 // ── Trivia rendering ──────────────────────────────────────────
+function showEuchre() {
+  document.querySelectorAll('.tv-screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-euchre').classList.add('active');
+  document.getElementById('eu-title-room').textContent = 'Room ' + roomCode;
+  renderEuchreTV();
+}
+
+const EU_SUIT_NAMES_TV = { '♠':'Spades','♥':'Hearts','♦':'Diamonds','♣':'Clubs' };
+const EU_COLOR_TV = { '♠':'black','♣':'black','♥':'red','♦':'red' };
+
+function euTVCardHtml(card) {
+  const isRed = EU_COLOR_TV[card.suit] === 'red';
+  const bg = isRed ? 'linear-gradient(160deg,#e74c3c,#c0392b)' : 'linear-gradient(160deg,#2c3e50,#1a1a2e)';
+  const color = '#fff';
+  return '<div style="width:clamp(54px,6vw,88px);aspect-ratio:2/3;border-radius:10px;border:2px solid rgba(255,255,255,.2);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:8px 5px;box-shadow:0 4px 20px rgba(0,0,0,.6);background:' + bg + ';color:' + color + ';">' +
+    '<div style="font-family:monospace;font-size:clamp(11px,1.2vw,16px);font-weight:800;">' + card.value + '</div>' +
+    '<div style="font-size:clamp(18px,2.2vw,32px);">' + card.suit + '</div>' +
+    '<div style="font-family:monospace;font-size:clamp(11px,1.2vw,16px);font-weight:800;transform:rotate(180deg);">' + card.value + '</div>' +
+    '</div>';
+}
+
+function renderEuchreTV() {
+  if (!gameState) return;
+  const s = gameState;
+  document.getElementById('eu-tv-score-1').textContent = s.scores?.[1] || 0;
+  document.getElementById('eu-tv-score-2').textContent = s.scores?.[2] || 0;
+  document.getElementById('eu-tv-trump').textContent = s.trump || '—';
+  document.getElementById('eu-tv-tricks').textContent = 'Tricks: ' + (s.tricksWon?.[1]||0) + ' / ' + (s.tricksWon?.[2]||0);
+
+  // Team names
+  if (s.teams) {
+    document.getElementById('eu-tv-team-1').textContent = (s.teams[1]||[]).join(' & ');
+    document.getElementById('eu-tv-team-2').textContent = (s.teams[2]||[]).join(' & ');
+  }
+
+  const phaseEl = document.getElementById('eu-tv-phase');
+  const trickEl = document.getElementById('eu-tv-trick');
+  const msgEl   = document.getElementById('eu-tv-message');
+
+  if (s.phase === 'bid1') {
+    phaseEl.textContent = 'Round 1 — Order Up ' + (s.upcard ? EU_SUIT_NAMES_TV[s.upcard.suit] : '');
+    trickEl.innerHTML = s.upcard ? euTVCardHtml(s.upcard) : '';
+    msgEl.textContent = (s.players?.[s.currentPlayerIdx] || '?') + "'s turn to bid";
+  } else if (s.phase === 'bid2') {
+    phaseEl.textContent = 'Round 2 — Call Suit';
+    trickEl.innerHTML = s.upcard ? ('<div style="opacity:.4;filter:grayscale(80%);">' + euTVCardHtml(s.upcard) + '</div>') : '';
+    msgEl.textContent = (s.players?.[s.currentPlayerIdx] || '?') + "'s turn to call";
+  } else if (s.phase === 'dealer-discard') {
+    phaseEl.textContent = 'Dealer picks up';
+    trickEl.innerHTML = '';
+    msgEl.textContent = (s.players?.[s.dealerIdx] || '?') + ' is discarding...';
+  } else if (s.phase === 'play') {
+    phaseEl.textContent = (s.maker || '?') + ' called ' + EU_SUIT_NAMES_TV[s.trump] + (s.alone ? ' · going alone' : '');
+    trickEl.innerHTML = (s.trick||[]).map(t =>
+      '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">' +
+        euTVCardHtml(t.card) +
+        '<div style="font-size:clamp(10px,1vw,14px);color:var(--color-text-faint);">' + t.player + '</div>' +
+      '</div>'
+    ).join('');
+    const currentPlayer = s.players?.[s.currentPlayerIdx];
+    const sittingOut = s.alone && s.aloneSitOut === currentPlayer;
+    msgEl.textContent = sittingOut ? '' : (currentPlayer || '?') + "'s turn";
+  } else if (s.phase === 'hand-end' || s.phase === 'game-end') {
+    phaseEl.textContent = s.phase === 'game-end' ? '🏆 Game Over' : 'Hand Complete';
+    trickEl.innerHTML = '';
+    msgEl.textContent = s.handMessage || '';
+  }
+
+  // Player tiles
+  const playersEl = document.getElementById('eu-tv-players');
+  if (s.players && playersEl) {
+    const myTeamByPlayer = {};
+    if (s.teams) for (const t of [1,2]) (s.teams[t]||[]).forEach(n => myTeamByPlayer[n] = t);
+    playersEl.innerHTML = s.players.map(name => {
+      const handCount = s.hands?.[name]?.length ?? '—';
+      const isActive = s.players[s.currentPlayerIdx] === name;
+      const isDealer = s.players[s.dealerIdx] === name;
+      const isSittingOut = s.alone && s.aloneSitOut === name;
+      const team = myTeamByPlayer[name];
+      const teamColor = team === 1 ? '#e74c3c' : '#2980b9';
+      const pInfo = Object.values(players).find(p => p.name === name) || {};
+      const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+      const vidHtml = pInfo.hasCamera && pInfo.videoTrack
+        ? '<video class="player-video-el" id="eu-tv-vid-' + name + '" autoplay muted playsinline></video>'
+        : '<div class="player-avatar">' + initials + '</div>';
+      return '<div class="player-tile" style="position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;' + (isSittingOut?'opacity:.35;':'') + '">' +
+        '<div class="player-video-wrap ' + (isActive?'active-turn':'') + '" style="width:clamp(80px,8vw,130px);height:clamp(60px,6vw,98px);border-radius:10px;overflow:hidden;position:relative;background:var(--color-surface);border:2px solid ' + teamColor + ';display:flex;align-items:center;justify-content:center;">' +
+          (isDealer ? '<div style="position:absolute;top:4px;left:4px;font-size:11px;background:rgba(255,200,80,.2);color:var(--color-gold);padding:1px 6px;border-radius:var(--radius-pill);">🃏 Dealer</div>' : '') +
+          vidHtml +
+        '</div>' +
+        '<div class="player-name" style="color:' + teamColor + ';">' + name + (isSittingOut?' (sitting out)':'') + '</div>' +
+        '<div class="player-cards">' + handCount + ' <span style="font-size:.6em;opacity:.6;">cards</span></div>' +
+      '</div>';
+    }).join('');
+
+    // Attach videos
+    s.players.forEach(name => {
+      const pInfo = Object.values(players).find(p => p.name === name) || {};
+      if (pInfo.hasCamera && pInfo.videoTrack) {
+        const el = document.getElementById('eu-tv-vid-' + name);
+        if (el) pInfo.videoTrack.play(el);
+      }
+    });
+  }
+}
+
 function renderTrivia() {
   if (!gameState) return;
   const s = gameState;

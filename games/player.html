@@ -265,6 +265,10 @@
           <div class="game-icon">🧠</div>
           <div><div class="game-name">Trivia Night</div><div class="game-desc">AI-generated questions · 2–20 players</div></div>
         </div>
+        <div class="game-card" onclick="selectGame('euchre')">
+          <div class="game-icon">♠</div>
+          <div><div class="game-name">Euchre</div><div class="game-desc">Trick-taking partners game · 4 players</div></div>
+        </div>
         <div class="game-card disabled">
           <div class="game-icon">🎵</div>
           <div><div class="game-name">Name That Tune</div><div class="game-desc">Coming soon</div></div>
@@ -479,6 +483,80 @@
       </div>
     </div>
 
+    <!-- EUCHRE -->
+    <div id="screen-euchre" class="screen" style="flex-direction:column;padding:0;overflow:hidden;">
+      <!-- Top status bar -->
+      <div id="eu-turn-bar" style="padding:6px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--color-border-dim);flex-shrink:0;gap:8px;">
+        <div class="lc-turn-label" id="eu-turn-label" style="flex:1;">—</div>
+        <button id="eu-endgame-btn" onclick="managerEndGame()" style="display:none;padding:4px 10px;border-radius:var(--radius-pill);border:1px solid var(--color-border);background:var(--color-gold-ghost);color:var(--color-gold-bright);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;flex-shrink:0;">End Game</button>
+        <button id="eu-cam-toggle" onclick="toggleGameCamera()" style="padding:4px 10px;border-radius:var(--radius-pill);border:1px solid var(--color-border);background:var(--color-gold-ghost);color:var(--color-gold-bright);font-size:10px;letter-spacing:.08em;cursor:pointer;flex-shrink:0;">📷 Cam</button>
+      </div>
+
+      <!-- Score bar -->
+      <div id="eu-score-bar" style="display:flex;padding:8px 14px;border-bottom:1px solid var(--color-border-dim);gap:12px;flex-shrink:0;">
+        <div style="flex:1;text-align:center;">
+          <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-text-faint);">Team 1</div>
+          <div id="eu-score-1" style="font-family:var(--font-mono);font-size:22px;color:var(--color-gold);font-weight:700;">0</div>
+        </div>
+        <div style="flex:1;text-align:center;">
+          <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-text-faint);">Trump</div>
+          <div id="eu-trump-display" style="font-family:var(--font-display);font-size:22px;color:var(--color-text);font-style:italic;">—</div>
+          <div id="eu-tricks" style="font-size:10px;color:var(--color-text-faint);letter-spacing:.1em;">Tricks: 0 / 0</div>
+        </div>
+        <div style="flex:1;text-align:center;">
+          <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-text-faint);">Team 2</div>
+          <div id="eu-score-2" style="font-family:var(--font-mono);font-size:22px;color:var(--color-gold);font-weight:700;">0</div>
+        </div>
+      </div>
+
+      <!-- Trick / upcard area -->
+      <div id="eu-center" style="padding:12px;display:flex;flex-direction:column;align-items:center;gap:8px;flex-shrink:0;min-height:120px;justify-content:center;">
+        <div id="eu-phase-label" style="font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--color-text-faint);">—</div>
+        <div id="eu-center-cards" style="display:flex;gap:8px;align-items:center;justify-content:center;"></div>
+        <div id="eu-center-msg" style="font-size:var(--text-sm);color:var(--color-text-dim);text-align:center;"></div>
+      </div>
+
+      <!-- Other players (partner + opponents) -->
+      <div id="eu-others-strip" style="display:flex;gap:8px;padding:8px 14px;border-top:1px solid var(--color-border-dim);flex-shrink:0;overflow-x:auto;"></div>
+
+      <!-- Bidding controls -->
+      <div id="eu-bid-controls" style="display:none;padding:10px 14px;border-top:1px solid var(--color-border-dim);flex-shrink:0;flex-direction:column;gap:8px;">
+        <div id="eu-bid-prompt" style="font-size:var(--text-sm);color:var(--color-text);text-align:center;">Your turn to bid</div>
+        <div id="eu-bid-round1" style="display:none;gap:8px;flex-direction:column;">
+          <div style="display:flex;gap:8px;">
+            <button class="lc-action-btn" onclick="euBidPass()" style="flex:1;">Pass</button>
+            <button class="lc-action-btn primary" onclick="euOrderUp(false)" style="flex:1;">Order Up</button>
+          </div>
+          <button class="lc-action-btn" onclick="euOrderUp(true)" style="background:var(--color-gold-faint);border-color:var(--color-gold);color:var(--color-gold);">Order Up + Go Alone</button>
+        </div>
+        <div id="eu-bid-round2" style="display:none;flex-direction:column;gap:8px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;" id="eu-suit-picker"></div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <label style="font-size:12px;color:var(--color-text-dim);display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="eu-alone-check"> Go alone
+            </label>
+            <button class="lc-action-btn" onclick="euBidPass()" style="flex:1;">Pass</button>
+          </div>
+        </div>
+        <div id="eu-dealer-discard" style="display:none;">
+          <div style="font-size:var(--text-xs);color:var(--color-text-faint);text-align:center;margin-bottom:6px;">Tap a card to discard</div>
+        </div>
+      </div>
+
+      <!-- Hand + play button -->
+      <div class="lc-hand-wrap" id="eu-hand-wrap" style="display:flex;">
+        <div class="lc-hand-label">Your Hand</div>
+        <div class="lc-hand" id="eu-hand"></div>
+        <div class="lc-actions" style="align-items:center;">
+          <div style="flex:1;font-size:var(--text-xs);color:var(--color-text-faint);padding-left:4px;" id="eu-must-follow"></div>
+          <div id="eu-selected-preview" style="display:none;align-items:center;gap:8px;flex-shrink:0;">
+            <div id="eu-selected-display" style="width:38px;height:54px;border-radius:6px;border:2px solid var(--color-green);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:4px 3px;font-weight:800;font-size:10px;box-shadow:0 0 10px rgba(0,232,122,.35);"></div>
+          </div>
+          <button class="lc-action-btn primary" id="eu-play-btn" onclick="euPlayCard()" disabled style="flex:1;">Play Card</button>
+        </div>
+      </div>
+    </div>
+
     <!-- GAME OVER -->
     <div id="screen-gameover" class="screen">
       <div class="page-title" style="text-align:center;" id="gameover-title">Game Over</div>
@@ -547,7 +625,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.86</div>
+<div class="ver">v2.87</div>
 
 <script>
 'use strict';
@@ -557,7 +635,7 @@ const AGORA_APP_ID  = 'b2c6543a9ed946829e6526cb68c7efc9';
 const CHAN_PREFIX    = 'elsewhere_g';
 const BASE_URL      = 'https://mstepanovich-web.github.io/elsewhere';
 const CLAUDE_MODEL  = 'claude-sonnet-4-20250514';
-const GAME_LIMITS   = { lastcard:{min:2,max:8,default:6}, trivia:{min:2,max:20,default:10} };
+const GAME_LIMITS   = { lastcard:{min:2,max:8,default:6}, trivia:{min:2,max:20,default:10}, euchre:{min:4,max:4,default:4} };
 
 const GAME_INFO = {
   lastcard: {
@@ -571,6 +649,12 @@ const GAME_INFO = {
     desc:'AI-generated trivia across the category you choose. Answer on your phone before the timer runs out. Bonus points for speed and answer streaks.',
     rules:['🧠 10 questions per round','⏱ 20 seconds per question','🎯 100pts base + time bonus + streak bonus','📊 Leaderboard after each answer'],
     min:2, max:20, default:10,
+  },
+  euchre: {
+    title:'Euchre', sub:'Trick-taking partners game',
+    desc:'Classic 4-player Euchre. Two teams of 2 play a 24-card deck. Call trump, then win at least 3 of 5 tricks. First team to 10 points wins.',
+    rules:['♠ 24-card deck (9–A)','🃏 5 cards per player, 1 upcard','👥 Partners sit opposite (1+3 vs 2+4)','🎯 Right Bower = J of trump (highest)','🎯 Left Bower = J of same-color (2nd highest)','⚡ Going alone: partner sits out','🏆 Win 3/4 tricks = 1pt, all 5 = 2pts, alone + 5 = 4pts','💥 Euchred (lose as maker) = 2pts to defenders'],
+    min:4, max:4, default:4,
   },
 };
 
@@ -892,6 +976,7 @@ function handleMessage(uid, data) {
     gameState=msg.state; gameInProgress=true;
     if (currentGame==='lastcard') startLastCard();
     if (currentGame==='trivia')   startTrivia(msg.state);
+    if (currentGame==='euchre')   startEuchre();
   }
 
   if (msg.type==='game-state') {
@@ -902,7 +987,6 @@ function handleMessage(uid, data) {
     if (currentGame==='lastcard') {
       if (activeScreen !== 'screen-lastcard') startLastCard();
       else {
-        // Make sure End Game stays visible for manager during game
         if (isManager) {
           const eg = document.getElementById('mgr-endgame');
           if (eg) eg.style.display='block';
@@ -913,6 +997,10 @@ function handleMessage(uid, data) {
     if (currentGame==='trivia') {
       if (activeScreen !== 'screen-trivia') startTrivia(msg.state);
       else renderTrivia();
+    }
+    if (currentGame==='euchre') {
+      if (activeScreen !== 'screen-euchre') startEuchre();
+      else renderEuchre();
     }
   }
 
@@ -960,6 +1048,21 @@ function handleMessage(uid, data) {
       log('Ignoring action — not '+msg._name+"'s turn, expected "+expectedPlayer);
       return;
     }
+    // ── Euchre actions ────────────────────────────────
+    if (msg.action==='eu-bid-pass') { euApplyBidPass(msg._name); return; }
+    if (msg.action==='eu-order-up') { euApplyOrderUp(msg._name, msg.alone); return; }
+    if (msg.action==='eu-call-suit') { euApplyCallSuit(msg._name, msg.suit, msg.alone); return; }
+    if (msg.action==='eu-dealer-discard') {
+      const hand = gameState.hands[msg._name] || [];
+      const card = hand.find(c=>c.id===msg.card.id) || msg.card;
+      euApplyDealerDiscard(msg._name, card); return;
+    }
+    if (msg.action==='eu-play') {
+      const hand = gameState.hands[msg._name] || [];
+      const card = hand.find(c=>c.id===msg.card.id) || msg.card;
+      euApplyPlayCard(msg._name, card); return;
+    }
+
     if (msg.action==='play') {
       // Find card in manager's authoritative hand by id
       const playerHand = gameState.hands[msg._name] || [];
@@ -1265,6 +1368,7 @@ function showToast(msg) {
 function managerStart() {
   if (currentGame==='lastcard') managerStartLastCard();
   if (currentGame==='trivia')   managerStartTrivia();
+  if (currentGame==='euchre')   managerStartEuchre();
 }
 function managerReveal() { if(currentGame==='trivia') triviaReveal(); }
 function managerNext()   { if(currentGame==='trivia') triviaNext();   }
@@ -1761,6 +1865,7 @@ function showPlayAgainSameTeam() {
   setTimeout(()=>{
     if (currentGame==='lastcard') managerStartLastCard();
     else if (currentGame==='trivia') managerStartTrivia();
+    else if (currentGame==='euchre') managerStartEuchre();
   }, 1500);
 }
 
@@ -1928,6 +2033,649 @@ function startTriviaTimer() {
 function stopTriviaTimer(){if(timerInterval){clearInterval(timerInterval);timerInterval=null;}}
 
 // ── Shared helpers ────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════
+// EUCHRE ENGINE
+// ═══════════════════════════════════════════════════════════════
+
+const EU_SUITS  = ['♠','♥','♦','♣']; // Spades, Hearts, Diamonds, Clubs
+const EU_VALUES = ['9','10','J','Q','K','A'];
+const EU_COLOR  = { '♠':'black','♣':'black','♥':'red','♦':'red' };
+const EU_SAME_COLOR = { '♠':'♣','♣':'♠','♥':'♦','♦':'♥' }; // left bower partner
+const EU_SUIT_NAMES = { '♠':'Spades','♥':'Hearts','♦':'Diamonds','♣':'Clubs' };
+
+let euSelectedCard = null;
+
+function euBuildDeck() {
+  const d = [];
+  for (const s of EU_SUITS) for (const v of EU_VALUES) d.push({ suit:s, value:v, id:v+s });
+  return d;
+}
+
+// Effective suit: left bower is counted as trump suit
+function euEffectiveSuit(card, trump) {
+  if (!trump) return card.suit;
+  if (card.value==='J' && card.suit === EU_SAME_COLOR[trump]) return trump;
+  return card.suit;
+}
+
+// Trump rank: right bower > left bower > A K Q 10 9
+function euCardRank(card, trump, leadSuit) {
+  const isTrump = euEffectiveSuit(card, trump) === trump;
+  if (isTrump) {
+    // 100s for trump to always beat non-trump
+    if (card.value==='J' && card.suit === trump) return 200; // right bower
+    if (card.value==='J' && card.suit === EU_SAME_COLOR[trump]) return 190; // left bower
+    const trumpOrder = { 'A':180, 'K':170, 'Q':160, '10':150, '9':140 };
+    return trumpOrder[card.value] || 0;
+  }
+  // Non-trump: only counts if it's the led suit
+  if (leadSuit && euEffectiveSuit(card, trump) !== leadSuit) return 0;
+  const nonTrumpOrder = { 'A':60, 'K':50, 'Q':40, 'J':30, '10':20, '9':10 };
+  return nonTrumpOrder[card.value] || 0;
+}
+
+function euCanPlay(hand, card, leadSuit, trump) {
+  // If there's a led suit, player must follow if able
+  if (!leadSuit) return true;
+  // Check if any card in hand matches the led suit (considering left bower)
+  const hasLed = hand.some(c => euEffectiveSuit(c, trump) === leadSuit);
+  if (!hasLed) return true; // can play anything
+  return euEffectiveSuit(card, trump) === leadSuit;
+}
+
+function euShuffle(deck) {
+  const d = [...deck];
+  for (let i = d.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [d[i], d[j]] = [d[j], d[i]];
+  }
+  return d;
+}
+
+function euBuildTeams(players) {
+  // Players 0,2 = Team 1; Players 1,3 = Team 2
+  return {
+    1: [players[0], players[2]],
+    2: [players[1], players[3]],
+  };
+}
+
+function euTeamOf(playerName, teams) {
+  for (const t of [1,2]) if (teams[t].includes(playerName)) return t;
+  return null;
+}
+
+function managerStartEuchre() {
+  const playerNames = lobbyPlayers.filter(p=>p.status==='active').map(p=>p.name);
+  if (playerNames.length !== 4) { showToast('Euchre requires exactly 4 players'); return; }
+
+  const deck = euShuffle(euBuildDeck());
+  const hands = {};
+  playerNames.forEach(n => { hands[n] = []; });
+  // Deal 5 cards each (simple: round-robin 3 then 2)
+  let idx = 0;
+  for (let pass=0; pass<2; pass++) {
+    const count = pass===0 ? 3 : 2;
+    for (const n of playerNames) {
+      for (let i=0; i<count; i++) hands[n].push(deck[idx++]);
+    }
+  }
+  // Upcard is next
+  const upcard = deck[idx++];
+  const kitty  = deck.slice(idx); // remaining 3 cards
+
+  const teams = euBuildTeams(playerNames);
+  const dealerIdx = 0; // manager deals first hand; rotates each hand
+
+  gameState = {
+    phase: 'bid1',       // bid1 | bid2 | dealer-discard | play | hand-end | game-end
+    players: playerNames,
+    teams,
+    dealerIdx,
+    hands,
+    upcard,
+    kitty,
+    trump: null,
+    maker: null,         // player who called trump
+    makerTeam: null,
+    alone: false,
+    aloneSitOut: null,   // player sitting out if alone
+    currentPlayerIdx: (dealerIdx+1) % 4, // left of dealer bids first
+    leadPlayerIdx: null,
+    trick: [],           // array of {player, card}
+    leadSuit: null,
+    tricksWon: { 1:0, 2:0 },
+    scores: gameState?.scores || { 1:0, 2:0 }, // preserve across rounds
+    log: [],
+  };
+  myHand = [...(gameState.hands[myName]||[])];
+  gameInProgress = true;
+  send({ type:'game-start', state: euCompressState(gameState) });
+  startEuchre();
+}
+
+function euCompressState(state) {
+  if (!state) return state;
+  const s = JSON.parse(JSON.stringify(state));
+  // kitty not needed by receivers
+  s.kitty = [];
+  return s;
+}
+
+function startEuchre() {
+  goTo('screen-euchre');
+  if (isManager) document.getElementById('eu-endgame-btn').style.display = 'block';
+  renderEuchre();
+}
+
+function renderEuchre() {
+  if (!gameState) return;
+  const s = gameState;
+
+  // Scores
+  document.getElementById('eu-score-1').textContent = s.scores[1] || 0;
+  document.getElementById('eu-score-2').textContent = s.scores[2] || 0;
+  document.getElementById('eu-trump-display').textContent = s.trump || '—';
+  document.getElementById('eu-tricks').textContent = 'Tricks: ' + (s.tricksWon[1]||0) + ' / ' + (s.tricksWon[2]||0);
+
+  // Turn label
+  const currentPlayer = s.players[s.currentPlayerIdx];
+  const myTurn = currentPlayer === myName && !(s.alone && s.aloneSitOut === myName);
+  const turnEl = document.getElementById('eu-turn-label');
+  if (turnEl) {
+    if (s.phase === 'hand-end') {
+      turnEl.textContent = s.handMessage || 'Hand complete';
+      turnEl.className = 'lc-turn-label mine';
+    } else if (myTurn) {
+      turnEl.textContent = 'Your turn';
+      turnEl.className = 'lc-turn-label mine';
+    } else {
+      turnEl.textContent = (currentPlayer||'?') + "'s turn";
+      turnEl.className = 'lc-turn-label other';
+    }
+  }
+
+  // Phase-specific rendering
+  const phaseLabel = document.getElementById('eu-phase-label');
+  const centerCards = document.getElementById('eu-center-cards');
+  const centerMsg = document.getElementById('eu-center-msg');
+  const bidControls = document.getElementById('eu-bid-controls');
+  const bidRound1 = document.getElementById('eu-bid-round1');
+  const bidRound2 = document.getElementById('eu-bid-round2');
+  const dealerDiscard = document.getElementById('eu-dealer-discard');
+  const handWrap = document.getElementById('eu-hand-wrap');
+
+  bidControls.style.display = 'none';
+  bidRound1.style.display = 'none';
+  bidRound2.style.display = 'none';
+  dealerDiscard.style.display = 'none';
+
+  if (s.phase === 'bid1' || s.phase === 'bid2') {
+    // Bidding phase
+    phaseLabel.textContent = s.phase === 'bid1' ? 'Round 1 — Order Up' : 'Round 2 — Call Suit';
+    centerMsg.textContent = '';
+    centerCards.innerHTML = '';
+    if (s.upcard) {
+      const up = euRenderCardHtml(s.upcard, false, false);
+      up.style.opacity = s.phase==='bid2' ? '0.4' : '1';
+      if (s.phase==='bid2') up.style.filter = 'grayscale(80%)';
+      centerCards.appendChild(up);
+    }
+    // Show bid controls if it's my turn
+    if (myTurn) {
+      bidControls.style.display = 'flex';
+      document.getElementById('eu-bid-prompt').textContent =
+        s.phase==='bid1'
+          ? 'Order up ' + EU_SUIT_NAMES[s.upcard.suit] + '?'
+          : 'Call trump (not ' + EU_SUIT_NAMES[s.upcard.suit] + ')';
+      if (s.phase === 'bid1') {
+        bidRound1.style.display = 'flex';
+      } else {
+        bidRound2.style.display = 'flex';
+        // Build suit picker excluding upcard suit
+        const picker = document.getElementById('eu-suit-picker');
+        picker.innerHTML = '';
+        for (const suit of EU_SUITS) {
+          if (suit === s.upcard.suit) continue;
+          const btn = document.createElement('button');
+          btn.className = 'lc-action-btn';
+          btn.style.cssText = 'font-size:16px;padding:10px;' + (EU_COLOR[suit]==='red' ? 'color:#e74c3c;' : 'color:var(--color-text);');
+          btn.textContent = EU_SUIT_NAMES[suit] + ' ' + suit;
+          btn.onclick = () => euCallSuit(suit);
+          picker.appendChild(btn);
+        }
+      }
+    }
+  } else if (s.phase === 'dealer-discard') {
+    // Dealer picks up upcard and must discard
+    phaseLabel.textContent = 'Dealer Pickup';
+    centerCards.innerHTML = '';
+    centerMsg.textContent = s.players[s.dealerIdx] + ' picks up the upcard';
+    if (myName === s.players[s.dealerIdx]) {
+      dealerDiscard.style.display = 'block';
+      bidControls.style.display = 'flex';
+      document.getElementById('eu-bid-prompt').textContent = 'Tap a card from your hand to discard';
+    }
+  } else if (s.phase === 'play') {
+    phaseLabel.textContent = s.maker + ' called ' + EU_SUIT_NAMES[s.trump] + (s.alone ? ' (alone)' : '');
+    centerMsg.textContent = '';
+    centerCards.innerHTML = '';
+    (s.trick||[]).forEach(t => {
+      const cardDiv = euRenderCardHtml(t.card, false, false);
+      cardDiv.style.transform = 'scale(0.85)';
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;';
+      wrap.appendChild(cardDiv);
+      const label = document.createElement('div');
+      label.textContent = t.player;
+      label.style.cssText = 'font-size:9px;color:var(--color-text-faint);letter-spacing:.06em;';
+      wrap.appendChild(label);
+      centerCards.appendChild(wrap);
+    });
+  } else if (s.phase === 'hand-end') {
+    phaseLabel.textContent = 'Hand Complete';
+    centerCards.innerHTML = '';
+    centerMsg.textContent = s.handMessage || '';
+  } else if (s.phase === 'game-end') {
+    phaseLabel.textContent = 'Game Over';
+    centerCards.innerHTML = '';
+    centerMsg.textContent = s.handMessage || '';
+  }
+
+  // Other players
+  euRenderOthers();
+
+  // Hand
+  euRenderHand();
+}
+
+function euRenderCardHtml(card, playable, selected) {
+  const div = document.createElement('div');
+  const isRed = EU_COLOR[card.suit] === 'red';
+  div.className = 'lc-card ' + (isRed ? 'color-red' : 'color-blue') +
+                  (playable ? ' playable' : ' disabled') +
+                  (selected ? ' selected' : '');
+  div.dataset.id = card.id;
+  div.innerHTML =
+    '<div style="font-size:12px;font-weight:800;line-height:1;align-self:flex-start;font-family:monospace;">' + card.value + '</div>' +
+    '<div style="font-size:22px;line-height:1;">' + card.suit + '</div>' +
+    '<div style="font-size:12px;font-weight:800;line-height:1;align-self:flex-end;transform:rotate(180deg);font-family:monospace;">' + card.value + '</div>';
+  return div;
+}
+
+function euRenderHand() {
+  const s = gameState;
+  const el = document.getElementById('eu-hand');
+  const playBtn = document.getElementById('eu-play-btn');
+  const mustFollow = document.getElementById('eu-must-follow');
+  if (!el) return;
+  el.innerHTML = '';
+  euSelectedCard = null;
+  if (playBtn) playBtn.disabled = true;
+
+  if (s.hands[myName]) myHand = [...s.hands[myName]];
+
+  const currentPlayer = s.players[s.currentPlayerIdx];
+  const myTurn = currentPlayer === myName && s.phase === 'play' && !(s.alone && s.aloneSitOut === myName);
+
+  // Show "must follow" hint
+  if (mustFollow) {
+    if (myTurn && s.leadSuit) {
+      const hasLed = myHand.some(c => euEffectiveSuit(c, s.trump) === s.leadSuit);
+      mustFollow.textContent = hasLed ? 'Must follow ' + EU_SUIT_NAMES[s.leadSuit] : '';
+    } else {
+      mustFollow.textContent = '';
+    }
+  }
+
+  myHand.forEach(card => {
+    const dealerDiscardMode = s.phase === 'dealer-discard' && myName === s.players[s.dealerIdx];
+    let playable = false;
+    if (dealerDiscardMode) {
+      playable = true; // any card can be discarded
+    } else if (myTurn) {
+      playable = euCanPlay(myHand, card, s.leadSuit, s.trump);
+    }
+    const cardDiv = euRenderCardHtml(card, playable, false);
+    if (playable) {
+      cardDiv.onclick = () => {
+        if (dealerDiscardMode) {
+          euDealerDiscard(card);
+        } else {
+          // Select card
+          document.querySelectorAll('#eu-hand .lc-card.selected').forEach(c=>c.classList.remove('selected'));
+          cardDiv.classList.add('selected');
+          euSelectedCard = card;
+          if (playBtn) playBtn.disabled = false;
+          euShowSelectedPreview(card);
+        }
+      };
+    }
+    el.appendChild(cardDiv);
+  });
+}
+
+function euShowSelectedPreview(card) {
+  const wrap = document.getElementById('eu-selected-preview');
+  const disp = document.getElementById('eu-selected-display');
+  if (!wrap || !disp) return;
+  const isRed = EU_COLOR[card.suit] === 'red';
+  disp.style.background = isRed ? 'linear-gradient(160deg,#e74c3c,#c0392b)' : 'linear-gradient(160deg,#2c3e50,#1a1a2e)';
+  disp.style.color = '#fff';
+  disp.innerHTML = '<span>'+card.value+'</span><span style="font-size:14px;">'+card.suit+'</span><span style="transform:rotate(180deg)">'+card.value+'</span>';
+  wrap.style.display = 'flex';
+}
+
+function euHideSelectedPreview() {
+  const wrap = document.getElementById('eu-selected-preview');
+  if (wrap) wrap.style.display = 'none';
+}
+
+function euRenderOthers() {
+  const s = gameState;
+  if (!s) return;
+  const strip = document.getElementById('eu-others-strip');
+  if (!strip) return;
+
+  // Show other 3 players with card counts, active turn highlight, team indicator
+  const myTeam = euTeamOf(myName, s.teams);
+  const others = s.players.filter(n => n !== myName);
+  strip.innerHTML = others.map(name => {
+    const count = s.hands?.[name]?.length ?? '?';
+    const isActive = s.players[s.currentPlayerIdx] === name;
+    const isDealer = s.players[s.dealerIdx] === name;
+    const team = euTeamOf(name, s.teams);
+    const isPartner = team === myTeam;
+    const sittingOut = s.alone && s.aloneSitOut === name;
+    const p = lobbyPlayers.find(lp => lp.name === name) || { name, hasCamera:false };
+    return `<div class="lc-other-player" style="${isActive?'border:1px solid var(--color-gold);':''}">
+      <div class="lc-other-video ${isActive?'active':''} ${sittingOut?'last-card':''}" id="eu-ov-${name}">
+        <span style="font-size:16px;">`+initials(name)+`</span>
+      </div>
+      <div class="lc-other-name" style="${isPartner?'color:var(--color-green);':''}">`+name+(isDealer?' 🃏':'')+`</div>
+      <div class="lc-other-count">`+count+(isPartner?' · partner':'')+`</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Player actions (bidding) ──────────────────────────────────
+function euBidPass() {
+  if (isManager) euApplyBidPass(myName);
+  else send({ type:'player-action', action:'eu-bid-pass' });
+}
+
+function euOrderUp(alone) {
+  if (isManager) euApplyOrderUp(myName, alone);
+  else send({ type:'player-action', action:'eu-order-up', alone });
+}
+
+function euCallSuit(suit) {
+  const alone = document.getElementById('eu-alone-check')?.checked || false;
+  if (isManager) euApplyCallSuit(myName, suit, alone);
+  else send({ type:'player-action', action:'eu-call-suit', suit, alone });
+}
+
+function euDealerDiscard(card) {
+  if (isManager) euApplyDealerDiscard(myName, card);
+  else send({ type:'player-action', action:'eu-dealer-discard', card });
+}
+
+function euPlayCard() {
+  if (!euSelectedCard) return;
+  const card = euSelectedCard;
+  euHideSelectedPreview();
+  euSelectedCard = null;
+  document.getElementById('eu-play-btn').disabled = true;
+  if (isManager) euApplyPlayCard(myName, card);
+  else send({ type:'player-action', action:'eu-play', card });
+}
+
+// ── Manager-side state transitions ────────────────────────────
+function euApplyBidPass(playerName) {
+  if (!isManager) return;
+  const s = JSON.parse(JSON.stringify(gameState));
+  if (s.players[s.currentPlayerIdx] !== playerName) { log('eu-bid-pass: not '+playerName+'\'s turn'); return; }
+  s.currentPlayerIdx = (s.currentPlayerIdx + 1) % 4;
+  // Back to dealer's turn means round ended
+  const roundEnd = s.currentPlayerIdx === (s.dealerIdx + 1) % 4;
+  if (roundEnd && s.phase === 'bid1') {
+    // Move to round 2 — no one ordered up
+    s.phase = 'bid2';
+  } else if (roundEnd && s.phase === 'bid2') {
+    // Stick the dealer: dealer must call something (not upcard suit)
+    // For simplicity: redeal the hand
+    gameState = s;
+    broadcastState();
+    setTimeout(() => euRedealHand(), 1500);
+    showToast('All passed — redealing');
+    return;
+  }
+  gameState = s;
+  broadcastState();
+  renderEuchre();
+}
+
+function euApplyOrderUp(playerName, alone) {
+  if (!isManager) return;
+  const s = JSON.parse(JSON.stringify(gameState));
+  if (s.players[s.currentPlayerIdx] !== playerName) return;
+  if (s.phase !== 'bid1') return;
+  s.trump = s.upcard.suit;
+  s.maker = playerName;
+  s.makerTeam = euTeamOf(playerName, s.teams);
+  s.alone = !!alone;
+  if (alone) {
+    // Partner sits out
+    const partners = s.teams[s.makerTeam];
+    s.aloneSitOut = partners.find(p => p !== playerName);
+  }
+  // Dealer picks up upcard, must discard
+  const dealer = s.players[s.dealerIdx];
+  s.hands[dealer].push(s.upcard);
+  s.upcard = null;
+  s.phase = 'dealer-discard';
+  s.currentPlayerIdx = s.dealerIdx;
+  gameState = s;
+  broadcastState();
+  renderEuchre();
+}
+
+function euApplyCallSuit(playerName, suit, alone) {
+  if (!isManager) return;
+  const s = JSON.parse(JSON.stringify(gameState));
+  if (s.players[s.currentPlayerIdx] !== playerName) return;
+  if (s.phase !== 'bid2') return;
+  if (s.upcard && suit === s.upcard.suit) return; // can't call upcard suit
+  s.trump = suit;
+  s.maker = playerName;
+  s.makerTeam = euTeamOf(playerName, s.teams);
+  s.alone = !!alone;
+  if (alone) {
+    const partners = s.teams[s.makerTeam];
+    s.aloneSitOut = partners.find(p => p !== playerName);
+  }
+  s.phase = 'play';
+  // Lead is left of dealer (or next active if partner sitting out)
+  let leadIdx = (s.dealerIdx + 1) % 4;
+  if (s.alone && s.players[leadIdx] === s.aloneSitOut) leadIdx = (leadIdx + 1) % 4;
+  s.currentPlayerIdx = leadIdx;
+  s.leadPlayerIdx = leadIdx;
+  s.trick = [];
+  s.leadSuit = null;
+  gameState = s;
+  broadcastState();
+  renderEuchre();
+}
+
+function euApplyDealerDiscard(playerName, card) {
+  if (!isManager) return;
+  const s = JSON.parse(JSON.stringify(gameState));
+  if (s.players[s.dealerIdx] !== playerName) return;
+  if (s.phase !== 'dealer-discard') return;
+  s.hands[playerName] = s.hands[playerName].filter(c => c.id !== card.id);
+  s.phase = 'play';
+  // Lead is left of dealer (skip alone partner)
+  let leadIdx = (s.dealerIdx + 1) % 4;
+  if (s.alone && s.players[leadIdx] === s.aloneSitOut) leadIdx = (leadIdx + 1) % 4;
+  s.currentPlayerIdx = leadIdx;
+  s.leadPlayerIdx = leadIdx;
+  s.trick = [];
+  s.leadSuit = null;
+  gameState = s;
+  broadcastState();
+  renderEuchre();
+}
+
+function euApplyPlayCard(playerName, card) {
+  if (!isManager) return;
+  const s = JSON.parse(JSON.stringify(gameState));
+  if (s.players[s.currentPlayerIdx] !== playerName) return;
+  if (s.phase !== 'play') return;
+  const hand = s.hands[playerName] || [];
+  // Verify card is in hand and legal to play
+  if (!hand.find(c => c.id === card.id)) return;
+  if (!euCanPlay(hand, card, s.leadSuit, s.trump)) return;
+
+  // Remove from hand, add to trick
+  s.hands[playerName] = hand.filter(c => c.id !== card.id);
+  s.trick.push({ player: playerName, card });
+  if (!s.leadSuit) s.leadSuit = euEffectiveSuit(card, s.trump);
+
+  // Check if trick is complete (3 cards if alone, 4 otherwise)
+  const expectedCards = s.alone ? 3 : 4;
+  if (s.trick.length >= expectedCards) {
+    // Resolve trick
+    let winnerCard = s.trick[0];
+    let winnerRank = euCardRank(s.trick[0].card, s.trump, s.leadSuit);
+    for (let i=1; i<s.trick.length; i++) {
+      const r = euCardRank(s.trick[i].card, s.trump, s.leadSuit);
+      if (r > winnerRank) { winnerRank = r; winnerCard = s.trick[i]; }
+    }
+    const winningTeam = euTeamOf(winnerCard.player, s.teams);
+    s.tricksWon[winningTeam] = (s.tricksWon[winningTeam] || 0) + 1;
+    s.handMessage = winnerCard.player + ' wins trick ('+s.trick.length+' cards)';
+    gameState = s;
+    broadcastState();
+    renderEuchre();
+
+    // Delay then start next trick OR end hand
+    setTimeout(() => {
+      const s2 = JSON.parse(JSON.stringify(gameState));
+      // Check if hand is over (all 5 tricks played)
+      const totalTricks = (s2.tricksWon[1]||0) + (s2.tricksWon[2]||0);
+      if (totalTricks >= 5) {
+        euEndHand(s2);
+      } else {
+        // Winner leads next trick
+        s2.currentPlayerIdx = s2.players.indexOf(winnerCard.player);
+        s2.leadPlayerIdx = s2.currentPlayerIdx;
+        s2.trick = [];
+        s2.leadSuit = null;
+        s2.handMessage = '';
+        gameState = s2;
+        broadcastState();
+        renderEuchre();
+      }
+    }, 2000);
+    return;
+  }
+
+  // Advance to next player (skip alone partner)
+  let nextIdx = (s.currentPlayerIdx + 1) % 4;
+  if (s.alone && s.players[nextIdx] === s.aloneSitOut) nextIdx = (nextIdx + 1) % 4;
+  s.currentPlayerIdx = nextIdx;
+  gameState = s;
+  broadcastState();
+  renderEuchre();
+}
+
+function euEndHand(s) {
+  // Score the hand
+  const makerTricks = s.tricksWon[s.makerTeam] || 0;
+  const defenderTeam = s.makerTeam === 1 ? 2 : 1;
+  const defenderTricks = s.tricksWon[defenderTeam] || 0;
+  let points = 0, winningTeam = null, msg = '';
+
+  if (makerTricks >= 3) {
+    if (makerTricks === 5 && s.alone) { points = 4; msg = '🎉 ' + s.maker + ' went alone and won all 5! +4'; }
+    else if (makerTricks === 5)       { points = 2; msg = '🎉 March! Team ' + s.makerTeam + ' won all 5. +2'; }
+    else                               { points = 1; msg = 'Team ' + s.makerTeam + ' made their bid. +1'; }
+    winningTeam = s.makerTeam;
+  } else {
+    points = 2;
+    msg = '💥 Euchred! Team ' + defenderTeam + ' set the makers. +2';
+    winningTeam = defenderTeam;
+  }
+  s.scores[winningTeam] = (s.scores[winningTeam] || 0) + points;
+  s.handMessage = msg;
+  s.phase = 'hand-end';
+
+  // Check for game end
+  if (s.scores[1] >= 10 || s.scores[2] >= 10) {
+    const winner = s.scores[1] >= 10 ? 1 : 2;
+    s.phase = 'game-end';
+    s.handMessage = '🏆 Team ' + winner + ' wins the game! ' + s.scores[1] + ' — ' + s.scores[2];
+    gameState = s;
+    broadcastState();
+    renderEuchre();
+    // Trigger game over screen after a pause
+    setTimeout(() => {
+      showGameOver(s.scores);
+    }, 3000);
+    return;
+  }
+
+  gameState = s;
+  broadcastState();
+  renderEuchre();
+
+  // Deal next hand after delay
+  setTimeout(() => euNextHand(), 4000);
+}
+
+function euNextHand() {
+  if (!isManager || !gameState) return;
+  const s = JSON.parse(JSON.stringify(gameState));
+  // Rotate dealer
+  s.dealerIdx = (s.dealerIdx + 1) % 4;
+  // Fresh deal
+  const deck = euShuffle(euBuildDeck());
+  const hands = {};
+  s.players.forEach(n => { hands[n] = []; });
+  let idx = 0;
+  for (let pass=0; pass<2; pass++) {
+    const count = pass===0 ? 3 : 2;
+    for (const n of s.players) {
+      for (let i=0; i<count; i++) hands[n].push(deck[idx++]);
+    }
+  }
+  const upcard = deck[idx++];
+  s.hands = hands;
+  s.upcard = upcard;
+  s.kitty = deck.slice(idx);
+  s.trump = null;
+  s.maker = null;
+  s.makerTeam = null;
+  s.alone = false;
+  s.aloneSitOut = null;
+  s.phase = 'bid1';
+  s.currentPlayerIdx = (s.dealerIdx + 1) % 4;
+  s.trick = [];
+  s.leadSuit = null;
+  s.tricksWon = { 1:0, 2:0 };
+  s.handMessage = '';
+  gameState = s;
+  myHand = [...(gameState.hands[myName]||[])];
+  broadcastState();
+  renderEuchre();
+}
+
+function euRedealHand() {
+  if (!isManager) return;
+  euNextHand();
+}
+
 function broadcastState() {
   if (!isManager) return;
   send({type:'game-state', state: compressState(gameState)});
