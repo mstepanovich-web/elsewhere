@@ -446,13 +446,12 @@
       <div class="lc-hand-wrap" id="lc-phone-hand-wrap">
         <div class="lc-hand-label">Your Hand</div>
         <div class="lc-hand" id="lc-hand"></div>
-        <div id="lc-selected-preview" style="display:none;padding:6px 14px;align-items:center;gap:12px;border-top:1px solid var(--color-border-dim);flex-shrink:0;background:var(--color-surface);">
-          <span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-text-faint);">Playing:</span>
-          <div id="lc-selected-card-display" style="width:40px;height:58px;border-radius:6px;border:2px solid var(--color-green);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:4px 3px;font-weight:800;font-size:10px;box-shadow:0 0 10px rgba(0,232,122,.35);"></div>
-        </div>
-        <div class="lc-actions">
-          <button class="lc-action-btn" id="lc-draw-btn" onclick="lcDraw()" disabled>Draw Card</button>
-          <button class="lc-action-btn primary" id="lc-play-btn" onclick="lcPlay()" disabled>Play Card</button>
+        <div class="lc-actions" style="align-items:center;">
+          <button class="lc-action-btn" id="lc-draw-btn" onclick="lcDraw()" disabled style="flex:1;">Draw Card</button>
+          <div id="lc-selected-preview" style="display:none;align-items:center;gap:8px;flex-shrink:0;">
+            <div id="lc-selected-card-display" style="width:38px;height:54px;border-radius:6px;border:2px solid var(--color-green);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:4px 3px;font-weight:800;font-size:10px;box-shadow:0 0 10px rgba(0,232,122,.35);"></div>
+          </div>
+          <button class="lc-action-btn primary" id="lc-play-btn" onclick="lcPlay()" disabled style="flex:1;">Play Card</button>
         </div>
       </div>
     </div>
@@ -490,9 +489,10 @@
         <div style="font-size:var(--text-sm);color:var(--color-text-dim);margin-bottom:14px;">Ask everyone to play again?</div>
         <button class="action-btn" onclick="managerAskPlayAgain()">Ask Play Again →</button>
       </div>
-      <!-- Same team button (always shown) -->
-      <div id="play-again-sameteam" style="display:none;width:100%;max-width:300px;">
+      <!-- Manager play again options -->
+      <div id="play-again-sameteam" style="display:none;flex-direction:column;gap:8px;width:100%;max-width:300px;">
         <button class="action-btn" onclick="showPlayAgainSameTeam()">▶ Play Again — Same Players</button>
+        <button class="action-btn ghost" onclick="showPlayAgainNewPlayers()">New Game — New Players</button>
       </div>
 
       <!-- Players see yes/no -->
@@ -547,7 +547,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.85</div>
+<div class="ver">v2.86</div>
 
 <script>
 'use strict';
@@ -964,7 +964,7 @@ function handleMessage(uid, data) {
       // Find card in manager's authoritative hand by id
       const playerHand = gameState.hands[msg._name] || [];
       const card = playerHand.find(c=>c.id===msg.card.id) || msg.card;
-      doPlayCard(card, msg.chosenSuit);
+      doPlayCard(card, msg.chosenSuit, msg._name);
     } else if (msg.action==='draw') {
       const s=JSON.parse(JSON.stringify(gameState));
       const isPenalty = s.pendingDraw > 0;
@@ -1061,6 +1061,11 @@ function showLobbyTab(tab) {
   }
 }
 
+function goToGamePicker() {
+  // Return to game selection screen — same as lobby for manager
+  goTo('screen-lobby');
+}
+
 function goToGameRoom() {
   const info=GAME_INFO[currentGame]||GAME_INFO.lastcard;
   document.getElementById('room-title').textContent=info.title;
@@ -1151,7 +1156,19 @@ function renderRoster() {
 }
 
 function renderOthersStrip() {
-  const others=lobbyPlayers.filter(p=>p.uid!==myUid);
+  // During a game, source of truth is gameState.players. In lobby, use lobbyPlayers.
+  let othersList;
+  if (gameState && gameState.players) {
+    // Get all players in the game except me, build from gameState
+    othersList = gameState.players.filter(name => name !== myName).map(name => {
+      // Find matching lobbyPlayers entry for camera/video
+      const p = lobbyPlayers.find(lp => lp.name === name) || { name, uid:'', hasCamera:false };
+      return p;
+    });
+  } else {
+    othersList = lobbyPlayers.filter(p=>p.uid!==myUid);
+  }
+  const others = othersList;
   // Phone strip
   const strip=document.getElementById('lc-others-strip');
   if (strip) strip.innerHTML=others.map(p=>{
@@ -1159,8 +1176,8 @@ function renderOthersStrip() {
     const handCount=gameState?.hands?.[p.name]?.length||'?';
     const isLast=handCount===1;
     return `<div class="lc-other-player">
-      <div class="lc-other-video ${isActive?'active':''} ${isLast?'last-card':''}" id="ov-${p.uid}">
-        ${p.hasCamera&&p.videoEl?'':'<span style="font-size:16px;">${initials(p.name)}</span>'}
+      <div class="lc-other-video ${isActive?'active':''} ${isLast?'last-card':''}" id="ov-${p.uid||p.name}">
+        ${p.hasCamera&&p.videoEl?'':'<span style="font-size:16px;">'+initials(p.name)+'</span>'}
       </div>
       <div class="lc-other-name">${p.name}</div>
       <div class="lc-other-count">${handCount}</div>
@@ -1424,12 +1441,20 @@ function renderLastCard() {
 
   // Round end
   if (s.phase==='round-end') {
+    // Show winner announcement to everyone
+    const winnerName = s.winner || '?';
+    const isMyWin = winnerName === myName;
+    showToast(isMyWin ? '🎉 You won the round!' : '🎉 '+winnerName+' won the round!');
+    // Show winner in the turn bar
+    const turnEl = document.getElementById('lc-turn-sm');
+    if (turnEl) {
+      turnEl.textContent = isMyWin ? '🎉 You win!' : '🎉 '+winnerName+' wins!';
+      turnEl.className = 'lc-turn-label mine';
+    }
     if (isManager) {
       document.getElementById('mgr-next').style.display='block';
       document.getElementById('mgr-next').textContent='Next Round →';
       document.getElementById('mgr-next').onclick=managerNextRound;
-      // Also show End Game option in manager bar
-      // End Game button is always visible in manager bar during game
     }
   }
 
@@ -1463,10 +1488,23 @@ function renderHand(myTurn, s, handId, drawId, playId) {
           send({type:'player-action', action:'pass'});
         }
       };
+    } else if (myTurn && s.pendingDraw>0) {
+      // Forced draw — Draw 2 or Wild Draw 4 played on you
+      drawBtn.textContent = 'Draw ' + s.pendingDraw + ' Cards';
+      drawBtn.disabled = false;
+      drawBtn.onclick = lcDraw;
+      drawBtn.style.background = 'linear-gradient(160deg,#e74c3c,#c0392b)';
+      drawBtn.style.color = '#fff';
+      drawBtn.style.borderColor = '#e74c3c';
+      drawBtn.style.fontWeight = '700';
     } else {
       drawBtn.textContent = drawId==='lc-draw-btn' ? 'Draw Card' : 'Draw';
       drawBtn.disabled = !myTurn;
       drawBtn.onclick = lcDraw;
+      drawBtn.style.background = '';
+      drawBtn.style.color = '';
+      drawBtn.style.borderColor = '';
+      drawBtn.style.fontWeight = '';
     }
   }
 
@@ -1554,10 +1592,12 @@ function applyOrSendPlay(card, chosenSuit) {
   }
 }
 
-function doPlayCard(card,chosenSuit) {
+function doPlayCard(card,chosenSuit,playerName) {
   hideSelectedPreview();
   const s=JSON.parse(JSON.stringify(gameState));
-  const pid=myName;
+  // Use provided playerName (from player-action) or default to the current turn player
+  const pid = playerName || s.players[s.currentPlayerIdx];
+  if (!s.hands[pid]) { log('doPlayCard: no hand for '+pid); return; }
   s.hands[pid]=s.hands[pid].filter(c=>c.id!==card.id);
   s.discardPile.push(card);
   s.currentValue=card.value;
@@ -1710,12 +1750,25 @@ function managerStartFromGameOver() {
 }
 
 function showPlayAgainSameTeam() {
-  // Skip asking — just restart with same players who are still connected
+  // Restart immediately with all currently connected players
   const connectedNames = lobbyPlayers.filter(p=>p.status==='active').map(p=>p.name);
-  lobbyPlayers=lobbyPlayers.filter(p=>connectedNames.includes(p.name));
-  send({type:'game-restart', playerNames:connectedNames});
+  if (connectedNames.length < 2) { showToast('Need at least 2 players'); return; }
+  lobbyPlayers=lobbyPlayers.filter(p=>connectedNames.includes(p.name)||p.uid===myUid);
+  send({type:'game-restart', playerNames:connectedNames, game: currentGame});
   gameInProgress=false; gameState=null;
   goToGameRoom();
+  // Auto-start the new game after brief delay so players can navigate
+  setTimeout(()=>{
+    if (currentGame==='lastcard') managerStartLastCard();
+    else if (currentGame==='trivia') managerStartTrivia();
+  }, 1500);
+}
+
+function showPlayAgainNewPlayers() {
+  // Reset everything and go to game picker
+  gameInProgress=false; gameState=null;
+  send({type:'switch-game'});
+  goToGamePicker();
 }
 
 // ── TRIVIA ────────────────────────────────────────────────────
