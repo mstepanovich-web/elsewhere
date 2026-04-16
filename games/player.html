@@ -547,7 +547,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.84</div>
+<div class="ver">v2.85</div>
 
 <script>
 'use strict';
@@ -637,6 +637,8 @@ async function doJoin() {
     try { streamId = await agoraClient.createDataStream({reliable:true,ordered:true}); log('streamId:'+streamId); }
     catch(e) { streamId=null; log('createDataStream not supported — using fallback'); }
     agoraReady = true;
+    // Keepalive: send ping every 20s to keep data channel fresh
+    setInterval(()=>{ if(agoraReady) send({type:'ping'}); }, 20000);
 
     isManager = urlP.get('mgr') === '1';
     userTVMode = isManager; // manager defaults to TV On, players to No TV
@@ -801,6 +803,17 @@ async function send(obj) {
 // Chunk reassembly buffer
 const _chunkBuf = {};
 
+// Detect tab suspension and log when it comes back
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    log('Tab visible — connection may need refresh if game went idle');
+    // Request current state from manager
+    if (!isManager && agoraReady) send({type:'request-state'});
+  } else {
+    log('Tab hidden');
+  }
+});
+
 function handleChunk(msg) {
   const { id, i, n, d } = msg;
   if (!_chunkBuf[id]) _chunkBuf[id] = { parts: new Array(n), received: 0 };
@@ -928,6 +941,14 @@ function handleMessage(uid, data) {
       lobbyPlayers = lobbyPlayers.filter(p=>msg.playerNames.includes(p.name)||p.uid===myUid);
     }
     goToGameRoom();
+  }
+
+  // Silent keepalive ping handler
+  if (msg.type==='ping') return;
+
+  if (msg.type==='request-state' && isManager) {
+    log('state requested by '+msg._name+' — broadcasting');
+    if (gameState) broadcastState();
   }
 
   if (msg.type==='player-action' && isManager) {
