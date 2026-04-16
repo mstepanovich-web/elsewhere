@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elsewhere · TV </title>
+  <link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* All colors and fonts from elsewhere-theme.css — no hardcoded values */
+
+    /* ── Ambient background ─────────────────────── */
+    .bg {
+      position: fixed; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse 55% 55% at 20% 60%, var(--color-gold-ghost) 0%, transparent 65%),
+        radial-gradient(ellipse 45% 45% at 80% 40%, var(--color-gold-ghost) 0%, transparent 65%),
+        var(--color-bg);
+    }
+
+    /* ── Wordmark ───────────────────────────────── */
+    .wordmark {
+      position: fixed; top: 32px; left: 50%; transform: translateX(-50%);
+      z-index: 20;
+      font-family: var(--font-display); font-size: clamp(18px, 2vw, 26px);
+      font-weight: 300; letter-spacing: var(--tracking-widest);
+      color: var(--color-gold-dim); text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    /* ── Screens ────────────────────────────────── */
+    .screen {
+      position: fixed; inset: 0; z-index: 10;
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.35s ease;
+      padding: 80px 40px 40px;
+    }
+    .screen.active { display: flex; }
+    .screen.visible { opacity: 1; }
+
+    /* ── SCREEN 1: Setup ────────────────────────── */
+    .setup-title {
+      font-family: var(--font-display);
+      font-size: clamp(32px, 4vw, 56px);
+      font-weight: 300; letter-spacing: var(--tracking-wide);
+      color: var(--color-text); margin-bottom: 8px; text-align: center;
+    }
+    .setup-sub {
+      font-size: var(--text-sm); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+      margin-bottom: clamp(32px, 5vh, 56px); text-align: center;
+    }
+
+    .setup-fields {
+      display: flex; gap: clamp(20px, 4vw, 48px);
+      flex-wrap: wrap; justify-content: center;
+      width: 100%; max-width: 760px; margin-bottom: clamp(32px, 5vh, 56px);
+    }
+
+    .field-group {
+      display: flex; flex-direction: column; gap: 8px;
+      flex: 1 1 280px; max-width: 340px;
+    }
+    .field-label {
+      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+      font-family: var(--font-mono);
+    }
+    .field-select {
+      background: var(--color-gold-ghost);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      color: var(--color-text);
+      font-family: var(--font-mono); font-size: var(--text-md);
+      padding: 14px 16px; cursor: pointer; outline: none;
+      width: 100%;
+      transition: border-color var(--transition-fast);
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(255,200,80,.4)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 36px;
+    }
+    .field-select:focus { border-color: var(--color-border-bright); }
+    .field-select option { background: var(--color-bg-mid); }
+
+    .setup-btn {
+      padding: 18px 56px;
+      background: var(--color-gold-dim);
+      border: none; border-radius: var(--radius-pill);
+      color: var(--color-bg);
+      font-family: var(--font-ui); font-size: var(--text-sm);
+      letter-spacing: var(--tracking-wider); text-transform: uppercase;
+      font-weight: 600; cursor: pointer;
+      box-shadow: var(--shadow-gold);
+      transition: background var(--transition-fast), transform var(--transition-fast);
+    }
+    .setup-btn:hover { background: var(--color-gold); }
+    .setup-btn:active { transform: scale(0.98); }
+
+    /* camera preview */
+    .cam-preview-wrap {
+      display: none; align-items: center; gap: 10px;
+      margin-top: 16px;
+    }
+    .cam-preview-wrap.visible { display: flex; }
+    .cam-preview {
+      width: 80px; height: 52px; border-radius: var(--radius-sm);
+      object-fit: cover; border: 1px solid var(--color-border-dim);
+      transform: scaleX(-1);
+    }
+    .cam-preview-label {
+      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+      font-family: var(--font-mono);
+    }
+
+    /* ── SCREEN 2: QR codes ─────────────────────── */
+    .qr-header {
+      font-family: var(--font-display);
+      font-size: clamp(18px, 2vw, 26px);
+      font-weight: 300; letter-spacing: var(--tracking-wider);
+      color: var(--color-text-faint); text-align: center;
+      margin-bottom: clamp(32px, 5vh, 56px);
+    }
+
+    .qr-grid {
+      display: flex; gap: clamp(20px, 3vw, 48px);
+      align-items: stretch; flex-wrap: nowrap; justify-content: center;
+      width: 100%; max-width: 1200px;
+    }
+
+    .qr-tile {
+      flex: 1 1 0; min-width: 0; max-width: 340px;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 16px; padding: clamp(20px, 3vw, 36px) clamp(16px, 2vw, 28px);
+      background: var(--color-surface);
+      border: 1px solid var(--color-border-dim);
+      border-radius: var(--radius-xl);
+      transition: border-color var(--transition-normal);
+      position: relative; overflow: hidden;
+    }
+    .qr-tile::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(ellipse 70% 55% at 50% 100%, var(--color-gold-ghost) 0%, transparent 70%);
+    }
+    .qr-tile:hover { border-color: var(--color-border); }
+
+    .qr-mode-label {
+      font-family: var(--font-display);
+      font-size: clamp(20px, 2.5vw, 34px);
+      font-weight: 300; letter-spacing: var(--tracking-wide);
+      color: var(--color-text); text-align: center;
+    }
+
+    .qr-box {
+      background: var(--color-white);
+      padding: 14px; border-radius: var(--radius-md);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: var(--shadow-card);
+      flex-shrink: 0;
+    }
+    .qr-box canvas { display: block; }
+
+    .qr-url {
+      font-family: var(--font-mono); font-size: clamp(10px, 1.1vw, 13px);
+      letter-spacing: var(--tracking-normal); color: var(--color-text-faint);
+      text-align: center; word-break: break-all; line-height: 1.6;
+    }
+
+    .qr-hint {
+      font-size: clamp(10px, 1vw, 13px); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+      text-align: center;
+    }
+
+    /* room code badge */
+    .room-badge {
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+      z-index: 30; display: flex; align-items: center; gap: 10px;
+      background: var(--color-overlay); backdrop-filter: blur(8px);
+      border: 1px solid var(--color-border-dim);
+      border-radius: var(--radius-pill); padding: 8px 20px;
+      opacity: 0; transition: opacity 0.4s ease 0.6s;
+    }
+    .room-badge.visible { opacity: 1; }
+    .room-badge-label {
+      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+      font-family: var(--font-mono);
+    }
+    .room-badge-code {
+      font-family: var(--font-mono); font-size: var(--text-md);
+      letter-spacing: var(--tracking-wider); font-weight: 500;
+      color: var(--color-gold);
+    }
+
+    /* back button */
+    .back-btn {
+      position: fixed; top: 28px; left: 32px; z-index: 30;
+      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; color: var(--color-text-faint);
+      cursor: pointer; background: none; border: none;
+      font-family: var(--font-mono); display: none;
+    }
+    .back-btn.visible { display: block; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg"></div>
+  <div class="wordmark">Elsewhere</div>
+  <button class="back-btn" id="back-btn">← Back</button>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- SCREEN 1: Setup                           -->
+  <!-- ══════════════════════════════════════════ -->
+  <div class="screen active" id="screen-setup">
+
+    <div class="setup-title">Set Up Your Stage</div>
+    <div class="setup-sub">Select your camera and quality, then continue</div>
+
+    <div class="setup-fields">
+
+      <div class="field-group">
+        <div class="field-label">Camera</div>
+        <select class="field-select" id="cam-select">
+          <option value="">Detecting cameras…</option>
+        </select>
+        <div class="cam-preview-wrap" id="cam-preview-wrap">
+          <video class="cam-preview" id="cam-preview" autoplay muted playsinline></video>
+          <span class="cam-preview-label">Preview</span>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <div class="field-label">Quality</div>
+        <select class="field-select" id="res-select">
+          <option value="hd">HD — 1280×720  (Recommended)</option>
+          <option value="standard">Standard — 640×480  (Lower CPU)</option>
+          <option value="fhd">Full HD — 1920×1080  (High CPU)</option>
+        </select>
+      </div>
+
+    </div>
+
+    <button class="setup-btn" id="setup-continue">Continue →</button>
+    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.59</div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- SCREEN 2: QR codes                        -->
+  <!-- ══════════════════════════════════════════ -->
+  <div class="screen" id="screen-qr">
+
+    <div class="qr-header">Scan a code on your phone to begin</div>
+
+    <div class="qr-grid">
+
+      <div class="qr-tile qr-tile--karaoke" id="qr-tile-karaoke" style="cursor:pointer;" title="Click to open Stage on this TV">
+        <div class="qr-mode-label">🎤 Karaoke</div>
+        <div class="qr-box">
+          <canvas id="qr-karaoke" width="160" height="160"></canvas>
+        </div>
+        <div class="qr-url" id="qr-karaoke-url">—</div>
+        <div class="qr-hint">Scan to select Karaoke</div>
+      </div>
+
+      <div class="qr-tile qr-tile--fashion">
+        <div class="qr-mode-label">✨ Fashion</div>
+        <div class="qr-box">
+          <canvas id="qr-fashion" width="160" height="160"></canvas>
+        </div>
+        <div class="qr-url" id="qr-fashion-url">—</div>
+        <div class="qr-hint">Scan to select Fashion</div>
+      </div>
+
+      <div class="qr-tile" style="border-color:rgba(124,77,255,.22);background:linear-gradient(160deg,rgba(12,8,18,.94) 0%,rgba(6,4,10,.97) 100%);">
+        <div class="qr-mode-label" style="color:rgba(200,180,255,.9);">🎮 Games</div>
+        <div class="qr-box">
+          <canvas id="qr-games" width="160" height="160"></canvas>
+        </div>
+        <div class="qr-url" id="qr-games-url" style="color:rgba(160,130,255,.4);">—</div>
+        <div class="qr-hint" style="color:rgba(160,130,255,.35);">Scan to select Games</div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Room code badge (shown on QR screen) -->
+  <div class="room-badge" id="room-badge">
+    <span class="room-badge-label">Room</span>
+    <span class="room-badge-code" id="room-badge-code">——</span>
+  </div>
+
+  <script>
+  // ═══════════════════════════════════════
+  //  Config
+  // ═══════════════════════════════════════
+  const BASE_URL   = 'https://mstepanovich-web.github.io/elsewhere';
+  const STAGE_URL  = BASE_URL + '/stage.html';
+  const SINGER_URL  = BASE_URL + '/singer.html';
+  const GAMES_URL    = BASE_URL + '/games/player.html';
+  const GAMES_TV_URL = BASE_URL + '/games/tv.html';
+  const FASHION_URL    = BASE_URL + '/fashion/display.html';
+  const STYLIST_URL    = BASE_URL + '/fashion/stylist.html';
+
+  // Generate room code — same charset as stage.html
+  const CHARS     = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let roomCode    = '';
+  for (let i = 0; i < 6; i++) roomCode += CHARS[Math.floor(Math.random() * CHARS.length)];
+
+  // ═══════════════════════════════════════
+  //  Screen management
+  // ═══════════════════════════════════════
+  function goTo(id) {
+    document.querySelectorAll('.screen').forEach(s => {
+      s.classList.remove('visible');
+      setTimeout(() => {
+        s.classList.remove('active');
+        if (s.id === id) {
+          s.classList.add('active');
+          requestAnimationFrame(() => s.classList.add('visible'));
+        }
+      }, 200);
+    });
+    document.getElementById('back-btn').classList.toggle('visible', id !== 'screen-setup');
+    document.getElementById('room-badge').classList.toggle('visible', id === 'screen-qr');
+  }
+
+  // Show first screen
+  setTimeout(() => document.getElementById('screen-setup').classList.add('visible'), 60);
+
+  document.getElementById('back-btn').addEventListener('click', () => goTo('screen-setup'));
+
+  // ═══════════════════════════════════════
+  //  Camera detection + preview
+  // ═══════════════════════════════════════
+  let previewStream = null;
+  const camSelect   = document.getElementById('cam-select');
+  const previewWrap = document.getElementById('cam-preview-wrap');
+  const previewVid  = document.getElementById('cam-preview');
+
+  async function detectCameras() {
+    try {
+      // Need a temp stream to trigger permission + get labels
+      const tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      tmp.getTracks().forEach(t => t.stop());
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams    = devices.filter(d => d.kind === 'videoinput');
+
+      camSelect.innerHTML = '';
+      cams.forEach((cam, i) => {
+        const opt = document.createElement('option');
+        opt.value = cam.deviceId;
+        opt.textContent = cam.label || `Camera ${i + 1}`;
+        camSelect.appendChild(opt);
+      });
+
+      if (cams.length === 0) {
+        camSelect.innerHTML = '<option value="">No cameras found</option>';
+        return;
+      }
+
+      startPreview(cams[0].deviceId);
+    } catch (e) {
+      camSelect.innerHTML = '<option value="">Camera access denied</option>';
+    }
+  }
+
+  async function startPreview(deviceId) {
+    if (previewStream) previewStream.getTracks().forEach(t => t.stop());
+    try {
+      previewStream = await navigator.mediaDevices.getUserMedia({
+        video: deviceId ? { deviceId: { exact: deviceId } } : true,
+        audio: false
+      });
+      previewVid.srcObject = previewStream;
+      previewWrap.classList.add('visible');
+    } catch (e) {
+      previewWrap.classList.remove('visible');
+    }
+  }
+
+  camSelect.addEventListener('change', () => {
+    if (camSelect.value) startPreview(camSelect.value);
+  });
+
+  detectCameras();
+
+  // ═══════════════════════════════════════
+  //  Continue → show QR screen
+  // ═══════════════════════════════════════
+  document.getElementById('setup-continue').addEventListener('click', () => {
+    // Stop preview — stage.html will open its own camera stream
+    if (previewStream) { previewStream.getTracks().forEach(t => t.stop()); previewStream = null; }
+
+    const selectedCam = camSelect.value;
+    const selectedRes = document.getElementById('res-select').value;
+
+    // Karaoke QR → singer.html on the performer's phone
+    // TV navigates itself to stage.html with camera/res params
+    const karaokeUrl = `${SINGER_URL}?code=${roomCode}`;
+    const gamesUrl    = `${GAMES_URL}?room=${roomCode}&mgr=1`;
+    const gamesTvUrl  = `${GAMES_TV_URL}?room=${roomCode}`;
+    const fashionUrl  = `${FASHION_URL}?room=${roomCode}`;
+    const stylistUrl  = `${STYLIST_URL}?room=${roomCode}`;
+
+    // TV goes to stage immediately after showing QR
+    const stageUrl = `${STAGE_URL}?room=${roomCode}&cam=${encodeURIComponent(selectedCam)}&res=${selectedRes}`;
+
+    // Set room badge
+    document.getElementById('room-badge-code').textContent = roomCode;
+
+    // Render QR codes
+    renderQR('qr-karaoke', karaokeUrl);
+    renderQR('qr-fashion',  stylistUrl);
+
+    // Show URLs
+    document.getElementById('qr-karaoke-url').textContent = karaokeUrl;
+    document.getElementById('qr-fashion-url').textContent  = stylistUrl;
+    renderQR('qr-games', gamesUrl);
+    document.getElementById('qr-games-url').textContent = gamesUrl;
+
+    goTo('screen-qr');
+
+    // Listen for phone scan via BroadcastChannel
+    // singer.html posts 'karaoke-scanned' when it loads with the room code
+    // fashion/stylist.html posts 'fashion-scanned' when it loads with the room code
+    // Use Agora to detect when phone joins the room
+    const AGORA_APP_ID = 'b2c6543a9ed946829e6526cb68c7efc9';
+    const CHAN_PREFIX  = 'elsewhere_';
+
+    tvLog('Waiting for phone to join room: ' + roomCode);
+
+    const agoraWatcher = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+    agoraWatcher.on('user-joined', (user) => {
+      tvLog('User joined UID: ' + user.uid + ' — checking URL param...');
+      // Check if this came from singer (karaoke) or stylist (fashion)
+      // We encode the mode in the channel suffix: elsewhere_ROOM = karaoke, elsewhere_fROOM = fashion
+      tvLog('→ Phone joined karaoke channel — navigating to stage...');
+      agoraWatcher.leave().catch(()=>{});
+      window.location.href = stageUrl;
+    });
+
+    agoraWatcher.join(AGORA_APP_ID, CHAN_PREFIX + roomCode, null, null)
+      .then(() => tvLog('Agora watching channel: ' + CHAN_PREFIX + roomCode))
+      .catch(e => tvLog('Agora error: ' + e.message));
+
+    // Watch games channel
+    const agoraGamesWatcher = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+    agoraGamesWatcher.on('user-joined', (user) => {
+      tvLog('Games user joined — navigating to games TV...');
+      agoraGamesWatcher.leave().catch(()=>{});
+      window.location.href = gamesTvUrl;
+    });
+    agoraGamesWatcher.join(AGORA_APP_ID, CHAN_PREFIX + 'g' + roomCode, null, null)
+      .then(() => tvLog('Agora watching games channel: ' + CHAN_PREFIX + 'g' + roomCode))
+      .catch(e => tvLog('Agora games error: ' + e.message));
+
+    // Also watch fashion channel
+    const agoraFashionWatcher = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+    agoraFashionWatcher.on('user-joined', (user) => {
+      tvLog('Fashion user joined UID: ' + user.uid + ' — navigating to fashion display...');
+      agoraFashionWatcher.leave().catch(()=>{});
+      window.location.href = fashionUrl;
+    });
+
+    agoraFashionWatcher.join(AGORA_APP_ID, CHAN_PREFIX + 'f' + roomCode, null, null)
+      .then(() => tvLog('Agora watching fashion channel: ' + CHAN_PREFIX + 'f' + roomCode))
+      .catch(e => tvLog('Agora fashion error: ' + e.message));
+  });
+
+  // ═══════════════════════════════════════
+  //  QR rendering (qrcodejs from CDN)
+  // ═══════════════════════════════════════
+  function renderQR(canvasId, url) {
+    const canvas = document.getElementById(canvasId);
+    const size   = canvas.width;
+
+    if (typeof QRCode !== 'undefined') {
+      // qrcodejs — render into temp div then copy to canvas
+      const tmp = document.createElement('div');
+      document.body.appendChild(tmp);
+      tmp.style.cssText = 'position:fixed;left:-9999px;top:0;';
+      new QRCode(tmp, { text: url, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
+      const img = tmp.querySelector('img');
+      if (img) {
+        img.onload = () => {
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, size, size);
+          ctx.drawImage(img, 0, 0, size, size);
+          tmp.remove();
+        };
+      } else {
+        const qrCanvas = tmp.querySelector('canvas');
+        if (qrCanvas) {
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, size, size);
+          ctx.drawImage(qrCanvas, 0, 0, size, size);
+        }
+        tmp.remove();
+      }
+      return;
+    }
+
+    // Fallback: draw a placeholder with the URL as text
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#333';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('QR loading…', size / 2, size / 2 - 6);
+    ctx.fillText(url.slice(0, 32), size / 2, size / 2 + 12);
+  }
+
+  const _logs = [];
+  function tvLog(msg) {
+    const ts = new Date().toISOString().slice(11,19);
+    const line = ts + ' ' + msg;
+    _logs.push(line);
+    console.log('[TV]', msg);
+    const el = document.getElementById('tv-debug');
+    if (el) el.textContent = msg;
+    const panel = document.getElementById('log-lines');
+    if (panel) {
+      const div = document.createElement('div');
+      div.style.cssText = 'border-bottom:1px solid rgba(255,255,255,.06);padding:3px 0;';
+      div.textContent = line;
+      panel.appendChild(div);
+      panel.scrollTop = panel.scrollHeight;
+    }
+  }
+  function toggleLog() {
+    const p = document.getElementById('log-panel');
+    p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  }
+  function copyLog() {
+    navigator.clipboard.writeText(_logs.join('\n')).then(() => {
+      const btn = document.querySelector('#log-panel span:last-child');
+      if (btn) { btn.textContent = 'COPIED ✓'; setTimeout(() => btn.textContent = 'COPY', 2000); }
+    });
+  }
+  </script>
+
+  <!-- Debug log panel -->
+  <div id="log-toggle" onclick="toggleLog()" style="position:fixed;bottom:16px;left:20px;z-index:999;font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);cursor:pointer;padding:4px 8px;border:1px solid var(--color-border-dim);border-radius:var(--radius-sm);">LOG</div>
+
+  <div id="log-panel" style="display:none;position:fixed;bottom:40px;left:20px;right:20px;z-index:998;background:var(--color-overlay);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;font-family:var(--font-mono);font-size:11px;color:var(--color-green);max-height:40vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+      <span style="color:var(--color-text-faint);letter-spacing:var(--tracking-wider);text-transform:uppercase;font-size:10px;">Debug Log</span>
+      <span onclick="copyLog()" style="color:var(--color-gold-dim);cursor:pointer;letter-spacing:var(--tracking-wider);font-size:10px;">COPY</span>
+    </div>
+    <div id="log-lines"></div>
+  </div>
+
+</body>
+</html>
