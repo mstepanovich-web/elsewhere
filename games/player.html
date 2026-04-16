@@ -114,7 +114,7 @@
     .p-video-thumb.visible { display: block; }
 
     /* ── LAST CARD GAME ── */
-    #screen-lastcard { padding: 0; overflow: hidden; height: 100%; flex-direction: column; }
+    #screen-lastcard { padding: 0; overflow: hidden; position: fixed; inset: 0; flex-direction: column; }
 
     /* TV mode — hand only */
     .lc-tv-status { padding: 8px 16px; font-size: var(--text-sm); color: var(--color-text-faint); text-align: center; border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; background: var(--color-bg); }
@@ -155,7 +155,7 @@
     #lc-ipad-right { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
     /* Hand */
-    .lc-hand-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+    .lc-hand-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; min-height: 120px; }
     .lc-hand-label { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); padding: 8px 14px 4px; flex-shrink: 0; }
     .lc-hand { display: flex; flex-wrap: wrap; gap: 7px; padding: 6px 14px 10px; align-content: flex-start; overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
     .lc-card { width: 58px; height: 86px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,.15); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 15px; cursor: pointer; transition: all 0.18s; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,.4); -webkit-user-select: none; }
@@ -345,17 +345,27 @@
         </div>
       </div>
 
-      <!-- Invited (not yet joined) — everyone sees -->
-      <div id="invited-section" style="display:none;">
-        <div class="section-label">Invited — not yet joined</div>
-        <div class="player-list" id="invited-list"></div>
+      <!-- Lobby / Invited tab toggle — everyone sees -->
+      <div style="display:flex;gap:0;margin-top:12px;border-radius:var(--radius-pill);border:1px solid var(--color-border-dim);overflow:hidden;background:var(--color-surface);">
+        <div id="tab-lobby" onclick="showLobbyTab('lobby')" style="flex:1;padding:8px;text-align:center;font-size:var(--text-xs);letter-spacing:var(--tracking-wider);text-transform:uppercase;cursor:pointer;background:var(--color-gold-faint);color:var(--color-gold);border-right:1px solid var(--color-border-dim);">In the Lobby</div>
+        <div id="tab-invited" onclick="showLobbyTab('invited')" style="flex:1;padding:8px;text-align:center;font-size:var(--text-xs);letter-spacing:var(--tracking-wider);text-transform:uppercase;cursor:pointer;color:var(--color-text-faint);">Invited <span id="invited-count"></span></div>
       </div>
 
-      <!-- Lobby (joined) — everyone sees -->
-      <div class="section-label">In the lobby</div>
+      <!-- Lobby tab -->
+      <div id="lobby-tab-content">
+        <div class="section-label">In the lobby</div>
       <div class="player-list" id="lobby-roster"></div>
-      <div class="section-label" id="queue-label" style="display:none;">Waiting in queue</div>
-      <div class="player-list" id="lobby-queue"></div>
+        <div class="section-label" id="queue-label" style="display:none;">Waiting in queue</div>
+        <div class="player-list" id="lobby-queue"></div>
+      </div>
+
+      <!-- Invited tab -->
+      <div id="invited-tab-content" style="display:none;">
+        <div class="section-label">Invited — not yet joined</div>
+        <div class="player-list" id="invited-list">
+          <div style="font-size:var(--text-xs);color:var(--color-text-faint);padding:8px 0;">No invites sent yet</div>
+        </div>
+      </div>
 
       <!-- Waiting message (non-manager) -->
       <div id="room-waiting-msg" style="display:none;padding:20px 0;text-align:center;">
@@ -375,6 +385,12 @@
     <div id="screen-lastcard" class="screen">
       <!-- TV mode: thin status bar -->
       <div class="lc-tv-status" id="lc-tv-status" style="display:none;">Waiting...</div>
+      <!-- TV mode toggle -->
+      <div id="lc-mode-toggle" style="display:flex;align-items:center;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border-dim);flex-shrink:0;background:var(--color-bg);">
+        <span style="font-size:var(--text-xs);color:var(--color-text-faint);letter-spacing:.1em;text-transform:uppercase;">Mode:</span>
+        <div id="lc-tv-btn" onclick="setTVMode(true)" style="padding:4px 12px;border-radius:var(--radius-pill);border:1px solid var(--color-border);font-size:var(--text-xs);cursor:pointer;letter-spacing:.08em;text-transform:uppercase;">📺 TV On</div>
+        <div id="lc-notv-btn" onclick="setTVMode(false)" style="padding:4px 12px;border-radius:var(--radius-pill);border:1px solid var(--color-gold);background:var(--color-gold-faint);font-size:var(--text-xs);cursor:pointer;letter-spacing:.08em;text-transform:uppercase;">📱 No TV</div>
+      </div>
 
       <!-- Phone-only top strip -->
       <div id="lc-top-strip">
@@ -461,6 +477,11 @@
         <div style="font-size:var(--text-sm);color:var(--color-text-dim);margin-bottom:14px;">Ask everyone to play again?</div>
         <button class="action-btn" onclick="managerAskPlayAgain()">Ask Play Again →</button>
       </div>
+      <!-- Same team button (always shown) -->
+      <div id="play-again-sameteam" style="display:none;width:100%;max-width:300px;">
+        <button class="action-btn" onclick="showPlayAgainSameTeam()">▶ Play Again — Same Players</button>
+      </div>
+
       <!-- Players see yes/no -->
       <div id="play-again-player" style="display:none;width:100%;max-width:300px;text-align:center;">
         <div style="font-size:var(--text-sm);color:var(--color-text-dim);margin-bottom:14px;" id="play-again-prompt">Play again?</div>
@@ -512,7 +533,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.72</div>
+<div class="ver">v2.73</div>
 
 <script>
 'use strict';
@@ -768,6 +789,12 @@ function handleMessage(uid, data) {
     renderRoster(); renderInvited();
   }
 
+  if (msg.type==='invite-sent') {
+    // Show invite count on all screens
+    const el = document.getElementById('invited-count');
+    if (el) el.textContent = msg.count + ' invite' + (msg.count===1?'':'s') + ' sent';
+  }
+
   if (msg.type==='camera-on')  { updateLobbyCamera(uid, true); }
   if (msg.type==='camera-off') { updateLobbyCamera(uid, false); }
 
@@ -789,8 +816,16 @@ function handleMessage(uid, data) {
   if (msg.type==='game-state') {
     log('game-state phase:'+(msg.state?.phase));
     gameState=msg.state;
-    if (currentGame==='lastcard') renderLastCard();
-    if (currentGame==='trivia')   renderTrivia();
+    // If we're not on the game screen yet, navigate there
+    const activeScreen = document.querySelector('.screen.active')?.id;
+    if (currentGame==='lastcard') {
+      if (activeScreen !== 'screen-lastcard') startLastCard();
+      else renderLastCard();
+    }
+    if (currentGame==='trivia') {
+      if (activeScreen !== 'screen-trivia') startTrivia(msg.state);
+      else renderTrivia();
+    }
   }
 
   if (msg.type==='game-over') {
@@ -857,6 +892,24 @@ function selectGame(game) {
   goTo('screen-game-info');
 }
 
+function showLobbyTab(tab) {
+  const lobbyTab   = document.getElementById('lobby-tab-content');
+  const invitedTab = document.getElementById('invited-tab-content');
+  const tabLobby   = document.getElementById('tab-lobby');
+  const tabInvited = document.getElementById('tab-invited');
+  if (tab === 'lobby') {
+    if (lobbyTab)   lobbyTab.style.display   = 'block';
+    if (invitedTab) invitedTab.style.display  = 'none';
+    if (tabLobby)   { tabLobby.style.background='var(--color-gold-faint)'; tabLobby.style.color='var(--color-gold)'; }
+    if (tabInvited) { tabInvited.style.background='transparent'; tabInvited.style.color='var(--color-text-faint)'; }
+  } else {
+    if (lobbyTab)   lobbyTab.style.display   = 'none';
+    if (invitedTab) invitedTab.style.display  = 'block';
+    if (tabLobby)   { tabLobby.style.background='transparent'; tabLobby.style.color='var(--color-text-faint)'; }
+    if (tabInvited) { tabInvited.style.background='var(--color-gold-faint)'; tabInvited.style.color='var(--color-gold)'; }
+  }
+}
+
 function goToGameRoom() {
   const info=GAME_INFO[currentGame]||GAME_INFO.lastcard;
   document.getElementById('room-title').textContent=info.title;
@@ -901,17 +954,21 @@ function toggleManagerAsPlayer(checked) {
 
 // ── Roster + invited rendering ────────────────────────────────
 function renderInvited() {
-  const el=document.getElementById('invited-list');
-  const sec=document.getElementById('invited-section');
+  const el = document.getElementById('invited-list');
   if (!el) return;
-  if (invitedNames.length===0) { sec.style.display='none'; return; }
-  sec.style.display='block';
-  el.innerHTML=invitedNames.map(n=>`
-    <div class="player-row invited">
-      <div class="p-dot dot-dim"></div>
-      <div class="p-name">${n}</div>
-      <div class="p-badge badge-invite">Invited</div>
-    </div>`).join('');
+  const count = document.getElementById('invited-count');
+  if (invitedNames.length === 0) {
+    el.innerHTML = '<div style="font-size:var(--text-xs);color:var(--color-text-faint);padding:8px 0;">No invites sent yet</div>';
+    if (count) count.textContent = '';
+  } else {
+    if (count) count.textContent = '(' + invitedNames.length + ')';
+    el.innerHTML = invitedNames.map(n=>`
+      <div class="player-row invited">
+        <div class="p-dot dot-dim"></div>
+        <div class="p-name">${n}</div>
+        <div class="p-badge badge-invite">Invited</div>
+      </div>`).join('');
+  }
 }
 
 function renderRoster() {
@@ -991,6 +1048,12 @@ function shareInvite() {
   const subject=encodeURIComponent(`${myName} has invited you to play ${gameName} — JOIN NOW!`);
   const body=encodeURIComponent(`Join the game here:\n\n${link}`);
   window.location.href=`mailto:?subject=${subject}&body=${body}`;
+  // Track invite sent and broadcast so all screens show it
+  const inviteEntry = { time: Date.now() };
+  if (!window._invitesSent) window._invitesSent = 0;
+  window._invitesSent++;
+  send({ type:'invite-sent', count: window._invitesSent });
+  showToast('Invite sent!');
 }
 
 function copyInvite() {
@@ -1028,7 +1091,10 @@ function managerSkip()   {
     gameState=lcApplyDraw(gameState); broadcastState(); renderLastCard();
   }
 }
-function managerEnd() { send({type:'switch-game'}); gameInProgress=false; goToLobby(); }
+function managerEnd() {
+  if (!confirm('End this game for all players?')) return;
+  send({type:'switch-game'}); gameInProgress=false; goToLobby();
+}
 
 // ── LAST CARD ─────────────────────────────────────────────────
 const SUITS=['♠','♥','♦','♣'], VALUES=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
@@ -1073,7 +1139,7 @@ function managerStartLastCard() {
   };
   myHand=[...(gameState.hands[myName]||[])];
   gameInProgress=true;
-  send({type:'game-start', state:stripHands(gameState)});
+  send({type:'game-start', state: gameState}); // full state — each player reads their own hand
   startLastCard();
 }
 
@@ -1084,17 +1150,29 @@ function startLastCard() {
   renderLastCard();
 }
 
+let userTVMode = false; // explicit TV mode set by user toggle
+
+function setTVMode(on) {
+  userTVMode = on;
+  // Update toggle button styles
+  const tvBtn   = document.getElementById('lc-tv-btn');
+  const notvBtn = document.getElementById('lc-notv-btn');
+  if (tvBtn)   tvBtn.style.cssText   = tvBtn.style.cssText.replace(/border:[^;]+;background:[^;]+;/,'') + (on  ? 'border:1px solid var(--color-gold);background:var(--color-gold-faint);' : 'border:1px solid var(--color-border);background:transparent;');
+  if (notvBtn) notvBtn.style.cssText = notvBtn.style.cssText.replace(/border:[^;]+;background:[^;]+;/,'') + (!on ? 'border:1px solid var(--color-gold);background:var(--color-gold-faint);' : 'border:1px solid var(--color-border);background:transparent;');
+  setupLastCardLayout();
+  renderLastCard();
+}
+
 function setupLastCardLayout() {
-  const phone=!IS_IPAD;
-  const tvMode=tvPresent&&!IS_IPAD;
+  // TV mode = user toggled TV On
+  // No TV mode = user toggled No TV (default)
+  document.getElementById('lc-tv-status').style.display   = userTVMode ? 'block' : 'none';
+  document.getElementById('lc-top-strip').classList.toggle('visible', !userTVMode);
+  document.getElementById('lc-others-strip').classList.toggle('visible', true); // always show others
+  document.getElementById('lc-ipad-wrap').classList.toggle('visible', false);   // never use iPad layout on phone
+  document.getElementById('lc-phone-hand-wrap').style.display = 'flex';          // always show phone hand
 
-  document.getElementById('lc-tv-status').style.display   = tvMode?'block':'none';
-  document.getElementById('lc-top-strip').classList.toggle('visible', phone&&!tvMode);
-  document.getElementById('lc-others-strip').classList.toggle('visible', phone);
-  document.getElementById('lc-ipad-wrap').classList.toggle('visible', IS_IPAD);
-  document.getElementById('lc-phone-hand-wrap').style.display = IS_IPAD?'none':'flex';
-
-  log('layout: ipad='+IS_IPAD+' tv='+tvMode+' phone='+phone);
+  log('layout: tvMode='+userTVMode);
 }
 
 function renderLastCard() {
@@ -1286,6 +1364,7 @@ function showGameOver(scores) {
       <div class="score-pts">${s} pts</div>
     </div>`).join('');
   document.getElementById('play-again-manager').style.display=isManager?'block':'none';
+  document.getElementById('play-again-sameteam').style.display=isManager?'block':'none';
   document.getElementById('play-again-player').style.display=isManager?'none':'block';
   document.getElementById('play-again-results').style.display='none';
   playAgainResponses={};
@@ -1322,9 +1401,19 @@ function renderPlayAgainResults() {
 
 function managerStartFromGameOver() {
   const yesNames=Object.values(playAgainResponses).filter(r=>r.yes).map(r=>r.name);
+  if (yesNames.length < 2) { showToast('Need at least 2 players who said yes'); return; }
   // Reset lobby to only yes players
   lobbyPlayers=lobbyPlayers.filter(p=>yesNames.includes(p.name)||p.uid===myUid);
   send({type:'game-restart', playerNames:yesNames});
+  gameInProgress=false; gameState=null;
+  goToGameRoom();
+}
+
+function showPlayAgainSameTeam() {
+  // Skip asking — just restart with same players who are still connected
+  const connectedNames = lobbyPlayers.filter(p=>p.status==='active').map(p=>p.name);
+  lobbyPlayers=lobbyPlayers.filter(p=>connectedNames.includes(p.name));
+  send({type:'game-restart', playerNames:connectedNames});
   gameInProgress=false; gameState=null;
   goToGameRoom();
 }
@@ -1488,16 +1577,14 @@ function stopTriviaTimer(){if(timerInterval){clearInterval(timerInterval);timerI
 // ── Shared helpers ────────────────────────────────────────────
 function broadcastState() {
   if (!isManager) return;
-  send({type:'game-state',state:stripHands(gameState)});
+  // Send full state — all players need their own hand data
+  // Card values for other players are hidden in the UI, not the data
+  send({type:'game-state', state: gameState});
 }
 
 function stripHands(state) {
-  if (!state?.hands) return state;
-  const s=JSON.parse(JSON.stringify(state));
-  for(const pid of Object.keys(s.hands)) {
-    if(pid!==myName) s.hands[pid]=s.hands[pid].map(()=>({id:'?',value:'?',suit:'?'}));
-  }
-  return s;
+  // No longer stripping — full state broadcast so each player gets their cards
+  return state;
 }
 
 // ── Log ───────────────────────────────────────────────────────
