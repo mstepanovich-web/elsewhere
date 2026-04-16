@@ -173,7 +173,7 @@
     .lc-action-btn:disabled { opacity: .35; pointer-events: none; }
 
     /* Suit chooser */
-    #suit-chooser { display: none; position: fixed; inset: 0; background: var(--color-overlay); align-items: center; justify-content: center; z-index: 500; }
+    #suit-chooser { display: none; position: fixed; bottom: 80px; left: 0; right: 0; background: rgba(4,2,6,.97); border-top: 1px solid var(--color-border); padding: 14px 16px; z-index: 500; flex-direction: column; gap: 10px; }
     #suit-chooser.show { display: flex; }
     .suit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 32px; background: var(--color-surface); border-radius: var(--radius-xl); border: 1px solid var(--color-border); }
     .suit-choice { width: 80px; height: 80px; border-radius: var(--radius-lg); border: 1.5px solid var(--color-border); background: var(--color-bg-mid); font-size: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
@@ -396,9 +396,11 @@
       </div>
 
       <!-- Turn indicator — always visible, independent of TV mode -->
-      <div id="lc-turn-bar" style="padding:6px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--color-border-dim);flex-shrink:0;">
-        <div class="lc-turn-label" id="lc-turn-sm" style="display:block;">—</div>
+      <div id="lc-turn-bar" style="padding:6px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--color-border-dim);flex-shrink:0;gap:8px;">
+        <div class="lc-turn-label" id="lc-turn-sm" style="display:block;flex:1;">—</div>
         <div id="lc-pending-sm" style="display:none;font-size:var(--text-xs);color:var(--color-red);letter-spacing:.1em;">Draw pending!</div>
+        <button id="lc-endgame-btn" onclick="managerEndGame()" style="display:none;padding:4px 10px;border-radius:var(--radius-pill);border:1px solid var(--color-border);background:var(--color-gold-ghost);color:var(--color-gold-bright);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;flex-shrink:0;">End Game</button>
+        <button id="lc-cam-toggle" onclick="toggleGameCamera()" style="padding:4px 10px;border-radius:var(--radius-pill);border:1px solid var(--color-border);background:var(--color-gold-ghost);color:var(--color-gold-bright);font-size:10px;letter-spacing:.08em;cursor:pointer;flex-shrink:0;">📷 Cam</button>
       </div>
 
       <!-- Discard + draw pile strip — always visible -->
@@ -526,14 +528,12 @@
 
 <!-- Color chooser -->
 <div id="suit-chooser">
-  <div style="background:var(--color-surface);border-radius:var(--radius-xl);border:1px solid var(--color-border);padding:24px;display:flex;flex-direction:column;align-items:center;gap:12px;">
-    <div style="font-size:var(--text-xs);letter-spacing:.15em;text-transform:uppercase;color:var(--color-text-faint);margin-bottom:4px;">Choose a color</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-      <div onclick="lcChooseSuit('red')"    style="width:72px;height:72px;border-radius:12px;background:linear-gradient(160deg,#e74c3c,#c0392b);cursor:pointer;box-shadow:0 4px 16px rgba(231,76,60,.4);"></div>
-      <div onclick="lcChooseSuit('yellow')" style="width:72px;height:72px;border-radius:12px;background:linear-gradient(160deg,#f1c40f,#d4ac0d);cursor:pointer;box-shadow:0 4px 16px rgba(241,196,15,.4);"></div>
-      <div onclick="lcChooseSuit('blue')"   style="width:72px;height:72px;border-radius:12px;background:linear-gradient(160deg,#2980b9,#1a5276);cursor:pointer;box-shadow:0 4px 16px rgba(41,128,185,.4);"></div>
-      <div onclick="lcChooseSuit('green')"  style="width:72px;height:72px;border-radius:12px;background:linear-gradient(160deg,#27ae60,#1e8449);cursor:pointer;box-shadow:0 4px 16px rgba(39,174,96,.4);"></div>
-    </div>
+  <div style="font-size:var(--text-xs);letter-spacing:.15em;text-transform:uppercase;color:var(--color-text-faint);text-align:center;">Choose a color to continue</div>
+  <div style="display:flex;gap:10px;justify-content:center;">
+    <div onclick="lcChooseSuit('red')"    style="flex:1;max-width:72px;height:56px;border-radius:10px;background:linear-gradient(160deg,#e74c3c,#c0392b);cursor:pointer;box-shadow:0 4px 16px rgba(231,76,60,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px;letter-spacing:.06em;">RED</div>
+    <div onclick="lcChooseSuit('yellow')" style="flex:1;max-width:72px;height:56px;border-radius:10px;background:linear-gradient(160deg,#f1c40f,#d4ac0d);cursor:pointer;box-shadow:0 4px 16px rgba(241,196,15,.4);display:flex;align-items:center;justify-content:center;color:#1a1a1a;font-weight:700;font-size:12px;letter-spacing:.06em;">YELLOW</div>
+    <div onclick="lcChooseSuit('blue')"   style="flex:1;max-width:72px;height:56px;border-radius:10px;background:linear-gradient(160deg,#2980b9,#1a5276);cursor:pointer;box-shadow:0 4px 16px rgba(41,128,185,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px;letter-spacing:.06em;">BLUE</div>
+    <div onclick="lcChooseSuit('green')"  style="flex:1;max-width:72px;height:56px;border-radius:10px;background:linear-gradient(160deg,#27ae60,#1e8449);cursor:pointer;box-shadow:0 4px 16px rgba(39,174,96,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px;letter-spacing:.06em;">GREEN</div>
   </div>
 </div>
 <button id="last-card-btn" onclick="lcDeclareLastCard()">Last Card!</button>
@@ -547,7 +547,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.82</div>
+<div class="ver">v2.83</div>
 
 <script>
 'use strict';
@@ -696,6 +696,11 @@ function checkTvPresent() {
 }
 
 // ── Camera ───────────────────────────────────────────────────
+async function toggleGameCamera() {
+  // Quick toggle for during a game
+  await toggleCamera();
+}
+
 async function toggleCamera() {
   if (cameraOn) {
     if (videoTrack) { videoTrack.stop(); videoTrack.close(); videoTrack=null; }
@@ -923,6 +928,37 @@ function handleMessage(uid, data) {
       lobbyPlayers = lobbyPlayers.filter(p=>msg.playerNames.includes(p.name)||p.uid===myUid);
     }
     goToGameRoom();
+  }
+
+  if (msg.type==='player-action' && isManager) {
+    log('player-action from '+msg._name+': '+msg.action);
+    if (!gameState) return;
+    // Verify it's actually this player's turn
+    const expectedPlayer = gameState.players[gameState.currentPlayerIdx];
+    if (expectedPlayer !== msg._name) {
+      log('Ignoring action — not '+msg._name+"'s turn, expected "+expectedPlayer);
+      return;
+    }
+    if (msg.action==='play') {
+      // Find card in manager's authoritative hand by id
+      const playerHand = gameState.hands[msg._name] || [];
+      const card = playerHand.find(c=>c.id===msg.card.id) || msg.card;
+      doPlayCard(card, msg.chosenSuit);
+    } else if (msg.action==='draw') {
+      const s=JSON.parse(JSON.stringify(gameState));
+      const cnt=s.pendingDraw>0?s.pendingDraw:1;
+      s.pendingDraw=0;
+      for(let i=0;i<cnt;i++){
+        if(s.drawPile.length===0) reshuffleDeck(s);
+        if(s.drawPile.length>0) s.hands[msg._name].push(s.drawPile.pop());
+      }
+      advance(s); gameState=s;
+      broadcastState(); renderLastCard();
+    } else if (msg.action==='declare-last-card') {
+      const s=JSON.parse(JSON.stringify(gameState));
+      s.lastCard[msg._name]=true; gameState=s;
+      broadcastState();
+    }
   }
 
   if (msg.type==='trivia-answer-received' && isManager) {
@@ -1261,6 +1297,8 @@ function startLastCard() {
   if (isManager) {
     document.getElementById('mgr-skip').style.display='block';
     document.getElementById('mgr-endgame').style.display='block';
+    const lcBtn = document.getElementById('lc-endgame-btn');
+    if (lcBtn) lcBtn.style.display='block';
   }
   renderLastCard();
 }
@@ -1434,12 +1472,25 @@ function canPlay(s,card) {
 function lcPlay() {
   if (!selectedCard||!gameState) return;
   if (selectedCard.color==='wild') document.getElementById('suit-chooser').classList.add('show');
-  else doPlayCard(selectedCard,null);
+  else applyOrSendPlay(selectedCard, null);
 }
 
 function lcChooseSuit(suit) {
   document.getElementById('suit-chooser').classList.remove('show');
-  if (selectedCard) doPlayCard(selectedCard,suit);
+  if (selectedCard) applyOrSendPlay(selectedCard, suit);
+}
+
+function applyOrSendPlay(card, chosenSuit) {
+  if (isManager) {
+    doPlayCard(card, chosenSuit);
+  } else {
+    send({type:'player-action', action:'play', card, chosenSuit});
+    hideSelectedPreview();
+    // Optimistically clear selection
+    document.querySelectorAll('.lc-card.selected').forEach(c=>c.classList.remove('selected'));
+    selectedCard=null;
+    document.getElementById('lc-play-btn').disabled=true;
+  }
 }
 
 function doPlayCard(card,chosenSuit) {
@@ -1469,12 +1520,32 @@ function doPlayCard(card,chosenSuit) {
 function lcDraw() {
   hideSelectedPreview();
   if (!gameState) return;
-  const s=JSON.parse(JSON.stringify(gameState));
-  const cnt=s.pendingDraw>0?s.pendingDraw:1; // draw pending amount or 1
-  s.pendingDraw=0;
-  for(let i=0;i<cnt;i++){if(s.drawPile.length===0)reshuffleDeck(s);if(s.drawPile.length>0)s.hands[myName].push(s.drawPile.pop());}
-  advance(s); gameState=s; myHand=[...s.hands[myName]];
-  broadcastState(); renderLastCard();
+  if (isManager) {
+    const s=JSON.parse(JSON.stringify(gameState));
+    const cnt=s.pendingDraw>0?s.pendingDraw:1;
+    s.pendingDraw=0;
+    // Manager draws from actual drawPile
+    const fullDeck = gameState._fullDrawPile || [];
+    for(let i=0;i<cnt;i++){
+      if(s.drawPile.length===0 && fullDeck.length>0){
+        // Reshuffle from discard
+        reshuffleDeck(s);
+      }
+      if(s.drawPile.length>0) s.hands[myName].push(s.drawPile.pop());
+      else {
+        // Draw pile exhausted — create fresh cards as fallback
+        const colors=['red','yellow','blue','green'];
+        const vals=['1','2','3','4','5','6','7','8','9'];
+        const c=colors[Math.floor(Math.random()*4)];
+        const v=vals[Math.floor(Math.random()*9)];
+        s.hands[myName].push({color:c,value:v,id:c+v+Date.now(),action:false});
+      }
+    }
+    advance(s); gameState=s; myHand=[...s.hands[myName]];
+    broadcastState(); renderLastCard();
+  } else {
+    send({type:'player-action', action:'draw'});
+  }
 }
 
 function lcApplyDraw(state) {
@@ -1487,10 +1558,14 @@ function lcApplyDraw(state) {
 }
 
 function lcDeclareLastCard() {
-  const s=JSON.parse(JSON.stringify(gameState));
-  s.lastCard[myName]=true; gameState=s;
-  broadcastState();
   document.getElementById('last-card-btn').style.display='none';
+  if (isManager) {
+    const s=JSON.parse(JSON.stringify(gameState));
+    s.lastCard[myName]=true; gameState=s;
+    broadcastState();
+  } else {
+    send({type:'player-action', action:'declare-last-card'});
+  }
 }
 
 function managerNextRound() {
