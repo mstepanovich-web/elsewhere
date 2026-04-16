@@ -315,7 +315,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.68</div>
+    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.69</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -466,7 +466,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.68</div>
+  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.69</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -4314,8 +4314,8 @@ const AMBIENT_PROFILES = {
   },
 
   stadium: {
-    audio: function(){ playAmbientMp3('stadium'); },
-    anim: function(){
+    audio: () => { playAmbientMp3('stadium'); },
+    anim: () => {
       // 4 GSAP-animated spotlight beams sweeping independently
       const beams = Array.from({length:4}, (_,i)=>({
         angle: (i-1.5)*0.25,
@@ -4390,8 +4390,8 @@ const AMBIENT_PROFILES = {
   },
 
   disco: {
-    audio: function(){ playAmbientMp3('disco'); },
-    anim: function(){
+    audio: () => { playAmbientMp3('disco'); },
+    anim: () => {
       // GSAP beat-synced mirror ball — 120bpm = 500ms per beat
       const BPM = 120, BEAT = 60000 / BPM;
       const dots = [];
@@ -4459,12 +4459,12 @@ const AMBIENT_PROFILES = {
   },
 
   space: {
-    audio: function(){
+    audio: () => {
       // Synthesized beeps only — no hum/noise base layer
       scheduleBeeps([880,1200,660,1760],2.5,0.05);
       scheduleBeeps([440,550],5,0.03);
     },
-    anim: function(){
+    anim: () => {
       spawnParticles({ count:150, spawn(){ return {
         x:Math.random()*ambientW, y:Math.random()*ambientH,
         speed:Math.random()*0.3+0.05, size:Math.random()*1.5+0.3,
@@ -4483,8 +4483,8 @@ const AMBIENT_PROFILES = {
   },
 
   speakeasy: {
-    audio: function(){ playAmbientMp3('speakeasy'); },
-    anim: function(){
+    audio: () => { playAmbientMp3('speakeasy'); },
+    anim: () => {
       // Warm amber light shafts from above — GSAP slow drift
       const shafts = Array.from({length:3}, (_,i)=>({
         x: ambientW*(0.25 + i*0.25),
@@ -4551,8 +4551,8 @@ const AMBIENT_PROFILES = {
   },
 
   honkytonk: {
-    audio: function(){ playAmbientMp3('honkytonk'); },
-    anim: function(){
+    audio: () => { playAmbientMp3('honkytonk'); },
+    anim: () => {
       // Neon sign flicker only — removed amber dust particles
       let neonAlpha=1, neonTimer=0;
       spawnParticles({ count:1, spawn(){ return {
@@ -4565,8 +4565,8 @@ const AMBIENT_PROFILES = {
   },
 
   festival: {
-    audio: function(){ playAmbientMp3('festival'); },
-    anim: function(){
+    audio: () => { playAmbientMp3('festival'); },
+    anim: () => {
       // GSAP beat-synced laser show — 128bpm = 469ms per beat
       const BPM = 128, BEAT = 60000 / BPM;
       const lasers = Array.from({length:6},(_,i)=>({
@@ -4640,8 +4640,8 @@ const AMBIENT_PROFILES = {
   },
 
   forest: {
-    audio: function(){ playAmbientMp3('forest'); },
-    anim: function(){
+    audio: () => { playAmbientMp3('forest'); },
+    anim: () => {
       spawnParticles({ count:40, spawn(){ return {
         x:Math.random()*ambientW, y:Math.random()*ambientH,
         phase:Math.random()*Math.PI*2, speed:Math.random()*0.02+0.01,
@@ -4655,13 +4655,13 @@ const AMBIENT_PROFILES = {
   },
 
   dragonlair: {
-    audio: function(){
+    audio: () => {
       const ac=getAmbientCtx();
       // Cave drip only — removed fire crackle noise
       function drip(){ if(currentAmbientVenue!=='dragonlair') return; const t=ac.currentTime; const o=ac.createOscillator(); o.frequency.value=400+Math.random()*200; const g=ac.createGain(); g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.3); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.35); setTimeout(drip,2000+Math.random()*4000); }
       setTimeout(drip, 1000);
     },
-    anim: function(){
+    anim: () => {
       // Ember particles only — removed fire glow fillRect overlay
       spawnParticles({ count:50, spawn(){ return {
         x:Math.random()*ambientW, y:ambientH+10,
@@ -4676,13 +4676,13 @@ const AMBIENT_PROFILES = {
   },
 
   underwater: {
-    audio: function(){
+    audio: () => {
       const ac=getAmbientCtx();
       // Bubble sounds only — no brown noise base
       function bubble(){ if(currentAmbientVenue!=='underwater') return; const t=ac.currentTime; const o=ac.createOscillator(); o.frequency.value=600+Math.random()*400; o.frequency.linearRampToValueAtTime(o.frequency.value*1.3,t+0.1); const g=ac.createGain(); g.gain.setValueAtTime(0.04,t); g.gain.linearRampToValueAtTime(0,t+0.15); o.connect(g); g.connect(ambientGain); o.start(t); o.stop(t+0.2); setTimeout(bubble,800+Math.random()*2000); }
       setTimeout(bubble, 500);
     },
-    anim: function(){
+    anim: () => {
       // Rising bubbles only — removed caustic blue shimmer overlay
       spawnParticles({ count:40, spawn(){ return {
         x:Math.random()*ambientW, y:ambientH+10,
@@ -4695,28 +4695,6 @@ const AMBIENT_PROFILES = {
       startParticleLoop();
     }
   },
-};
-
-  // ── New venues — simple audio only, no custom animation ──────────────────
-  broadway:       { audio: function(){ playAmbientMp3('broadway'); },       anim: null },
-  hollywoodbowl:  { audio: function(){ playAmbientMp3('hollywoodbowl'); },  anim: null },
-  amphitheater:   { audio: function(){ playAmbientMp3('amphitheater'); },   anim: null },
-  colosseum:      { audio: function(){ playAmbientMp3('colosseum'); },      anim: null },
-  drivein:        { audio: function(){ playAmbientMp3('drivein'); },        anim: null },
-  rooftop:        { audio: function(){ playAmbientMp3('rooftop'); },        anim: null },
-  supperclub:     { audio: function(){ playAmbientMp3('supperclub'); },     anim: null },
-  cabaret:        { audio: function(){ playAmbientMp3('cabaret'); },        anim: null },
-  bourbonstreet:  { audio: function(){ playAmbientMp3('bourbonstreet'); },  anim: null },
-  saloon:         { audio: function(){ playAmbientMp3('saloon'); },         anim: null },
-  dragonlair:     { audio: function(){ playAmbientMp3('dragonlair'); },     anim: null },
-  enchantedforest:{ audio: function(){ playAmbientMp3('enchantedforest'); },anim: null },
-  spacestation:   { audio: function(){ playAmbientMp3('spacestation'); },   anim: null },
-  'kids-candy':   { audio: function(){ playAmbientMp3('kids-candy'); },     anim: null },
-  'kids-dino':    { audio: function(){ playAmbientMp3('kids-dino'); },      anim: null },
-  'kids-dino2':   { audio: function(){ playAmbientMp3('kids-dino'); },      anim: null }, // shares kids-dino sound
-  'kids-northpole':{ audio: function(){ playAmbientMp3('kids-northpole'); },anim: null },
-  'kids-princess':{ audio: function(){ playAmbientMp3('kids-princess'); },  anim: null },
-  'kids-winter':  { audio: function(){ playAmbientMp3('kids-winter'); },    anim: null },
 };
 
 // Default fallback for venues without specific profiles
