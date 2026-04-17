@@ -632,7 +632,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.88</div>
+<div class="ver">v2.89</div>
 
 <script>
 'use strict';
@@ -697,6 +697,34 @@ nameInput.addEventListener('input', checkJoin);
 codeInput.addEventListener('input', () => { codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g,''); checkJoin(); });
 function checkJoin() { joinBtn.disabled = !(nameInput.value.trim().length>=1 && codeInput.value.length>=4); }
 if (roomCode) { codeInput.value = roomCode; checkJoin(); }
+
+// ── Capacitor deep-link handler (iOS app only) ───────────────
+// Reacts to elsewhere://games?room=ABC&mgrname=Mike when launched or
+// foregrounded via the app's URL scheme. In a regular browser
+// window.Capacitor is undefined and this block is skipped entirely —
+// the existing ?room=&mgr=1 URL param handling above keeps working for web.
+if (window.Capacitor?.Plugins?.App) {
+  const AppPlugin = window.Capacitor.Plugins.App;
+  function applyElsewhereDeepLink(url) {
+    if (!url || !url.startsWith('elsewhere://')) return;
+    try {
+      const u       = new URL(url);
+      const room    = (u.searchParams.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const mgrName = u.searchParams.get('mgrname') || '';
+      if (!room) return;
+      codeInput.value = room;
+      if (mgrName) nameInput.value = mgrName;
+      const mgrCheck = document.getElementById('join-mgr-check');
+      if (mgrCheck) mgrCheck.checked = true;
+      checkJoin();
+      if (!joinBtn.disabled) setTimeout(() => joinBtn.click(), 300);
+    } catch (e) { /* malformed URL — ignore */ }
+  }
+  // Cold start: app opened directly from tapping the link
+  AppPlugin.getLaunchUrl?.().then(res => applyElsewhereDeepLink(res?.url)).catch(() => {});
+  // Warm start: link tapped while app already running
+  AppPlugin.addListener('appUrlOpen', data => applyElsewhereDeepLink(data?.url));
+}
 
 // ── Join ────────────────────────────────────────────────────
 async function doJoin() {

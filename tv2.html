@@ -262,7 +262,7 @@
       <div style="font-size:10px;color:var(--color-text-faint);text-align:center;margin-top:6px;">Players can type this in Elsewhere app or at <span style="color:var(--color-text-dim);">mstepanovich-web.github.io/elsewhere/games/player.html</span></div>
     </div>
 
-    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.88</div>
+    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.89</div>
 
   </div>
 
@@ -300,6 +300,7 @@
         </div>
         <div class="qr-url" id="qr-games-url" style="color:rgba(160,130,255,.4);">—</div>
         <div class="qr-hint" style="color:rgba(160,130,255,.35);">Scan to select Games</div>
+        <a id="qr-games-fallback" href="#" target="_blank" rel="noopener" style="display:block;margin-top:10px;text-align:center;font-family:var(--font-mono);font-size:10px;letter-spacing:var(--tracking-wider);text-transform:uppercase;color:rgba(160,130,255,.5);text-decoration:none;">Don't have the app? Open in browser →</a>
       </div>
 
     </div>
@@ -433,7 +434,11 @@
     // Karaoke QR → singer.html on the performer's phone
     // TV navigates itself to stage.html with camera/res params
     const karaokeUrl = `${SINGER_URL}?code=${roomCode}`;
-    const gamesUrl    = `${GAMES_URL}?room=${roomCode}&mgr=1`;
+    // Games QR deep-links the iOS app via the elsewhere:// scheme.
+    // Browsers without the app use the "Open in browser" fallback link below the QR.
+    const gamesMgrName = encodeURIComponent('Manager');
+    const gamesUrl        = `elsewhere://games?room=${roomCode}&mgrname=${gamesMgrName}`;
+    const gamesFallbackUrl = `${GAMES_URL}?room=${roomCode}&mgr=1`;
     const gamesTvUrl  = `${GAMES_TV_URL}?room=${roomCode}`;
     const fashionUrl  = `${FASHION_URL}?room=${roomCode}`;
     const stylistUrl  = `${STYLIST_URL}?room=${roomCode}`;
@@ -453,6 +458,8 @@
     document.getElementById('qr-fashion-url').textContent  = stylistUrl;
     renderQR('qr-games', gamesUrl);
     document.getElementById('qr-games-url').textContent = gamesUrl;
+    const gamesFallbackEl = document.getElementById('qr-games-fallback');
+    if (gamesFallbackEl) gamesFallbackEl.href = gamesFallbackUrl;
 
     goTo('screen-qr');
 
