@@ -1,0 +1,7 @@
+# Environment / secrets — future-proofing even though we don't use them today
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
