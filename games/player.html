@@ -32,7 +32,7 @@
     #app { display: flex; flex-direction: column; height: 100dvh; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
 
     /* ── Manager bar ── */
-    #manager-bar { display: none; flex-direction: row; gap: 8px; padding: 8px 14px; background: rgba(255,200,80,.07); border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; flex-wrap: wrap; align-items: center; }
+    #manager-bar { display: none; flex-direction: row; gap: 8px; padding: 8px 14px; background: var(--color-gold-ghost); border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; flex-wrap: wrap; align-items: center; }
     #manager-bar.visible { display: flex; }
     .mgr-label { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-gold); font-family: var(--font-mono); }
     .mgr-btn { padding: 6px 14px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; cursor: pointer; transition: all var(--transition-fast); }
@@ -126,7 +126,7 @@
     .p-name { flex: 1; font-size: var(--text-sm); color: var(--color-text-dim); }
     .p-name.me { color: var(--color-text); font-weight: 500; }
     .p-badge { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; padding: 2px 8px; border-radius: var(--radius-pill); }
-    .badge-mgr    { background: rgba(255,200,80,.12); color: var(--color-gold); border: 1px solid rgba(255,200,80,.2); }
+    .badge-mgr    { background: var(--color-gold-faint); color: var(--color-gold); border: 1px solid var(--color-border-dim); }
     .badge-you    { background: var(--color-white-ghost); color: var(--color-text-faint); border: 1px solid var(--color-border-dim); }
     .badge-queue  { background: var(--color-white-ghost); color: var(--color-text-faint); border: 1px solid var(--color-border-dim); }
     .badge-invite { background: var(--color-white-ghost); color: var(--color-text-faint); border: 1px solid var(--color-border-dim); font-style: italic; }
@@ -146,10 +146,11 @@
     .lc-top-row { display: flex; align-items: center; gap: 10px; }
     .lc-discard-area { display: flex; align-items: center; gap: 10px; flex: 1; }
     .lc-card-sm { width: 46px; height: 68px; border-radius: 7px; border: 1.5px solid rgba(255,255,255,.15); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 13px; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+    /* game-semantic, intentionally not themed — Last Card / Euchre suit colors */
     .lc-card-sm.red  { background: #c0392b; color: #fff; }
     .lc-card-sm.black{ background: #1a1a2e; color: #eee; }
-    .lc-card-sm.wild { background: linear-gradient(135deg,#8e44ad,#c0392b,#27ae60,#2980b9); color: #ffd700; }
-    .lc-card-sm.glow { box-shadow: 0 0 14px rgba(255,200,80,.5); border-color: var(--color-gold); }
+    .lc-card-sm.wild { background: linear-gradient(135deg,#8e44ad,#c0392b,#27ae60,#2980b9); color: var(--color-gold); }
+    .lc-card-sm.glow { box-shadow: 0 0 14px var(--color-border-bright); border-color: var(--color-gold); }
     .lc-pile-info { display: flex; flex-direction: column; gap: 2px; }
     .lc-pile-label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--color-text-faint); }
     .lc-pile-val { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-dim); }
@@ -162,7 +163,7 @@
     #lc-others-strip.visible { display: flex; }
     .lc-other-player { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; min-width: 52px; }
     .lc-other-video { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; transform: scaleX(-1); border: 2px solid var(--color-border-dim); background: var(--color-surface); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 500; color: var(--color-text-faint); overflow: hidden; }
-    .lc-other-video.active { border-color: var(--color-gold); box-shadow: 0 0 8px rgba(255,200,80,.3); }
+    .lc-other-video.active { border-color: var(--color-gold); box-shadow: 0 0 8px var(--color-border); }
     .lc-other-video.last-card { border-color: var(--color-red); animation: lc-pulse 0.8s infinite; }
     .lc-other-name { font-size: 10px; color: var(--color-text-faint); letter-spacing: .06em; text-align: center; max-width: 52px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .lc-other-count { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-dim); font-weight: 500; }
@@ -179,12 +180,13 @@
     .lc-hand-label { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); padding: 8px 14px 4px; flex-shrink: 0; }
     .lc-hand { display: flex; flex-wrap: wrap; gap: 7px; padding: 6px 14px 10px; align-content: flex-start; overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
     .lc-card { width: 64px; height: 96px; border-radius: 10px; border: 2px solid rgba(255,255,255,.2); display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 6px 4px; cursor: pointer; transition: all 0.18s; flex-shrink: 0; box-shadow: 0 2px 12px rgba(0,0,0,.5); -webkit-user-select: none; position: relative; overflow: hidden; }
+    /* game-semantic, intentionally not themed — Last Card suit gradients (red/yellow/blue/green/wild) */
     .lc-card.color-red    { background: linear-gradient(160deg,#e74c3c,#c0392b); color: #fff; }
     .lc-card.color-yellow { background: linear-gradient(160deg,#f1c40f,#d4ac0d); color: #1a1a1a; }
     .lc-card.color-blue   { background: linear-gradient(160deg,#2980b9,#1a5276); color: #fff; }
     .lc-card.color-green  { background: linear-gradient(160deg,#27ae60,#1e8449); color: #fff; }
-    .lc-card.color-wild   { background: linear-gradient(160deg,#1a1a1a,#2c2c2c); color: #ffd700; border-color: rgba(255,215,0,.4); }
-    .lc-card.playable { border-color: #ffd700; border-width: 2.5px; box-shadow: 0 0 16px rgba(255,215,0,.5); transform: translateY(-6px); }
+    .lc-card.color-wild   { background: linear-gradient(160deg,#1a1a1a,#2c2c2c); color: var(--color-gold); border-color: var(--color-gold-soft); }
+    .lc-card.playable { border-color: var(--color-gold); border-width: 2.5px; box-shadow: 0 0 16px var(--color-border-bright); transform: translateY(-6px); }
     .lc-card.selected { border-color: var(--color-green); box-shadow: 0 0 16px rgba(0,232,122,.4); transform: translateY(-8px); }
     .lc-card.disabled { opacity: 0.75; cursor: default; transform: none !important; }
     .lc-actions { display: flex; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--color-border-dim); flex-shrink: 0; }
@@ -729,6 +731,7 @@
 <!-- Color chooser -->
 <div id="suit-chooser">
   <div style="font-size:var(--text-xs);letter-spacing:.15em;text-transform:uppercase;color:var(--color-text-faint);text-align:center;">Choose a color to continue</div>
+  <!-- game-semantic, intentionally not themed — Last Card suit picker (red/yellow/blue/green) -->
   <div style="display:flex;gap:10px;justify-content:center;">
     <div onclick="lcChooseSuit('red')"    style="flex:1;max-width:72px;height:56px;border-radius:10px;background:linear-gradient(160deg,#e74c3c,#c0392b);cursor:pointer;box-shadow:0 4px 16px rgba(231,76,60,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px;letter-spacing:.06em;">RED</div>
     <div onclick="lcChooseSuit('yellow')" style="flex:1;max-width:72px;height:56px;border-radius:10px;background:linear-gradient(160deg,#f1c40f,#d4ac0d);cursor:pointer;box-shadow:0 4px 16px rgba(241,196,15,.4);display:flex;align-items:center;justify-content:center;color:#1a1a1a;font-weight:700;font-size:12px;letter-spacing:.06em;">YELLOW</div>
@@ -757,7 +760,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.92</div>
+<div class="ver">v2.93</div>
 
 <script>
 'use strict';
@@ -2037,6 +2040,7 @@ function renderHand(myTurn, s, handId, drawId, playId) {
       drawBtn.textContent = 'Draw ' + s.pendingDraw + ' Cards';
       drawBtn.disabled = false;
       drawBtn.onclick = lcDraw;
+      // game-semantic, intentionally not themed — pending-draw button uses Last Card red suit
       drawBtn.style.background = 'linear-gradient(160deg,#e74c3c,#c0392b)';
       drawBtn.style.color = '#fff';
       drawBtn.style.borderColor = '#e74c3c';
@@ -2093,8 +2097,9 @@ function showSelectedPreview(card) {
   const disp = document.getElementById('lc-selected-card-display');
   if (!wrap || !disp) return;
   const lbl = card.value==='Wild Draw 4'?'★+4':card.value==='Wild'?'★':card.value==='Draw 2'?'+2':card.value==='Skip'?'⊘':card.value==='Reverse'?'⇄':card.value;
+  // game-semantic, intentionally not themed — Last Card suit gradients (bgMap); wild text uses brand gold
   const bgMap = { red:'linear-gradient(160deg,#e74c3c,#c0392b)', yellow:'linear-gradient(160deg,#f1c40f,#d4ac0d)', blue:'linear-gradient(160deg,#2980b9,#1a5276)', green:'linear-gradient(160deg,#27ae60,#1e8449)', wild:'linear-gradient(160deg,#1a1a1a,#2c2c2c)' };
-  const txMap = { red:'#fff', yellow:'#1a1a1a', blue:'#fff', green:'#fff', wild:'#ffd700' };
+  const txMap = { red:'#fff', yellow:'#1a1a1a', blue:'#fff', green:'#fff', wild:'var(--color-gold)' };
   disp.style.background = bgMap[card.color] || '#333';
   disp.style.color = txMap[card.color] || '#fff';
   disp.innerHTML = '<span>'+lbl+'</span><span style="font-size:14px;">'+lbl+'</span><span style="transform:rotate(180deg)">'+lbl+'</span>';
@@ -2801,6 +2806,7 @@ function euShowSelectedPreview(card) {
   const disp = document.getElementById('eu-selected-display');
   if (!wrap || !disp) return;
   const isRed = EU_COLOR[card.suit] === 'red';
+  // game-semantic, intentionally not themed — Euchre red/black card backing
   disp.style.background = isRed ? 'linear-gradient(160deg,#e74c3c,#c0392b)' : 'linear-gradient(160deg,#2c3e50,#1a1a2e)';
   disp.style.color = '#fff';
   disp.innerHTML = '<span>'+card.value+'</span><span style="font-size:14px;">'+card.suit+'</span><span style="transform:rotate(180deg)">'+card.value+'</span>';

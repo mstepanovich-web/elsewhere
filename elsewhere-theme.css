@@ -113,6 +113,10 @@
   --shadow-card:   0 8px 32px rgba(0,0,0,.6);
   --shadow-glow:   0 0 40px rgba(255,200,80,.25);
 
+  /* ── Gradients ────────────────────────────────────────── */
+  /* Progress bar — warm gold→orange fill used by karaoke/performance progress meters */
+  --color-progress: linear-gradient(90deg, rgba(255,217,110,1), rgba(255,140,66,1));
+
   /* ── Transitions ──────────────────────────────────────── */
   --transition-fast:   120ms ease;
   --transition-normal: 220ms ease;

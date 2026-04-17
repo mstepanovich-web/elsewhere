@@ -8,7 +8,7 @@
   <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #080508; color: var(--color-text); font-family: var(--font-ui); overflow: hidden; height: 100vh; width: 100vw; }
+    body { background: var(--color-bg); color: var(--color-text); font-family: var(--font-ui); overflow: hidden; height: 100vh; width: 100vw; }
 
     /* ── Screens ── */
     .tv-screen { position: fixed; inset: 0; display: none; }
@@ -29,7 +29,7 @@
     .lobby-player-name { font-size: clamp(14px,1.6vw,20px); color: var(--color-text-dim); flex: 1; }
     .lobby-player-video { width: clamp(48px,5vw,72px); height: clamp(36px,3.8vw,54px); border-radius: 6px; object-fit: cover; transform: scaleX(-1); border: 1px solid var(--color-border); flex-shrink: 0; }
     .lobby-badge { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; padding: 3px 10px; border-radius: var(--radius-pill); }
-    .badge-mgr    { background: rgba(255,200,80,.15); color: var(--color-gold); border: 1px solid rgba(255,200,80,.25); }
+    .badge-mgr    { background: var(--color-border-dim); color: var(--color-gold); border: 1px solid var(--color-border); }
     .badge-invite { background: rgba(255,255,255,.06); color: var(--color-text-faint); border: 1px solid var(--color-border-dim); font-style: italic; }
     .lobby-empty  { font-size: var(--text-sm); color: var(--color-text-faint); font-style: italic; padding: 12px 0; }
 
@@ -59,11 +59,12 @@
     .tv-card { width: clamp(54px,7vw,96px); aspect-ratio: 2/3; border-radius: 10px; border: 2px solid rgba(255,255,255,.2); display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 8px 5px; box-shadow: 0 4px 20px rgba(0,0,0,.6); transition: all 0.3s; font-weight: 800; }
     .tv-card-val { font-family: monospace; font-size: clamp(10px,1.2vw,16px); line-height: 1; }
     .tv-card-centre { font-size: clamp(14px,2vw,28px); line-height: 1; }
+    /* game-semantic, intentionally not themed — Last Card suit gradients (red/yellow/blue/green/wild) */
     .tv-card.color-red    { background: linear-gradient(160deg,#e74c3c,#c0392b); color: #fff; }
     .tv-card.color-yellow { background: linear-gradient(160deg,#f1c40f,#d4ac0d); color: #1a1a1a; }
     .tv-card.color-blue   { background: linear-gradient(160deg,#2980b9,#1a5276); color: #fff; }
     .tv-card.color-green  { background: linear-gradient(160deg,#27ae60,#1e8449); color: #fff; }
-    .tv-card.color-wild   { background: linear-gradient(160deg,#1a1a1a,#2c2c2c); color: #ffd700; border-color: rgba(255,215,0,.4); }
+    .tv-card.color-wild   { background: linear-gradient(160deg,#1a1a1a,#2c2c2c); color: var(--color-gold); border-color: var(--color-gold-soft); }
     .centre-color-dot { width: clamp(16px,2vw,28px); height: clamp(16px,2vw,28px); border-radius: 50%; border: 2px solid rgba(255,255,255,.3); }
     .centre-meta { display: flex; gap: clamp(10px,1.5vw,20px); }
     .centre-stat { text-align: center; }
@@ -86,7 +87,7 @@
       display: flex; align-items: center; justify-content: center;
       transition: border-color 0.3s, box-shadow 0.3s;
     }
-    .player-video-wrap.active-turn { border-color: var(--color-gold); box-shadow: 0 0 20px rgba(255,200,80,.25); }
+    .player-video-wrap.active-turn { border-color: var(--color-gold); box-shadow: 0 0 20px var(--color-border); }
     .player-video-wrap.last-card   { border-color: var(--color-red); animation: lc-pulse 0.8s infinite; }
     @keyframes lc-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(232,25,44,.4)} 50%{box-shadow:0 0 0 10px rgba(232,25,44,0)} }
     .player-avatar { font-family: var(--font-display); font-size: clamp(16px,2vw,28px); color: var(--color-text-faint); font-weight: 300; }
@@ -94,7 +95,7 @@
     .player-name  { font-size: clamp(10px,1.1vw,15px); color: var(--color-text-dim); letter-spacing: .04em; white-space: nowrap; max-width: clamp(90px,11vw,160px); overflow: hidden; text-overflow: ellipsis; text-align: center; }
     .player-cards { font-family: var(--font-mono); font-size: clamp(14px,1.8vw,26px); color: var(--color-gold); font-weight: 500; }
     .player-score { font-size: clamp(8px,.9vw,12px); color: var(--color-text-faint); }
-    .player-badge-mgr { position: absolute; top: 4px; left: 4px; font-size: 9px; letter-spacing: .08em; padding: 1px 6px; border-radius: var(--radius-pill); background: rgba(255,200,80,.2); color: var(--color-gold); }
+    .player-badge-mgr { position: absolute; top: 4px; left: 4px; font-size: 9px; letter-spacing: .08em; padding: 1px 6px; border-radius: var(--radius-pill); background: var(--color-border-dim); color: var(--color-gold); }
     .last-card-alert { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; font-size: clamp(8px,.9vw,11px); font-weight: 700; color: var(--color-red); text-transform: uppercase; letter-spacing: .08em; text-shadow: 0 0 12px rgba(232,25,44,.8); }
 
     /* ── TRIVIA ── */
@@ -120,8 +121,8 @@
     .tv-lb-score { font-family: var(--font-mono); font-size: var(--text-xl); color: var(--color-gold); font-weight: 500; }
 
     /* ── Wordmark + room ── */
-    .tv-wordmark { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); font-family: var(--font-display); font-size: clamp(12px,1.3vw,18px); font-weight: 300; letter-spacing: var(--tracking-widest); color: rgba(255,200,80,.25); z-index: 50; pointer-events: none; text-transform: uppercase; }
-    .tv-room-badge { position: fixed; bottom: 12px; right: 18px; font-family: var(--font-mono); font-size: clamp(9px,.9vw,13px); letter-spacing: .2em; color: rgba(255,200,80,.2); z-index: 50; }
+    .tv-wordmark { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); font-family: var(--font-display); font-size: clamp(12px,1.3vw,18px); font-weight: 300; letter-spacing: var(--tracking-widest); color: var(--color-border); z-index: 50; pointer-events: none; text-transform: uppercase; }
+    .tv-room-badge { position: fixed; bottom: 12px; right: 18px; font-family: var(--font-mono); font-size: clamp(9px,.9vw,13px); letter-spacing: .2em; color: var(--color-border-dim); z-index: 50; }
 
     /* ── Log ── */
     #log-toggle { position: fixed; bottom: 12px; left: 14px; z-index: 999; font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: var(--color-gold-dim); cursor: pointer; padding: 3px 8px; border: 1px solid var(--color-border-dim); border-radius: var(--radius-sm); }
@@ -251,7 +252,7 @@
   </div>
   <div id="log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.92</div>
+<div class="ver">v2.93</div>
 
 <script>
 'use strict';
@@ -272,8 +273,9 @@ let players     = {};   // uid → { name, isManager, hasCamera, videoTrack }
 let invitedList = [];   // names invited but not yet joined
 
 // ── Color helpers ────────────────────────────────────────────
+// game-semantic, intentionally not themed — Last Card per-suit BG hex (COLOR_BG used on inline styles)
 const COLOR_BG = { red:'#c0392b', yellow:'#d4ac0d', blue:'#1a5276', green:'#1e8449', wild:'#1a1a1a' };
-const COLOR_TEXT = { red:'#fff', yellow:'#1a1a1a', blue:'#fff', green:'#fff', wild:'#ffd700' };
+const COLOR_TEXT = { red:'#fff', yellow:'#1a1a1a', blue:'#fff', green:'#fff', wild:'var(--color-gold)' };
 
 function cardLabel(card) {
   if (!card || card.value==='?') return '?';
@@ -589,6 +591,7 @@ const EU_COLOR_TV = { '♠':'black','♣':'black','♥':'red','♦':'red' };
 
 function euTVCardHtml(card) {
   const isRed = EU_COLOR_TV[card.suit] === 'red';
+  // game-semantic, intentionally not themed — Euchre red/black card backing
   const bg = isRed ? 'linear-gradient(160deg,#e74c3c,#c0392b)' : 'linear-gradient(160deg,#2c3e50,#1a1a2e)';
   const color = '#fff';
   return '<div style="width:clamp(54px,6vw,88px);aspect-ratio:2/3;border-radius:10px;border:2px solid rgba(255,255,255,.2);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:8px 5px;box-shadow:0 4px 20px rgba(0,0,0,.6);background:' + bg + ';color:' + color + ';">' +
@@ -656,6 +659,7 @@ function renderEuchreTV() {
       const isDealer = s.players[s.dealerIdx] === name;
       const isSittingOut = s.alone && s.aloneSitOut === name;
       const team = myTeamByPlayer[name];
+      // game-semantic, intentionally not themed — Euchre team colors (team 1 red, team 2 blue, same hues as Last Card suits)
       const teamColor = team === 1 ? '#e74c3c' : '#2980b9';
       const pInfo = Object.values(players).find(p => p.name === name) || {};
       const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
@@ -664,7 +668,7 @@ function renderEuchreTV() {
         : '<div class="player-avatar">' + initials + '</div>';
       return '<div class="player-tile" style="position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;' + (isSittingOut?'opacity:.35;':'') + '">' +
         '<div class="player-video-wrap ' + (isActive?'active-turn':'') + '" style="width:clamp(80px,8vw,130px);height:clamp(60px,6vw,98px);border-radius:10px;overflow:hidden;position:relative;background:var(--color-surface);border:2px solid ' + teamColor + ';display:flex;align-items:center;justify-content:center;">' +
-          (isDealer ? '<div style="position:absolute;top:4px;left:4px;font-size:11px;background:rgba(255,200,80,.2);color:var(--color-gold);padding:1px 6px;border-radius:var(--radius-pill);">🃏 Dealer</div>' : '') +
+          (isDealer ? '<div style="position:absolute;top:4px;left:4px;font-size:11px;background:var(--color-border-dim);color:var(--color-gold);padding:1px 6px;border-radius:var(--radius-pill);">🃏 Dealer</div>' : '') +
           vidHtml +
         '</div>' +
         '<div class="player-name" style="color:' + teamColor + ';">' + name + (isSittingOut?' (sitting out)':'') + '</div>' +

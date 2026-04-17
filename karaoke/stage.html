@@ -8,19 +8,19 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 
-body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--font-mono);cursor:none;}
+body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-family:var(--font-mono);cursor:none;}
 
 /* ── VENUE PICKER ── */
 #venue-picker{display:flex;flex-direction:column;align-items:center;gap:10px;margin:10px 0;width:100%;max-width:560px;}
 #venue-picker-label{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,200,120,.35);font-family:var(--font-mono);}
 #venue-grid{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:560px;}
 .venue-card{
-  width:100px;padding:8px 6px;background:rgba(255,200,80,.04);border:1px solid var(--color-gold-faint);
+  width:100px;padding:8px 6px;background:var(--color-gold-ghost);border:1px solid var(--color-gold-faint);
   border-radius:6px;cursor:pointer;text-align:center;transition:all .15s;
   font-family:var(--font-mono);
 }
-.venue-card:hover{background:var(--color-border-dim);border-color:rgba(255,200,80,.35);}
-.venue-card.selected{background:rgba(255,200,80,.14);border-color:var(--color-gold-dim);box-shadow:0 0 10px var(--color-gold-border);}
+.venue-card:hover{background:var(--color-border-dim);border-color:var(--color-border);}
+.venue-card.selected{background:var(--color-border-dim);border-color:var(--color-gold-dim);box-shadow:0 0 10px var(--color-border);}
 .venue-icon{font-size:22px;margin-bottom:4px;}
 .venue-name{font-size:9px;letter-spacing:.04em;color:rgba(255,220,150,.65);line-height:1.3;}
 #aud-layer{position:fixed;inset:0;z-index:2;}
@@ -36,33 +36,34 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 #bar-center{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;}
 .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
 .ok{background:var(--color-green);box-shadow:0 0 5px var(--color-green);}
+/* game-semantic, intentionally not themed — loading dot amber color */
 .ld{background:#f5c842;animation:blink 1s infinite;}
-.of{background:rgba(255,200,80,.35);}
+.of{background:var(--color-border);}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
 .bi{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-text-dim);white-space:nowrap;}
-#rcode-wrap{font-size:15px;letter-spacing:.22em;font-weight:500;color:rgba(255,200,80,.98);text-align:center;cursor:pointer;flex-shrink:0;text-shadow:0 0 10px rgba(255,200,80,.4);}
+#rcode-wrap{font-size:15px;letter-spacing:.22em;font-weight:500;color:var(--color-gold);text-align:center;cursor:pointer;flex-shrink:0;text-shadow:0 0 10px var(--color-gold-soft);}
 #rcode-wrap small{display:block;font-size:8px;letter-spacing:.1em;color:rgba(255,200,120,.5);margin-bottom:1px;font-weight:300;}
-#vtoggle{padding:5px 11px;background:var(--color-gold-faint);border:1px solid rgba(255,200,80,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text);cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;}
-#vtoggle:hover{background:rgba(255,200,80,.22);color:#fff;}
+#vtoggle{padding:5px 11px;background:var(--color-gold-faint);border:1px solid var(--color-gold-soft);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text);cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;}
+#vtoggle:hover{background:var(--color-border-dim);color:#fff;}
 #vtoggle.pano{border-color:rgba(100,200,255,.5);color:rgba(180,230,255,.9);background:rgba(100,200,255,.12);}
 
 /* Compass */
 #compass{position:fixed;top:50px;right:14px;z-index:200;text-align:center;display:none;}
-#cring{width:44px;height:44px;border:1px solid rgba(255,200,80,.14);border-radius:50%;position:relative;margin:0 auto;}
-#cneedle{position:absolute;width:2px;height:15px;background:linear-gradient(180deg,rgba(255,200,80,.85),transparent);border-radius:1px;top:50%;left:50%;transform-origin:bottom center;transform:translateX(-50%) translateY(-100%) rotate(0deg);}
+#cring{width:44px;height:44px;border:1px solid var(--color-border-dim);border-radius:50%;position:relative;margin:0 auto;}
+#cneedle{position:absolute;width:2px;height:15px;background:linear-gradient(180deg,var(--color-gold-dim),transparent);border-radius:1px;top:50%;left:50%;transform-origin:bottom center;transform:translateX(-50%) translateY(-100%) rotate(0deg);}
 #cdir{font-size:8px;color:rgba(255,200,120,.4);letter-spacing:.06em;margin-top:3px;max-width:80px;line-height:1.3;}
 
 /* Controls */
 #ctrl{position:fixed;bottom:16px;right:14px;display:flex;gap:8px;z-index:200;}
-.btn{padding:7px 14px;background:rgba(0,0,0,.7);border:1px solid rgba(255,200,80,.45);border-radius:4px;font-size:10px;letter-spacing:.1em;color:var(--color-text);cursor:pointer;text-transform:uppercase;transition:all .15s;font-family:var(--font-mono);backdrop-filter:blur(4px);}
-.btn:hover{background:var(--color-gold-border);border-color:rgba(255,200,80,.6);color:#fff;}
+.btn{padding:7px 14px;background:rgba(0,0,0,.7);border:1px solid var(--color-gold-soft);border-radius:4px;font-size:10px;letter-spacing:.1em;color:var(--color-text);cursor:pointer;text-transform:uppercase;transition:all .15s;font-family:var(--font-mono);backdrop-filter:blur(4px);}
+.btn:hover{background:var(--color-border);border-color:var(--color-border-bright);color:#fff;}
 .input{width:100%;padding:10px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:var(--color-text);font-size:14px;font-family:var(--font-mono);outline:none;}
 .input::placeholder{color:rgba(255,200,120,.25);}
-.input:focus{border-color:rgba(255,200,80,.35);}
+.input:focus{border-color:var(--color-border);}
 
 /* Progress */
 #prog{position:fixed;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,.04);z-index:200;}
-#pf{height:100%;background:linear-gradient(90deg,#ffd96e,#ff8c42);width:0%;transition:width .4s linear;}
+#pf{height:100%;background:var(--color-progress);width:0%;transition:width .4s linear;}
 
 /* Reactions */
 #rx{position:fixed;inset:0;z-index:40;pointer-events:none;overflow:hidden;}
@@ -76,7 +77,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   flex-direction:column;align-items:center;gap:14px;
   text-align:center;
   background:rgba(4,2,6,.82);backdrop-filter:blur(10px);
-  border:1px solid rgba(255,200,80,.18);border-radius:14px;
+  border:1px solid var(--color-border-dim);border-radius:14px;
   padding:28px 32px;
   /* needed so child absolute X button positions inside panel */
   isolation:isolate;
@@ -86,9 +87,9 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   animation:qr-pulse 1.2s infinite;
 }
 @keyframes qr-pulse{
-  0%{box-shadow:0 0 0 0 rgba(255,200,80,.5);}
-  70%{box-shadow:0 0 0 16px rgba(255,200,80,0);}
-  100%{box-shadow:0 0 0 0 rgba(255,200,80,0);}
+  0%{box-shadow:0 0 0 0 var(--color-border-bright);}
+  70%{box-shadow:0 0 0 16px transparent;}
+  100%{box-shadow:0 0 0 0 transparent;}
 }
 #idle-qr-wrap{background:#fff;padding:12px;border-radius:8px;}
 #idle-qr-canvas{display:block;}
@@ -107,10 +108,10 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 #tv-search-query{font-family:var(--font-display);font-size:clamp(28px,4vw,58px);color:rgba(255,220,150,.95);font-style:italic;margin-bottom:28px;text-shadow:0 0 30px rgba(255,180,60,.3);}
 #tv-results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;overflow:hidden;}
 .tv-result{
-  background:rgba(255,200,80,.05);border:1px solid var(--color-gold-faint);border-radius:8px;
+  background:var(--color-gold-ghost);border:1px solid var(--color-gold-faint);border-radius:8px;
   padding:14px;cursor:pointer;transition:all .2s;position:relative;
 }
-.tv-result.selected{border-color:rgba(255,200,80,.6);background:var(--color-gold-faint);box-shadow:0 0 20px var(--color-border-dim);}
+.tv-result.selected{border-color:var(--color-border-bright);background:var(--color-gold-faint);box-shadow:0 0 20px var(--color-border-dim);}
 .tv-result-num{position:absolute;top:10px;left:12px;font-size:11px;color:rgba(255,200,120,.4);letter-spacing:.08em;}
 .tv-result-thumb{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:4px;background:var(--color-gold-ghost);margin-bottom:8px;}
 .tv-result-title{font-size:clamp(11px,1.2vw,16px);color:var(--color-text-dim);line-height:1.3;margin-bottom:4px;}
@@ -142,10 +143,10 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   transform:translateX(100%);transition:transform .3s ease;
 }
 #comment-bar.open{transform:translateX(0);}
-#cb-header{padding:12px 14px;border-bottom:1px solid rgba(255,200,80,.08);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.4);display:flex;justify-content:space-between;align-items:center;}
+#cb-header{padding:12px 14px;border-bottom:1px solid var(--color-gold-ghost);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,200,120,.4);display:flex;justify-content:space-between;align-items:center;}
 #cb-close{cursor:pointer;color:rgba(255,200,120,.4);font-size:14px;}
 #cb-feed{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:8px;}
-.cb-item{font-size:12px;color:rgba(255,220,150,.8);padding:7px 10px;background:rgba(255,200,80,.04);border-radius:6px;border-left:2px solid var(--color-gold-border);line-height:1.5;}
+.cb-item{font-size:12px;color:rgba(255,220,150,.8);padding:7px 10px;background:var(--color-gold-ghost);border-radius:6px;border-left:2px solid var(--color-border);line-height:1.5;}
 .cb-item .cb-name{font-size:10px;color:rgba(255,200,120,.4);margin-bottom:2px;letter-spacing:.06em;}
 
 /* ── VIDEO CHAT OVERLAYS ── */
@@ -157,18 +158,18 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 }
 .vc-tile{
   width:320px;height:240px;border-radius:12px;overflow:hidden;
-  border:2px solid rgba(255,200,80,.35);
-  background:#0a0508;position:relative;
+  border:2px solid var(--color-border);
+  background:var(--color-bg);position:relative;
   box-shadow:0 8px 32px rgba(0,0,0,.7);
 }
 .vc-tile video{width:100%;height:100%;object-fit:cover;}
 .vc-name{position:absolute;bottom:0;left:0;right:0;padding:6px 10px;font-size:12px;color:var(--color-text);background:rgba(0,0,0,.6);letter-spacing:.04em;}
 
 /* Song panel */
-.panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(4,2,6,.97);border:1px solid rgba(255,200,80,.18);border-radius:8px;padding:22px;z-index:800;display:none;min-width:340px;}
+.panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(4,2,6,.97);border:1px solid var(--color-border-dim);border-radius:8px;padding:22px;z-index:800;display:none;min-width:340px;}
 .panel h2{font-family:var(--font-display);font-size:20px;color:var(--color-text-dim);font-style:italic;margin-bottom:14px;}
 .so{padding:10px 14px;border:1px solid var(--color-border-dim);border-radius:3px;margin-bottom:7px;cursor:pointer;transition:all .15s;}
-.so:hover{background:rgba(255,200,80,.07);border-color:rgba(255,200,80,.28);}
+.so:hover{background:var(--color-gold-ghost);border-color:var(--color-border);}
 .so-t{font-family:var(--font-display);font-size:15px;color:rgba(255,220,150,.75);margin-bottom:2px;}
 .so-a{font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.08em;text-transform:uppercase;}
 
@@ -187,9 +188,10 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 #gpwrap{width:270px;display:none;}
 #gplbl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(0,232,122,.75);text-align:center;margin-bottom:5px;}
 #gptrack{height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;}
+/* game-semantic, intentionally not themed — mic level meter fill (green gradient) */
 #gpfill{height:100%;width:0%;border-radius:2px;background:linear-gradient(90deg,var(--color-green),#00ffa3);box-shadow:0 0 8px rgba(0,232,122,.5);}
-#gmanual{margin-top:4px;padding:11px 26px;background:var(--color-border-dim);border:1px solid rgba(255,200,80,.4);border-radius:4px;font-size:13px;color:var(--color-text);cursor:pointer;font-family:var(--font-mono);letter-spacing:.08em;}
-#gmanual:hover{background:var(--color-gold-border);}
+#gmanual{margin-top:4px;padding:11px 26px;background:var(--color-border-dim);border:1px solid var(--color-gold-soft);border-radius:4px;font-size:13px;color:var(--color-text);cursor:pointer;font-family:var(--font-mono);letter-spacing:.08em;}
+#gmanual:hover{background:var(--color-border);}
 
 /* Countdown */
 #cd{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:700;background:rgba(0,0,0,.4);}
@@ -205,9 +207,9 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 #start h1{font-family:var(--font-display);font-size:clamp(38px,6vw,78px);color:rgba(255,220,150,.92);font-style:italic;text-shadow:0 0 50px rgba(255,180,60,.35);letter-spacing:.06em;}
 #start p{font-size:12px;color:rgba(255,200,120,.4);letter-spacing:.16em;text-transform:uppercase;}
 .sf{font-size:11px;color:rgba(255,200,120,.28);display:flex;align-items:center;gap:8px;}
-.fd{width:4px;height:4px;border-radius:50%;background:rgba(255,200,80,.5);flex-shrink:0;}
-.sb{margin-top:8px;padding:13px 36px;background:var(--color-border-dim);border:1px solid rgba(255,200,80,.38);border-radius:3px;font-size:15px;font-family:var(--font-display);color:rgba(255,220,150,.88);cursor:pointer;letter-spacing:.08em;transition:all .2s;}
-.sb:hover{background:rgba(255,200,80,.18);}
+.fd{width:4px;height:4px;border-radius:50%;background:var(--color-border-bright);flex-shrink:0;}
+.sb{margin-top:8px;padding:13px 36px;background:var(--color-border-dim);border:1px solid var(--color-gold-soft);border-radius:3px;font-size:15px;font-family:var(--font-display);color:rgba(255,220,150,.88);cursor:pointer;letter-spacing:.08em;transition:all .2s;}
+.sb:hover{background:var(--color-border-dim);}
 #shint{font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:1.9;}
 
 /* ── ON-SCREEN DEBUG LOG ── */
@@ -240,7 +242,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 <canvas id="deepar-canvas" style="display:none;"></canvas>
 
 <!-- Venue transition overlay -->
-<div id="venue-transition" style="position:fixed;inset:0;z-index:10;background:#080508;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;pointer-events:none;transition:opacity 0.3s;">
+<div id="venue-transition" style="position:fixed;inset:0;z-index:10;background:var(--color-bg);display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;pointer-events:none;transition:opacity 0.3s;">
   <div id="venue-transition-icon" style="font-size:48px;"></div>
   <div id="venue-transition-name" style="font-family:var(--font-display);font-size:28px;color:var(--color-text);font-style:italic;letter-spacing:.05em;"></div>
   <div style="font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.15em;font-family:var(--font-mono);text-transform:uppercase;">Loading venue...</div>
@@ -256,7 +258,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 <!-- On-screen debug log -->
 <div id="dbg-toggle" onclick="toggleDbg()">LOG</div>
 <div id="set-center-btn" onclick="logCurrentYaw('singer')" style="display:none;position:fixed;top:54px;right:120px;z-index:400;padding:4px 10px;background:rgba(0,232,122,.15);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;font-family:var(--font-mono);">Set Singer View</div>
-<div id="set-aud-btn" onclick="logCurrentYaw('audience')" style="display:none;position:fixed;top:54px;right:240px;z-index:400;padding:4px 10px;background:var(--color-border-dim);border:1px solid rgba(255,200,80,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,80,.8);cursor:pointer;font-family:var(--font-mono);">Set Audience View</div>
+<div id="set-aud-btn" onclick="logCurrentYaw('audience')" style="display:none;position:fixed;top:54px;right:240px;z-index:400;padding:4px 10px;background:var(--color-border-dim);border:1px solid var(--color-gold-soft);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-gold-dim);cursor:pointer;font-family:var(--font-mono);">Set Audience View</div>
 <div id="dbg"></div>
 
 <div id="rx"></div>
@@ -310,12 +312,12 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   <div id="bar-center">
     <div id="rcode-wrap" title="Click to copy"><small>Room Code</small><span id="rcode">––––––</span></div>
     <div id="qr-toggle" onclick="showSongs()" title="Show QR code"
-      style="font-size:10px;letter-spacing:.08em;cursor:pointer;padding:4px 8px;opacity:0.6;-webkit-user-select:none;font-family:var(--font-mono);border:1px solid var(--color-gold-border);border-radius:3px;color:var(--color-text-faint);"
+      style="font-size:10px;letter-spacing:.08em;cursor:pointer;padding:4px 8px;opacity:0.6;-webkit-user-select:none;font-family:var(--font-mono);border:1px solid var(--color-border);border-radius:3px;color:var(--color-text-faint);"
       >QR</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:rgba(255,200,80,.9);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.92</div>
+    <div style="font-size:14px;color:var(--color-gold);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.93</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -326,7 +328,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 <div id="compass"><div id="cring"><div id="cneedle"></div></div><div id="cdir">Center</div></div>
 
 <div id="ctrl">
-  <div class="btn" onclick="window.location.href='https://mstepanovich-web.github.io/elsewhere/tv.html'">⌂ Home</div>
+  <div class="btn" onclick="window.location.href='https://mstepanovich-web.github.io/elsewhere/tv2.html'">⌂ Home</div>
   <div class="btn" onclick="shareInvite()">📨 Invite</div>
   <div class="btn" onclick="showSongs()">🎵 Song</div>
   <div class="btn" onclick="toggleCommentBar()">💬 Comments</div>
@@ -352,9 +354,9 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 <div onclick="resetTrayForNewVenue();showVenueEffectTray(selectedVenueId);" style="
   position:fixed; bottom:140px; right:18px; z-index:200;
   width:48px; height:48px; border-radius:50%;
-  background:rgba(0,0,0,0.45); border:1.5px solid rgba(255,200,80,0.4);
+  background:rgba(0,0,0,0.45); border:1.5px solid var(--color-gold-soft);
   display:flex; align-items:center; justify-content:center;
-  cursor:pointer; opacity:0.5; color:rgba(255,200,80,0.8);
+  cursor:pointer; opacity:0.5; color:var(--color-gold-dim);
   font-size:10px; font-weight:bold; font-family:var(--font-mono);
   user-select:none;
 " title="Test tray">FX</div>
@@ -395,8 +397,8 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 <div id="ap"><div id="apt">Bravo!</div></div>
 
 <!-- Stage Venue Picker Overlay -->
-<div id="stage-venue-overlay" style="display:none;position:fixed;top:0;left:0;bottom:0;width:300px;z-index:600;background:rgba(4,2,6,.96);flex-direction:column;overflow:hidden;border-right:1px solid rgba(255,200,80,.15);">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;flex-shrink:0;border-bottom:1px solid rgba(255,200,80,.15);">
+<div id="stage-venue-overlay" style="display:none;position:fixed;top:0;left:0;bottom:0;width:300px;z-index:600;background:rgba(4,2,6,.96);flex-direction:column;overflow:hidden;border-right:1px solid var(--color-border-dim);">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;flex-shrink:0;border-bottom:1px solid var(--color-border-dim);">
     <div style="font-family:var(--font-display);font-size:16px;color:var(--color-text);font-style:italic;">Venues</div>
     <div onclick="hideStageVenuePicker()" style="font-size:18px;cursor:pointer;color:rgba(255,200,120,.5);padding:2px 8px;">✕</div>
   </div>
@@ -404,16 +406,16 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 </div>
 
 <!-- Costume Picker Overlay -->
-<div id="costume-overlay" style="display:none;position:fixed;top:0;left:0;bottom:0;width:300px;z-index:600;background:rgba(4,2,6,.96);flex-direction:column;overflow:hidden;border-right:1px solid rgba(255,200,80,.15);">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;flex-shrink:0;border-bottom:1px solid rgba(255,200,80,.15);">
+<div id="costume-overlay" style="display:none;position:fixed;top:0;left:0;bottom:0;width:300px;z-index:600;background:rgba(4,2,6,.96);flex-direction:column;overflow:hidden;border-right:1px solid var(--color-border-dim);">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;flex-shrink:0;border-bottom:1px solid var(--color-border-dim);">
     <div style="font-family:var(--font-display);font-size:16px;color:var(--color-text);font-style:italic;">All Effects</div>
     <div onclick="hideCostumePicker()" style="font-size:18px;cursor:pointer;color:rgba(255,200,120,.5);padding:2px 8px;">✕</div>
   </div>
   <div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
-    <div style="font-size:9px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:var(--font-mono);padding:10px 14px 6px;text-transform:uppercase;">AR Filters</div>
+    <div style="font-size:9px;color:var(--color-border-bright);letter-spacing:.1em;font-family:var(--font-mono);padding:10px 14px 6px;text-transform:uppercase;">AR Filters</div>
     <div id="stage-deepar-grid" style="padding:0 14px 8px;"></div>
     <div style="margin:6px 14px;border-top:1px solid rgba(255,255,255,.08);"></div>
-    <div style="font-size:9px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:var(--font-mono);padding:0 14px 6px;text-transform:uppercase;">Basic Overlays</div>
+    <div style="font-size:9px;color:var(--color-border-bright);letter-spacing:.1em;font-family:var(--font-mono);padding:0 14px 6px;text-transform:uppercase;">Basic Overlays</div>
     <div id="costume-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 14px 14px;align-content:start;"></div>
     <div onclick="clearAllAccessories()" style="margin:6px 14px 16px;padding:10px;text-align:center;font-size:11px;color:rgba(196,122,107,.7);font-family:var(--font-mono);cursor:pointer;border:1px solid rgba(196,122,107,.2);border-radius:6px;">✕ Remove All</div>
   </div>
@@ -450,13 +452,13 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
   <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin:10px 0;width:100%;max-width:320px;">
     <div style="display:flex;flex-direction:column;gap:6px;width:100%;">
       <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-text-faint);font-family:var(--font-mono);">Camera</div>
-      <select id="cam-select" style="background:rgba(255,200,80,0.08);border:1px solid var(--color-border);border-radius:4px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
+      <select id="cam-select" style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:4px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
         <option value="">Detecting cameras...</option>
       </select>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px;width:100%;">
       <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-text-faint);font-family:var(--font-mono);">Quality</div>
-      <select id="res-select" onchange="setResolution(this.value)" style="background:rgba(255,200,80,0.08);border:1px solid var(--color-border);border-radius:4px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
+      <select id="res-select" onchange="setResolution(this.value)" style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:4px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;padding:7px 12px;cursor:pointer;outline:none;width:100%;">
         <option value="hd">HD — 1280×720 (Recommended)</option>
         <option value="standard">Standard — 640×480 (Lower CPU)</option>
         <option value="fhd">Full HD — 1920×1080 (High CPU)</option>
@@ -466,7 +468,7 @@ body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:var(--
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:rgba(255,200,80,.85);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.92</div>
+  <div style="margin-top:12px;font-size:14px;color:var(--color-gold-dim);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.93</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -505,7 +507,7 @@ const CHAN_PREFIX     = 'elsewhere_';
 const _urlParams      = new URLSearchParams(location.search);
 const _urlRoom        = (_urlParams.get('room')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 const ROOM_CODE       = _urlRoom.length >= 4 ? _urlRoom : (()=>{ const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<6;i++) s+=c[Math.floor(Math.random()*c.length)]; return s; })();
-const ARRIVED_VIA_QR  = _urlRoom.length >= 4; // true = came from tv.html QR scan
+const ARRIVED_VIA_QR  = _urlRoom.length >= 4; // true = came from tv2.html QR scan
 const CHANNEL         = CHAN_PREFIX + ROOM_CODE;
 
 document.getElementById('rcode').textContent = ROOM_CODE;
@@ -587,7 +589,7 @@ function showStageVenuePicker(){
         const card = document.createElement('div');
         card.style.cssText = `display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer;border-left:2px solid ${v.id===selectedVenueId?'var(--color-gold)':'transparent'};background:${v.id===selectedVenueId?'var(--color-gold-faint)':'transparent'};transition:background 0.15s;`;
         card.innerHTML = `<span style="font-size:20px;flex-shrink:0;">${v.icon}</span><span style="font-size:12px;color:${v.id===selectedVenueId?'var(--color-text)':'rgba(255,220,150,.7)'};font-family:var(--font-mono);">${v.name}</span>`;
-        card.onmouseenter = ()=>{ if(v.id!==selectedVenueId) card.style.background='rgba(255,200,80,.06)'; };
+        card.onmouseenter = ()=>{ if(v.id!==selectedVenueId) card.style.background='var(--color-gold-ghost)'; };
         card.onmouseleave = ()=>{ if(v.id!==selectedVenueId) card.style.background='transparent'; };
         card.onclick = ()=>{ applyStageVenue(v); };
         grid.appendChild(card);
@@ -820,6 +822,7 @@ const ACCESSORIES = [
   { id:'butterfly',  label:'Butterfly',   emoji:'🦋', anchor:'shoulder',    offsetY:-0.05, scale:0.50 },
   { id:'sparkles',   label:'Sparkles',    emoji:'💫', anchor:'head-top',    offsetY:-0.08, scale:0.85 },
 
+  // game-semantic, intentionally not themed — costume accessory pigments (user picks a specific color)
   // Mohawks
   { id:'mohawk-red',    label:'Mohawk Red',    emoji:'🔴', anchor:'head-top', offsetY:-0.5, scale:0.6,
     drawFn:(c,cx,cy,sz)=>drawMohawk(c,cx,cy,sz,'#e8192c') },
@@ -892,7 +895,7 @@ function showCostumePicker(){
     const active = activeAccessories.has(a.id);
     const card = document.createElement('div');
     card.id = 'acc-'+a.id;
-    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'rgba(255,200,80,.6)':'rgba(255,255,255,.15)'};background:${active?'rgba(255,200,80,.15)':'rgba(255,255,255,.05)'};-webkit-user-select:none;`;
+    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'var(--color-border-bright)':'rgba(255,255,255,.15)'};background:${active?'var(--color-border-dim)':'rgba(255,255,255,.05)'};-webkit-user-select:none;`;
     card.innerHTML = `<div style="font-size:28px;margin-bottom:4px;">${a.emoji}</div><div style="font-size:9px;color:rgba(255,220,150,.75);font-family:var(--font-mono);">${a.label}</div>`;
     card.onclick = ()=>{ toggleAccessory(a.id); };
     grid.appendChild(card);
@@ -908,7 +911,7 @@ function buildStageDeepARGrid(){
   categories.forEach(cat=>{
     const effects = DEEPAR_EFFECTS.filter(e=>e.category===cat);
     const label = document.createElement('div');
-    label.style.cssText = 'font-size:9px;color:rgba(255,200,80,.45);letter-spacing:.1em;font-family:var(--font-mono);padding:6px 0 4px;text-transform:uppercase;';
+    label.style.cssText = 'font-size:9px;color:var(--color-gold-soft);letter-spacing:.1em;font-family:var(--font-mono);padding:6px 0 4px;text-transform:uppercase;';
     label.textContent = cat;
     grid.appendChild(label);
     const row = document.createElement('div');
@@ -917,7 +920,7 @@ function buildStageDeepARGrid(){
       const active = deepARSlots[eff.slot] === eff.url;
       const card = document.createElement('div');
       card.id = 'stage-dar-'+eff.id;
-      card.style.cssText = `padding:8px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'rgba(255,200,80,.6)':'rgba(255,255,255,.12)'};background:${active?'rgba(255,200,80,.15)':'rgba(255,255,255,.04)'};`;
+      card.style.cssText = `padding:8px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'var(--color-border-bright)':'rgba(255,255,255,.12)'};background:${active?'var(--color-border-dim)':'rgba(255,255,255,.04)'};`;
       card.innerHTML = `<div style="font-size:22px;margin-bottom:3px;">${eff.emoji}</div><div style="font-size:9px;color:rgba(255,220,150,.75);font-family:var(--font-mono);">${eff.label}</div>`;
       card.onclick = ()=>{
         const isActive = deepARSlots[eff.slot] === eff.url;
@@ -1289,7 +1292,7 @@ async function populateCameraList(){
       opt.textContent = cam.label || `Camera ${i+1}`;
       sel.appendChild(opt);
     });
-    // Pre-select camera from URL param if arrived via tv.html QR
+    // Pre-select camera from URL param if arrived via tv2.html QR
     const _urlCam = _urlParams.get('cam') || '';
     const _urlRes = _urlParams.get('res') || '';
     if (_urlCam && cameras.find(c => c.deviceId === _urlCam)) {
@@ -1303,7 +1306,7 @@ async function populateCameraList(){
       setResolution(_urlRes);
     }
     sel.onchange = ()=>{ selectedCameraId = sel.value; };
-    // Auto-start when arriving via tv.html QR — skip "Step on Stage" button
+    // Auto-start when arriving via tv2.html QR — skip "Step on Stage" button
     if (ARRIVED_VIA_QR) enterStage();
   }catch(e){
     const sel = document.getElementById('cam-select');
@@ -1392,6 +1395,8 @@ function drawStage(){
   const W=AC.width, H=AC.height, r=V.r, g=V.g, b=V.b;
   // Flat venue images disabled — equirectangular crops look warped when displayed flat
   // Venues only apply in panorama mode via Three.js sphere
+  // game-semantic, intentionally not themed — all hex values below procedurally draw the stage
+  // (wood grain, curtains, parquet, spotlight wash). Canvas 2D context cannot parse CSS var().
   const bg=ctx.createLinearGradient(0,0,0,H);
   bg.addColorStop(0,'#08020a'); bg.addColorStop(.45,'#0e0412'); bg.addColorStop(1,'#0c0608');
   ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
@@ -1653,8 +1658,8 @@ let deepARCanvas = null;  // offscreen canvas DeepAR renders into
 // slot names: 'face' (masks/glasses/makeup), 'hair', 'hat'
 const deepARSlots = { face: null, hair: null, hat: null };
 
-// Built-in effect library — hosted at /elsewhere/effects/ on GitHub Pages
-const ELSEWHERE_EFFECTS_BASE = 'https://mstepanovich-web.github.io/elsewhere/effects/';
+// Built-in effect library — hosted at /elsewhere/karaoke/effects/ on GitHub Pages
+const ELSEWHERE_EFFECTS_BASE = 'https://mstepanovich-web.github.io/elsewhere/karaoke/effects/';
 const DEEPAR_EFFECTS = [
   // Glasses (CDN — confirmed working)
   { id:'dar-aviators',     label:'Aviators',        emoji:'🕶',  category:'Glasses',  slot:'face', url: DEEPAR_BASE+'effects/aviators' },
@@ -2339,14 +2344,16 @@ function runGuideLoop(gc, W, H){
     const locked = handRaised && handProgress > 0;
     gctx.save();
     rrect(rx,ry,rw,rh,cr);
-    gctx.strokeStyle = locked ? `rgba(0,232,122,1)` : 'rgba(255,200,80,1)';
+    // canvas 2D context cannot parse CSS var() — keep brand rgba hardcoded here.
+    // if you rebrand, update these to match --color-gold / --color-green-dim.
+    gctx.strokeStyle = locked ? 'rgba(0,232,122,1)' : 'rgba(255,200,80,1)';
     gctx.lineWidth = 4;
-    gctx.shadowColor = locked ? 'var(--color-green-dim)' : 'rgba(255,200,80,.6)';
+    gctx.shadowColor = locked ? 'rgba(0,232,122,.8)' : 'rgba(255,200,80,.6)';
     gctx.shadowBlur = 16;
     gctx.stroke(); gctx.restore();
     // --- Tick marks top & bottom ---
     gctx.save(); gctx.lineWidth=2;
-    gctx.strokeStyle = locked ? 'var(--color-green-dim)' : 'rgba(255,200,80,.65)';
+    gctx.strokeStyle = locked ? 'rgba(0,232,122,.8)' : 'rgba(255,200,80,.65)';
     gctx.beginPath(); gctx.moveTo(cx-14,ry); gctx.lineTo(cx+14,ry); gctx.stroke();
     gctx.beginPath(); gctx.moveTo(cx-14,ry+rh); gctx.lineTo(cx+14,ry+rh); gctx.stroke();
     gctx.restore();
@@ -2550,6 +2557,7 @@ function buildProgrammaticPanorama(){
       pg.fillRect(x-row.hW,by+row.hH*.4,row.hW*2,row.hH*.35);
       if(row.hH>5&&Math.random()<row.ph){
         const lw=Math.max(1,row.hW*.28),lh=Math.max(2,row.hH*.45);
+        /* canvas fillStyle — keep brand rgba hardcoded (var() doesn't work on 2D context) */
         pg.fillStyle=Math.random()<.6?'rgba(255,255,255,.75)':'rgba(255,200,80,.75)';
         pg.fillRect(x-lw/2,by-row.hH*.5-lh-2,lw,lh);
       }
@@ -2844,7 +2852,7 @@ function toggleHeadTracking(){
   headTrackingAuto = !headTrackingAuto;
   const btn = document.getElementById('htoggle');
   btn.textContent = headTrackingAuto ? 'Auto' : 'Manual';
-  btn.style.borderColor = headTrackingAuto ? 'rgba(255,200,80,.3)' : 'rgba(0,232,122,.4)';
+  btn.style.borderColor = headTrackingAuto ? 'var(--color-border)' : 'rgba(0,232,122,.4)';
   btn.style.color = headTrackingAuto ? 'var(--color-text-faint)' : 'var(--color-green-dim)';
   btn.style.background = headTrackingAuto ? 'var(--color-gold-faint)' : 'rgba(0,232,122,.12)';
   if(!headTrackingAuto) initMousePan();
@@ -3398,7 +3406,7 @@ function showToast(msg){
 // REACTIONS
 // ═══════════════════════════════════════
 function spawnRx(e,x){ const el=document.createElement('div'); el.className='rx'; el.textContent=e; el.style.left=x+'%'; el.style.bottom=(10+Math.random()*8)+'%'; el.style.animationDuration=(2.2+Math.random()*.8)+'s'; document.getElementById('rx').appendChild(el); el.addEventListener('animationend',()=>el.remove()); }
-function spawnComment(t){ const el=document.createElement('div'); el.style.cssText=`position:fixed;left:${10+Math.random()*60}%;bottom:${18+Math.random()*18}%;font-size:12px;color:var(--color-text-dim);z-index:45;pointer-events:none;background:rgba(0,0,0,.55);padding:4px 10px;border-radius:12px;border:1px solid var(--color-gold-border);animation:rxup 4s ease-out forwards;font-family:var(--font-mono);`; el.textContent=t; document.body.appendChild(el); el.addEventListener('animationend',()=>el.remove()); }
+function spawnComment(t){ const el=document.createElement('div'); el.style.cssText=`position:fixed;left:${10+Math.random()*60}%;bottom:${18+Math.random()*18}%;font-size:12px;color:var(--color-text-dim);z-index:45;pointer-events:none;background:rgba(0,0,0,.55);padding:4px 10px;border-radius:12px;border:1px solid var(--color-border);animation:rxup 4s ease-out forwards;font-family:var(--font-mono);`; el.textContent=t; document.body.appendChild(el); el.addEventListener('animationend',()=>el.remove()); }
 function playCheer(){ try{ const c=new(window.AudioContext||window.webkitAudioContext)(),buf=c.createBuffer(1,c.sampleRate*.8,c.sampleRate),d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/c.sampleRate*4); const s=c.createBufferSource(); s.buffer=buf; const g=c.createGain(); g.gain.value=.15; s.connect(g); g.connect(c.destination); s.start(); setTimeout(()=>c.close(),1000); }catch(e){} }
 
 // ═══════════════════════════════════════
@@ -3886,10 +3894,10 @@ function loadYouTubeAPI(){
 // ═══════════════════════════════════════
 // QR IDLE PANEL — self-contained, no external library
 // ═══════════════════════════════════════
-const SINGER_URL = 'https://mstepanovich-web.github.io/elsewhere/singer.html';
+const SINGER_URL = 'https://mstepanovich-web.github.io/elsewhere/karaoke/singer.html';
 
 function showWaitingScreen(){
-  if (ARRIVED_VIA_QR) return; // phone already scanned QR from tv.html
+  if (ARRIVED_VIA_QR) return; // phone already scanned QR from tv2.html
   const singerLink = `${SINGER_URL}?code=${ROOM_CODE}`;
   document.getElementById('idle-room-code').textContent = ROOM_CODE;
   document.getElementById('idle-panel').style.display = 'flex';
@@ -3958,7 +3966,7 @@ function showQRFallback(canvas, text){
   ctx.font='bold 14px monospace'; ctx.textAlign='center';
   ctx.fillText('Open:', 80, 50);
   ctx.font='11px monospace';
-  ctx.fillText('elsewhere/singer.html', 80, 72);
+  ctx.fillText('elsewhere/karaoke/singer.html', 80, 72);
   ctx.font='bold 20px monospace';
   ctx.fillText(ROOM_CODE, 80, 110);
   ctx.font='11px monospace';

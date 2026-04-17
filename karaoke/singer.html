@@ -9,8 +9,8 @@
 <title>Elsewhere · Singer</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:var(--font-mono);}
-.screen{position:fixed;inset:0;display:none;flex-direction:column;background:#080508;padding:max(20px,env(safe-area-inset-top)) 0 max(16px,env(safe-area-inset-bottom));}
+html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--color-white);font-family:var(--font-mono);}
+.screen{position:fixed;inset:0;display:none;flex-direction:column;background:var(--color-bg);padding:max(20px,env(safe-area-inset-top)) 0 max(16px,env(safe-area-inset-bottom));}
 #screen-costume{flex-direction:column;overflow-y:scroll;-webkit-overflow-scrolling:touch;padding:0;}
 .screen.active{display:flex;}
 #screen-costume.active{display:block;}
@@ -22,48 +22,48 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 .nav-back:active{color:var(--color-text);}
 .pill{display:flex;align-items:center;gap:5px;padding:4px 10px;border:1px solid var(--color-border-dim);border-radius:16px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.4);}
 .pill.ok{border-color:rgba(0,232,122,.3);color:rgba(0,232,122,.75);}
-.pdot{width:5px;height:5px;border-radius:50%;background:rgba(255,200,80,.3);flex-shrink:0;}
+.pdot{width:5px;height:5px;border-radius:50%;background:var(--color-border);flex-shrink:0;}
 .pill.ok .pdot{background:var(--color-green);box-shadow:0 0 4px var(--color-green);animation:pulse 2s infinite;}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.btn{padding:11px 18px;background:rgba(255,200,80,.08);border:1px solid var(--color-gold-border);border-radius:6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-faint);cursor:pointer;text-align:center;transition:all .15s;font-family:var(--font-mono);touch-action:manipulation;-webkit-user-select:none;}
-.btn:active{background:rgba(255,200,80,.18);}
-.btn.primary{background:var(--color-border-dim);border-color:rgba(255,200,80,.45);color:rgba(255,220,150,.95);font-size:13px;padding:14px 24px;}
-.btn.primary:active{background:rgba(255,200,80,.28);}
+.btn{padding:11px 18px;background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-faint);cursor:pointer;text-align:center;transition:all .15s;font-family:var(--font-mono);touch-action:manipulation;-webkit-user-select:none;}
+.btn:active{background:var(--color-border-dim);}
+.btn.primary{background:var(--color-border-dim);border-color:var(--color-gold-soft);color:rgba(255,220,150,.95);font-size:13px;padding:14px 24px;}
+.btn.primary:active{background:var(--color-border);}
 .btn.danger{border-color:rgba(196,122,107,.4);color:rgba(196,122,107,.85);background:rgba(196,122,107,.08);}
 .btn.danger:active{background:rgba(196,122,107,.18);}
 .btn.green{border-color:rgba(0,232,122,.4);color:rgba(0,232,122,.85);background:rgba(0,232,122,.08);}
 .input{width:100%;padding:12px 14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:var(--color-text);font-size:15px;font-family:var(--font-mono);outline:none;-webkit-appearance:none;}
 .input::placeholder{color:rgba(255,200,120,.25);}
-.input:focus{border-color:rgba(255,200,80,.3);}
+.input:focus{border-color:var(--color-border);}
 
 /* JOIN */
 #screen-join{align-items:center;justify-content:center;gap:16px;padding:40px 28px;}
 #screen-join h1{font-family:var(--font-display);font-size:clamp(42px,12vw,68px);color:rgba(255,220,150,.92);font-style:italic;text-shadow:0 0 50px rgba(255,180,60,.35);}
 #screen-join p{font-size:12px;color:rgba(255,200,120,.4);letter-spacing:.12em;text-transform:uppercase;text-align:center;line-height:1.8;}
-#join-wrap{display:flex;border:1px solid rgba(255,200,80,.3);border-radius:8px;overflow:hidden;width:100%;max-width:300px;background:rgba(255,200,80,.04);}
+#join-wrap{display:flex;border:1px solid var(--color-border);border-radius:8px;overflow:hidden;width:100%;max-width:300px;background:var(--color-gold-ghost);}
 #join-in{flex:1;padding:15px;background:transparent;border:none;color:rgba(255,220,150,.95);font-size:26px;letter-spacing:.3em;font-family:var(--font-mono);text-transform:uppercase;text-align:center;outline:none;min-width:0;}
 #join-in::placeholder{color:rgba(255,200,120,.2);font-size:13px;letter-spacing:.06em;}
-#join-go{padding:15px 18px;background:rgba(255,200,80,.18);border:none;border-left:1px solid rgba(255,200,80,.3);font-size:13px;letter-spacing:.1em;color:var(--color-text);cursor:pointer;font-family:var(--font-mono);text-transform:uppercase;white-space:nowrap;}
-#join-go:active{background:rgba(255,200,80,.3);}
+#join-go{padding:15px 18px;background:var(--color-border-dim);border:none;border-left:1px solid var(--color-border);font-size:13px;letter-spacing:.1em;color:var(--color-text);cursor:pointer;font-family:var(--font-mono);text-transform:uppercase;white-space:nowrap;}
+#join-go:active{background:var(--color-border);}
 #join-err{font-size:12px;color:rgba(196,122,107,.9);text-align:center;min-height:18px;}
 
 /* HOME */
 #screen-home{overflow:hidden;}
 #home-body{flex:1;overflow-y:auto;padding:14px 18px;padding-top:max(70px,calc(env(safe-area-inset-top) + 50px));display:flex;flex-direction:column;gap:12px;}
 .stats-row{display:flex;gap:10px;}
-.stat-card{flex:1;padding:12px;background:rgba(255,200,80,.04);border:1px solid var(--color-border-dim);border-radius:8px;text-align:center;}
+.stat-card{flex:1;padding:12px;background:var(--color-gold-ghost);border:1px solid var(--color-border-dim);border-radius:8px;text-align:center;}
 .stat-val{font-family:var(--font-display);font-size:28px;color:var(--color-text-dim);}
 .stat-lbl{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.35);margin-top:2px;}
-#song-card{padding:14px;background:rgba(255,200,80,.05);border:1px solid var(--color-gold-faint);border-radius:8px;}
+#song-card{padding:14px;background:var(--color-gold-ghost);border:1px solid var(--color-gold-faint);border-radius:8px;}
 #song-title{font-family:var(--font-display);font-size:18px;color:var(--color-text-dim);font-style:italic;margin-bottom:2px;}
 #song-artist{font-size:10px;color:rgba(255,200,120,.4);letter-spacing:.08em;text-transform:uppercase;}
 .action-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-.action-card{padding:16px 14px;background:rgba(255,200,80,.04);border:1px solid var(--color-border-dim);border-radius:10px;cursor:pointer;text-align:center;touch-action:manipulation;-webkit-user-select:none;}
+.action-card{padding:16px 14px;background:var(--color-gold-ghost);border:1px solid var(--color-border-dim);border-radius:10px;cursor:pointer;text-align:center;touch-action:manipulation;-webkit-user-select:none;}
 .action-card:active{background:var(--color-gold-faint);}
 .ac-icon{font-size:26px;margin-bottom:6px;}
 .ac-label{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--color-text-dim);}
 .ac-sub{font-size:10px;color:rgba(255,200,120,.45);margin-top:3px;}
-#aud-box{background:rgba(255,200,80,.03);border:1px solid rgba(255,200,80,.08);border-radius:8px;padding:12px;}
+#aud-box{background:var(--color-gold-ghost);border:1px solid var(--color-gold-ghost);border-radius:8px;padding:12px;}
 #aud-box-hdr{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,200,120,.35);margin-bottom:8px;display:flex;justify-content:space-between;}
 #aud-list{max-height:90px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;}
 .aud-row{font-size:12px;color:rgba(255,220,150,.65);display:flex;align-items:center;gap:6px;}
@@ -77,8 +77,8 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 #voice-btn{width:44px;height:44px;border-radius:50%;flex-shrink:0;border:1px solid var(--color-border);background:var(--color-gold-ghost);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;transition:all .15s;}
 #voice-btn.on{border-color:rgba(196,122,107,.6);background:rgba(196,122,107,.15);animation:vpulse .8s infinite;}
 @keyframes vpulse{0%,100%{box-shadow:0 0 0 0 rgba(196,122,107,.4)}50%{box-shadow:0 0 0 8px rgba(196,122,107,0)}}
-#srch-go{padding:12px 16px;background:var(--color-border-dim);border:1px solid var(--color-gold-border);border-radius:6px;font-size:13px;color:var(--color-text-dim);cursor:pointer;white-space:nowrap;font-family:var(--font-mono);letter-spacing:.06em;}
-#srch-go:active{background:var(--color-gold-border);}
+#srch-go{padding:12px 16px;background:var(--color-border-dim);border:1px solid var(--color-border);border-radius:6px;font-size:13px;color:var(--color-text-dim);cursor:pointer;white-space:nowrap;font-family:var(--font-mono);letter-spacing:.06em;}
+#srch-go:active{background:var(--color-border);}
 #voice-hint{padding:6px 18px;font-size:10px;color:rgba(196,122,107,.7);letter-spacing:.08em;display:none;}
 #srch-status{padding:8px 18px;font-size:11px;color:rgba(255,200,120,.5);letter-spacing:.06em;flex-shrink:0;}
 #srch-results{flex:1;overflow-y:auto;padding:0 18px 16px;}
@@ -88,7 +88,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 .res-info{flex:1;min-width:0;}
 .res-title{font-size:15px;color:rgba(255,220,150,.92);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .res-meta{font-size:11px;color:rgba(255,200,120,.55);margin-top:3px;}
-.res-num{font-size:18px;color:rgba(255,200,80,.4);font-family:var(--font-display);flex-shrink:0;width:24px;text-align:center;}
+.res-num{font-size:18px;color:var(--color-gold-soft);font-family:var(--font-display);flex-shrink:0;width:24px;text-align:center;}
 .empty{padding:40px 0;text-align:center;font-size:12px;color:rgba(255,200,120,.35);line-height:1.8;}
 
 /* CONFIRM */
@@ -100,7 +100,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 #confirm-btns{width:100%;padding:0 18px 16px;display:flex;flex-direction:column;gap:10px;}
 
 /* COUNTDOWN */
-#screen-countdown{align-items:center;justify-content:center;gap:20px;background:#080508;}
+#screen-countdown{align-items:center;justify-content:center;gap:20px;background:var(--color-bg);}
 #cd-info{text-align:center;}
 #cd-sname{font-family:var(--font-display);font-size:20px;font-style:italic;color:var(--color-text-faint);}
 #cd-sartist{font-size:10px;color:rgba(255,200,120,.35);letter-spacing:.1em;text-transform:uppercase;margin-top:4px;}
@@ -122,6 +122,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 #mute-txt{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,200,120,.5);z-index:1;}
 #lv-wrap{width:220px;}
 #lv-track{height:5px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;}
+/* game-semantic, intentionally not themed — mic level meter states (ok-green / loud-amber / clip-red) */
 #lv-fill{height:100%;width:0%;border-radius:3px;background:linear-gradient(90deg,var(--color-green),#00ffa3);transition:width .05s;}
 #lv-fill.loud{background:linear-gradient(90deg,#f5c842,#ff8c42);}
 #lv-fill.clip{background:linear-gradient(90deg,#c47a6b,#ff4422);}
@@ -130,7 +131,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 #vol-sl{flex:1;-webkit-appearance:none;height:4px;background:rgba(255,255,255,.1);border-radius:2px;outline:none;}
 #vol-sl::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:rgba(201,151,58,.9);cursor:pointer;}
 #fx-row{display:flex;gap:8px;}
-.fxc{flex:1;padding:9px 4px;border:1px solid var(--color-gold-faint);border-radius:8px;background:rgba(255,200,80,.04);font-size:10px;color:rgba(255,200,120,.45);cursor:pointer;text-align:center;touch-action:manipulation;}
+.fxc{flex:1;padding:9px 4px;border:1px solid var(--color-gold-faint);border-radius:8px;background:var(--color-gold-ghost);font-size:10px;color:rgba(255,200,120,.45);cursor:pointer;text-align:center;touch-action:manipulation;}
 .fxc.on{border-color:rgba(201,151,58,.5);background:rgba(201,151,58,.10);color:var(--color-text);}
 .fxi{font-size:16px;display:block;margin-bottom:2px;}
 
@@ -149,10 +150,10 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 #perf-mute-txt{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,200,120,.5);z-index:1;}
 #perf-prog-wrap{width:100%;padding:0 24px;}
 #perf-prog-track{height:3px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden;}
-#perf-prog-fill{height:100%;width:0%;background:linear-gradient(90deg,#ffd96e,#ff8c42);transition:width .4s;}
+#perf-prog-fill{height:100%;width:0%;background:var(--color-progress);transition:width .4s;}
 #perf-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 18px;width:100%;}
-.perf-btn{padding:18px 8px;font-size:15px;border-radius:12px;text-align:center;cursor:pointer;border:1px solid var(--color-gold-border);background:rgba(255,200,80,.08);color:rgba(255,220,150,.8);font-family:var(--font-mono);letter-spacing:.06em;touch-action:manipulation;-webkit-user-select:none;}
-.perf-btn:active{background:var(--color-gold-border);}
+.perf-btn{padding:18px 8px;font-size:15px;border-radius:12px;text-align:center;cursor:pointer;border:1px solid var(--color-border);background:var(--color-gold-ghost);color:rgba(255,220,150,.8);font-family:var(--font-mono);letter-spacing:.06em;touch-action:manipulation;-webkit-user-select:none;}
+.perf-btn:active{background:var(--color-border);}
 .perf-btn.danger{border-color:rgba(196,122,107,.3);color:rgba(196,122,107,.8);background:rgba(196,122,107,.06);}
 .perf-btn.danger:active{background:rgba(196,122,107,.18);}
 #perf-watchers{padding:0 18px 8px;text-align:center;}
@@ -163,9 +164,9 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 #ps-actions{display:flex;flex-direction:column;gap:10px;width:100%;max-width:300px;}
 
 /* TOAST */
-#toast{position:fixed;top:max(60px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(4,2,6,.95);border:1px solid rgba(255,200,80,.22);border-radius:8px;padding:10px 18px;font-size:12px;color:var(--color-text);z-index:999;display:none;white-space:nowrap;pointer-events:none;backdrop-filter:blur(6px);max-width:90vw;overflow:hidden;text-overflow:ellipsis;}
+#toast{position:fixed;top:max(60px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(4,2,6,.95);border:1px solid var(--color-border-dim);border-radius:8px;padding:10px 18px;font-size:12px;color:var(--color-text);z-index:999;display:none;white-space:nowrap;pointer-events:none;backdrop-filter:blur(6px);max-width:90vw;overflow:hidden;text-overflow:ellipsis;}
 ::-webkit-scrollbar{width:2px;}
-::-webkit-scrollbar-thumb{background:var(--color-gold-border);border-radius:1px;}
+::-webkit-scrollbar-thumb{background:var(--color-border);border-radius:1px;}
 </style>
 </head>
 <body>
@@ -185,7 +186,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.92</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.93</div>
 </div>
 
 <!-- HOME -->
@@ -195,7 +196,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.92</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.93</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -329,11 +330,12 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 </div>
 
 <!-- VOICE LISTENING — full screen -->
-<div id="screen-voice" class="screen" style="background:#080508;">
+<div id="screen-voice" class="screen" style="background:var(--color-bg);">
   <div onclick="stopVoiceFullscreen()" style="position:absolute;top:max(20px,env(safe-area-inset-top));left:18px;font-size:13px;color:rgba(255,200,120,.5);cursor:pointer;font-family:var(--font-mono);letter-spacing:.08em;">✕ Cancel</div>
   <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:28px;">
     <div id="voice-status-txt" style="font-family:var(--font-display);font-size:38px;color:var(--color-text-dim);font-style:italic;">Listening...</div>
     <div style="font-size:13px;color:rgba(255,200,120,.4);letter-spacing:.08em;font-family:var(--font-mono);">Say a song or artist</div>
+    <!-- game-semantic, intentionally not themed — voice-pulse peach represents mic activity -->
     <div id="voice-pulse" style="width:80px;height:80px;border-radius:50%;background:rgba(196,122,107,.15);border:2px solid rgba(196,122,107,.4);display:flex;align-items:center;justify-content:center;font-size:36px;animation:vpulse .8s infinite;">🎙</div>
   </div>
 </div>
@@ -382,7 +384,7 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
       <select id="mic-select" onchange="switchMicDevice(this.value)" style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:4px;color:var(--color-text-dim);font-family:var(--font-mono);font-size:12px;padding:7px 12px;cursor:pointer;outline:none;flex:1;">
         <option value="">Detecting...</option>
       </select>
-      <div onclick="populateMicList()" style="padding:7px 12px;background:rgba(255,200,80,.08);border:1px solid var(--color-border);border-radius:4px;color:var(--color-text-faint);font-family:var(--font-mono);font-size:11px;cursor:pointer;white-space:nowrap;">↻ Refresh</div>
+      <div onclick="populateMicList()" style="padding:7px 12px;background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:4px;color:var(--color-text-faint);font-family:var(--font-mono);font-size:11px;cursor:pointer;white-space:nowrap;">↻ Refresh</div>
     </div>
     <div id="mic-diag" style="display:none;font-size:10px;color:rgba(0,232,122,.7);font-family:var(--font-mono);padding:2px 0;word-break:break-all;"></div>
   </div>
@@ -454,10 +456,10 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
       ▶ Start Lyrics
     </div>
     <div id="lyric-transport" style="display:none;align-items:center;justify-content:space-between;gap:8px;">
-      <div onclick="lyricSeek(-1)" style="flex:1;padding:12px 8px;background:rgba(255,200,80,.08);border:1px solid var(--color-gold-border);border-radius:8px;text-align:center;font-size:22px;cursor:pointer;-webkit-user-select:none;touch-action:manipulation;">←</div>
-      <div id="lyric-pause-btn" onclick="toggleLyricPause()" style="flex:1;padding:12px 8px;background:rgba(255,200,80,.08);border:1px solid var(--color-gold-border);border-radius:8px;text-align:center;font-size:20px;cursor:pointer;-webkit-user-select:none;touch-action:manipulation;">⏸</div>
-      <div onclick="lyricRestart()" style="flex:1;padding:12px 8px;background:rgba(255,200,80,.08);border:1px solid var(--color-gold-border);border-radius:8px;text-align:center;font-size:20px;cursor:pointer;-webkit-user-select:none;touch-action:manipulation;">↺</div>
-      <div onclick="lyricSeek(1)" style="flex:1;padding:12px 8px;background:rgba(255,200,80,.08);border:1px solid var(--color-gold-border);border-radius:8px;text-align:center;font-size:22px;cursor:pointer;-webkit-user-select:none;touch-action:manipulation;">→</div>
+      <div onclick="lyricSeek(-1)" style="flex:1;padding:12px 8px;background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:8px;text-align:center;font-size:22px;cursor:pointer;-webkit-user-select:none;touch-action:manipulation;">←</div>
+      <div id="lyric-pause-btn" onclick="toggleLyricPause()" style="flex:1;padding:12px 8px;background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:8px;text-align:center;font-size:20px;cursor:pointer;-webkit-user-select:none;touch-action:manipulation;">⏸</div>
+      <div onclick="lyricRestart()" style="flex:1;padding:12px 8px;background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:8px;text-align:center;font-size:20px;cursor:pointer;-webkit-user-select:none;touch-action:manipulation;">↺</div>
+      <div onclick="lyricSeek(1)" style="flex:1;padding:12px 8px;background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:8px;text-align:center;font-size:22px;cursor:pointer;-webkit-user-select:none;touch-action:manipulation;">→</div>
     </div>
   </div>
 
@@ -490,17 +492,17 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 <!-- COSTUME PICKER -->
 <div id="screen-costume" class="screen" style="overflow-y:scroll;-webkit-overflow-scrolling:touch;">
   <!-- Header — sticky at top -->
-  <div style="position:sticky;top:0;z-index:10;padding:max(20px,env(safe-area-inset-top)) 18px 12px;display:flex;align-items:center;justify-content:space-between;background:#0a0608;border-bottom:1px solid rgba(255,200,80,.15);">
-    <div onclick="hideSingerCostumePicker()" style="font-size:14px;color:rgba(255,200,80,.9);font-family:monospace;padding:8px 8px 8px 0;">← Back</div>
+  <div style="position:sticky;top:0;z-index:10;padding:max(20px,env(safe-area-inset-top)) 18px 12px;display:flex;align-items:center;justify-content:space-between;background:var(--color-bg);border-bottom:1px solid var(--color-border-dim);">
+    <div onclick="hideSingerCostumePicker()" style="font-size:14px;color:var(--color-gold);font-family:monospace;padding:8px 8px 8px 0;">← Back</div>
     <div style="font-size:18px;color:rgba(255,220,150,.95);font-style:italic;">Accessories</div>
     <div onclick="sendClearAllAccessories()" style="font-size:12px;color:rgba(255,100,80,.9);font-family:monospace;padding:8px 0 8px 8px;">Clear All</div>
   </div>
   <!-- Scrollable body -->
   <div style="padding:12px 0 80px;">
-    <div style="font-size:11px;color:rgba(255,200,80,.7);letter-spacing:.12em;font-family:monospace;padding:0 18px 10px;text-transform:uppercase;">AR Filters</div>
+    <div style="font-size:11px;color:var(--color-gold-dim);letter-spacing:.12em;font-family:monospace;padding:0 18px 10px;text-transform:uppercase;">AR Filters</div>
     <div id="singer-deepar-grid" style="padding:0 18px 4px;"></div>
     <div style="margin:14px 18px;border-top:1px solid rgba(255,255,255,.12);"></div>
-    <div style="font-size:11px;color:rgba(255,200,80,.7);letter-spacing:.12em;font-family:monospace;padding:0 18px 10px;text-transform:uppercase;">Basic Overlays</div>
+    <div style="font-size:11px;color:var(--color-gold-dim);letter-spacing:.12em;font-family:monospace;padding:0 18px 10px;text-transform:uppercase;">Basic Overlays</div>
     <div id="singer-costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 18px;"></div>
   </div>
 </div>
@@ -510,16 +512,16 @@ html,body{height:100%;overflow:hidden;background:#080508;color:#fff;font-family:
 
 <!-- PERF COSTUME OVERLAY — slides up over performance screen -->
 <div id="perf-costume-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(10,6,8,.97);flex-direction:column;overflow:hidden;">
-  <div style="padding:max(20px,env(safe-area-inset-top)) 18px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid rgba(255,200,80,.15);">
-    <div onclick="hidePerfCostumePicker()" style="font-size:14px;color:rgba(255,200,80,.8);font-family:monospace;padding:8px 4px;-webkit-user-select:none;">✕ Close</div>
+  <div style="padding:max(20px,env(safe-area-inset-top)) 18px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid var(--color-border-dim);">
+    <div onclick="hidePerfCostumePicker()" style="font-size:14px;color:var(--color-gold-dim);font-family:monospace;padding:8px 4px;-webkit-user-select:none;">✕ Close</div>
     <div style="font-size:18px;color:rgba(255,220,150,.9);font-style:italic;">Accessories</div>
     <div onclick="sendClearAllAccessories();clearAllDeepAREffects();updatePerfCostumeGrid();" style="font-size:12px;color:rgba(255,100,80,.8);font-family:monospace;padding:8px 4px;-webkit-user-select:none;">Clear All</div>
   </div>
   <div style="flex:1;overflow-y:scroll;-webkit-overflow-scrolling:touch;min-height:0;">
-    <div style="font-size:11px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:monospace;padding:12px 18px 8px;text-transform:uppercase;">AR Filters</div>
+    <div style="font-size:11px;color:var(--color-border-bright);letter-spacing:.1em;font-family:monospace;padding:12px 18px 8px;text-transform:uppercase;">AR Filters</div>
     <div id="perf-deepar-grid" style="padding:0 18px 8px;"></div>
     <div style="margin:4px 18px 8px;border-top:1px solid rgba(255,255,255,.1);"></div>
-    <div style="font-size:11px;color:rgba(255,200,80,.6);letter-spacing:.1em;font-family:monospace;padding:0 18px 8px;text-transform:uppercase;">Basic Overlays</div>
+    <div style="font-size:11px;color:var(--color-border-bright);letter-spacing:.1em;font-family:monospace;padding:0 18px 8px;text-transform:uppercase;">Basic Overlays</div>
     <div id="perf-costume-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 18px 60px;"></div>
   </div>
 </div>
@@ -572,7 +574,7 @@ function showScreen(id){
   const c=(p.get('code')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
   if(c.length>=4){
     document.getElementById('join-in').value=c;
-    // Signal tv.html that Karaoke was scanned — TV will navigate to stage.html
+    // Signal tv2.html that Karaoke was scanned — TV will navigate to karaoke/stage.html
     try { new BroadcastChannel('elsewhere_tv_' + c).postMessage({ type: 'karaoke-scanned' }); } catch(e){}
     window.addEventListener('load',()=>setTimeout(doJoin,600));
   }
@@ -981,7 +983,7 @@ let singerActiveAccessories = new Set();
 
 // ── DeepAR effects ────────────────────────────────────────────────────────────
 const DEEPAR_BASE = 'https://cdn.jsdelivr.net/npm/deepar/';
-const ELSEWHERE_EFFECTS_BASE = 'https://mstepanovich-web.github.io/elsewhere/effects/';
+const ELSEWHERE_EFFECTS_BASE = 'https://mstepanovich-web.github.io/elsewhere/karaoke/effects/';
 const DEEPAR_EFFECTS = [
   { id:'dar-aviators',     label:'Aviators',        emoji:'🕶',  category:'Glasses',  slot:'face', url: DEEPAR_BASE+'effects/aviators' },
   { id:'dar-neon-horns',   label:'Neon Horns',      emoji:'😈',  category:'Face',     slot:'face', url: ELSEWHERE_EFFECTS_BASE+'Neon_Devil_Horns.deepar' },
@@ -1126,7 +1128,7 @@ function buildCostumeGrid(gridId, cardPrefix){
     const active = singerActiveAccessories.has(a.id);
     const card = document.createElement('div');
     card.id = cardPrefix+a.id;
-    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'rgba(255,200,80,.6)':'rgba(255,255,255,.2)'};background:${active?'rgba(255,200,80,.15)':'rgba(255,255,255,.06)'};-webkit-user-select:none;`;
+    card.style.cssText = `padding:10px 4px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${active?'var(--color-border-bright)':'rgba(255,255,255,.2)'};background:${active?'var(--color-border-dim)':'rgba(255,255,255,.06)'};-webkit-user-select:none;`;
     card.innerHTML = `<div style="font-size:26px;margin-bottom:4px;">${a.emoji}</div><div style="font-size:11px;color:rgba(255,220,150,.85);font-family:monospace;">${a.label}</div>`;
     card.onclick = ()=>{ singerToggleAccessory(a.id); syncAllCostumeGrids(); };
     grid.appendChild(card);
@@ -1234,7 +1236,7 @@ function renderResults(items){
         <div class="res-meta">${escH(r.artist||'')}</div>
         <div class="res-title" style="white-space:normal;line-height:1.3;font-size:13px;">${escH(cleanedTitle)}</div>
       </div>
-      <div style="font-size:16px;color:rgba(255,200,80,.3);">›</div>`;
+      <div style="font-size:16px;color:var(--color-border);">›</div>`;
     el.onclick=()=>{ sendToStage({type:'tv-result-highlight',index:i}); selectResult(r); };
     c.appendChild(el);
   });
@@ -1618,7 +1620,7 @@ function showStageOverlay(){
         card.innerHTML = `
           <div style="font-size:24px;margin-bottom:4px;">${v.icon}</div>
           <div style="font-size:10px;color:rgba(255,220,150,.8);font-family:var(--font-mono);letter-spacing:.04em;">${v.name}</div>
-          ${v.skyboxId ? `<div class="btn-360-singer" onclick="event.stopPropagation();requestVenueTour('${v.id}')" style="position:absolute;top:5px;right:5px;font-size:8px;font-family:var(--font-mono);font-weight:bold;color:rgba(255,220,80,0.7);border:1px solid rgba(255,220,80,0.3);border-radius:4px;padding:1px 4px;background:rgba(0,0,0,0.3);letter-spacing:0.04em;">360°</div>` : ''}
+          ${v.skyboxId ? `<div class="btn-360-singer" onclick="event.stopPropagation();requestVenueTour('${v.id}')" style="position:absolute;top:5px;right:5px;font-size:8px;font-family:var(--font-mono);font-weight:bold;color:var(--color-gold-dim);border:1px solid var(--color-border);border-radius:4px;padding:1px 4px;background:rgba(0,0,0,0.3);letter-spacing:0.04em;">360°</div>` : ''}
         `;
         card.onclick = ()=>{ selectVenue(v); };
         venueGrid.appendChild(card);
@@ -1757,6 +1759,7 @@ let dbgVisible = false;
 
 function log(msg, type='info'){
   const ts = new Date().toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  // game-semantic, intentionally not themed — debug log severity colors (err red / warn orange)
   const colors = { ok:'var(--color-green)', err:'#ff5555', warn:'#ffb347', info:'rgba(255,220,150,.75)' };
   logEntries.unshift({ ts, msg:String(msg), color: colors[type]||colors.info });
   if(logEntries.length > LOG_MAX) logEntries.pop();
@@ -1788,8 +1791,8 @@ document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#h
 </script>
 
 <!-- Debug log panel -->
-<div id="singer-dbg-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;height:200px;z-index:9000;background:rgba(4,2,8,.95);border-top:1px solid rgba(255,200,80,.25);flex-direction:column;overflow:hidden;pointer-events:auto;">
-  <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 10px;border-bottom:1px solid rgba(255,200,80,.1);flex-shrink:0;">
+<div id="singer-dbg-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;height:200px;z-index:9000;background:rgba(4,2,8,.95);border-top:1px solid var(--color-border);flex-direction:column;overflow:hidden;pointer-events:auto;">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 10px;border-bottom:1px solid var(--color-gold-faint);flex-shrink:0;">
     <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,200,120,.5);font-family:var(--font-mono);">Debug Log — tap costume while this is open</div>
     <div onclick="toggleSingerLog()" style="font-size:16px;cursor:pointer;color:rgba(255,200,120,.5);padding:2px 8px;">✕</div>
   </div>
@@ -1797,7 +1800,7 @@ document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#h
 </div>
 
 <!-- Log button — fixed top left -->
-<div onclick="toggleSingerLog()" style="position:fixed;top:max(14px,env(safe-area-inset-top));left:14px;z-index:8000;padding:4px 8px;background:rgba(255,200,80,.08);border:1px solid var(--color-gold-border);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.5);cursor:pointer;font-family:var(--font-mono);">LOG</div>
+<div onclick="toggleSingerLog()" style="position:fixed;top:max(14px,env(safe-area-inset-top));left:14px;z-index:8000;padding:4px 8px;background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.5);cursor:pointer;font-family:var(--font-mono);">LOG</div>
 
 </body>
 </html>

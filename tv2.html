@@ -80,6 +80,7 @@
       width: 100%;
       transition: border-color var(--transition-fast);
       -webkit-appearance: none;
+      /* chevron stroke — hardcoded brand gold; data: URLs cannot reference CSS var() */
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(255,200,80,.4)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 14px center;
@@ -262,7 +263,7 @@
       <div style="font-size:10px;color:var(--color-text-faint);text-align:center;margin-top:6px;">Players can type this in Elsewhere app or at <span style="color:var(--color-text-dim);">mstepanovich-web.github.io/elsewhere/games/player.html</span></div>
     </div>
 
-    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.92</div>
+    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.93</div>
 
   </div>
 
@@ -284,6 +285,7 @@
         <div class="qr-hint">Scan to select Karaoke</div>
       </div>
 
+      <!-- game-semantic, intentionally not themed — cosmic-purple is the Games product identity accent -->
       <div class="qr-tile" style="border-color:rgba(124,77,255,.22);background:linear-gradient(160deg,rgba(12,8,18,.94) 0%,rgba(6,4,10,.97) 100%);">
         <div class="qr-mode-label" style="color:rgba(200,180,255,.9);">🎮 Games</div>
         <div class="qr-box">
@@ -309,12 +311,12 @@
   //  Config
   // ═══════════════════════════════════════
   const BASE_URL   = 'https://mstepanovich-web.github.io/elsewhere';
-  const STAGE_URL  = BASE_URL + '/stage.html';
-  const SINGER_URL  = BASE_URL + '/singer.html';
+  const STAGE_URL  = BASE_URL + '/karaoke/stage.html';
+  const SINGER_URL  = BASE_URL + '/karaoke/singer.html';
   const GAMES_URL    = BASE_URL + '/games/player.html';
   const GAMES_TV_URL = BASE_URL + '/games/tv.html';
 
-  // Generate room code — same charset as stage.html
+  // Generate room code — same charset as karaoke/stage.html
   const CHARS     = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let roomCode    = '';
   for (let i = 0; i < 6; i++) roomCode += CHARS[Math.floor(Math.random() * CHARS.length)];
@@ -414,14 +416,14 @@
   //  Continue → show QR screen
   // ═══════════════════════════════════════
   document.getElementById('setup-continue').addEventListener('click', () => {
-    // Stop preview — stage.html will open its own camera stream
+    // Stop preview — karaoke/stage.html will open its own camera stream
     if (previewStream) { previewStream.getTracks().forEach(t => t.stop()); previewStream = null; }
 
     const selectedCam = camSelect.value;
     const selectedRes = document.getElementById('res-select').value;
 
-    // Karaoke QR → singer.html on the performer's phone
-    // TV navigates itself to stage.html with camera/res params
+    // Karaoke QR → karaoke/singer.html on the performer's phone
+    // TV navigates itself to karaoke/stage.html with camera/res params
     const karaokeUrl = `${SINGER_URL}?code=${roomCode}`;
     // Games QR deep-links the iOS app via the elsewhere:// scheme.
     // Browsers without the app use the "Open in browser" fallback link below the QR.
@@ -449,7 +451,7 @@
     goTo('screen-qr');
 
     // Listen for phone scan via Agora — the channel they join tells us the mode.
-    // singer.html joins elsewhere_<ROOM> (karaoke); games/player.html joins elsewhere_g<ROOM>.
+    // karaoke/singer.html joins elsewhere_<ROOM> (karaoke); games/player.html joins elsewhere_g<ROOM>.
     const AGORA_APP_ID = 'b2c6543a9ed946829e6526cb68c7efc9';
     const CHAN_PREFIX  = 'elsewhere_';
 

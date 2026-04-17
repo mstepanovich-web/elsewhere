@@ -9,7 +9,7 @@
 <title>Elsewhere · Live</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM Mono',monospace;}
+html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--color-white);font-family:'DM Mono',monospace;}
 
 /* ── STREAM VIDEO — hidden, used as source for canvas compositing ── */
 #stream{
@@ -28,16 +28,17 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 /* ── TOP STATUS BAR ── */
 #topbar{position:fixed;top:0;left:0;right:0;height:44px;background:linear-gradient(180deg,rgba(0,0,0,.75) 0%,transparent 100%);display:flex;align-items:center;justify-content:space-between;padding:0 14px;z-index:200;padding-top:env(safe-area-inset-top);}
 .dot{width:7px;height:7px;border-radius:50%;}
-.ok{background:#00e87a;box-shadow:0 0 5px #00e87a;}
+.ok{background:var(--color-green);box-shadow:0 0 5px var(--color-green);}
+/* game-semantic, intentionally not themed — loading dot amber color */
 .ld{background:#f5c842;animation:blink 1s infinite;}
-.of{background:rgba(255,200,80,.3);}
+.of{background:var(--color-border);}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
 .bi{display:flex;align-items:center;gap:5px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.55);}
 #song-title{font-family:'Cormorant Garamond',serif;font-size:13px;font-style:italic;color:rgba(255,220,150,.7);text-align:center;flex:1;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
 /* ── PROGRESS ── */
 #prog{position:fixed;top:44px;left:0;right:0;height:2px;background:rgba(255,255,255,.05);z-index:200;}
-#pf{height:100%;background:linear-gradient(90deg,#ffd96e,#ff8c42);width:0%;transition:width .4s linear;}
+#pf{height:100%;background:var(--color-progress);width:0%;transition:width .4s linear;}
 
 /* ── REACTIONS ── */
 #rx{position:fixed;inset:0;z-index:50;pointer-events:none;overflow:hidden;}
@@ -46,7 +47,7 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 
 /* ── COMMENT FEED ── */
 #comments{position:fixed;left:12px;bottom:24%;z-index:55;display:flex;flex-direction:column-reverse;gap:5px;max-height:25%;overflow:hidden;pointer-events:none;width:min(260px, 60vw);}
-.comment{font-size:12px;color:rgba(255,220,150,.9);background:rgba(0,0,0,.6);padding:5px 11px;border-radius:14px;border:1px solid rgba(255,200,80,.18);animation:cfade 7s ease-out forwards;word-break:break-word;backdrop-filter:blur(4px);}
+.comment{font-size:12px;color:rgba(255,220,150,.9);background:rgba(0,0,0,.6);padding:5px 11px;border-radius:14px;border:1px solid var(--color-border-dim);animation:cfade 7s ease-out forwards;word-break:break-word;backdrop-filter:blur(4px);}
 @keyframes cfade{0%{opacity:1}65%{opacity:1}100%{opacity:0}}
 
 /* ── BOTTOM CONTROLS ── */
@@ -64,8 +65,8 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
   -webkit-appearance:none;min-width:0;
 }
 #cmt-in::placeholder{color:rgba(255,255,255,.35);}
-#cmt-send{padding:9px 16px;background:rgba(255,200,80,.2);border:1px solid rgba(255,200,80,.4);border-radius:22px;font-size:13px;color:rgba(255,220,150,.9);cursor:pointer;white-space:nowrap;font-family:'DM Mono',monospace;}
-#cmt-send:active{background:rgba(255,200,80,.35);}
+#cmt-send{padding:9px 16px;background:var(--color-border-dim);border:1px solid var(--color-gold-soft);border-radius:22px;font-size:13px;color:rgba(255,220,150,.9);cursor:pointer;white-space:nowrap;font-family:'DM Mono',monospace;}
+#cmt-send:active{background:var(--color-border);}
 
 #action-row{display:flex;gap:8px;justify-content:center;}
 .abt{
@@ -97,12 +98,12 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 }
 #aud-results-grid::-webkit-scrollbar{display:none;}
 .aud-result{
-  flex:0 0 130px;background:rgba(255,200,80,.04);border:1px solid rgba(255,200,80,.1);
+  flex:0 0 130px;background:var(--color-gold-ghost);border:1px solid var(--color-gold-faint);
   border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;
 }
-.aud-result.selected{border-color:rgba(255,200,80,.5);background:rgba(255,200,80,.1);}
-.aud-result-num{font-family:'Cormorant Garamond',serif;font-size:22px;color:rgba(255,200,80,.4);text-align:center;}
-.aud-result-thumb{width:100%;height:72px;border-radius:4px;object-fit:cover;background:rgba(255,200,80,.06);}
+.aud-result.selected{border-color:var(--color-border-bright);background:var(--color-gold-faint);}
+.aud-result-num{font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--color-gold-soft);text-align:center;}
+.aud-result-thumb{width:100%;height:72px;border-radius:4px;object-fit:cover;background:var(--color-gold-ghost);}
 .aud-result-info{flex:1;min-width:0;}
 .aud-result-title{font-size:11px;color:rgba(255,220,150,.85);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
 .aud-result-meta{font-size:9px;color:rgba(255,200,120,.4);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -113,7 +114,7 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
   display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;
   padding:60px 24px 24px;
 }
-.aud-song-thumb{width:160px;height:110px;border-radius:8px;object-fit:cover;background:rgba(255,200,80,.06);border:1px solid rgba(255,200,80,.12);}
+.aud-song-thumb{width:160px;height:110px;border-radius:8px;object-fit:cover;background:var(--color-gold-ghost);border:1px solid var(--color-gold-faint);}
 .aud-song-title{font-family:'Cormorant Garamond',serif;font-size:clamp(22px,5vw,36px);color:rgba(255,220,150,.95);font-style:italic;text-align:center;}
 .aud-song-artist{font-size:11px;color:rgba(255,200,120,.45);letter-spacing:.1em;text-transform:uppercase;text-align:center;}
 .aud-song-ready{font-size:10px;color:rgba(0,232,122,.6);letter-spacing:.12em;text-transform:uppercase;margin-top:4px;}
@@ -126,7 +127,7 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 }
 .aud-vc-tile{
   width:120px;height:90px;border-radius:8px;overflow:hidden;
-  border:2px solid rgba(0,232,122,.4);background:#0a0508;
+  border:2px solid rgba(0,232,122,.4);background:var(--color-bg);
   box-shadow:0 4px 16px rgba(0,0,0,.6);
 }
 .aud-vc-tile video{width:100%;height:100%;object-fit:cover;}
@@ -142,7 +143,7 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 #aud-cd-song{font-family:'Cormorant Garamond',serif;font-size:clamp(16px,3vw,24px);color:rgba(255,220,150,.5);font-style:italic;text-align:center;padding:0 24px;}
 #toast{
   position:fixed;top:54px;left:50%;transform:translateX(-50%);
-  background:rgba(0,0,0,.88);border:1px solid rgba(255,200,80,.25);
+  background:rgba(0,0,0,.88);border:1px solid var(--color-border);
   border-radius:8px;padding:9px 18px;font-size:13px;color:rgba(255,220,150,.95);
   z-index:300;display:none;pointer-events:none;white-space:nowrap;
   backdrop-filter:blur(6px);max-width:90vw;text-overflow:ellipsis;overflow:hidden;
@@ -163,7 +164,7 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 }
 #join h1{font-family:'Cormorant Garamond',serif;font-size:clamp(42px,10vw,72px);color:rgba(255,220,150,.92);font-style:italic;text-shadow:0 0 50px rgba(255,180,60,.35);}
 #join p{font-size:12px;color:rgba(255,200,120,.45);letter-spacing:.14em;text-transform:uppercase;text-align:center;line-height:1.8;max-width:280px;}
-#code-wrap{display:flex;border:1px solid rgba(255,200,80,.35);border-radius:8px;overflow:hidden;width:100%;max-width:320px;background:rgba(255,200,80,.04);}
+#code-wrap{display:flex;border:1px solid var(--color-border);border-radius:8px;overflow:hidden;width:100%;max-width:320px;background:var(--color-gold-ghost);}
 #code-in{
   flex:1;padding:16px;
   background:transparent;border:none;
@@ -173,26 +174,26 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 }
 #code-in::placeholder{color:rgba(255,200,120,.2);font-size:13px;letter-spacing:.06em;}
 #join-go{
-  padding:16px 20px;background:rgba(255,200,80,.18);border:none;
-  border-left:1px solid rgba(255,200,80,.35);
+  padding:16px 20px;background:var(--color-border-dim);border:none;
+  border-left:1px solid var(--color-border);
   font-size:14px;letter-spacing:.1em;color:rgba(255,220,150,.9);
   cursor:pointer;font-family:'DM Mono',monospace;text-transform:uppercase;
   white-space:nowrap;-webkit-appearance:none;
 }
-#join-go:active{background:rgba(255,200,80,.3);}
+#join-go:active{background:var(--color-border);}
 #join-err{font-size:12px;color:rgba(196,122,107,.9);text-align:center;min-height:18px;letter-spacing:.04em;}
 #join-hint{font-size:10px;color:rgba(255,200,120,.22);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;max-width:280px;}
 
 /* ── MUTED NOTICE ── */
 #unmute-banner{
   position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
-  background:rgba(0,0,0,.9);border:1px solid rgba(255,200,80,.3);border-radius:10px;
+  background:rgba(0,0,0,.9);border:1px solid var(--color-border);border-radius:10px;
   padding:18px 24px;z-index:500;display:none;text-align:center;
   backdrop-filter:blur(8px);
 }
 #unmute-banner p{font-size:13px;color:rgba(255,220,150,.85);margin-bottom:12px;line-height:1.6;}
-#unmute-btn{padding:10px 22px;background:rgba(255,200,80,.18);border:1px solid rgba(255,200,80,.4);border-radius:6px;font-size:13px;color:rgba(255,220,150,.9);cursor:pointer;font-family:'DM Mono',monospace;}
-#unmute-btn:active{background:rgba(255,200,80,.32);}
+#unmute-btn{padding:10px 22px;background:var(--color-border-dim);border:1px solid var(--color-gold-soft);border-radius:6px;font-size:13px;color:rgba(255,220,150,.9);cursor:pointer;font-family:'DM Mono',monospace;}
+#unmute-btn:active{background:var(--color-border);}
 </style>
 </head>
 <body>
@@ -213,9 +214,9 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
 <div id="topbar">
   <div class="bi"><div class="dot of" id="cdot"></div><span id="clbl">Not connected</span></div>
   <div id="song-title">Elsewhere</div>
-  <div id="room-indicator" onclick="changeRoom()" style="display:none;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.4);cursor:pointer;padding:2px 6px;border:1px solid rgba(255,200,80,.15);border-radius:4px;font-family:'DM Mono',monospace;" title="Tap to change room">Room: <span id="room-display">––––––</span></div>
+  <div id="room-indicator" onclick="changeRoom()" style="display:none;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.4);cursor:pointer;padding:2px 6px;border:1px solid var(--color-border-dim);border-radius:4px;font-family:'DM Mono',monospace;" title="Tap to change room">Room: <span id="room-display">––––––</span></div>
   <div class="bi" id="wcount"></div>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);white-space:nowrap;">v2.92</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);white-space:nowrap;">v2.93</div>
 </div>
 <div id="prog"><div id="pf"></div></div>
 
@@ -283,7 +284,7 @@ html,body{height:100%;overflow:hidden;background:#000;color:#fff;font-family:'DM
     Works from anywhere in the world<br>
     The code is 6 characters · letters and numbers
   </div>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.92</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.93</div>
   <div id="https-notice" style="display:none;font-size:11px;color:rgba(255,120,80,.8);text-align:center;max-width:280px;line-height:1.8;border:1px solid rgba(255,120,80,.25);border-radius:6px;padding:10px 14px;">
     ⚠️ This app requires HTTPS to work on mobile.<br>
     Upload it to <strong>netlify.com/drop</strong> and open that link instead.
@@ -1013,7 +1014,7 @@ async function joinVideoChat(){
     if(!preview){
       preview = document.createElement('div');
       preview.id = 'vc-preview';
-      preview.style.cssText = 'position:fixed;bottom:80px;right:14px;width:120px;height:90px;border-radius:8px;overflow:hidden;border:2px solid rgba(0,232,122,.5);background:#0a0508;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.6);';
+      preview.style.cssText = 'position:fixed;bottom:80px;right:14px;width:120px;height:90px;border-radius:8px;overflow:hidden;border:2px solid rgba(0,232,122,.5);background:var(--color-bg);z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.6);';
       const vidWrap = document.createElement('div');
       vidWrap.style.cssText = 'width:100%;height:100%;transform:scaleX(-1);';
       const lbl = document.createElement('div');
