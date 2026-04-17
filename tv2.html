@@ -262,7 +262,7 @@
       <div style="font-size:10px;color:var(--color-text-faint);text-align:center;margin-top:6px;">Players can type this in Elsewhere app or at <span style="color:var(--color-text-dim);">mstepanovich-web.github.io/elsewhere/games/player.html</span></div>
     </div>
 
-    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.90</div>
+    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.91</div>
 
   </div>
 
@@ -282,15 +282,6 @@
         </div>
         <div class="qr-url" id="qr-karaoke-url">—</div>
         <div class="qr-hint">Scan to select Karaoke</div>
-      </div>
-
-      <div class="qr-tile qr-tile--fashion">
-        <div class="qr-mode-label">✨ Fashion</div>
-        <div class="qr-box">
-          <canvas id="qr-fashion" width="160" height="160"></canvas>
-        </div>
-        <div class="qr-url" id="qr-fashion-url">—</div>
-        <div class="qr-hint">Scan to select Fashion</div>
       </div>
 
       <div class="qr-tile" style="border-color:rgba(124,77,255,.22);background:linear-gradient(160deg,rgba(12,8,18,.94) 0%,rgba(6,4,10,.97) 100%);">
@@ -322,8 +313,6 @@
   const SINGER_URL  = BASE_URL + '/singer.html';
   const GAMES_URL    = BASE_URL + '/games/player.html';
   const GAMES_TV_URL = BASE_URL + '/games/tv.html';
-  const FASHION_URL    = BASE_URL + '/fashion/display.html';
-  const STYLIST_URL    = BASE_URL + '/fashion/stylist.html';
 
   // Generate room code — same charset as stage.html
   const CHARS     = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -440,8 +429,6 @@
     const gamesUrl        = `elsewhere://games?room=${roomCode}&mgrname=${gamesMgrName}`;
     const gamesFallbackUrl = `${GAMES_URL}?room=${roomCode}&mgr=1`;
     const gamesTvUrl  = `${GAMES_TV_URL}?room=${roomCode}`;
-    const fashionUrl  = `${FASHION_URL}?room=${roomCode}`;
-    const stylistUrl  = `${STYLIST_URL}?room=${roomCode}`;
 
     // TV goes to stage immediately after showing QR
     const stageUrl = `${STAGE_URL}?room=${roomCode}&cam=${encodeURIComponent(selectedCam)}&res=${selectedRes}`;
@@ -451,11 +438,9 @@
 
     // Render QR codes
     renderQR('qr-karaoke', karaokeUrl);
-    renderQR('qr-fashion',  stylistUrl);
 
     // Show URLs
     document.getElementById('qr-karaoke-url').textContent = karaokeUrl;
-    document.getElementById('qr-fashion-url').textContent  = stylistUrl;
     renderQR('qr-games', gamesUrl);
     document.getElementById('qr-games-url').textContent = gamesUrl;
     const gamesFallbackEl = document.getElementById('qr-games-fallback');
@@ -463,10 +448,8 @@
 
     goTo('screen-qr');
 
-    // Listen for phone scan via BroadcastChannel
-    // singer.html posts 'karaoke-scanned' when it loads with the room code
-    // fashion/stylist.html posts 'fashion-scanned' when it loads with the room code
-    // Use Agora to detect when phone joins the room
+    // Listen for phone scan via Agora — the channel they join tells us the mode.
+    // singer.html joins elsewhere_<ROOM> (karaoke); games/player.html joins elsewhere_g<ROOM>.
     const AGORA_APP_ID = 'b2c6543a9ed946829e6526cb68c7efc9';
     const CHAN_PREFIX  = 'elsewhere_';
 
@@ -474,9 +457,6 @@
 
     const agoraWatcher = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
     agoraWatcher.on('user-joined', (user) => {
-      tvLog('User joined UID: ' + user.uid + ' — checking URL param...');
-      // Check if this came from singer (karaoke) or stylist (fashion)
-      // We encode the mode in the channel suffix: elsewhere_ROOM = karaoke, elsewhere_fROOM = fashion
       tvLog('→ Phone joined karaoke channel — navigating to stage...');
       agoraWatcher.leave().catch(()=>{});
       window.location.href = stageUrl;
@@ -496,18 +476,6 @@
     agoraGamesWatcher.join(AGORA_APP_ID, CHAN_PREFIX + 'g' + roomCode, null, null)
       .then(() => tvLog('Agora watching games channel: ' + CHAN_PREFIX + 'g' + roomCode))
       .catch(e => tvLog('Agora games error: ' + e.message));
-
-    // Also watch fashion channel
-    const agoraFashionWatcher = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
-    agoraFashionWatcher.on('user-joined', (user) => {
-      tvLog('Fashion user joined UID: ' + user.uid + ' — navigating to fashion display...');
-      agoraFashionWatcher.leave().catch(()=>{});
-      window.location.href = fashionUrl;
-    });
-
-    agoraFashionWatcher.join(AGORA_APP_ID, CHAN_PREFIX + 'f' + roomCode, null, null)
-      .then(() => tvLog('Agora watching fashion channel: ' + CHAN_PREFIX + 'f' + roomCode))
-      .catch(e => tvLog('Agora fashion error: ' + e.message));
   });
 
   // ═══════════════════════════════════════
