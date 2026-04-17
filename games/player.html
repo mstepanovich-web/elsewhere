@@ -6,6 +6,26 @@
   <title>Elsewhere · Games</title>
   <link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
   <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
+
+  <!-- Supabase (ESM from CDN). Initializes window.sb and dispatches the
+       'elsewhere:sb-ready' event when done. Regular inline scripts below
+       use sbReady() (defined in the main script) to await initialization. -->
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+    const SUPABASE_URL = 'https://gbrnuxyzrlzbybvcvyzm.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_QQTDPpfpUI0NJlGawfYljw_O3d6Z9RK';
+    window.sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        // The magic-link callback comes to us via Capacitor's appUrlOpen,
+        // not window.location — we call exchangeCodeForSession / setSession
+        // manually from the deep-link handler.
+        detectSessionInUrl: false,
+      },
+    });
+    document.dispatchEvent(new CustomEvent('elsewhere:sb-ready'));
+  </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; background: var(--color-bg); color: var(--color-text); font-family: var(--font-ui); overflow: hidden; }
@@ -215,6 +235,52 @@
     /* ── LATE JOINER ── */
     #screen-watching { align-items: center; justify-content: center; gap: 16px; padding: 40px 24px; text-align: center; }
 
+    /* ── Auth: screen-join header + account screen + user badge ── */
+    .auth-section { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+    .auth-welcome-title { font-family: var(--font-display); font-size: clamp(22px,6vw,28px); font-weight: 300; color: var(--color-text); text-align: center; }
+    .auth-welcome-title span { color: var(--color-gold); }
+    .auth-welcome-sub { font-size: var(--text-xs); color: var(--color-text-faint); letter-spacing: var(--tracking-wider); text-transform: uppercase; cursor: pointer; padding: 4px 8px; }
+    .auth-welcome-sub:hover { color: var(--color-text-dim); }
+    .auth-signin-btn { width: 100%; max-width: 300px; padding: 14px; border-radius: var(--radius-pill); background: var(--color-gold); border: none; color: var(--color-bg); font-size: var(--text-sm); letter-spacing: var(--tracking-wider); text-transform: uppercase; font-weight: 600; cursor: pointer; transition: background var(--transition-fast); }
+    .auth-signin-btn:active { background: var(--color-gold-dim); }
+    .auth-divider { font-size: var(--text-xs); letter-spacing: var(--tracking-widest); text-transform: uppercase; color: var(--color-text-faint); padding: 14px 0 2px; }
+
+    /* screen-account */
+    #screen-account { padding: 24px 20px 32px; }
+    .account-status { display: none; font-size: var(--text-sm); padding: 10px 14px; border-radius: var(--radius-md); margin: 4px 0; line-height: 1.5; }
+    .account-status.info  { background: var(--color-gold-ghost); color: var(--color-text-dim); border: 1px solid var(--color-border-dim); }
+    .account-status.ok    { background: var(--color-green-faint); color: var(--color-green); border: 1px solid var(--color-green-faint); }
+    .account-status.error { background: var(--color-red-faint); color: var(--color-red); border: 1px solid var(--color-red-faint); }
+    .account-input { background: var(--color-gold-ghost); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-md); padding: 12px 16px; outline: none; width: 100%; }
+    .account-input:focus { border-color: var(--color-border-bright); }
+
+    /* User badge (top-right, only when signed in and on screen-join/account) */
+    #user-badge {
+      display: none; position: fixed;
+      top: calc(10px + env(safe-area-inset-top)); right: 10px;
+      z-index: 200; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: var(--radius-pill);
+      background: rgba(4,2,6,.85); backdrop-filter: blur(6px);
+      border: 1px solid var(--color-border-dim);
+      font-family: var(--font-mono); font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider); color: var(--color-text-dim);
+      cursor: pointer; max-width: 60vw;
+    }
+    #user-badge-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #user-badge .user-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-green); box-shadow: 0 0 5px var(--color-green); flex-shrink: 0; }
+    #user-menu {
+      display: none; position: fixed;
+      top: calc(50px + env(safe-area-inset-top)); right: 10px;
+      z-index: 200; min-width: 200px;
+      background: var(--color-overlay); backdrop-filter: blur(6px);
+      border: 1px solid var(--color-border); border-radius: var(--radius-md);
+      padding: 4px; box-shadow: var(--shadow-card);
+    }
+    #user-menu-email { padding: 8px 12px; font-size: var(--text-xs); color: var(--color-text-faint); letter-spacing: .04em; word-break: break-all; }
+    .user-menu-item { padding: 10px 12px; cursor: pointer; font-size: var(--text-sm); border-top: 1px solid var(--color-border-dim); }
+    .user-menu-item.danger { color: var(--color-red); }
+    .user-menu-item:active { background: var(--color-gold-faint); }
+
     /* ── Version + log ── */
     .ver { position: fixed; bottom: calc(8px + env(safe-area-inset-bottom)); right: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--tracking-wider); color: var(--color-gold); z-index: 50; pointer-events: none; }
   </style>
@@ -237,8 +303,18 @@
 
     <!-- JOIN -->
     <div id="screen-join" class="screen active">
+      <!-- Auth header: welcome (signed in) OR sign-in CTA (signed out). Populated by updateJoinScreenAuth(). -->
+      <div id="auth-welcome" class="auth-section" style="display:none;">
+        <div class="auth-welcome-title">Welcome back, <span id="auth-welcome-name">friend</span>!</div>
+        <div class="auth-welcome-sub" onclick="signOut()">Not you? Sign out</div>
+      </div>
+      <div id="auth-signin-cta" class="auth-section" style="display:none;">
+        <button class="auth-signin-btn" onclick="goToAccount('signin')">Sign in / Create account →</button>
+        <div class="auth-divider">— or continue as guest —</div>
+      </div>
+
       <div class="page-title">Games</div>
-      <div class="page-sub">Enter your name and room code</div>
+      <div class="page-sub" id="join-sub">Enter your name and room code</div>
       <div class="join-field">
         <div class="join-label">Your Name</div>
         <input class="join-input name-input" id="join-name" type="text" placeholder="Name" maxlength="14" autocomplete="off">
@@ -255,6 +331,43 @@
         </div>
       </div>
       <button class="action-btn" id="join-btn" onclick="doJoin()" disabled style="max-width:300px;">Join →</button>
+    </div>
+
+    <!-- ACCOUNT (sign-in / sign-up via magic link) -->
+    <div id="screen-account" class="screen" data-mode="signin">
+      <div class="back-link" onclick="goTo('screen-join')">← Back</div>
+      <div class="page-title" id="account-title">Sign in</div>
+      <div class="page-sub" id="account-sub">Get a magic link by email</div>
+
+      <div id="account-form" style="display:flex;flex-direction:column;gap:14px;margin-top:18px;max-width:340px;width:100%;">
+        <div class="join-field" id="account-name-field" style="display:none;">
+          <div class="join-label">Your Name</div>
+          <input class="account-input" id="account-name" type="text" placeholder="Full name" maxlength="48" autocomplete="name">
+        </div>
+        <div class="join-field">
+          <div class="join-label">Email</div>
+          <input class="account-input" id="account-email" type="email" inputmode="email" placeholder="you@example.com" autocomplete="email" autocapitalize="off" spellcheck="false">
+        </div>
+        <div id="account-status" class="account-status"></div>
+        <button class="action-btn" id="account-submit" onclick="submitAccount()">Send magic link →</button>
+        <div id="account-desktop-note" style="display:none;font-size:var(--text-xs);color:var(--color-text-faint);line-height:1.5;text-align:center;padding:4px 0;">
+          Sign-in requires the Elsewhere app. You can still continue as guest from the previous screen.
+        </div>
+        <div style="text-align:center;margin-top:4px;">
+          <span class="back-link" id="account-toggle" onclick="toggleAccountMode()" style="margin-bottom:0;">Don't have an account? Create one</span>
+        </div>
+      </div>
+
+      <div id="account-confirm" style="display:none;margin-top:20px;max-width:340px;width:100%;">
+        <div style="font-family:var(--font-display);font-size:var(--text-2xl);color:var(--color-text);margin-bottom:10px;">Check your email</div>
+        <div style="font-size:var(--text-sm);color:var(--color-text-dim);line-height:1.6;">
+          We sent a magic link to <strong id="account-confirm-email" style="color:var(--color-gold);font-weight:500;"></strong>. Tap it <em>on this device</em> to finish signing in.
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:22px;">
+          <a class="action-btn" href="mailto:" style="text-decoration:none;text-align:center;display:inline-block;">Open Mail app</a>
+          <button class="action-btn ghost" onclick="resetAccountForm()">Send to a different email</button>
+        </div>
+      </div>
     </div>
 
     <!-- GAME PICKER -->
@@ -623,6 +736,16 @@
 </div>
 <button id="last-card-btn" onclick="lcDeclareLastCard()">Last Card!</button>
 
+<!-- User badge + menu (only visible on screen-join / screen-account when signed in) -->
+<div id="user-badge" onclick="toggleUserMenu(event)">
+  <span class="user-dot"></span>
+  <span id="user-badge-name">Me</span>
+</div>
+<div id="user-menu">
+  <div id="user-menu-email">—</div>
+  <div class="user-menu-item danger" onclick="signOut()">Sign out</div>
+</div>
+
 <!-- Log panel -->
 <div id="game-log-toggle" onclick="toggleGameLog()" style="position:fixed;bottom:calc(28px + env(safe-area-inset-bottom));left:12px;z-index:999;font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;color:var(--color-gold-dim);cursor:pointer;padding:3px 8px;border:1px solid var(--color-border-dim);border-radius:var(--radius-sm);">LOG</div>
 <div id="game-log-panel" style="display:none;position:fixed;bottom:calc(52px + env(safe-area-inset-bottom));left:12px;right:12px;z-index:998;background:var(--color-overlay);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:10px;max-height:40vh;overflow-y:auto;">
@@ -632,7 +755,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.91</div>
+<div class="ver">v2.92</div>
 
 <script>
 'use strict';
@@ -698,32 +821,307 @@ codeInput.addEventListener('input', () => { codeInput.value = codeInput.value.to
 function checkJoin() { joinBtn.disabled = !(nameInput.value.trim().length>=1 && codeInput.value.length>=4); }
 if (roomCode) { codeInput.value = roomCode; checkJoin(); }
 
-// ── Capacitor deep-link handler (iOS app only) ───────────────
-// Reacts to elsewhere://games?room=ABC&mgrname=Mike when launched or
-// foregrounded via the app's URL scheme. In a regular browser
-// window.Capacitor is undefined and this block is skipped entirely —
-// the existing ?room=&mgr=1 URL param handling above keeps working for web.
+// ════════════════════════════════════════════════════════════
+//  SUPABASE AUTH (Phase 1)
+// ════════════════════════════════════════════════════════════
+//
+// window.sb is created in the <head> module script; we wait for it here
+// via sbReady() before touching auth. Auth state is exposed to the rest
+// of the app via `currentUser` (user object or null) and the
+// 'elsewhere:auth-changed' custom DOM event.
+//
+// Redirect URL for magic links is always elsewhere://auth/callback — this
+// is an iOS-app-first flow for v1. Desktop users who click a magic link
+// will see the browser fail to open the scheme; that's a known limitation
+// documented in PHASE1-NOTES.md.
+
+const AUTH_REDIRECT_URL = 'elsewhere://auth/callback';
+let currentUser = null;
+
+function sbReady() {
+  return new Promise(resolve => {
+    if (window.sb) return resolve(window.sb);
+    document.addEventListener('elsewhere:sb-ready', () => resolve(window.sb), { once: true });
+  });
+}
+
+function emitAuthChanged() {
+  document.dispatchEvent(new CustomEvent('elsewhere:auth-changed', { detail: { user: currentUser } }));
+}
+
+async function initAuth() {
+  const sb = await sbReady();
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    currentUser = session?.user || null;
+  } catch (e) { log('getSession error: ' + e.message); }
+  emitAuthChanged();
+
+  sb.auth.onAuthStateChange((event, session) => {
+    currentUser = session?.user || null;
+    log('auth ' + event + ' — ' + (currentUser ? currentUser.email : 'signed out'));
+    emitAuthChanged();
+  });
+}
+
+// ── UI reactions to auth state ───────────────────────────────
+document.addEventListener('elsewhere:auth-changed', () => {
+  updateJoinScreenAuth();
+  updateUserBadge();
+});
+
+function updateJoinScreenAuth() {
+  const signedIn = !!currentUser;
+  const fullName = currentUser?.user_metadata?.full_name || '';
+  const display  = fullName || currentUser?.email || '';
+  const welcome  = document.getElementById('auth-welcome');
+  const cta      = document.getElementById('auth-signin-cta');
+  const sub      = document.getElementById('join-sub');
+
+  if (signedIn) {
+    welcome.style.display = 'flex';
+    document.getElementById('auth-welcome-name').textContent = display;
+    cta.style.display = 'none';
+    if (sub) sub.textContent = 'Ready to play? Enter a room code.';
+    // Prefill name if the input is empty — don't clobber a user-edited value.
+    if (fullName && !nameInput.value) {
+      nameInput.value = fullName;
+      checkJoin();
+    }
+  } else {
+    welcome.style.display = 'none';
+    cta.style.display = 'flex';
+    if (sub) sub.textContent = 'Enter your name and room code';
+  }
+}
+
+function updateUserBadge() {
+  const badge = document.getElementById('user-badge');
+  const menu  = document.getElementById('user-menu');
+  if (!badge || !menu) return;
+  const activeScreen = document.querySelector('.screen.active')?.id;
+  const eligible = activeScreen === 'screen-join' || activeScreen === 'screen-account';
+  const visible  = !!currentUser && eligible;
+  badge.style.display = visible ? 'flex' : 'none';
+  if (!visible) menu.style.display = 'none';
+  if (currentUser) {
+    const fullName = currentUser.user_metadata?.full_name || '';
+    const first    = fullName.split(/\s+/)[0] || currentUser.email?.split('@')[0] || '?';
+    document.getElementById('user-badge-name').textContent = first;
+    document.getElementById('user-menu-email').textContent = currentUser.email || '';
+  }
+}
+
+function toggleUserMenu(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById('user-menu');
+  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+}
+// Close the user menu on any tap outside it.
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('user-menu');
+  const badge = document.getElementById('user-badge');
+  if (!menu || menu.style.display !== 'block') return;
+  if (e.target === badge || badge?.contains(e.target) || menu.contains(e.target)) return;
+  menu.style.display = 'none';
+});
+
+// ── screen-account (sign-in / sign-up) ───────────────────────
+function goToAccount(mode = 'signin') {
+  setAccountMode(mode);
+  resetAccountForm();
+  const emailEl = document.getElementById('account-email');
+  const nameEl  = document.getElementById('account-name');
+  if (emailEl) emailEl.value = '';
+  if (nameEl)  nameEl.value = '';
+  goTo('screen-account');
+}
+
+function setAccountMode(mode) {
+  const screen = document.getElementById('screen-account');
+  screen.dataset.mode = mode;
+  const isSignup = mode === 'signup';
+  document.getElementById('account-title').textContent = isSignup ? 'Create account' : 'Sign in';
+  document.getElementById('account-sub').textContent   = isSignup
+    ? "We'll send a magic link to confirm your email"
+    : 'Get a magic link by email';
+  document.getElementById('account-name-field').style.display = isSignup ? '' : 'none';
+  document.getElementById('account-submit').textContent = isSignup ? 'Create account →' : 'Send magic link →';
+  document.getElementById('account-toggle').textContent = isSignup
+    ? 'Already have an account? Sign in'
+    : "Don't have an account? Create one";
+  hideAccountStatus();
+}
+
+function toggleAccountMode() {
+  const current = document.getElementById('screen-account').dataset.mode || 'signin';
+  setAccountMode(current === 'signin' ? 'signup' : 'signin');
+}
+
+function showAccountStatus(msg, kind = 'info') {
+  const el = document.getElementById('account-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'account-status ' + kind;
+  el.style.display = 'block';
+}
+
+function hideAccountStatus() {
+  const el = document.getElementById('account-status');
+  if (el) el.style.display = 'none';
+}
+
+function resetAccountForm() {
+  document.getElementById('account-form').style.display = 'block';
+  document.getElementById('account-confirm').style.display = 'none';
+  const btn = document.getElementById('account-submit');
+  btn.disabled = false;
+  const mode = document.getElementById('screen-account').dataset.mode || 'signin';
+  btn.textContent = mode === 'signup' ? 'Create account →' : 'Send magic link →';
+  hideAccountStatus();
+}
+
+function validEmail(s) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s || '').trim());
+}
+
+async function submitAccount() {
+  const sb = await sbReady();
+  const mode    = document.getElementById('screen-account').dataset.mode || 'signin';
+  const emailEl = document.getElementById('account-email');
+  const nameEl  = document.getElementById('account-name');
+  const btn     = document.getElementById('account-submit');
+  const email   = (emailEl.value || '').trim();
+
+  if (!validEmail(email)) {
+    showAccountStatus('Please enter a valid email address.', 'error');
+    emailEl.focus();
+    return;
+  }
+  if (mode === 'signup' && !(nameEl.value || '').trim()) {
+    showAccountStatus('Please enter your name.', 'error');
+    nameEl.focus();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  showAccountStatus('Sending your magic link…', 'info');
+
+  const options = { emailRedirectTo: AUTH_REDIRECT_URL };
+  if (mode === 'signup') {
+    options.data = { full_name: nameEl.value.trim() };
+  }
+
+  try {
+    const { error } = await sb.auth.signInWithOtp({ email, options });
+    if (error) throw error;
+    document.getElementById('account-form').style.display = 'none';
+    document.getElementById('account-confirm').style.display = 'block';
+    document.getElementById('account-confirm-email').textContent = email;
+  } catch (e) {
+    const pretty = /network|fetch|timeout/i.test(e.message || '')
+      ? 'Network error — check your connection and try again.'
+      : (e.message || 'Could not send the link, try again.');
+    showAccountStatus(pretty, 'error');
+    btn.disabled = false;
+    btn.textContent = mode === 'signup' ? 'Create account →' : 'Send magic link →';
+  }
+}
+
+async function signOut() {
+  const sb = await sbReady();
+  document.getElementById('user-menu').style.display = 'none';
+  try { await sb.auth.signOut(); } catch (e) { log('signOut: ' + e.message); }
+  // onAuthStateChange will flip currentUser and re-render the join screen.
+  goTo('screen-join');
+}
+
+// Desktop users can't receive the elsewhere:// callback — show a note.
+function maybeShowDesktopNote() {
+  const note = document.getElementById('account-desktop-note');
+  if (note && !window.Capacitor?.Plugins?.App) note.style.display = 'block';
+}
+maybeShowDesktopNote();
+
+// Kick off auth state detection once the SDK is ready.
+initAuth();
+
+
+// ════════════════════════════════════════════════════════════
+//  CAPACITOR DEEP-LINK HANDLER (iOS app only)
+// ════════════════════════════════════════════════════════════
+// Two URL shapes are routed here via the @capacitor/app plugin:
+//   • elsewhere://auth/callback?code=…   (PKCE) — or  #access_token=…  (implicit)
+//       → finish Supabase sign-in, land on screen-join in Welcome-back state.
+//   • elsewhere://games?room=ABC&mgrname=Mike
+//       → pre-fill join form and auto-join (mgrname only used when NOT signed in).
+//
+// In a regular browser window.Capacitor is undefined and this block is a
+// no-op; the existing ?room=&mgr=1 URL-param path (applied above) still works.
 if (window.Capacitor?.Plugins?.App) {
   const AppPlugin = window.Capacitor.Plugins.App;
-  function applyElsewhereDeepLink(url) {
+
+  async function handleElsewhereDeepLink(url) {
     if (!url || !url.startsWith('elsewhere://')) return;
-    try {
-      const u       = new URL(url);
-      const room    = (u.searchParams.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-      const mgrName = u.searchParams.get('mgrname') || '';
-      if (!room) return;
-      codeInput.value = room;
-      if (mgrName) nameInput.value = mgrName;
-      const mgrCheck = document.getElementById('join-mgr-check');
-      if (mgrCheck) mgrCheck.checked = true;
-      checkJoin();
-      if (!joinBtn.disabled) setTimeout(() => joinBtn.click(), 300);
-    } catch (e) { /* malformed URL — ignore */ }
+    log('deep link: ' + url);
+
+    // ── Auth callback ──
+    if (url.startsWith('elsewhere://auth/callback')) {
+      const sb = await sbReady();
+      try {
+        const u = new URL(url);
+        const code = u.searchParams.get('code');
+        if (code) {
+          const { error } = await sb.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+          goTo('screen-join');
+          return;
+        }
+        if (u.hash) {
+          const p = new URLSearchParams(u.hash.startsWith('#') ? u.hash.slice(1) : u.hash);
+          const access_token  = p.get('access_token');
+          const refresh_token = p.get('refresh_token');
+          if (access_token && refresh_token) {
+            const { error } = await sb.auth.setSession({ access_token, refresh_token });
+            if (error) throw error;
+            goTo('screen-join');
+            return;
+          }
+        }
+        showAccountStatus('Sign-in link was missing its token.', 'error');
+        goTo('screen-account');
+      } catch (e) {
+        log('auth callback error: ' + (e.message || e));
+        goTo('screen-account');
+        showAccountStatus('Sign-in failed: ' + (e.message || 'link may be expired.'), 'error');
+      }
+      return;
+    }
+
+    // ── Games deep link ──
+    if (url.startsWith('elsewhere://games')) {
+      try {
+        const u       = new URL(url);
+        const room    = (u.searchParams.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const mgrName = u.searchParams.get('mgrname') || '';
+        if (!room) return;
+        codeInput.value = room;
+        // Signed-in profile name wins over URL mgrname.
+        const signedInName = currentUser?.user_metadata?.full_name || '';
+        if (signedInName)   nameInput.value = signedInName;
+        else if (mgrName)   nameInput.value = mgrName;
+        const mgrCheck = document.getElementById('join-mgr-check');
+        if (mgrCheck) mgrCheck.checked = true;
+        checkJoin();
+        if (!joinBtn.disabled) setTimeout(() => joinBtn.click(), 300);
+      } catch (e) { /* malformed URL — ignore */ }
+      return;
+    }
   }
-  // Cold start: app opened directly from tapping the link
-  AppPlugin.getLaunchUrl?.().then(res => applyElsewhereDeepLink(res?.url)).catch(() => {});
-  // Warm start: link tapped while app already running
-  AppPlugin.addListener('appUrlOpen', data => applyElsewhereDeepLink(data?.url));
+
+  AppPlugin.getLaunchUrl?.().then(res => handleElsewhereDeepLink(res?.url)).catch(() => {});
+  AppPlugin.addListener('appUrlOpen', data => handleElsewhereDeepLink(data?.url));
 }
 
 // ── Join ────────────────────────────────────────────────────
@@ -1162,6 +1560,8 @@ function goTo(id) {
   ['mgr-start','mgr-reveal','mgr-next','mgr-skip'].forEach(b=>{
     document.getElementById(b).style.display='none';
   });
+  // Keep the user badge visibility in sync (only shows on join + account).
+  if (typeof updateUserBadge === 'function') updateUserBadge();
 }
 
 function goToLobby()     {
