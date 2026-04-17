@@ -254,7 +254,15 @@
     </div>
 
     <button class="setup-btn" id="setup-continue">Continue →</button>
-    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.87</div>
+
+    <!-- Fallback room code display — always visible on setup screen -->
+    <div style="margin-top:20px;padding:16px 24px;border:1px solid var(--color-border-dim);border-radius:var(--radius-md);background:rgba(0,0,0,.3);">
+      <div style="font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--color-text-faint);margin-bottom:4px;text-align:center;">Room Code</div>
+      <div id="setup-room-code" style="font-family:var(--font-mono);font-size:28px;letter-spacing:.3em;color:var(--color-gold);text-align:center;font-weight:700;">——————</div>
+      <div style="font-size:10px;color:var(--color-text-faint);text-align:center;margin-top:6px;">Players can type this in Elsewhere app or at <span style="color:var(--color-text-dim);">mstepanovich-web.github.io/elsewhere/games/player.html</span></div>
+    </div>
+
+    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.88</div>
 
   </div>
 
@@ -320,6 +328,11 @@
   const CHARS     = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let roomCode    = '';
   for (let i = 0; i < 6; i++) roomCode += CHARS[Math.floor(Math.random() * CHARS.length)];
+  // Display it immediately on setup screen
+  try {
+    const setupCodeEl = document.getElementById('setup-room-code');
+    if (setupCodeEl) setupCodeEl.textContent = roomCode;
+  } catch(e) { console.error('room code display failed', e); }
 
   // ═══════════════════════════════════════
   //  Screen management
@@ -355,6 +368,10 @@
   async function detectCameras() {
     try {
       // Need a temp stream to trigger permission + get labels
+      if (!navigator.mediaDevices) {
+        camSelect.innerHTML = '<option value="">No camera access (HTTPS required)</option>';
+        return;
+      }
       const tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       tmp.getTracks().forEach(t => t.stop());
 
@@ -398,7 +415,10 @@
     if (camSelect.value) startPreview(camSelect.value);
   });
 
-  detectCameras();
+  detectCameras().catch(e => {
+    console.warn('Camera detection failed, continuing anyway:', e);
+    camSelect.innerHTML = '<option value="">No camera (tap Continue to proceed)</option>';
+  });
 
   // ═══════════════════════════════════════
   //  Continue → show QR screen
