@@ -317,7 +317,7 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:var(--color-gold);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.93</div>
+    <div style="font-size:14px;color:var(--color-gold);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.93.2</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -468,7 +468,7 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:var(--color-gold-dim);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.93</div>
+  <div style="margin-top:12px;font-size:14px;color:var(--color-gold-dim);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.93.2</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -1278,7 +1278,9 @@ let selectedCameraId = null;
 async function populateCameraList(){
   try{
     // If arrived via QR, skip straight to enterStage — camera already set up on tv2.html
-    if (ARRIVED_VIA_QR) { enterStage(); return; }
+    // Deferred to next tick so enterStage runs after all let/const at the bottom of this file
+    // have initialized (initAgora references agoraClient, renderLoop references viewMode).
+    if (ARRIVED_VIA_QR) { setTimeout(enterStage, 0); return; }
     // Brief permission request to unlock device labels
     const tmp = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
     tmp.getTracks().forEach(t=>t.stop());
@@ -1307,12 +1309,12 @@ async function populateCameraList(){
     }
     sel.onchange = ()=>{ selectedCameraId = sel.value; };
     // Auto-start when arriving via tv2.html QR — skip "Step on Stage" button
-    if (ARRIVED_VIA_QR) enterStage();
+    if (ARRIVED_VIA_QR) setTimeout(enterStage, 0);
   }catch(e){
     const sel = document.getElementById('cam-select');
     if(sel) sel.innerHTML = '<option value="">Default camera</option>';
     // Even on camera list error, auto-start if via QR
-    if (ARRIVED_VIA_QR) enterStage();
+    if (ARRIVED_VIA_QR) setTimeout(enterStage, 0);
   }
 }
 populateCameraList();
@@ -3842,6 +3844,8 @@ function renderLoop(){
 // ENTER STAGE — single entry point
 // ═══════════════════════════════════════
 function enterStage(){
+  if (enterStage._called) { log('enterStage already called — ignoring duplicate','warn'); return; }
+  enterStage._called = true;
   log('enterStage called','info');
   document.getElementById('start').style.display='none';
   const res = RESOLUTIONS[currentResolution] || RESOLUTIONS.hd;
