@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Elsewhere · Games</title>
   <link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
   <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; background: var(--color-bg); color: var(--color-text); font-family: var(--font-ui); overflow: hidden; }
-    #app { display: flex; flex-direction: column; height: 100dvh; }
+    #app { display: flex; flex-direction: column; height: 100dvh; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
 
     /* ── Manager bar ── */
     #manager-bar { display: none; flex-direction: row; gap: 8px; padding: 8px 14px; background: rgba(255,200,80,.07); border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; flex-wrap: wrap; align-items: center; }
@@ -114,7 +114,7 @@
     .p-video-thumb.visible { display: block; }
 
     /* ── LAST CARD GAME ── */
-    #screen-lastcard { padding: 0; overflow: hidden; position: fixed; inset: 0; flex-direction: column; }
+    #screen-lastcard { padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); overflow: hidden; position: fixed; inset: 0; flex-direction: column; }
 
     /* TV mode — hand only */
     .lc-tv-status { padding: 8px 16px; font-size: var(--text-sm); color: var(--color-text-faint); text-align: center; border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; background: var(--color-bg); }
@@ -173,12 +173,12 @@
     .lc-action-btn:disabled { opacity: .35; pointer-events: none; }
 
     /* Suit chooser */
-    #suit-chooser { display: none; position: fixed; bottom: 80px; left: 0; right: 0; background: rgba(4,2,6,.97); border-top: 1px solid var(--color-border); padding: 14px 16px; z-index: 500; flex-direction: column; gap: 10px; }
+    #suit-chooser { display: none; position: fixed; bottom: calc(80px + env(safe-area-inset-bottom)); left: 0; right: 0; background: rgba(4,2,6,.97); border-top: 1px solid var(--color-border); padding: 14px 16px; z-index: 500; flex-direction: column; gap: 10px; }
     #suit-chooser.show { display: flex; }
     .suit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 32px; background: var(--color-surface); border-radius: var(--radius-xl); border: 1px solid var(--color-border); }
     .suit-choice { width: 80px; height: 80px; border-radius: var(--radius-lg); border: 1.5px solid var(--color-border); background: var(--color-bg-mid); font-size: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
     .suit-choice:active { background: var(--color-gold-faint); border-color: var(--color-gold); }
-    #last-card-btn { display: none; position: fixed; bottom: 90px; right: 16px; z-index: 400; padding: 12px 20px; border-radius: var(--radius-pill); background: var(--color-red); border: none; color: #fff; font-size: var(--text-sm); letter-spacing: var(--tracking-wider); text-transform: uppercase; font-weight: 600; cursor: pointer; animation: lc-pulse 1s infinite; }
+    #last-card-btn { display: none; position: fixed; bottom: calc(90px + env(safe-area-inset-bottom)); right: 16px; z-index: 400; padding: 12px 20px; border-radius: var(--radius-pill); background: var(--color-red); border: none; color: #fff; font-size: var(--text-sm); letter-spacing: var(--tracking-wider); text-transform: uppercase; font-weight: 600; cursor: pointer; animation: lc-pulse 1s infinite; }
 
     /* ── TRIVIA ── */
     #screen-trivia { padding: 0; }
@@ -216,7 +216,7 @@
     #screen-watching { align-items: center; justify-content: center; gap: 16px; padding: 40px 24px; text-align: center; }
 
     /* ── Version + log ── */
-    .ver { position: fixed; bottom: 8px; right: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--tracking-wider); color: var(--color-gold); z-index: 50; pointer-events: none; }
+    .ver { position: fixed; bottom: calc(8px + env(safe-area-inset-bottom)); right: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--tracking-wider); color: var(--color-gold); z-index: 50; pointer-events: none; }
   </style>
 </head>
 <body>
@@ -624,15 +624,15 @@
 <button id="last-card-btn" onclick="lcDeclareLastCard()">Last Card!</button>
 
 <!-- Log panel -->
-<div id="game-log-toggle" onclick="toggleGameLog()" style="position:fixed;bottom:28px;left:12px;z-index:999;font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;color:var(--color-gold-dim);cursor:pointer;padding:3px 8px;border:1px solid var(--color-border-dim);border-radius:var(--radius-sm);">LOG</div>
-<div id="game-log-panel" style="display:none;position:fixed;bottom:52px;left:12px;right:12px;z-index:998;background:var(--color-overlay);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:10px;max-height:40vh;overflow-y:auto;">
+<div id="game-log-toggle" onclick="toggleGameLog()" style="position:fixed;bottom:calc(28px + env(safe-area-inset-bottom));left:12px;z-index:999;font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;color:var(--color-gold-dim);cursor:pointer;padding:3px 8px;border:1px solid var(--color-border-dim);border-radius:var(--radius-sm);">LOG</div>
+<div id="game-log-panel" style="display:none;position:fixed;bottom:calc(52px + env(safe-area-inset-bottom));left:12px;right:12px;z-index:998;background:var(--color-overlay);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:10px;max-height:40vh;overflow-y:auto;">
   <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
     <span style="color:var(--color-text-faint);font-size:10px;text-transform:uppercase;letter-spacing:.1em;">Debug</span>
     <span onclick="copyGameLog()" style="color:var(--color-gold-dim);cursor:pointer;font-size:10px;letter-spacing:.1em;">COPY</span>
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.89</div>
+<div class="ver">v2.90</div>
 
 <script>
 'use strict';
