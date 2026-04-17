@@ -247,6 +247,13 @@
         <div class="join-label">Room Code</div>
         <input class="join-input" id="join-code" type="text" placeholder="ABCDEF" maxlength="6" autocomplete="off" spellcheck="false">
       </div>
+      <div class="join-field" style="display:flex;align-items:center;gap:10px;padding:12px 16px;border:1px solid var(--color-border-dim);border-radius:var(--radius-md);background:rgba(0,0,0,.2);cursor:pointer;" onclick="document.getElementById('join-mgr-check').click()">
+        <input type="checkbox" id="join-mgr-check" style="width:20px;height:20px;cursor:pointer;" onclick="event.stopPropagation()">
+        <div style="flex:1;">
+          <div style="font-size:14px;color:var(--color-text);font-weight:500;">Join as manager</div>
+          <div style="font-size:11px;color:var(--color-text-faint);margin-top:2px;">Check this if you're starting the game — you'll see Start Game, End Game, and other controls</div>
+        </div>
+      </div>
       <button class="action-btn" id="join-btn" onclick="doJoin()" disabled style="max-width:300px;">Join →</button>
     </div>
 
@@ -724,7 +731,10 @@ async function doJoin() {
     // Keepalive: send ping every 20s to keep data channel fresh
     setInterval(()=>{ if(agoraReady) send({type:'ping'}); }, 20000);
 
-    isManager = urlP.get('mgr') === '1';
+    // URL param takes precedence, otherwise check the manual checkbox on the join screen
+    const mgrFromUrl = urlP.get('mgr') === '1';
+    const mgrFromCheckbox = document.getElementById('join-mgr-check')?.checked || false;
+    isManager = mgrFromUrl || mgrFromCheckbox;
     userTVMode = isManager; // manager defaults to TV On, players to No TV
     log('isManager:'+isManager+' userTVMode:'+userTVMode);
     // Will call setTVMode after game starts to style buttons correctly
