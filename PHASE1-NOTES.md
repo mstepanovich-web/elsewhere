@@ -24,3 +24,14 @@ Deferred to Phase 2. The plan is a Supabase Edge Function that accepts a token, 
 - Profile-edit UI (update `profiles.full_name`; today the name is write-once at signup via `raw_user_meta_data`).
 - Contacts / groups management UI (schema is live, no screens yet).
 - Desktop sign-in path — if ever needed, likely via a `redirect_to=https://<site>/auth/callback` → app-link fallback.
+
+## Deferred — post-v2.93 testing observations
+
+- [ ] Karaoke: small issues observed during v2.93.2 testing (venue transitions / UI / stream quality — details TBD, to be reported when revisiting)
+- [ ] Games: small issues observed during v2.93.2 testing (details TBD)
+- [ ] DeepAR `background_segmentation` jsdelivr 404 (stage.html falls back to MediaPipe, low priority)
+- [ ] ~143 text-tone hardcoded colors deferred from Session 1 color audit (`rgba(255,220,150,*)` and `rgba(255,200,120,*)` across `karaoke/*.html`) — rebrand-safe enough for now
+- [ ] Session 1 deferred: extract ambient venue effects (Type 1: speakeasy dust, stadium lasers, forest sway, etc.) from `karaoke/stage.html` into `shell/venue-effects.js` when wellness product work begins
+- [ ] Session 1 deferred: create `venues.json` metadata file with product tags when wellness needs it
+- [ ] Session 1 deferred: move karaoke performance effects (Type 2: DeepAR face filters, confetti, crowd reactions) formally under `karaoke/effects/` — physically there already but can be better organized
+- [ ] Phase 1 pending after shell: de-emphasize room codes in UI (primary flow becomes QR/invite, manual code entry becomes hidden fallback)
