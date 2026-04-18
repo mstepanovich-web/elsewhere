@@ -39,6 +39,18 @@
   --color-red:            rgba(232,  25,  44, 1.00);
   --color-red-faint:      rgba(232,  25,  44, 0.15);
 
+  /* Contact-identity palette — muted jewel tones for avatar initial-circles,
+     deterministically hashed off the contact's name. Stylistic, not semantic;
+     rebrand/white-label scenarios should shift all seven in concert so contacts
+     stay visually distinct against whatever the new UI palette is. */
+  --color-avatar-1:       #B85C42;  /* terracotta */
+  --color-avatar-2:       #8B4767;  /* plum */
+  --color-avatar-3:       #5A5A96;  /* indigo */
+  --color-avatar-4:       #3E7A82;  /* teal */
+  --color-avatar-5:       #6B8A5F;  /* sage */
+  --color-avatar-6:       #4E6275;  /* slate */
+  --color-avatar-7:       #B06A80;  /* rose */
+
   /* Background layers */
   --color-bg:             rgba(  4,   2,   6, 1.00);  /* deepest black-purple */
   --color-bg-mid:         rgba(  8,   5,   9, 1.00);

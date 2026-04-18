@@ -404,6 +404,265 @@
     }
     .modal-actions button { flex: 1; }
 
+    /* ── User menu: two-button stack spacing ──────────────── */
+    #user-menu button + button { margin-top: 8px; }
+
+    /* ── Screen header (Back + title) ─────────────────────── */
+    .screen-head {
+      width: 100%;
+      max-width: 540px;
+      margin-bottom: 18px;
+    }
+    .screen-head-title {
+      text-align: left;
+      margin-top: 8px;
+      margin-bottom: 0;
+    }
+
+    /* ── Error banner (inline, per-screen) ────────────────── */
+    .screen-error-banner {
+      width: 100%;
+      max-width: 540px;
+      padding: 10px 14px;
+      background: var(--color-red-faint);
+      border: 1px solid var(--color-red);
+      border-radius: var(--radius-md);
+      color: var(--color-red);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider);
+      margin-bottom: 12px;
+    }
+
+    /* ── Contact avatar ───────────────────────────────────── */
+    .contact-avatar {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: var(--color-surface-raised);
+      color: var(--color-white);
+      font-family: var(--font-ui);
+      font-weight: 600;
+      letter-spacing: 0;
+      -webkit-user-select: none;
+      user-select: none;
+      overflow: hidden;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .contact-avatar.avatar-1 { background: var(--color-avatar-1); }
+    .contact-avatar.avatar-2 { background: var(--color-avatar-2); }
+    .contact-avatar.avatar-3 { background: var(--color-avatar-3); }
+    .contact-avatar.avatar-4 { background: var(--color-avatar-4); }
+    .contact-avatar.avatar-5 { background: var(--color-avatar-5); }
+    .contact-avatar.avatar-6 { background: var(--color-avatar-6); }
+    .contact-avatar.avatar-7 { background: var(--color-avatar-7); }
+    .contact-avatar.size-sm { width: 48px;  height: 48px;  font-size: 19px; }
+    .contact-avatar.size-lg { width: 96px;  height: 96px;  font-size: 38px; }
+    .contact-avatar .avatar-image {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+
+    /* ── Contacts list ────────────────────────────────────── */
+    .contacts-loading,
+    .contacts-empty,
+    .contacts-list-wrap {
+      width: 100%;
+      max-width: 540px;
+    }
+    .contacts-loading {
+      text-align: center;
+      color: var(--color-text-faint);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider);
+      text-transform: uppercase;
+      padding: 40px 0;
+    }
+
+    .contacts-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: clamp(24px, 8vh, 80px) 12px;
+    }
+    .contacts-empty-headline {
+      font-family: var(--font-display);
+      font-size: var(--text-2xl);
+      color: var(--color-gold-bright);
+      letter-spacing: var(--tracking-wide);
+      margin-bottom: 12px;
+    }
+    .contacts-empty-sub {
+      font-size: var(--text-sm);
+      color: var(--color-text-faint);
+      line-height: 1.5;
+      max-width: 340px;
+      margin-bottom: 32px;
+    }
+    .contacts-empty-cta { max-width: 340px; }
+
+    .contacts-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 24px;
+    }
+    .contact-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 12px;
+      background: transparent;
+      border: 1px solid var(--color-border-dim);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .contact-row:active {
+      background: var(--color-gold-ghost);
+      border-color: var(--color-border);
+    }
+    .contact-row-text {
+      flex: 1;
+      min-width: 0;
+    }
+    .contact-row-name {
+      font-size: var(--text-base);
+      color: var(--color-text);
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .contact-row-sub {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--color-text-faint);
+      letter-spacing: var(--tracking-wider);
+      line-height: 1.3;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .contacts-add-btn {
+      margin-top: 0;
+      max-width: 340px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* ── Contact edit form ────────────────────────────────── */
+    .contact-edit-form {
+      width: 100%;
+      max-width: 540px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .avatar-picker-wrap {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 28px;
+    }
+    .avatar-picker {
+      padding: 0;
+      border: 2px solid var(--color-border);
+      cursor: pointer;
+      transition: border-color var(--transition-fast), transform var(--transition-fast);
+    }
+    .avatar-picker:active { transform: scale(0.97); }
+    .avatar-picker:hover  { border-color: var(--color-border-bright); }
+    .avatar-clear-btn {
+      position: absolute;
+      top: -2px;
+      right: calc(50% - 54px);
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--color-bg);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    .avatar-clear-btn:active { background: var(--color-gold-ghost); }
+    .avatar-picker-hint {
+      margin-top: 10px;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider);
+      text-transform: uppercase;
+      color: var(--color-text-faint);
+    }
+    .avatar-upload-overlay {
+      position: absolute; inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+    }
+    .avatar-upload-spinner {
+      width: 26px; height: 26px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: var(--color-white);
+      border-radius: 50%;
+      animation: avatar-spin 0.9s linear infinite;
+    }
+    @keyframes avatar-spin { to { transform: rotate(360deg); } }
+
+    .contact-edit-form .field-group {
+      max-width: 360px;
+      width: 100%;
+    }
+    .field-required {
+      color: var(--color-gold-dim);
+      margin-left: 2px;
+    }
+    .contact-edit-hint {
+      font-size: var(--text-xs);
+      color: var(--color-text-faint);
+      line-height: 1.4;
+      padding: 4px 2px;
+      margin-top: -4px;
+    }
+
+    .cta-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .danger-btn {
+      width: 100%;
+      padding: 12px 16px;
+      background: transparent;
+      color: var(--color-red);
+      border: 1px solid var(--color-red);
+      border-radius: var(--radius-pill);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider);
+      text-transform: uppercase;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: all var(--transition-fast);
+    }
+    .danger-btn:active { background: var(--color-red-faint); }
+
     /* ── Version badge ────────────────────────────────────── */
     .ver {
       position: fixed; bottom: 8px; right: 12px;
@@ -426,6 +685,7 @@
       </div>
       <div id="user-menu">
         <div id="user-menu-email">—</div>
+        <button onclick="openContactsFromMenu()">Contacts</button>
         <button onclick="shellSignOut()">Sign out</button>
       </div>
     </div>
@@ -505,6 +765,135 @@
         <button class="ghost-btn" onclick="resetAccount()">Use a different email</button>
       </div>
     </div>
+
+    <!-- Contacts list screen -->
+    <div class="screen" id="screen-contacts">
+      <div class="screen-head">
+        <div class="back-link" onclick="goTo('screen-home')">← Back</div>
+        <div class="page-title screen-head-title">Contacts</div>
+      </div>
+
+      <div class="screen-error-banner" id="contacts-error" style="display:none;"></div>
+
+      <div class="contacts-loading" id="contacts-loading">Loading…</div>
+
+      <div class="contacts-empty" id="contacts-empty" style="display:none;">
+        <div class="contacts-empty-headline">No contacts yet</div>
+        <div class="contacts-empty-sub">
+          Add contacts here so you can invite them to games and karaoke sessions later.
+        </div>
+        <button class="cta-btn contacts-empty-cta" onclick="openNewContact()">
+          Add your first contact
+        </button>
+      </div>
+
+      <div class="contacts-list-wrap" id="contacts-list-wrap" style="display:none;">
+        <div class="contacts-list" id="contacts-list"></div>
+        <button class="ghost-btn contacts-add-btn" onclick="openNewContact()">+ Add contact</button>
+      </div>
+    </div>
+
+    <!-- Contact add/edit screen -->
+    <div class="screen" id="screen-contact-edit" data-mode="new" data-contact-id="">
+      <div class="screen-head">
+        <div class="back-link" onclick="cancelContactEdit()">← Cancel</div>
+        <div class="page-title screen-head-title" id="contact-edit-title">New contact</div>
+      </div>
+
+      <div class="screen-error-banner" id="contact-edit-error" style="display:none;"></div>
+
+      <div class="contact-edit-form">
+        <div class="avatar-picker-wrap">
+          <button type="button"
+                  class="avatar-picker contact-avatar size-lg avatar-1"
+                  id="avatar-picker"
+                  onclick="pickAvatar()"
+                  aria-label="Choose photo">
+            <span class="avatar-initials" id="avatar-picker-initials">?</span>
+            <img class="avatar-image" id="avatar-picker-image" alt="" style="display:none;">
+            <div class="avatar-upload-overlay" id="avatar-upload-overlay" style="display:none;">
+              <div class="avatar-upload-spinner"></div>
+            </div>
+          </button>
+          <button type="button"
+                  class="avatar-clear-btn"
+                  id="avatar-clear-btn"
+                  onclick="clearAvatar()"
+                  style="display:none;"
+                  aria-label="Remove photo">×</button>
+          <input type="file" id="avatar-file-input" accept="image/*" style="display:none;">
+          <div class="avatar-picker-hint">Tap to add a photo</div>
+        </div>
+
+        <div class="field-group">
+          <div class="field-row">
+            <div class="field-label">
+              Full name <span class="field-required">*</span>
+            </div>
+            <input class="field-input"
+                   id="contact-full-name"
+                   type="text"
+                   placeholder="e.g. Alex Morgan"
+                   maxlength="80"
+                   autocomplete="name"
+                   autocapitalize="words"
+                   oninput="onContactFormChange()">
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">Nickname</div>
+            <input class="field-input"
+                   id="contact-nickname"
+                   type="text"
+                   placeholder="Optional"
+                   maxlength="40"
+                   autocomplete="off"
+                   autocapitalize="words"
+                   oninput="onContactFormChange()">
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">Email</div>
+            <input class="field-input"
+                   id="contact-email"
+                   type="email"
+                   inputmode="email"
+                   placeholder="alex@example.com"
+                   autocomplete="off"
+                   autocapitalize="none"
+                   autocorrect="off"
+                   spellcheck="false"
+                   oninput="onContactFormChange()"
+                   onblur="onContactMethodBlur()">
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">Phone</div>
+            <input class="field-input"
+                   id="contact-phone"
+                   type="tel"
+                   inputmode="tel"
+                   placeholder="(555) 123-4567"
+                   autocomplete="off"
+                   oninput="onContactFormChange()"
+                   onblur="onContactMethodBlur()">
+          </div>
+
+          <div class="contact-edit-hint" id="contact-edit-hint" style="display:none;">
+            Add an email or phone so you can invite them to sessions.
+          </div>
+
+          <button class="cta-btn"
+                  id="contact-save-btn"
+                  onclick="saveContact()">Save contact</button>
+
+          <button class="danger-btn"
+                  id="contact-delete-btn"
+                  onclick="requestDeleteContact()"
+                  style="display:none;">Delete contact</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Modals (outside #app so they overlay everything) -->
@@ -541,7 +930,7 @@
     // time this listener fires, window.elsewhere is guaranteed to exist.
     document.addEventListener('DOMContentLoaded', initShell);
 
-    const SCREENS = ['screen-home', 'screen-account', 'screen-confirm'];
+    const SCREENS = ['screen-home', 'screen-account', 'screen-confirm', 'screen-contacts', 'screen-contact-edit'];
     let activeScreen = 'screen-home';
 
     function initShell() {
@@ -638,6 +1027,9 @@
       // Reset account-screen state when entering it fresh
       if (id === 'screen-account') {
         showAccountStatus('', 'info');
+      }
+      if (id === 'screen-contacts') {
+        enterContactsScreen();
       }
     }
 
@@ -756,6 +1148,281 @@
 
     // ── Helpers ──────────────────────────────────────────────
     function isMobile() { return window.innerWidth <= 768; }
+
+    // ══════════════════════════════════════════════════════════
+    // Contacts (Phase 1 Path B, Session 3)
+    // Part C: screen structure + nav stubs. CRUD lives in Part D,
+    // avatar upload in Part E.
+    // ══════════════════════════════════════════════════════════
+
+    // Form state mirrors what will be persisted. Lives outside the DOM so
+    // we can track dirty state / uploaded-but-not-saved avatars cleanly.
+    let contactEditState = {
+      id: null,                 // null on "new", uuid on "edit"
+      avatarUrl: null,          // signed URL of uploaded image, if any
+      avatarStoragePath: null,  // path inside the contact-avatars bucket
+      savePressed: false,       // used to gate the email/phone hint
+      contactFieldsTouched: false,
+    };
+
+    function openContactsFromMenu() {
+      document.getElementById('user-menu').classList.remove('open');
+      goTo('screen-contacts');
+    }
+
+    // ── Avatar helpers ────────────────────────────────────────
+    // Deterministic: the same name always lands on the same color.
+    function avatarClassForName(name) {
+      const s = (name || '').trim() || '?';
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = (h + s.charCodeAt(i)) >>> 0;
+      return 'avatar-' + ((h % 7) + 1);
+    }
+    function avatarInitialsForName(name) {
+      const s = (name || '').trim();
+      if (!s) return '?';
+      const parts = s.split(/\s+/).filter(Boolean);
+      if (parts.length === 1) return parts[0][0].toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+
+    // ── List screen ───────────────────────────────────────────
+    function enterContactsScreen() {
+      const err   = document.getElementById('contacts-error');
+      const load  = document.getElementById('contacts-loading');
+      const empty = document.getElementById('contacts-empty');
+      const list  = document.getElementById('contacts-list-wrap');
+      err.style.display   = 'none';
+      load.style.display  = '';
+      empty.style.display = 'none';
+      list.style.display  = 'none';
+
+      loadContacts().then(rows => {
+        load.style.display = 'none';
+        if (!rows || rows.length === 0) {
+          empty.style.display = 'flex';
+        } else {
+          renderContactsList(rows);
+          list.style.display = '';
+        }
+      }).catch(e => {
+        console.error('[contacts] load failed', e);
+        load.style.display = 'none';
+        empty.style.display = 'flex';
+        showContactsError(e?.message || 'Could not load contacts.');
+      });
+    }
+
+    // Stub — replaced by a real Supabase query in Part D.
+    async function loadContacts() { return []; }
+
+    function renderContactsList(rows) {
+      const list = document.getElementById('contacts-list');
+      list.textContent = '';
+      for (const row of rows) {
+        list.appendChild(buildContactRow(row));
+      }
+    }
+
+    function buildContactRow(row) {
+      const wrap = document.createElement('div');
+      wrap.className = 'contact-row';
+      wrap.onclick = () => openEditContact(row);
+
+      const avatar = document.createElement('div');
+      avatar.className = 'contact-avatar size-sm ' + avatarClassForName(row.full_name);
+      if (row.avatar_url) {
+        const img = document.createElement('img');
+        img.className = 'avatar-image';
+        img.src = row.avatar_url;
+        img.alt = '';
+        avatar.appendChild(img);
+      } else {
+        const initials = document.createElement('span');
+        initials.className = 'avatar-initials';
+        initials.textContent = avatarInitialsForName(row.full_name);
+        avatar.appendChild(initials);
+      }
+      wrap.appendChild(avatar);
+
+      const text = document.createElement('div');
+      text.className = 'contact-row-text';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'contact-row-name';
+      nameEl.textContent = row.full_name || '(no name)';
+      text.appendChild(nameEl);
+      const subEl = document.createElement('div');
+      subEl.className = 'contact-row-sub';
+      subEl.textContent = row.email || row.phone || '';
+      text.appendChild(subEl);
+      wrap.appendChild(text);
+
+      return wrap;
+    }
+
+    function showContactsError(msg) {
+      const el = document.getElementById('contacts-error');
+      el.textContent = msg;
+      el.style.display = '';
+    }
+
+    // ── Edit screen ───────────────────────────────────────────
+    function openNewContact() {
+      resetContactEditForm();
+      const screen = document.getElementById('screen-contact-edit');
+      screen.dataset.mode = 'new';
+      screen.dataset.contactId = '';
+      document.getElementById('contact-edit-title').textContent = 'New contact';
+      document.getElementById('contact-delete-btn').style.display = 'none';
+      goTo('screen-contact-edit');
+      setTimeout(() => document.getElementById('contact-full-name').focus(), 80);
+    }
+
+    function openEditContact(row) {
+      resetContactEditForm();
+      const screen = document.getElementById('screen-contact-edit');
+      screen.dataset.mode = 'edit';
+      screen.dataset.contactId = row.id;
+      document.getElementById('contact-edit-title').textContent = 'Edit contact';
+      document.getElementById('contact-full-name').value = row.full_name || '';
+      document.getElementById('contact-nickname').value  = row.nickname || '';
+      document.getElementById('contact-email').value     = row.email || '';
+      document.getElementById('contact-phone').value     = row.phone || '';
+      if (row.avatar_url) {
+        contactEditState.avatarUrl = row.avatar_url;
+        showAvatarImage(row.avatar_url);
+      }
+      updateAvatarVisual();
+      updateSaveButtonState();
+      document.getElementById('contact-delete-btn').style.display = '';
+      goTo('screen-contact-edit');
+    }
+
+    function resetContactEditForm() {
+      contactEditState = {
+        id: null,
+        avatarUrl: null,
+        avatarStoragePath: null,
+        savePressed: false,
+        contactFieldsTouched: false,
+      };
+      for (const id of ['contact-full-name', 'contact-nickname', 'contact-email', 'contact-phone']) {
+        document.getElementById(id).value = '';
+      }
+      document.getElementById('contact-edit-hint').style.display = 'none';
+      document.getElementById('contact-edit-error').style.display = 'none';
+      document.getElementById('avatar-clear-btn').style.display = 'none';
+      document.getElementById('avatar-picker-image').style.display = 'none';
+      document.getElementById('avatar-picker-image').src = '';
+      document.getElementById('avatar-upload-overlay').style.display = 'none';
+      updateAvatarVisual();
+      updateSaveButtonState();
+    }
+
+    function cancelContactEdit() {
+      // No dirty check per spec — just discard and back.
+      goTo('screen-contacts');
+    }
+
+    // Updates initials + color whenever name changes.
+    function updateAvatarVisual() {
+      const name = document.getElementById('contact-full-name').value;
+      const picker = document.getElementById('avatar-picker');
+      const initials = document.getElementById('avatar-picker-initials');
+      // Swap the avatar-N class without disturbing the rest.
+      picker.className = picker.className
+        .replace(/\bavatar-\d+\b/g, '')
+        .trim() + ' ' + avatarClassForName(name);
+      initials.textContent = avatarInitialsForName(name);
+    }
+
+    function showAvatarImage(url) {
+      const img = document.getElementById('avatar-picker-image');
+      const clearBtn = document.getElementById('avatar-clear-btn');
+      img.src = url;
+      img.style.display = '';
+      clearBtn.style.display = '';
+    }
+
+    function onContactFormChange() {
+      updateAvatarVisual();
+      updateSaveButtonState();
+      maybeShowContactHint();
+    }
+
+    function onContactMethodBlur() {
+      contactEditState.contactFieldsTouched = true;
+      maybeShowContactHint();
+    }
+
+    function maybeShowContactHint() {
+      const email = document.getElementById('contact-email').value.trim();
+      const phone = document.getElementById('contact-phone').value.trim();
+      const name  = document.getElementById('contact-full-name').value.trim();
+      const hint  = document.getElementById('contact-edit-hint');
+      const bothEmpty = !email && !phone;
+      // Only nag after the user has engaged — pressed Save, or typed a name
+      // AND blurred the email/phone fields without filling either.
+      const allowed = contactEditState.savePressed
+        || (contactEditState.contactFieldsTouched && name);
+      hint.style.display = (bothEmpty && allowed) ? '' : 'none';
+    }
+
+    function updateSaveButtonState() {
+      const name  = document.getElementById('contact-full-name').value.trim();
+      const email = document.getElementById('contact-email').value.trim();
+      const phone = document.getElementById('contact-phone').value.trim();
+      const btn   = document.getElementById('contact-save-btn');
+      btn.disabled = !name || (!email && !phone);
+    }
+
+    // ── Stubs: Part D wires Supabase CRUD, Part E wires avatars ──
+    function saveContact() {
+      contactEditState.savePressed = true;
+      maybeShowContactHint();
+      alert('Save wiring comes in Part D.');
+    }
+    function requestDeleteContact() {
+      alert('Delete wiring comes in Part D.');
+    }
+    function pickAvatar() {
+      alert('Avatar wiring comes in Part E.');
+    }
+    function clearAvatar() {
+      contactEditState.avatarUrl = null;
+      contactEditState.avatarStoragePath = null;
+      document.getElementById('avatar-picker-image').style.display = 'none';
+      document.getElementById('avatar-picker-image').src = '';
+      document.getElementById('avatar-clear-btn').style.display = 'none';
+    }
+
+    // ── Dev helpers for previewing states (remove if they end up unused) ──
+    window.__previewContactsList = function(n = 4) {
+      const names = ['Alex Morgan', 'Priya Patel', 'Jordan Reese', 'Sam Ito', 'Luca Bianchi', 'Maya Chen', 'Oz Ben-David'];
+      const rows = [];
+      for (let i = 0; i < Math.min(n, names.length); i++) {
+        rows.push({
+          id: 'preview-' + i,
+          full_name: names[i],
+          email: i % 2 === 0 ? names[i].toLowerCase().replace(/[^a-z]/g, '') + '@example.com' : null,
+          phone: i % 2 === 1 ? '(555) 010-' + (1000 + i) : null,
+          avatar_url: null,
+        });
+      }
+      document.getElementById('contacts-loading').style.display = 'none';
+      document.getElementById('contacts-empty').style.display = 'none';
+      renderContactsList(rows);
+      document.getElementById('contacts-list-wrap').style.display = '';
+    };
+    window.__previewContactEdit = function(row) {
+      openEditContact(row || {
+        id: 'preview-1',
+        full_name: 'Alex Morgan',
+        email: 'alex@example.com',
+        phone: '(555) 123-4567',
+        nickname: 'AM',
+      });
+    };
   </script>
 </body>
 </html>
