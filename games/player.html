@@ -225,6 +225,105 @@
 
     /* ── Version + log ── */
     .ver { position: fixed; bottom: calc(8px + env(safe-area-inset-bottom)); right: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--tracking-wider); color: var(--color-gold); z-index: 50; pointer-events: none; }
+
+    /* ══════════════════════════════════════════════════════════
+       RESPONSIVE — Session 4.7
+       Breakpoints: phone (default), tablet ≥601px, desktop ≥1101px.
+       Player stays a single-user controller at all sizes — wider
+       screens get a centered column with more padding / larger
+       tap targets, NOT a dashboard. IS_IPAD (≥768px, JS-driven)
+       layers on top — see PHASE1-NOTES Session 4.7 decisions.
+       ══════════════════════════════════════════════════════════ */
+
+    @media (min-width: 601px) {
+      /* Centered content column — applied to all content screens
+         except #screen-lastcard (position: fixed, owns its own layout). */
+      #screen-join,
+      #screen-lobby,
+      #screen-game-info,
+      #screen-game-room,
+      #screen-gameover,
+      #screen-watching { max-width: 640px; margin: 0 auto; width: 100%; }
+
+      #screen-join      { padding: 60px 40px; gap: 28px; }
+      #screen-lobby     { padding: 40px 40px 48px; gap: 14px; }
+      #screen-game-info { padding: 40px 40px 48px; }
+      #screen-game-room { padding: 36px 40px 48px; }
+      #screen-gameover  { padding: 60px 40px; gap: 28px; }
+      #screen-watching  { padding: 60px 40px; gap: 24px; }
+
+      .join-field      { max-width: 380px; }
+      .scores-list     { max-width: 420px; }
+      .play-again-btns { max-width: 380px; }
+
+      .action-btn { padding: 17px; font-size: var(--text-md); }
+
+      .game-card { padding: 20px 22px; gap: 18px; }
+      .game-icon { font-size: 34px; }
+      .game-name { font-size: 24px; }
+
+      /* Last Card — proportionally larger cards / avatars */
+      .lc-card           { width: 80px; height: 120px; border-radius: 12px; }
+      .lc-card.playable  { transform: translateY(-8px); }
+      .lc-card.selected  { transform: translateY(-10px); }
+      .lc-card-sm        { width: 56px; height: 84px; font-size: 15px; }
+      .lc-other-video    { width: 56px; height: 56px; font-size: 20px; }
+      .lc-other-player   { min-width: 64px; }
+      .lc-other-name     { max-width: 64px; font-size: 11px; }
+
+      /* Suit chooser: full-width bottom drawer → centered modal */
+      #suit-chooser { left: 50%; right: auto; transform: translateX(-50%); max-width: 460px; border: 1px solid var(--color-border); border-radius: var(--radius-xl) var(--radius-xl) 0 0; bottom: calc(100px + env(safe-area-inset-bottom)); }
+      .suit-choice  { width: 100px; height: 100px; font-size: 44px; }
+
+      /* Trivia layout benefits from a bit more air */
+      .trivia-opt { padding: 16px 18px; }
+
+      .ver { font-size: 11px; right: 18px; bottom: calc(12px + env(safe-area-inset-bottom)); }
+    }
+
+    @media (min-width: 1101px) {
+      /* Slightly wider column at desktop, still single-user. */
+      #screen-join,
+      #screen-lobby,
+      #screen-game-info,
+      #screen-game-room,
+      #screen-gameover,
+      #screen-watching { max-width: 720px; }
+
+      #screen-join      { padding: 80px 48px; gap: 32px; }
+      #screen-lobby     { padding: 56px 48px 64px; gap: 16px; }
+      #screen-game-info { padding: 56px 48px 64px; }
+      #screen-game-room { padding: 48px 48px 64px; }
+      #screen-gameover  { padding: 80px 48px; gap: 32px; }
+      #screen-watching  { padding: 80px 48px; gap: 28px; }
+
+      .join-field      { max-width: 420px; }
+      .scores-list     { max-width: 480px; }
+      .play-again-btns { max-width: 420px; }
+
+      .action-btn { padding: 18px; font-size: var(--text-md); }
+
+      .game-card { padding: 24px 26px; gap: 20px; }
+      .game-icon { font-size: 40px; }
+      .game-name { font-size: 28px; }
+      .game-desc { font-size: var(--text-sm); margin-top: 4px; }
+
+      /* Cap the IS_IPAD split layout so it doesn't spread across
+         ultra-wide displays. Keeps single-player controller feel. */
+      #lc-ipad-wrap.visible { max-width: 1100px; margin: 0 auto; width: 100%; }
+
+      .lc-card        { width: 96px; height: 144px; border-radius: 14px; padding: 8px 6px; }
+      .lc-card-sm     { width: 64px; height: 96px; font-size: 17px; }
+      .lc-other-video { width: 64px; height: 64px; font-size: 22px; }
+      .lc-other-player{ min-width: 72px; }
+      .lc-other-name  { max-width: 72px; font-size: 12px; }
+
+      .suit-choice { width: 120px; height: 120px; font-size: 52px; }
+
+      .trivia-opt { padding: 18px 20px; }
+
+      .ver { font-size: 12px; }
+    }
   </style>
 </head>
 <body>

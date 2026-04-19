@@ -139,3 +139,20 @@ Deferred to Phase 2:
 2. Session 4.8: "Add TV display" pairing via QR/link; TV setup indicator; first-time casting instructions
 3. Session 5: full invite flow with per-person tokens, manual distribution, identity linkage, join flow with display_name confirmation
 4. Phase 2 later: server-sent invites (Resend/Twilio)
+
+### Games lobby state: known fragility, replaced in Session 5
+
+- Current: `lobbyPlayers[]` is client-authoritative, deduped by Agora uid, propagated by `player-join` / `player-join-ack` broadcasts over the Agora data stream
+- **Diagnosed root cause (April 19, 2026, during Session 4.7):** Agora data-stream messages are ephemeral — they're dropped, not buffered, across `CONNECTED → RECONNECTING → CONNECTED` transitions. iOS backgrounds the WebView tab aggressively, so the iPhone Agora client reconnects multiple times per session. Any `player-join` broadcast that lands during a reconnect window is lost forever on that device.
+- Symptom observed: Mike (manager) on iPhone saw only himself in the lobby despite Jeff and Steve successfully joining from stable browsers. Jeff/Steve saw each other fine. One `← player-join from jeff` landed in Mike's log in the 1-second window right after a successful reconnect; Steve's never arrived at all.
+- **Original hypothesis was wrong** — we first suspected silent throws in `renderRoster`/`renderInvited` inside the message handler. Safari Web Inspector showed no such errors; instead, multiple `CONNECTED → RECONNECTING` state changes correlated with the missing broadcasts.
+- **No tactical patch pursued.** try/catch wrappers wouldn't help — the messages never arrive in the first place. A resend-on-reconnect heartbeat would paper over this but is the wrong shape of fix given Session 5's design.
+- **Structural fix (Session 5):** replace `lobbyPlayers[]` broadcast propagation with `session_participants` rows in Supabase + Postgres realtime subscriptions. Supabase realtime handles reconnect buffering correctly (the DB remains the source of truth; the client replays state on reconnect). `player-join` / `player-join-ack` broadcasts become redundant once the DB is authoritative.
+- **Testing workaround until Session 5:** iPhone is unreliable as a multi-player test client for lobby flows. Use stable browsers (laptop Chrome/Safari, iPad Safari) for any repro involving multiple joiners. iPhone is still fine for solo CSS / single-device testing.
+
+### Capacitor deep-link auto-checks manager checkbox (landmine for Session 5)
+
+- Current: `games/player.html` deep-link handler sets `mgrCheck.checked = true` on every `elsewhere://games?…` arrival
+- Impact: every iOS-app user opening an invite deep link becomes a manager of the room they join, creating duplicate managers
+- Must be fixed before Session 5 invite flow ships — otherwise every invitee arrives as a manager and the single-manager assumption breaks
+- Fix options: (a) gate on a `?role=manager` deep-link param (set only by the inviter's "share to my own device" flow, not by invitee links), or (b) remove auto-check entirely and trust the URL `?mgr=1` param exclusively

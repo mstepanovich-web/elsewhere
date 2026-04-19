@@ -2,17 +2,43 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
   <title>Elsewhere · Games TV</title>
   <link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
   <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* Ellipse geometry for player tiles — JS reads these via getComputedStyle.
+       Media queries override them below, so the layout retunes per breakpoint
+       without duplicating the JS positioning code. */
+    :root {
+      --tv-ellipse-rx-max: 320px;
+      --tv-ellipse-ry-max: 240px;
+      --tv-ellipse-factor: 0.38;
+    }
+
     body { background: var(--color-bg); color: var(--color-text); font-family: var(--font-ui); overflow: hidden; height: 100vh; width: 100vw; }
 
     /* ── Screens ── */
     .tv-screen { position: fixed; inset: 0; display: none; }
     .tv-screen.active { display: flex; }
+
+    /* Fullscreen prompt — dismissed on first tap. Hidden via inline style
+       on browsers that don't support requestFullscreen (mobile Safari). */
+    #fs-prompt {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,.72); backdrop-filter: blur(6px);
+      color: var(--color-text-dim);
+      font-family: var(--font-display); font-weight: 300;
+      font-size: clamp(16px,2vw,24px); letter-spacing: var(--tracking-wide);
+      text-align: center; padding: 20px;
+      transition: opacity .35s ease;
+      cursor: pointer;
+    }
+    #fs-prompt.dismissed { opacity: 0; pointer-events: none; }
+    #fs-prompt .fs-sub { font-size: .7em; color: var(--color-text-faint); letter-spacing: .18em; text-transform: uppercase; margin-top: 14px; }
 
     /* ── LOBBY SCREEN ── */
     #screen-lobby { flex-direction: column; align-items: center; justify-content: center; gap: 0; padding: 40px 60px; }
@@ -128,9 +154,133 @@
     #log-toggle { position: fixed; bottom: 12px; left: 14px; z-index: 999; font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: var(--color-gold-dim); cursor: pointer; padding: 3px 8px; border: 1px solid var(--color-border-dim); border-radius: var(--radius-sm); }
     #log-panel  { display: none; position: fixed; bottom: 36px; left: 14px; right: 14px; z-index: 998; background: var(--color-overlay); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px; max-height: 35vh; overflow-y: auto; }
     .ver { position: fixed; bottom: 12px; right: 60px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; color: var(--color-gold); z-index: 50; }
+
+    /* ══════════════════════════════════════════════════════════
+       RESPONSIVE — Session 4.7
+       TV (≥1101px) is the anchor — preserved. Tablet and phone
+       compact the layout so the ellipse of player tiles fits the
+       viewport instead of spilling offscreen.
+       Tile positions are set inline from JS; the ellipse radii
+       are tuned via the CSS custom properties at :root, which
+       renderPlayerTiles() reads at render + resize time.
+       ══════════════════════════════════════════════════════════ */
+
+    /* ── TABLET (≤1100px) ── */
+    @media (max-width: 1100px) {
+      :root {
+        --tv-ellipse-rx-max: 220px;
+        --tv-ellipse-ry-max: 170px;
+        --tv-ellipse-factor: 0.36;
+      }
+
+      /* Smaller player tiles — lower min caps in clamp() so the ellipse
+         doesn't get crowded by 80px-minimum tiles. */
+      .player-video-wrap { width: clamp(64px,8vw,110px); height: clamp(48px,6vw,82px); }
+      .player-name  { font-size: clamp(10px,1.1vw,14px); max-width: clamp(72px,9vw,130px); }
+      .player-cards { font-size: clamp(12px,1.5vw,20px); }
+      .player-score { font-size: clamp(8px,.85vw,11px); }
+      .player-avatar { font-size: clamp(14px,1.8vw,22px); }
+
+      /* Compact centre panel */
+      #centre-panel {
+        min-width: clamp(110px,14vw,180px);
+        padding: clamp(10px,1.6vw,20px) clamp(14px,2vw,26px);
+        gap: clamp(5px,.9vh,10px);
+      }
+      .tv-card { width: clamp(48px,6.5vw,80px); }
+      .tv-card-val    { font-size: clamp(10px,1.1vw,14px); }
+      .tv-card-centre { font-size: clamp(13px,1.8vw,22px); }
+      .centre-game-title { font-size: clamp(11px,1.2vw,16px); }
+      .centre-turn       { font-size: clamp(10px,1.15vw,15px); }
+      .centre-color-dot  { width: clamp(14px,1.8vw,22px); height: clamp(14px,1.8vw,22px); }
+      .centre-meta       { gap: clamp(8px,1.3vw,16px); }
+      .centre-stat-val   { font-size: clamp(11px,1.4vw,18px); }
+
+      /* Game title bar — tighter */
+      #game-title-bar { padding: clamp(6px,1vh,12px) clamp(12px,1.8vw,24px); }
+      .game-bar-title { font-size: clamp(14px,1.8vw,22px); }
+      .game-bar-room  { font-size: clamp(10px,1vw,13px); }
+
+      /* Lobby screen — less aggressive padding */
+      #screen-lobby { padding: 32px 40px; }
+      .lobby-game-name { font-size: clamp(32px,4.5vw,56px); }
+      .lobby-room      { margin-bottom: 28px; }
+      .lobby-columns   { gap: clamp(28px,4vw,60px); max-width: 880px; }
+    }
+
+    /* ── PHONE (≤600px) ── */
+    @media (max-width: 600px) {
+      :root {
+        --tv-ellipse-rx-max: 130px;
+        --tv-ellipse-ry-max: 100px;
+        --tv-ellipse-factor: 0.32;
+      }
+
+      /* Very compact player tiles */
+      .player-video-wrap { width: 52px; height: 39px; border-radius: 8px; border-width: 1.5px; }
+      .player-name       { font-size: 10px; max-width: 62px; letter-spacing: 0; }
+      .player-cards      { font-size: 12px; }
+      .player-score      { font-size: 9px; }
+      .player-avatar     { font-size: 13px; }
+      .player-badge-mgr  { font-size: 8px; padding: 1px 4px; top: 2px; left: 2px; }
+      .last-card-alert   { font-size: 8px; }
+      .player-tile       { gap: 3px; }
+
+      /* Centre panel — tighter still */
+      #centre-panel {
+        min-width: 92px;
+        padding: 8px 12px;
+        gap: 4px;
+        border-radius: 14px;
+      }
+      .tv-card { width: 44px; border-radius: 7px; border-width: 1.5px; padding: 5px 3px; }
+      .tv-card-val    { font-size: 10px; }
+      .tv-card-centre { font-size: 13px; }
+      .centre-game-title { font-size: 10px; }
+      .centre-turn       { font-size: 11px; }
+      .centre-color-dot  { width: 14px; height: 14px; }
+      .centre-meta       { gap: 10px; }
+      .centre-stat-val   { font-size: 12px; }
+      .centre-stat-label { font-size: 7px; }
+      .centre-draw-pending { font-size: 8px; padding: 2px 8px; }
+
+      /* Game title bar — tight */
+      #game-title-bar { padding: 6px 12px; }
+      .game-bar-title { font-size: 13px; }
+      .game-bar-room  { font-size: 10px; }
+
+      /* Lobby screen — stack columns, narrower gutters */
+      #screen-lobby { padding: 24px 20px 60px; gap: 0; }
+      .lobby-game-name { font-size: clamp(28px,7vw,40px); }
+      .lobby-room      { margin-bottom: 20px; font-size: 13px; }
+      .lobby-columns   { flex-direction: column; gap: 24px; max-width: 100%; }
+      .lobby-col       { max-width: 100%; width: 100%; }
+      .lobby-col-title { margin-bottom: 10px; }
+      .lobby-player-name  { font-size: 14px; }
+      .lobby-player-video { width: 44px; height: 33px; }
+
+      /* Fixed overlays — shrink + shift to avoid collisions */
+      .tv-wordmark  { top: 10px; font-size: 10px; letter-spacing: .15em; }
+      .tv-room-badge{ bottom: 8px; right: 10px; font-size: 9px; letter-spacing: .15em; }
+      .ver          { bottom: 8px; right: 100px; font-size: 9px; }
+      #log-toggle   { bottom: 8px; left: 10px; font-size: 9px; padding: 2px 6px; }
+
+      /* Euchre screen — compact scoreboard + trick area */
+      #eu-tv-score-1, #eu-tv-score-2 { font-size: 36px !important; }
+      #eu-tv-trump { font-size: 32px !important; }
+    }
   </style>
 </head>
 <body>
+
+<!-- First-tap-to-fullscreen prompt (dismissed on any click). Hidden via JS
+     on browsers that don't support requestFullscreen. -->
+<div id="fs-prompt">
+  <div>
+    Tap anywhere to enter fullscreen
+    <div class="fs-sub">Best on a big screen</div>
+  </div>
+</div>
 
 <div class="tv-wordmark">Elsewhere · Games</div>
 
@@ -480,9 +630,15 @@ function renderPlayerTiles() {
   const n = playerNames.length;
   if (n === 0) { container.innerHTML = ''; return; }
 
-  // Radius for player placement (avoid centre panel ~220px wide)
-  const rx = Math.min(W*0.38, 320);
-  const ry = Math.min(H*0.38, 240);
+  // Radius for player placement — tuned per breakpoint via CSS custom
+  // properties set in media queries (see :root + @media blocks at top).
+  // parseFloat strips the 'px' suffix; fallbacks guard against unset values.
+  const rootStyles = getComputedStyle(document.documentElement);
+  const rxMax  = parseFloat(rootStyles.getPropertyValue('--tv-ellipse-rx-max')) || 320;
+  const ryMax  = parseFloat(rootStyles.getPropertyValue('--tv-ellipse-ry-max')) || 240;
+  const factor = parseFloat(rootStyles.getPropertyValue('--tv-ellipse-factor')) || 0.38;
+  const rx = Math.min(W*factor, rxMax);
+  const ry = Math.min(H*factor, ryMax);
 
   container.innerHTML = '';
   playerNames.forEach((name, i) => {
@@ -736,6 +892,47 @@ function tvLog(msg) {
 }
 function toggleLog() { const p=document.getElementById('log-panel'); p.style.display=p.style.display==='none'?'block':'none'; }
 function copyLog()   { navigator.clipboard.writeText(_logs.join('\n')).then(()=>{ const b=document.querySelector('#log-panel span:last-child'); if(b){b.textContent='COPIED ✓';setTimeout(()=>b.textContent='COPY',2000);} }); }
+
+// ── Wake lock ─────────────────────────────────────────────────
+// Request at load; re-request when the tab returns to foreground
+// (browsers drop it on visibility loss). Best-effort, no UI on failure.
+let _wakeLock = null;
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try { _wakeLock = await navigator.wakeLock.request('screen'); tvLog('wake lock acquired'); }
+  catch(e) { tvLog('wake lock denied: '+e.message); }
+}
+requestWakeLock();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') requestWakeLock();
+});
+
+// ── Fullscreen on first tap ───────────────────────────────────
+// Hide the prompt on browsers that can't enter fullscreen (mobile Safari);
+// otherwise dismiss it on first click and attempt fullscreen. Fails silently
+// when denied — the visual layout still works without true fullscreen.
+(function setupFullscreen() {
+  const prompt = document.getElementById('fs-prompt');
+  const fsSupported = !!document.documentElement.requestFullscreen;
+  if (!fsSupported && prompt) { prompt.style.display = 'none'; return; }
+
+  const dismiss = () => {
+    if (prompt) prompt.classList.add('dismissed');
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  };
+  document.addEventListener('click', dismiss, { once: true });
+  document.addEventListener('keydown', dismiss, { once: true });
+})();
+
+// ── Resize: reposition player tiles ───────────────────────────
+// Tile positions are set inline from renderPlayerTiles() based on
+// #game-main's current size. Without this listener the ellipse froze
+// at the original viewport dimensions when the browser was resized.
+let _resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => { renderPlayerTiles(); }, 100);
+});
 
 // ── Boot ──────────────────────────────────────────────────────
 initAgora();
