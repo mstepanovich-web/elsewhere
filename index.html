@@ -906,6 +906,11 @@
                   id="contact-save-btn"
                   onclick="saveContact()">Save contact</button>
 
+          <button class="ghost-btn"
+                  id="contact-cancel-btn"
+                  style="margin-top:0;"
+                  onclick="cancelContactEdit()">Cancel</button>
+
           <button class="danger-btn"
                   id="contact-delete-btn"
                   onclick="requestDeleteContact()"
@@ -1004,12 +1009,20 @@
         menu.classList.remove('open');
       });
 
-      // Close any open modal + the user menu on Escape
+      // Escape: close any open modal + the user menu first. If neither was
+      // open, treat it as a cancel for the edit screen (runs the dirty-check).
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-          document.querySelectorAll('.modal-backdrop.open')
-            .forEach(m => m.classList.remove('open'));
-          document.getElementById('user-menu').classList.remove('open');
+        if (e.key !== 'Escape') return;
+        const openModals = document.querySelectorAll('.modal-backdrop.open');
+        const menu = document.getElementById('user-menu');
+        const menuOpen = menu.classList.contains('open');
+        if (openModals.length || menuOpen) {
+          openModals.forEach(m => m.classList.remove('open'));
+          menu.classList.remove('open');
+          return;
+        }
+        if (activeScreen === 'screen-contact-edit') {
+          cancelContactEdit();
         }
       });
 
