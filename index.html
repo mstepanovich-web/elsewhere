@@ -977,6 +977,19 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="remove-avatar-modal" onclick="closeModalOnBackdrop(event, 'remove-avatar-modal')">
+    <div class="modal">
+      <div class="modal-title">Remove photo?</div>
+      <div class="modal-body">
+        The contact will use their initials instead. Nothing is saved until you tap Save contact.
+      </div>
+      <div class="modal-actions">
+        <button class="ghost-btn" style="margin-top:0;" onclick="closeModal('remove-avatar-modal')">Keep photo</button>
+        <button class="danger-btn-solid" onclick="confirmRemoveAvatar()">Remove</button>
+      </div>
+    </div>
+  </div>
+
   <div class="ver">v2.94</div>
 
   <script>
@@ -1229,12 +1242,18 @@
     function avatarPathFor(userId, contactId) { return `${userId}/${contactId}.jpg`; }
 
     // Form state mirrors what will be persisted. Lives outside the DOM so
-    // we can track dirty state / uploaded-but-not-saved avatars cleanly.
+    // we can track dirty state cleanly. Photo handling is deferred:
+    // picking a file only captures a Blob in memory + an object-URL preview,
+    // and the real Storage upload happens in saveContact(). That way, Cancel
+    // leaves the saved file untouched — nothing to roll back.
     let contactEditState = {
-      id: null,                   // UUID — set on openNewContact() or openEditContact()
-      avatarPath: null,           // current path in bucket, null if no avatar
-      originalAvatarPath: null,   // path at form-entry — used to know whether to delete on save
-      savePressed: false,         // used to gate the email/phone hint
+      id: null,                        // UUID — set on openNewContact() or openEditContact()
+      originalAvatarPath: null,        // bucket path from DB on form open (null if no photo)
+      originalAvatarSignedUrl: null,   // display URL for the existing DB photo
+      pendingAvatarBlob: null,         // freshly-picked photo, NOT yet uploaded
+      pendingAvatarBlobUrl: null,      // object-URL preview for pendingAvatarBlob
+      pendingClear: false,             // user tapped × on an existing photo — delete on save
+      savePressed: false,              // used to gate the email/phone hint
       contactFieldsTouched: false,
       baseline: null,
     };
@@ -1388,7 +1407,8 @@
       resetContactEditForm();
       const screen = document.getElementById('screen-contact-edit');
       screen.dataset.mode = 'new';
-      // Assign a UUID up-front so avatar uploads land at the final path.
+      // Assign a UUID up-front so the eventual avatar upload lands at the
+      // final path and the DB insert uses the same id.
       contactEditState.id = newUuid();
       screen.dataset.contactId = contactEditState.id;
       document.getElementById('contact-edit-title').textContent = 'New contact';
@@ -1409,16 +1429,14 @@
       document.getElementById('contact-nickname').value  = row.nickname || '';
       document.getElementById('contact-email').value     = row.email || '';
       document.getElementById('contact-phone').value     = row.phone || '';
-      // The row's avatar_url is already a signed URL (set by loadContacts).
-      // We need the underlying path separately so we know what to clean up
-      // on save/delete — derive it from the user id + contact id.
+      // row.avatar_url is a signed URL produced by loadContacts; the bucket
+      // path itself is deterministic from user.id + row.id.
       const user = window.elsewhere?.getCurrentUser?.();
       if (row.avatar_url && user) {
-        contactEditState.avatarPath = avatarPathFor(user.id, row.id);
-        contactEditState.originalAvatarPath = contactEditState.avatarPath;
-        showAvatarImage(row.avatar_url);
+        contactEditState.originalAvatarPath = avatarPathFor(user.id, row.id);
+        contactEditState.originalAvatarSignedUrl = row.avatar_url;
       }
-      updateAvatarVisual();
+      renderAvatarPicker();
       updateSaveButtonState();
       document.getElementById('contact-delete-btn').style.display = '';
       captureContactEditBaseline();
@@ -1426,10 +1444,17 @@
     }
 
     function resetContactEditForm() {
+      // Release any object-URL preview from the previous form session.
+      if (contactEditState.pendingAvatarBlobUrl) {
+        URL.revokeObjectURL(contactEditState.pendingAvatarBlobUrl);
+      }
       contactEditState = {
         id: null,
-        avatarPath: null,
         originalAvatarPath: null,
+        originalAvatarSignedUrl: null,
+        pendingAvatarBlob: null,
+        pendingAvatarBlobUrl: null,
+        pendingClear: false,
         savePressed: false,
         contactFieldsTouched: false,
         baseline: null,
@@ -1439,38 +1464,35 @@
       }
       document.getElementById('contact-edit-hint').style.display = 'none';
       document.getElementById('contact-edit-error').style.display = 'none';
-      document.getElementById('avatar-clear-btn').style.display = 'none';
-      document.getElementById('avatar-picker-image').style.display = 'none';
-      document.getElementById('avatar-picker-image').src = '';
       document.getElementById('avatar-upload-overlay').style.display = 'none';
       document.getElementById('avatar-file-input').value = '';
       // Reset Save button cosmetic state in case a prior save had mutated it.
       document.getElementById('contact-save-btn').textContent = 'Save contact';
-      updateAvatarVisual();
+      renderAvatarPicker();
       updateSaveButtonState();
     }
 
-    // Snapshot of form values on entry — diffed against the live form on Cancel
-    // to decide whether to prompt about discarding unsaved edits.
+    // Snapshot of text fields on entry — diffed against the live form on
+    // Cancel. Photo changes aren't snapshotted; isContactEditDirty checks
+    // pendingAvatarBlob / pendingClear directly since those ARE the change.
     function captureContactEditBaseline() {
       contactEditState.baseline = {
         full_name: document.getElementById('contact-full-name').value,
         nickname:  document.getElementById('contact-nickname').value,
         email:     document.getElementById('contact-email').value,
         phone:     document.getElementById('contact-phone').value,
-        avatarPath: contactEditState.avatarPath,
       };
     }
     function isContactEditDirty() {
       const b = contactEditState.baseline;
       if (!b) return false;
-      return (
-        b.full_name  !== document.getElementById('contact-full-name').value ||
-        b.nickname   !== document.getElementById('contact-nickname').value ||
-        b.email      !== document.getElementById('contact-email').value ||
-        b.phone      !== document.getElementById('contact-phone').value ||
-        b.avatarPath !== contactEditState.avatarPath
-      );
+      if (b.full_name !== document.getElementById('contact-full-name').value) return true;
+      if (b.nickname  !== document.getElementById('contact-nickname').value) return true;
+      if (b.email     !== document.getElementById('contact-email').value) return true;
+      if (b.phone     !== document.getElementById('contact-phone').value) return true;
+      if (contactEditState.pendingAvatarBlob) return true;
+      if (contactEditState.pendingClear) return true;
+      return false;
     }
 
     function cancelContactEdit() {
@@ -1485,28 +1507,45 @@
       goTo('screen-contacts');
     }
 
-    // Updates initials + color whenever name changes.
+    // Updates initials + color whenever name changes. Called from
+    // renderAvatarPicker so every state change keeps the fallback in sync.
     function updateAvatarVisual() {
       const name = document.getElementById('contact-full-name').value;
       const picker = document.getElementById('avatar-picker');
       const initials = document.getElementById('avatar-picker-initials');
-      // Swap the avatar-N class without disturbing the rest.
       picker.className = picker.className
         .replace(/\bavatar-\d+\b/g, '')
         .trim() + ' ' + avatarClassForName(name);
       initials.textContent = avatarInitialsForName(name);
     }
 
-    function showAvatarImage(url) {
+    // Single source of truth for what the picker circle should show:
+    // pending blob > existing DB photo (unless cleared) > initials.
+    function avatarDisplayUrl() {
+      if (contactEditState.pendingAvatarBlobUrl) return contactEditState.pendingAvatarBlobUrl;
+      if (!contactEditState.pendingClear && contactEditState.originalAvatarSignedUrl) {
+        return contactEditState.originalAvatarSignedUrl;
+      }
+      return null;
+    }
+    function renderAvatarPicker() {
+      updateAvatarVisual();
       const img = document.getElementById('avatar-picker-image');
       const clearBtn = document.getElementById('avatar-clear-btn');
-      img.src = url;
-      img.style.display = '';
-      clearBtn.style.display = '';
+      const url = avatarDisplayUrl();
+      if (url) {
+        img.src = url;
+        img.style.display = '';
+        clearBtn.style.display = '';
+      } else {
+        img.src = '';
+        img.style.display = 'none';
+        clearBtn.style.display = 'none';
+      }
     }
 
     function onContactFormChange() {
-      updateAvatarVisual();
+      renderAvatarPicker();
       updateSaveButtonState();
       maybeShowContactHint();
     }
@@ -1551,7 +1590,7 @@
       document.getElementById('contact-edit-error').style.display = 'none';
     }
 
-    // ── Save (insert or update) ───────────────────────────────
+    // ── Save (insert or update + deferred avatar upload) ──────
     async function saveContact() {
       contactEditState.savePressed = true;
       maybeShowContactHint();
@@ -1577,6 +1616,7 @@
       }
 
       const btn = document.getElementById('contact-save-btn');
+      const overlay = document.getElementById('avatar-upload-overlay');
       btn.disabled = true;
       btn.textContent = 'Saving\u2026';
 
@@ -1584,17 +1624,38 @@
       const mode = screen.dataset.mode;
       const id   = screen.dataset.contactId;
 
-      const fields = {
-        full_name: name,
-        nickname:  nick  || null,
-        email:     email || null,
-        phone:     phone || null,
-        avatar_url: contactEditState.avatarPath || null,
-      };
-
       try {
+        // Upload pending photo FIRST — we can't write the DB row's avatar_url
+        // until we know the blob actually made it to the bucket.
+        let finalAvatarPath;
+        if (contactEditState.pendingAvatarBlob) {
+          overlay.style.display = '';
+          const path = avatarPathFor(user.id, id);
+          const { error: upErr } = await window.sb.storage
+            .from(AVATAR_BUCKET)
+            .upload(path, contactEditState.pendingAvatarBlob, {
+              contentType: 'image/jpeg',
+              upsert: true,
+            });
+          overlay.style.display = 'none';
+          if (upErr) throw upErr;
+          finalAvatarPath = path;
+        } else if (contactEditState.pendingClear) {
+          finalAvatarPath = null;
+        } else {
+          finalAvatarPath = contactEditState.originalAvatarPath;
+        }
+
+        const fields = {
+          full_name: name,
+          nickname:  nick  || null,
+          email:     email || null,
+          phone:     phone || null,
+          avatar_url: finalAvatarPath,
+        };
+
         if (mode === 'new') {
-          fields.id = id;  // client-generated UUID (matches any uploaded avatar path)
+          fields.id = id;  // client-generated UUID, matches the avatar path
           fields.account_id = user.id;
           const { error } = await window.sb.from('contacts').insert(fields);
           if (error) throw error;
@@ -1603,15 +1664,18 @@
           if (error) throw error;
         }
 
-        // If the form had an avatar when we opened it and now doesn't, the
-        // user cleared it — remove the storage file AFTER the DB write
-        // succeeded. A failure here leaves an orphan blob but doesn't roll
-        // back the save (the user would have to retry, which is worse UX).
-        if (contactEditState.originalAvatarPath && !contactEditState.avatarPath) {
+        // Explicit clear: remove the file AFTER the DB is the new source of
+        // truth. Orphan on failure is better than a rollback.
+        if (contactEditState.pendingClear && contactEditState.originalAvatarPath) {
           const { error: rmErr } = await window.sb.storage
             .from(AVATAR_BUCKET)
             .remove([contactEditState.originalAvatarPath]);
-          if (rmErr) console.warn('[contacts] orphan avatar cleanup failed', rmErr);
+          if (rmErr) console.warn('[contacts] avatar cleanup failed', rmErr);
+        }
+
+        if (contactEditState.pendingAvatarBlobUrl) {
+          URL.revokeObjectURL(contactEditState.pendingAvatarBlobUrl);
+          contactEditState.pendingAvatarBlobUrl = null;
         }
 
         // Clear baseline so back-navigation doesn't re-prompt the discard modal.
@@ -1620,6 +1684,7 @@
       } catch (e) {
         console.error('[contacts] save failed', e);
         showContactEditError(e?.message || 'Could not save contact.');
+        overlay.style.display = 'none';
         btn.disabled = false;
         btn.textContent = 'Save contact';
       }
@@ -1677,27 +1742,38 @@
     }
 
     // ── Avatar picker (file input) ────────────────────────────
+    // Picking only stages the photo in memory (as a Blob + object-URL). The
+    // real upload happens in saveContact(). That way, Cancel/Discard has
+    // nothing to roll back — the Storage bucket never saw a half-save.
     function pickAvatar() {
       document.getElementById('avatar-file-input').click();
     }
 
     function clearAvatar() {
-      contactEditState.avatarPath = null;
-      document.getElementById('avatar-picker-image').style.display = 'none';
-      document.getElementById('avatar-picker-image').src = '';
-      document.getElementById('avatar-clear-btn').style.display = 'none';
+      // Removing a photo is the kind of action people tap by accident, so
+      // we confirm. "Remove" applies to whichever photo is currently showing:
+      // a pending pick (just discard it) or the saved DB photo (mark pending
+      // clear, to be acted on at save time).
+      openModal('remove-avatar-modal');
+    }
+    function confirmRemoveAvatar() {
+      closeModal('remove-avatar-modal');
+      if (contactEditState.pendingAvatarBlobUrl) {
+        URL.revokeObjectURL(contactEditState.pendingAvatarBlobUrl);
+        contactEditState.pendingAvatarBlob = null;
+        contactEditState.pendingAvatarBlobUrl = null;
+      } else if (contactEditState.originalAvatarPath) {
+        contactEditState.pendingClear = true;
+      }
       document.getElementById('avatar-file-input').value = '';
+      renderAvatarPicker();
+      updateSaveButtonState();
     }
 
     async function onAvatarFilePicked(event) {
       const file = event.target.files?.[0];
       if (!file) return;
 
-      const user = window.elsewhere?.getCurrentUser?.();
-      if (!user) {
-        showContactEditError('You need to be signed in to upload a photo.');
-        return;
-      }
       if (!contactEditState.id) {
         // Shouldn't happen — openNewContact/openEditContact both set this.
         showContactEditError('Something went wrong. Reopen the form and try again.');
@@ -1710,19 +1786,21 @@
 
       try {
         const blob = await compressImageToJpegSquare(file, 512, 0.85);
-        const path = avatarPathFor(user.id, contactEditState.id);
-        const { error } = await window.sb.storage
-          .from(AVATAR_BUCKET)
-          .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
-        if (error) throw error;
+        const url  = URL.createObjectURL(blob);
 
-        const signed = await signAvatarPath(path);
-        contactEditState.avatarPath = path;
-        if (signed) showAvatarImage(signed);
+        // If a previous pick is being replaced, free its preview URL first.
+        if (contactEditState.pendingAvatarBlobUrl) {
+          URL.revokeObjectURL(contactEditState.pendingAvatarBlobUrl);
+        }
+        contactEditState.pendingAvatarBlob    = blob;
+        contactEditState.pendingAvatarBlobUrl = url;
+        contactEditState.pendingClear         = false;  // a fresh pick unstages any prior clear
+
+        renderAvatarPicker();
         updateSaveButtonState();
       } catch (e) {
-        console.error('[contacts] avatar upload failed', e);
-        showContactEditError(e?.message || 'Could not upload photo.');
+        console.error('[contacts] avatar compression failed', e);
+        showContactEditError(e?.message || 'Could not process that photo.');
       } finally {
         overlay.style.display = 'none';
         // Reset so the same file can be re-picked if needed.
