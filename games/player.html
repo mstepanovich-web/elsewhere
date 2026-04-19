@@ -3118,29 +3118,69 @@ function maybeCloseAddTvModal(e) {
 
 function renderAddTvQR(url) {
   const canvas = document.getElementById('add-tv-qr');
+  if (!canvas) { log('QR: canvas element missing'); return; }
   const size = canvas.width;
   const ctx = canvas.getContext('2d');
-  // Blank white base in case library isn't loaded yet
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, size, size);
+
   if (typeof QRCode === 'undefined') {
+    log('QR: qrcodejs library not loaded (typeof QRCode === undefined)');
     ctx.fillStyle = '#333'; ctx.font = '11px monospace';
     ctx.fillText('QR library loading…', 10, size/2);
     return;
   }
-  // qrcodejs — render into temp div then copy image into our canvas
+
   const tmp = document.createElement('div');
   tmp.style.cssText = 'position:fixed;left:-9999px;top:0;';
   document.body.appendChild(tmp);
-  new QRCode(tmp, { text: url, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
-  const done = () => {
-    const img = tmp.querySelector('img');
-    const src = img || tmp.querySelector('canvas');
-    if (src) ctx.drawImage(src, 0, 0, size, size);
+  try {
+    new QRCode(tmp, { text: url, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
+  } catch(e) { log('QR ctor threw: '+e.message); tmp.remove(); return; }
+
+  // qrcodejs creates a <canvas> drawn with the QR, then sets an <img>
+  // with src=canvas.toDataURL(). On iOS WebView, img.complete can flip
+  // to true synchronously while pixel decode is still pending, so the
+  // old "if !complete, onload; else draw" logic painted before pixels
+  // were ready → blank square. Fix: prefer the already-drawn canvas if
+  // present (synchronous + safe), else use img.decode() (awaits actual
+  // decode), with onload + polling fallbacks for older runtimes.
+  let drawn = false;
+  const draw = (src, why) => {
+    if (drawn) return; drawn = true;
+    try { ctx.drawImage(src, 0, 0, size, size); log('QR drawn via '+why); }
+    catch(e) { log('QR drawImage error ('+why+'): '+e.message); }
     tmp.remove();
   };
-  const img = tmp.querySelector('img');
-  if (img && !img.complete) img.onload = done;
-  else done();
+
+  const qrCanvas = tmp.querySelector('canvas');
+  const qrImg    = tmp.querySelector('img');
+  log('QR: canvas='+!!qrCanvas+' img='+!!qrImg);
+
+  // Preferred path: use the qrcodejs-drawn canvas directly. Synchronous,
+  // no decode wait. Avoids the whole img-complete race.
+  if (qrCanvas) { draw(qrCanvas, 'canvas'); return; }
+
+  if (!qrImg) { log('QR: library produced neither canvas nor img'); tmp.remove(); return; }
+
+  // Image path — wait for pixel decode. Preferred: HTMLImageElement.decode()
+  // returns a Promise that resolves when decoding actually completes.
+  if (typeof qrImg.decode === 'function') {
+    qrImg.decode()
+      .then(() => draw(qrImg, 'decode'))
+      .catch(e => { log('QR img.decode failed: '+e.message); tmp.remove(); });
+    return;
+  }
+
+  // Fallback for runtimes without decode(): onload + polled completeness.
+  qrImg.onload  = () => draw(qrImg, 'onload');
+  qrImg.onerror = () => { log('QR img onerror'); tmp.remove(); };
+  const poll = () => {
+    if (drawn) return;
+    if (qrImg.complete && qrImg.naturalWidth > 0) draw(qrImg, 'poll');
+  };
+  poll();
+  setTimeout(poll,  50);
+  setTimeout(poll, 300);
 }
 
 function copyAddTvUrl() {
