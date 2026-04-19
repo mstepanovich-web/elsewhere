@@ -156,3 +156,12 @@ Deferred to Phase 2:
 - Impact: every iOS-app user opening an invite deep link becomes a manager of the room they join, creating duplicate managers
 - Must be fixed before Session 5 invite flow ships — otherwise every invitee arrives as a manager and the single-manager assumption breaks
 - Fix options: (a) gate on a `?role=manager` deep-link param (set only by the inviter's "share to my own device" flow, not by invitee links), or (b) remove auto-check entirely and trust the URL `?mgr=1` param exclusively
+
+### Player tile avatar unification (Session 5 scope)
+
+- Contacts screen uses circular avatars with two-letter initials + one of 7 deterministic palette colors (`--color-avatar-1..7`), optionally with photo
+- `games/tv.html` currently uses rectangular dark tiles with monospace initials — different visual language
+- Unification requires `contact_id` linkage on participants (Session 5 provides this)
+- Session 5 should reuse the Contacts avatar component for player tiles
+- Guest joins (no `contact_id`) fall back to initials-only; palette color hashed from `display_name`
+- Also applies to `karaoke/stage.html` participant list in Phase 2

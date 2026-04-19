@@ -124,6 +124,19 @@
     .player-badge-mgr { position: absolute; top: 4px; left: 4px; font-size: 9px; letter-spacing: .08em; padding: 1px 6px; border-radius: var(--radius-pill); background: var(--color-border-dim); color: var(--color-gold); }
     .last-card-alert { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; font-size: clamp(8px,.9vw,11px); font-weight: 700; color: var(--color-red); text-transform: uppercase; letter-spacing: .08em; text-shadow: 0 0 12px rgba(232,25,44,.8); }
 
+    /* Player meta row — name · cards · score on one horizontal line.
+       Keeps tile vertical footprint small so text doesn't collide with
+       the centre panel when tiles sit close to centre on big screens.
+       Phone breakpoint below re-stacks vertically (space too tight
+       horizontally at that width). */
+    .player-meta-row {
+      display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
+      gap: clamp(5px,.7vw,10px);
+      max-width: clamp(180px,18vw,300px);
+      padding: 0 4px;
+    }
+    .meta-unit { font-size: .55em; opacity: .55; font-weight: 400; letter-spacing: .04em; }
+
     /* ── TRIVIA ── */
     #screen-trivia { flex-direction: column; padding: clamp(28px,4vh,56px) clamp(40px,6vw,90px); }
     .tv-q-meta   { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; }
@@ -225,6 +238,10 @@
       .player-badge-mgr  { font-size: 8px; padding: 1px 4px; top: 2px; left: 2px; }
       .last-card-alert   { font-size: 8px; }
       .player-tile       { gap: 3px; }
+
+      /* Meta row re-stacks at phone — adjacent tiles sit ~120px apart
+         on the ellipse and a 180px horizontal row would overlap neighbours. */
+      .player-meta-row { flex-direction: column; gap: 1px; max-width: 72px; align-items: center; }
 
       /* Centre panel — tighter still */
       #centre-panel {
@@ -402,7 +419,7 @@
   </div>
   <div id="log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.96</div>
+<div class="ver">v2.97</div>
 
 <script>
 'use strict';
@@ -676,9 +693,11 @@ function renderPlayerTiles() {
 
     tile.innerHTML = `
       ${mediaHtml}
-      <div class="player-name">${name}</div>
-      <div class="player-cards">${handCount} <span style="font-size:.6em;opacity:.6;">cards</span></div>
-      <div class="player-score">${score} pts</div>
+      <div class="player-meta-row">
+        <span class="player-name">${name}</span>
+        <span class="player-cards">${handCount}<span class="meta-unit"> cards</span></span>
+        <span class="player-score">${score} pts</span>
+      </div>
     `;
     container.appendChild(tile);
 
