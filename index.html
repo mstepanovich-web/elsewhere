@@ -662,6 +662,25 @@
       transition: all var(--transition-fast);
     }
     .danger-btn:active { background: var(--color-red-faint); }
+    .danger-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .danger-btn-solid {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--color-red);
+      color: var(--color-white);
+      border: 1px solid var(--color-red);
+      border-radius: var(--radius-pill);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider);
+      text-transform: uppercase;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .danger-btn-solid:active   { filter: brightness(0.9); }
+    .danger-btn-solid:disabled { opacity: 0.5; cursor: not-allowed; }
 
     /* ── Version badge ────────────────────────────────────── */
     .ver {
@@ -922,6 +941,33 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="delete-contact-modal" onclick="closeModalOnBackdrop(event, 'delete-contact-modal')">
+    <div class="modal">
+      <div class="modal-title">Delete contact?</div>
+      <div class="modal-body">
+        Delete <strong id="delete-contact-name">this contact</strong>? This cannot be undone.
+      </div>
+      <div class="screen-error-banner" id="delete-contact-error" style="display:none;margin-bottom:8px;"></div>
+      <div class="modal-actions">
+        <button class="ghost-btn" style="margin-top:0;" onclick="closeModal('delete-contact-modal')">Cancel</button>
+        <button class="danger-btn-solid" id="delete-contact-confirm-btn" onclick="confirmDeleteContact()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="discard-changes-modal" onclick="closeModalOnBackdrop(event, 'discard-changes-modal')">
+    <div class="modal">
+      <div class="modal-title">Discard changes?</div>
+      <div class="modal-body">
+        You have unsaved edits. Leaving now will throw them away.
+      </div>
+      <div class="modal-actions">
+        <button class="ghost-btn" style="margin-top:0;" onclick="closeModal('discard-changes-modal')">Keep editing</button>
+        <button class="danger-btn-solid" onclick="confirmDiscardChanges()">Discard</button>
+      </div>
+    </div>
+  </div>
+
   <div class="ver">v2.94</div>
 
   <script>
@@ -958,11 +1004,11 @@
         menu.classList.remove('open');
       });
 
-      // Close modals on Escape
+      // Close any open modal + the user menu on Escape
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-          closeModal('room-modal');
-          closeModal('games-desktop-modal');
+          document.querySelectorAll('.modal-backdrop.open')
+            .forEach(m => m.classList.remove('open'));
           document.getElementById('user-menu').classList.remove('open');
         }
       });
@@ -1208,13 +1254,19 @@
       }).catch(e => {
         console.error('[contacts] load failed', e);
         load.style.display = 'none';
-        empty.style.display = 'flex';
-        showContactsError(e?.message || 'Could not load contacts.');
+        showContactsError((e?.message || 'Could not load contacts.') + ' Tap ← Back to try again.');
       });
     }
 
-    // Stub — replaced by a real Supabase query in Part D.
-    async function loadContacts() { return []; }
+    // RLS enforces the account_id = auth.uid() filter; we only need to order.
+    async function loadContacts() {
+      const { data, error } = await window.sb
+        .from('contacts')
+        .select('id, full_name, nickname, email, phone, avatar_url')
+        .order('full_name', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    }
 
     function renderContactsList(rows) {
       const list = document.getElementById('contacts-list');
@@ -1274,6 +1326,7 @@
       screen.dataset.contactId = '';
       document.getElementById('contact-edit-title').textContent = 'New contact';
       document.getElementById('contact-delete-btn').style.display = 'none';
+      captureContactEditBaseline();
       goTo('screen-contact-edit');
       setTimeout(() => document.getElementById('contact-full-name').focus(), 80);
     }
@@ -1295,6 +1348,7 @@
       updateAvatarVisual();
       updateSaveButtonState();
       document.getElementById('contact-delete-btn').style.display = '';
+      captureContactEditBaseline();
       goTo('screen-contact-edit');
     }
 
@@ -1305,6 +1359,7 @@
         avatarStoragePath: null,
         savePressed: false,
         contactFieldsTouched: false,
+        baseline: null,
       };
       for (const id of ['contact-full-name', 'contact-nickname', 'contact-email', 'contact-phone']) {
         document.getElementById(id).value = '';
@@ -1315,12 +1370,45 @@
       document.getElementById('avatar-picker-image').style.display = 'none';
       document.getElementById('avatar-picker-image').src = '';
       document.getElementById('avatar-upload-overlay').style.display = 'none';
+      // Reset Save button cosmetic state in case a prior save had mutated it.
+      const saveBtn = document.getElementById('contact-save-btn');
+      saveBtn.textContent = 'Save contact';
       updateAvatarVisual();
       updateSaveButtonState();
     }
 
+    // Snapshot of form values on entry — diffed against the live form on Cancel
+    // to decide whether to prompt about discarding unsaved edits.
+    function captureContactEditBaseline() {
+      contactEditState.baseline = {
+        full_name: document.getElementById('contact-full-name').value,
+        nickname:  document.getElementById('contact-nickname').value,
+        email:     document.getElementById('contact-email').value,
+        phone:     document.getElementById('contact-phone').value,
+        avatarUrl: contactEditState.avatarUrl,
+      };
+    }
+    function isContactEditDirty() {
+      const b = contactEditState.baseline;
+      if (!b) return false;
+      return (
+        b.full_name !== document.getElementById('contact-full-name').value ||
+        b.nickname  !== document.getElementById('contact-nickname').value ||
+        b.email     !== document.getElementById('contact-email').value ||
+        b.phone     !== document.getElementById('contact-phone').value ||
+        b.avatarUrl !== contactEditState.avatarUrl
+      );
+    }
+
     function cancelContactEdit() {
-      // No dirty check per spec — just discard and back.
+      if (isContactEditDirty()) {
+        openModal('discard-changes-modal');
+      } else {
+        goTo('screen-contacts');
+      }
+    }
+    function confirmDiscardChanges() {
+      closeModal('discard-changes-modal');
       goTo('screen-contacts');
     }
 
@@ -1376,15 +1464,121 @@
       btn.disabled = !name || (!email && !phone);
     }
 
-    // ── Stubs: Part D wires Supabase CRUD, Part E wires avatars ──
-    function saveContact() {
+    // ── Validation helpers ────────────────────────────────────
+    // Intentionally lightweight — matches the DB's at-least-one-channel rule.
+    function isValidEmail(s) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+    }
+    function showContactEditError(msg) {
+      const el = document.getElementById('contact-edit-error');
+      el.textContent = msg;
+      el.style.display = '';
+    }
+    function hideContactEditError() {
+      document.getElementById('contact-edit-error').style.display = 'none';
+    }
+
+    // ── Save (insert or update) ───────────────────────────────
+    async function saveContact() {
       contactEditState.savePressed = true;
       maybeShowContactHint();
-      alert('Save wiring comes in Part D.');
+
+      const name  = document.getElementById('contact-full-name').value.trim();
+      const email = document.getElementById('contact-email').value.trim();
+      const phone = document.getElementById('contact-phone').value.trim();
+      const nick  = document.getElementById('contact-nickname').value.trim();
+
+      // Belt-and-suspenders — the Save button is disabled when these are
+      // wrong, but a flaky touch could still fire the handler.
+      if (!name || (!email && !phone)) return;
+      if (email && !isValidEmail(email)) {
+        showContactEditError('That email doesn\u2019t look right. Double-check the format.');
+        return;
+      }
+      hideContactEditError();
+
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) {
+        showContactEditError('You need to be signed in to save contacts.');
+        return;
+      }
+
+      const btn = document.getElementById('contact-save-btn');
+      btn.disabled = true;
+      btn.textContent = 'Saving\u2026';
+
+      const screen = document.getElementById('screen-contact-edit');
+      const mode = screen.dataset.mode;
+      const id   = screen.dataset.contactId;
+
+      const fields = {
+        full_name: name,
+        nickname:  nick  || null,
+        email:     email || null,
+        phone:     phone || null,
+        avatar_url: contactEditState.avatarUrl || null,
+      };
+
+      try {
+        if (mode === 'new') {
+          fields.account_id = user.id;
+          const { error } = await window.sb.from('contacts').insert(fields);
+          if (error) throw error;
+        } else {
+          const { error } = await window.sb.from('contacts').update(fields).eq('id', id);
+          if (error) throw error;
+        }
+        // Clear baseline so back-navigation doesn't re-prompt the discard modal.
+        contactEditState.baseline = null;
+        goTo('screen-contacts');
+      } catch (e) {
+        console.error('[contacts] save failed', e);
+        showContactEditError(e?.message || 'Could not save contact.');
+        btn.disabled = false;
+        btn.textContent = 'Save contact';
+      }
     }
+
+    // ── Delete (confirmation modal, then DB delete) ───────────
     function requestDeleteContact() {
-      alert('Delete wiring comes in Part D.');
+      const screen = document.getElementById('screen-contact-edit');
+      if (screen.dataset.mode !== 'edit') return;
+      const name = document.getElementById('contact-full-name').value.trim() || 'this contact';
+      document.getElementById('delete-contact-name').textContent = name;
+      document.getElementById('delete-contact-error').style.display = 'none';
+      const btn = document.getElementById('delete-contact-confirm-btn');
+      btn.disabled = false;
+      btn.textContent = 'Delete';
+      openModal('delete-contact-modal');
     }
+    async function confirmDeleteContact() {
+      const screen = document.getElementById('screen-contact-edit');
+      const id = screen.dataset.contactId;
+      if (!id) { closeModal('delete-contact-modal'); return; }
+
+      const btn = document.getElementById('delete-contact-confirm-btn');
+      const errEl = document.getElementById('delete-contact-error');
+      btn.disabled = true;
+      btn.textContent = 'Deleting\u2026';
+      errEl.style.display = 'none';
+
+      try {
+        const { error } = await window.sb.from('contacts').delete().eq('id', id);
+        if (error) throw error;
+        // Part E: also sb.storage.remove([storagePath]) if the contact had an avatar.
+        contactEditState.baseline = null;
+        closeModal('delete-contact-modal');
+        goTo('screen-contacts');
+      } catch (e) {
+        console.error('[contacts] delete failed', e);
+        errEl.textContent = e?.message || 'Delete failed.';
+        errEl.style.display = '';
+        btn.disabled = false;
+        btn.textContent = 'Delete';
+      }
+    }
+
+    // ── Avatar (Part E wires this up) ─────────────────────────
     function pickAvatar() {
       alert('Avatar wiring comes in Part E.');
     }
