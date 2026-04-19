@@ -6,6 +6,8 @@
   <title>Elsewhere · Games</title>
   <link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
   <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
+  <!-- qrcodejs for the "Add TV display" pairing QR. Same CDN tv2.html uses. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
   <!-- Elsewhere shell — exposes window.sb + window.elsewhere.{getCurrentUser,
        signInWithEmail, signUpWithEmail, signOut, onAuthChange, ready}, and
@@ -225,6 +227,28 @@
 
     /* ── Version + log ── */
     .ver { position: fixed; bottom: calc(8px + env(safe-area-inset-bottom)); right: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--tracking-wider); color: var(--color-gold); z-index: 50; pointer-events: none; }
+
+    /* ── Add-TV-display modal (Session 4.8) ────────────────────────
+       Full-viewport overlay with QR + URL + share. Every player can
+       pair a secondary device as a TV display via this modal. */
+    .add-tv-modal { display: none; position: fixed; inset: 0; z-index: 600; background: rgba(4,2,6,.85); backdrop-filter: blur(6px); align-items: center; justify-content: center; padding: 20px; }
+    .add-tv-modal.open { display: flex; }
+    .add-tv-modal-inner { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: 24px 20px; max-width: 360px; width: 100%; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.6); max-height: calc(100vh - 40px); overflow-y: auto; }
+    .add-tv-title { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 300; color: var(--color-text); text-align: center; letter-spacing: var(--tracking-wide); }
+    .add-tv-sub   { font-size: var(--text-xs); color: var(--color-text-faint); text-align: center; line-height: 1.45; }
+    .add-tv-qr-box { background: #fff; padding: 10px; border-radius: var(--radius-md); align-self: center; line-height: 0; }
+    .add-tv-url-row { display: flex; gap: 8px; align-items: center; }
+    .add-tv-url { flex: 1; background: var(--color-gold-ghost); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text-dim); font-family: var(--font-mono); font-size: 11px; padding: 10px 12px; outline: none; letter-spacing: .02em; }
+    .add-tv-url-btn, .add-tv-share-btn, .add-tv-close { padding: 11px 16px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; cursor: pointer; text-align: center; font-family: var(--font-ui); }
+    .add-tv-url-btn { padding: 10px 14px; }
+    .add-tv-share-btn { background: var(--color-gold-dim); color: var(--color-bg); border-color: var(--color-gold); font-weight: 600; }
+    .add-tv-close { background: transparent; color: var(--color-text-faint); border-color: var(--color-border-dim); }
+    .add-tv-status { text-align: center; font-size: var(--text-xs); color: var(--color-green); min-height: 14px; letter-spacing: var(--tracking-wider); text-transform: uppercase; }
+
+    /* ── TV Displays section (Session 4.8) — shown in lobby when any
+       TV is paired. Hidden when tvDisplays is empty. */
+    #tv-displays-section .player-row { border-color: var(--color-border-dim); }
+    #tv-displays-section .tv-icon { font-size: 16px; flex-shrink: 0; }
 
     /* ══════════════════════════════════════════════════════════
        RESPONSIVE — Session 4.7
@@ -488,6 +512,18 @@
         <div class="player-list" id="invited-list">
           <div style="font-size:var(--text-xs);color:var(--color-text-faint);padding:8px 0;">No invites sent yet</div>
         </div>
+      </div>
+
+      <!-- TV Displays (Session 4.8) — hidden when tvDisplays is empty.
+           Populated by lobbyPlayers[*].hasTVs aggregation in Part C. -->
+      <div id="tv-displays-section" style="display:none;margin-top:16px;">
+        <div class="section-label">TV Displays</div>
+        <div class="player-list" id="tv-displays-list"></div>
+      </div>
+
+      <!-- Add TV display — all roles. Opens QR+URL modal. -->
+      <div style="margin-top:12px;">
+        <button class="invite-btn" onclick="openAddTvModal()" style="width:100%;padding:11px 10px;">📺 Add TV display</button>
       </div>
 
       <!-- Waiting message (non-manager) -->
@@ -787,8 +823,12 @@ let videoTrack=null, cameraOn=false;
 
 let currentGame='lastcard', playerLimit=6;
 let managerIsPlayer=true;
-let lobbyPlayers=[];   // {uid,name,isManager,status:'active'|'queue',hasCamera,videoEl}
+let lobbyPlayers=[];   // {uid,player_id,name,isManager,status:'active'|'queue',hasCamera,videoEl,hasTVs:[{tv_uid,tv_name}]}
 let invitedNames=[];   // names of people invited but not yet joined
+// Session 4.8: 10s grace timers so brief disconnects don't flicker the
+// lobby. Keys: player_id for players, tv_uid for TVs.
+// Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+const pendingRemovals = new Map();
 let gameInProgress=false;
 let playAgainResponses={};
 
@@ -900,6 +940,9 @@ if (window.Capacitor?.Plugins?.App) {
 async function doJoin() {
   myName   = nameInput.value.trim();
   roomCode = codeInput.value.toUpperCase();
+  // Session 4.8: stable player_id for TV-ownership + reconnect dedup.
+  // Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+  myPlayerId = getOrCreatePlayerId(roomCode);
   joinBtn.disabled = true;
   joinBtn.textContent = 'Joining...';
   try {
@@ -941,15 +984,18 @@ async function doJoin() {
     // Check if TV is present (non-player watcher on channel)
     checkTvPresent();
 
-    // Add myself to lobby
-    lobbyPlayers.push({uid:myUid, name:myName, isManager, status:'active', hasCamera:false});
+    // Add myself to lobby (Session 4.8: self entry carries player_id + hasTVs).
+    lobbyPlayers.push({uid:myUid, player_id:myPlayerId, name:myName, isManager, status:'active', hasCamera:false, hasTVs:[]});
 
     // Announce with retry
     let acked = false;
     function announce() {
       if (acked) return;
       log('Announcing...');
-      send({type:'player-join', name:myName, isManager});
+      // player_id (Session 4.8) stays stable across Agora reconnects so
+      // receivers can dedup by it rather than the rotating Agora uid.
+      // Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+      send({type:'player-join', name:myName, isManager, player_id:myPlayerId});
     }
     announce();
     const retry = setInterval(() => { if(acked){clearInterval(retry);return;} announce(); }, 3000);
@@ -1135,25 +1181,51 @@ function handleMessage(uid, data) {
   }
   log('← '+msg.type+' from '+(msg._name||uid));
 
-  if (msg.type==='player-join') {
-    if (!lobbyPlayers.find(p=>p.uid===uid)) {
+  // Session 4.8: dedup by player_id first (stable across Agora reconnects),
+  // fall back to uid for older clients that don't send player_id.
+  // Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+  if (msg.type==='player-join' || msg.type==='player-join-ack') {
+    const pid = msg.player_id || null;
+    let existing = pid ? lobbyPlayers.find(p=>p.player_id===pid) : null;
+    if (!existing) existing = lobbyPlayers.find(p=>p.uid===uid);
+    if (existing) {
+      // Reconnect — uid rotated, update it. Cancel any pending removal.
+      existing.uid = uid;
+      if (pid && !existing.player_id) existing.player_id = pid;
+      existing.name = msg.name;
+      existing.isManager = msg.isManager;
+      if (pid && pendingRemovals.has(pid)) { clearTimeout(pendingRemovals.get(pid)); pendingRemovals.delete(pid); }
+    } else {
       const active = lobbyPlayers.filter(p=>p.status==='active').length;
-      lobbyPlayers.push({uid, name:msg.name, isManager:msg.isManager, status:active<playerLimit?'active':'queue', hasCamera:false});
-      // Move from invited list if present
+      lobbyPlayers.push({uid, player_id:pid, name:msg.name, isManager:msg.isManager, status:active<playerLimit?'active':'queue', hasCamera:false, hasTVs:[]});
       invitedNames = invitedNames.filter(n=>n.toLowerCase()!==msg.name.toLowerCase());
     }
     if (msg.isManager) { const el=document.getElementById('manager-name-display'); if(el) el.textContent=msg.name; }
-    renderRoster(); renderInvited();
-    send({type:'player-join-ack', name:myName, isManager});
+    renderRoster(); renderInvited(); renderTvDisplays();
+    if (msg.type==='player-join') {
+      send({type:'player-join-ack', name:myName, isManager, player_id:myPlayerId});
+    }
   }
 
-  if (msg.type==='player-join-ack') {
-    if (!lobbyPlayers.find(p=>p.uid===uid)) {
-      const active=lobbyPlayers.filter(p=>p.status==='active').length;
-      lobbyPlayers.push({uid, name:msg.name, isManager:msg.isManager, status:active<playerLimit?'active':'queue', hasCamera:false});
+  // Session 4.8: tv-display-added — attach TV to its owning player's
+  // hasTVs list (dedup by tv_uid), cancel any pending-removal timer
+  // if the TV is reappearing within the grace window.
+  // Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+  if (msg.type==='tv-display-added') {
+    const owner = lobbyPlayers.find(p=>p.player_id === msg.owner_id);
+    const tvUid = msg.tv_uid;
+    if (tvUid && pendingRemovals.has(tvUid)) { clearTimeout(pendingRemovals.get(tvUid)); pendingRemovals.delete(tvUid); }
+    if (owner) {
+      if (!owner.hasTVs.some(t=>t.tv_uid===tvUid)) {
+        owner.hasTVs.push({tv_uid: tvUid, tv_name: msg.tv_name});
+      }
+    } else {
+      // Owner hasn't announced yet — the render will pick this up when
+      // the owner's player-join arrives (we skip tracking orphan TVs).
+      log('tv-display-added with unknown owner_id='+msg.owner_id+' — deferring until owner joins');
     }
-    if (msg.isManager) { const el=document.getElementById('manager-name-display'); if(el) el.textContent=msg.name; }
-    renderRoster(); renderInvited();
+    renderTvDisplays();
+    if (msg.owner_id === myPlayerId) onMyTvPaired(msg.tv_name);
   }
 
   if (msg.type==='invite-sent') {
@@ -1320,9 +1392,50 @@ function handleMessage(uid, data) {
   if (msg.type==='switch-game') { goToLobby(); }
 }
 
+// Session 4.8: grace-period removal. A brief disconnect (iOS backgrounding
+// or flaky wifi) triggers user-left, but the device often rejoins within
+// seconds. Hold the slot 10s before actually removing so the lobby doesn't
+// flicker players/TVs in and out.
+// Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+const TV_GRACE_MS = 10000;
+
 function removePlayer(uid) {
-  lobbyPlayers = lobbyPlayers.filter(p=>p.uid!==uid);
-  renderRoster();
+  // Is this uid a paired TV?
+  for (const p of lobbyPlayers) {
+    const tv = p.hasTVs.find(t=>t.tv_uid===uid);
+    if (tv) {
+      if (pendingRemovals.has(uid)) return; // already scheduled
+      const timer = setTimeout(() => {
+        pendingRemovals.delete(uid);
+        const owner = lobbyPlayers.find(pp=>pp.hasTVs.some(t=>t.tv_uid===uid));
+        if (owner) owner.hasTVs = owner.hasTVs.filter(t=>t.tv_uid!==uid);
+        renderTvDisplays();
+        log('TV removed after grace: '+uid);
+      }, TV_GRACE_MS);
+      pendingRemovals.set(uid, timer);
+      log('TV disconnect grace timer started: '+uid);
+      return;
+    }
+  }
+  // Otherwise treat as player disconnect.
+  const player = lobbyPlayers.find(p=>p.uid===uid);
+  if (!player) return;
+  const pid = player.player_id;
+  if (pid) {
+    if (pendingRemovals.has(pid)) return;
+    const timer = setTimeout(() => {
+      pendingRemovals.delete(pid);
+      lobbyPlayers = lobbyPlayers.filter(p=>p.player_id!==pid);
+      recomputeQueue(); renderRoster(); renderTvDisplays();
+      log('player removed after grace: '+pid);
+    }, TV_GRACE_MS);
+    pendingRemovals.set(pid, timer);
+    log('player disconnect grace timer started: '+pid);
+  } else {
+    // No player_id known — fall back to immediate removal (legacy clients).
+    lobbyPlayers = lobbyPlayers.filter(p=>p.uid!==uid);
+    recomputeQueue(); renderRoster(); renderTvDisplays();
+  }
 }
 
 // ── Screen management ─────────────────────────────────────────
@@ -1386,7 +1499,7 @@ function goToGameRoom() {
   document.getElementById('room-start-section').style.display=isManager?'block':'none';
   // Announce game to others
   if (isManager) send({type:'game-selected', game:currentGame});
-  renderRoster(); renderInvited();
+  renderRoster(); renderInvited(); renderTvDisplays();
   goTo('screen-game-room');
   if (isManager && currentGame==='trivia') setTimeout(()=>showTriviaSetup(),200);
 }
@@ -1419,7 +1532,35 @@ function toggleManagerAsPlayer(checked) {
   send({type:'manager-player-status', isPlayer:checked});
 }
 
-// ── Roster + invited rendering ────────────────────────────────
+// ── Roster + invited + TV displays rendering ──────────────────
+// Session 4.8 — TV Displays section is populated by aggregating
+// lobbyPlayers[*].hasTVs. Hidden when total TVs == 0.
+// Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+function renderTvDisplays() {
+  const section = document.getElementById('tv-displays-section');
+  const listEl  = document.getElementById('tv-displays-list');
+  if (!section || !listEl) return;
+  // Collect each TV with its owner's display name, preserving lobby order.
+  const rows = [];
+  for (const p of lobbyPlayers) {
+    if (!p.hasTVs || p.hasTVs.length === 0) continue;
+    p.hasTVs.forEach((tv, idx) => {
+      const total = p.hasTVs.length;
+      const label = total === 1
+        ? `${p.name}'s TV`
+        : `${p.name}'s TV (${idx+1})`;
+      rows.push({ tv_uid: tv.tv_uid, label });
+    });
+  }
+  if (rows.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  listEl.innerHTML = rows.map(r => `
+    <div class="player-row">
+      <span class="tv-icon">📺</span>
+      <div class="p-name" style="flex:1;">${r.label}</div>
+    </div>`).join('');
+}
+
 function renderInvited() {
   const el = document.getElementById('invited-list');
   if (!el) return;
@@ -2915,6 +3056,133 @@ function log(msg) {
 }
 function toggleGameLog(){const p=document.getElementById('game-log-panel');p.style.display=p.style.display==='none'?'block':'none';}
 function copyGameLog(){navigator.clipboard.writeText(_logs.join('\n')).then(()=>{const b=document.querySelector('#game-log-panel span:last-child');if(b){b.textContent='COPIED ✓';setTimeout(()=>b.textContent='COPY',2000);}});}
+
+// ════════════════════════════════════════════════════════════
+//  SESSION 4.8 — TV DISPLAY PAIRING
+// ════════════════════════════════════════════════════════════
+// Every player can pair a secondary device as a TV display for the
+// room. Pairing URL opens games/tv.html with ?paired_by=<player_id>
+// so the TV reports ownership back via a broadcast message.
+//
+// player_id is a session-scoped UUID stored in sessionStorage keyed
+// by room code. It stays stable across Agora reconnects (Agora uid
+// rotates on reconnect), so TV ownership doesn't break when a player
+// briefly drops.
+//
+// Session 5 replaces this whole client-authoritative pattern with
+// session_participants + session_tv_displays rows + Supabase realtime.
+// See PHASE1-NOTES "Games lobby state: known fragility".
+
+let myPlayerId = null; // set in doJoin once roomCode is known
+
+function getOrCreatePlayerId(room) {
+  const key = 'elsewhere_player_id_' + room;
+  let id = sessionStorage.getItem(key);
+  if (!id) {
+    // crypto.randomUUID is available in all modern browsers incl. iOS Safari
+    id = (crypto.randomUUID && crypto.randomUUID()) || (Date.now().toString(36) + Math.random().toString(36).slice(2));
+    sessionStorage.setItem(key, id);
+  }
+  return id;
+}
+
+function getAddTvUrl() {
+  if (!myPlayerId || !roomCode) return '';
+  const base = 'https://mstepanovich-web.github.io/elsewhere';
+  const nameParam = myName ? '&owner_name=' + encodeURIComponent(myName) : '';
+  return `${base}/games/tv.html?room=${roomCode}&paired_by=${myPlayerId}${nameParam}`;
+}
+
+function openAddTvModal() {
+  if (!agoraReady || !myPlayerId) { showToast('Join a room first'); return; }
+  const modal = document.getElementById('add-tv-modal');
+  modal.classList.add('open');
+  document.getElementById('add-tv-status').textContent = '';
+  const url = getAddTvUrl();
+  document.getElementById('add-tv-url').value = url;
+  renderAddTvQR(url);
+  // navigator.share is available on iOS Safari + Capacitor webview; most
+  // desktop browsers don't implement it. Only show the button when it works.
+  const shareBtn = document.getElementById('add-tv-share-btn');
+  if (shareBtn) shareBtn.style.display = navigator.share ? 'block' : 'none';
+}
+
+function closeAddTvModal() {
+  document.getElementById('add-tv-modal').classList.remove('open');
+}
+
+function maybeCloseAddTvModal(e) {
+  // Click on the backdrop closes; clicks on the inner box don't bubble.
+  if (e.target.id === 'add-tv-modal') closeAddTvModal();
+}
+
+function renderAddTvQR(url) {
+  const canvas = document.getElementById('add-tv-qr');
+  const size = canvas.width;
+  const ctx = canvas.getContext('2d');
+  // Blank white base in case library isn't loaded yet
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, size, size);
+  if (typeof QRCode === 'undefined') {
+    ctx.fillStyle = '#333'; ctx.font = '11px monospace';
+    ctx.fillText('QR library loading…', 10, size/2);
+    return;
+  }
+  // qrcodejs — render into temp div then copy image into our canvas
+  const tmp = document.createElement('div');
+  tmp.style.cssText = 'position:fixed;left:-9999px;top:0;';
+  document.body.appendChild(tmp);
+  new QRCode(tmp, { text: url, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
+  const done = () => {
+    const img = tmp.querySelector('img');
+    const src = img || tmp.querySelector('canvas');
+    if (src) ctx.drawImage(src, 0, 0, size, size);
+    tmp.remove();
+  };
+  const img = tmp.querySelector('img');
+  if (img && !img.complete) img.onload = done;
+  else done();
+}
+
+function copyAddTvUrl() {
+  const url = getAddTvUrl();
+  navigator.clipboard.writeText(url).then(() => {
+    document.getElementById('add-tv-status').textContent = 'Copied ✓';
+    setTimeout(() => { document.getElementById('add-tv-status').textContent = ''; }, 2500);
+  }).catch(() => { showToast('Copy failed — use Share'); });
+}
+
+function shareAddTvUrl() {
+  if (!navigator.share) { copyAddTvUrl(); return; }
+  navigator.share({
+    title: 'Elsewhere · TV display',
+    text:  'Open this on a nearby device to show the game view',
+    url:   getAddTvUrl(),
+  }).catch(() => {});
+}
+
+// Auto-close hook — called from handleMessage in Part C when a
+// tv-display-added broadcast arrives with owner_id === myPlayerId.
+function onMyTvPaired(tvName) {
+  document.getElementById('add-tv-status').textContent = '📺 ' + (tvName || 'TV display') + ' paired';
+  setTimeout(closeAddTvModal, 900);
+  showToast('📺 TV display paired');
+}
 </script>
+
+<!-- Add TV display modal (Session 4.8) -->
+<div id="add-tv-modal" class="add-tv-modal" onclick="maybeCloseAddTvModal(event)">
+  <div class="add-tv-modal-inner">
+    <div class="add-tv-title">Add a TV display</div>
+    <div class="add-tv-sub">Open this on a nearby screen — laptop, iPad, second phone, or a TV browser — to show the shared game view.</div>
+    <div class="add-tv-qr-box"><canvas id="add-tv-qr" width="220" height="220"></canvas></div>
+    <div class="add-tv-url-row">
+      <input class="add-tv-url" id="add-tv-url" readonly onclick="this.select()">
+      <button class="add-tv-url-btn" onclick="copyAddTvUrl()">Copy</button>
+    </div>
+    <button class="add-tv-share-btn" id="add-tv-share-btn" onclick="shareAddTvUrl()" style="display:none;">Share via…</button>
+    <button class="add-tv-close" onclick="closeAddTvModal()">Close</button>
+    <div class="add-tv-status" id="add-tv-status"></div>
+  </div>
+</div>
 </body>
 </html>

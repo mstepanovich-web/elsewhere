@@ -40,6 +40,39 @@
     #fs-prompt.dismissed { opacity: 0; pointer-events: none; }
     #fs-prompt .fs-sub { font-size: .7em; color: var(--color-text-faint); letter-spacing: .18em; text-transform: uppercase; margin-top: 14px; }
 
+    /* First-time casting instructions — only on paired TVs (when
+       ?paired_by=... is in the URL). Sits at z-index 9998 beneath
+       the fs-prompt; becomes interactable after fs-prompt dismiss.
+       Remembered in localStorage so it only appears once per device. */
+    #casting-instructions {
+      display: none;
+      position: fixed; inset: 0; z-index: 9998;
+      background: rgba(4,2,6,.9); backdrop-filter: blur(8px);
+      align-items: center; justify-content: center;
+      padding: 24px;
+      transition: opacity .35s ease;
+    }
+    #casting-instructions.open { display: flex; }
+    #casting-instructions.dismissed { opacity: 0; pointer-events: none; }
+    #casting-instructions .ci-inner {
+      max-width: 420px; width: 100%;
+      background: var(--color-surface); border: 1px solid var(--color-border);
+      border-radius: var(--radius-xl); padding: 28px 24px;
+      display: flex; flex-direction: column; gap: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.6);
+    }
+    #casting-instructions .ci-title { font-family: var(--font-display); font-size: clamp(20px,2.4vw,28px); font-weight: 300; color: var(--color-text); text-align: center; letter-spacing: var(--tracking-wide); }
+    #casting-instructions .ci-body  { font-size: var(--text-sm); color: var(--color-text-dim); line-height: 1.55; }
+    #casting-instructions .ci-body ul { margin: 10px 0 0 0; padding-left: 20px; }
+    #casting-instructions .ci-body li { margin: 4px 0; }
+    #casting-instructions .ci-close {
+      margin-top: 8px; padding: 13px; border-radius: var(--radius-pill);
+      background: var(--color-gold-dim); color: var(--color-bg);
+      border: 1px solid var(--color-gold); font-weight: 600;
+      font-size: var(--text-sm); letter-spacing: var(--tracking-wider);
+      text-transform: uppercase; cursor: pointer; font-family: var(--font-ui);
+    }
+
     /* ── LOBBY SCREEN ── */
     #screen-lobby { flex-direction: column; align-items: center; justify-content: center; gap: 0; padding: 40px 60px; }
     .lobby-game-name { font-family: var(--font-display); font-size: clamp(36px,5vw,72px); font-weight: 300; letter-spacing: var(--tracking-wide); color: var(--color-text); margin-bottom: 8px; text-align: center; }
@@ -299,6 +332,23 @@
   </div>
 </div>
 
+<!-- First-time casting instructions — only shown when ?paired_by is set
+     in the URL and the user hasn't dismissed it on this device. -->
+<div id="casting-instructions">
+  <div class="ci-inner">
+    <div class="ci-title">📺 You're on the TV</div>
+    <div class="ci-body">
+      To show this on your TV:
+      <ul>
+        <li>Mirror this device — AirPlay, Chromecast, or Miracast</li>
+        <li>Or connect an HDMI cable</li>
+        <li>Or just leave this page open on the largest screen you have</li>
+      </ul>
+    </div>
+    <button class="ci-close" onclick="dismissCastingInstructions()">Got it →</button>
+  </div>
+</div>
+
 <div class="tv-wordmark">Elsewhere · Games</div>
 
 <!-- ══════════════════════════════════════════════════════ -->
@@ -319,6 +369,13 @@
       <div class="lobby-col-title">Invited — Not Yet Joined</div>
       <div id="tv-invited-list"><div class="lobby-empty">No invites sent yet</div></div>
     </div>
+  </div>
+
+  <!-- TV Displays section (Session 4.8) — shown below the lobby
+       columns when any paired TV is present; hidden otherwise. -->
+  <div id="tv-displays-section" style="display:none;max-width:900px;width:100%;margin-top:32px;">
+    <div class="lobby-col-title">TV Displays</div>
+    <div id="tv-displays-list"></div>
   </div>
 </div>
 
@@ -429,6 +486,15 @@ const CHAN_PREFIX   = 'elsewhere_g';
 const urlParams    = new URLSearchParams(location.search);
 const roomCode     = (urlParams.get('room')||'').toUpperCase();
 
+// Session 4.8: paired-TV mode. When pairedBy is set this tv.html is a
+// secondary display owned by a player; without it, this is a primary TV
+// (the one tv2.html redirects to after a phone joins). Only paired TVs
+// broadcast tv-display-added and show the casting instructions overlay.
+const pairedBy  = urlParams.get('paired_by') || '';
+const ownerName = decodeURIComponent(urlParams.get('owner_name') || '');
+const isPairedTV = !!pairedBy;
+const CASTING_DISMISSED_KEY = 'elsewhere_casting_dismissed';
+
 document.getElementById('lobby-room-code').textContent = roomCode || '——';
 document.getElementById('game-bar-room').textContent   = 'Room ' + roomCode;
 document.getElementById('tv-room-badge').textContent   = 'Room ' + roomCode;
@@ -436,8 +502,19 @@ document.getElementById('tv-room-badge').textContent   = 'Room ' + roomCode;
 let agoraClient = null;
 let currentGame = null;
 let gameState   = null;
-let players     = {};   // uid → { name, isManager, hasCamera, videoTrack }
+let players     = {};   // uid → { name, isManager, player_id, hasCamera, videoTrack }
 let invitedList = [];   // names invited but not yet joined
+let streamId    = null; // Agora data stream id (or null → use fallback sendStreamMessage signature)
+
+// Session 4.8 TV-pairing state.
+// Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+// tvDisplays: [{ owner_id, tv_uid, tv_name }]
+// tvUidSet:   Set of Agora uids that are paired TVs (not players)
+// pendingRemovals: 10s grace timers keyed by player_id or tv_uid
+let tvDisplays      = [];
+const tvUidSet      = new Set();
+const pendingRemovals = new Map();
+const TV_GRACE_MS   = 10000;
 
 // ── Color helpers ────────────────────────────────────────────
 // game-semantic, intentionally not themed — Last Card per-suit BG hex (COLOR_BG used on inline styles)
@@ -461,15 +538,22 @@ async function initAgora() {
 
   agoraClient.on('user-joined', u => {
     tvLog('user-joined: '+u.uid);
+    // Session 4.8: paired TVs announce themselves via tv-display-added
+    // which arrives shortly after user-joined. If we already know this
+    // uid is a TV (from a prior broadcast this session) skip adding to
+    // players — otherwise provisionally add and tv-display-added handler
+    // will move it out.
+    if (tvUidSet.has(u.uid)) return;
     if (!players[u.uid]) players[u.uid] = { name:'...', isManager:false, hasCamera:false };
     renderLobby();
   });
 
+  // Session 4.8: grace-period removal. Players + TVs are held 10s before
+  // final removal so brief iOS reconnects don't flicker the lobby.
+  // Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
   agoraClient.on('user-left', u => {
     tvLog('user-left: '+u.uid);
-    delete players[u.uid];
-    renderLobby();
-    renderPlayerTiles();
+    scheduleRemoval(u.uid);
   });
 
   agoraClient.on('stream-message', (uid, data) => handleMessage(uid, data));
@@ -492,8 +576,47 @@ async function initAgora() {
     renderPlayerTiles();
   });
 
+  // Rebroadcast tv-display-added when we reconnect — same ephemerality
+  // failure mode as player-join (messages dropped across RECONNECTING).
+  // Session 5 moves TV registration to a Supabase row; no rebroadcasts
+  // needed then. See PHASE1-NOTES "Games lobby state: known fragility".
+  agoraClient.on('connection-state-change', async (cur, prev) => {
+    tvLog('conn: '+prev+' → '+cur);
+    if (isPairedTV && cur === 'CONNECTED' && prev === 'RECONNECTING') {
+      await broadcastTvDisplayAdded();
+    }
+  });
+
   await agoraClient.join(AGORA_APP_ID, CHAN_PREFIX+roomCode, null, null);
   tvLog('TV joined: '+CHAN_PREFIX+roomCode);
+
+  // Session 4.8 — paired TVs announce themselves so players + other TVs
+  // can list them under "TV Displays". Primary TVs (no paired_by) skip.
+  if (isPairedTV) {
+    try { streamId = await agoraClient.createDataStream({reliable:true, ordered:true}); }
+    catch(e) { streamId = null; tvLog('createDataStream unsupported — fallback'); }
+    await broadcastTvDisplayAdded();
+  }
+}
+
+// ── TV pairing broadcast (Session 4.8) ────────────────────────
+// Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+async function broadcastTvDisplayAdded() {
+  if (!isPairedTV || !agoraClient) return;
+  const tvName = (ownerName ? ownerName + "'s TV" : "A player's TV");
+  const msg = {
+    type: 'tv-display-added',
+    owner_id: pairedBy,
+    tv_name: tvName,
+    tv_uid: agoraClient.uid,
+    _uid: agoraClient.uid,
+  };
+  const bytes = new TextEncoder().encode(JSON.stringify(msg));
+  try {
+    if (streamId !== null) await agoraClient.sendStreamMessage(streamId, bytes);
+    else                   await agoraClient.sendStreamMessage(bytes, true);
+    tvLog('sent tv-display-added owner='+pairedBy+' name='+tvName);
+  } catch(e) { tvLog('tv-display-added send failed: '+e.message); }
 }
 
 // ── Messages ─────────────────────────────────────────────────
@@ -517,12 +640,48 @@ function handleMessage(uid, data) {
     if (msg._chunk) { msg = handleChunk(msg); if (!msg) return; }
     tvLog('← '+msg.type+' '+(msg._name||''));
 
+    // Session 4.8: players identified by stable player_id. On reconnect
+    // the Agora uid rotates; find existing entry by player_id and move
+    // it to the new uid so TV ownership etc. stays consistent.
+    // Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
     if (msg.type==='player-join' || msg.type==='player-join-ack') {
+      const pid = msg.player_id || null;
+      // Look for existing entry by player_id first.
+      let oldUid = null;
+      if (pid) {
+        for (const [k, p] of Object.entries(players)) {
+          if (p.player_id === pid && k !== String(uid)) { oldUid = k; break; }
+        }
+      }
+      if (oldUid) {
+        // Reconnect: move the entry to the new uid.
+        players[uid] = players[oldUid];
+        delete players[oldUid];
+      }
       if (!players[uid]) players[uid] = { hasCamera:false };
       players[uid].name      = msg.name;
       players[uid].isManager = msg.isManager;
+      if (pid) players[uid].player_id = pid;
+      // Cancel any pending-removal grace timer.
+      if (pid && pendingRemovals.has(pid)) { clearTimeout(pendingRemovals.get(pid)); pendingRemovals.delete(pid); }
       // Remove from invited when they join lobby
       if (msg.name) invitedList = invitedList.filter(n => n.toLowerCase() !== msg.name.toLowerCase());
+      renderLobby();
+    }
+
+    // Session 4.8: tv-display-added — a secondary paired TV announced
+    // itself. Move its uid out of players (if we provisionally added it
+    // on user-joined) and into tvDisplays.
+    if (msg.type==='tv-display-added') {
+      const tvUid = msg.tv_uid;
+      // Drop provisional player entry for this TV's uid.
+      if (players[tvUid]) delete players[tvUid];
+      tvUidSet.add(tvUid);
+      // Cancel any pending removal for this TV.
+      if (pendingRemovals.has(tvUid)) { clearTimeout(pendingRemovals.get(tvUid)); pendingRemovals.delete(tvUid); }
+      if (!tvDisplays.some(d => d.tv_uid === tvUid)) {
+        tvDisplays.push({ owner_id: msg.owner_id, tv_uid: tvUid, tv_name: msg.tv_name });
+      }
       renderLobby();
     }
 
@@ -590,11 +749,56 @@ function showTrivia() {
   renderTrivia();
 }
 
+// ── Grace-period removal (Session 4.8) ────────────────────────
+// Schedule removal 10s after user-left; cancel if the same player_id
+// (via player-join) or tv_uid (via tv-display-added) reappears.
+// Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+function scheduleRemoval(uid) {
+  // Paired TV?
+  if (tvUidSet.has(uid) || tvDisplays.some(d => d.tv_uid === uid)) {
+    if (pendingRemovals.has(uid)) return;
+    const timer = setTimeout(() => {
+      pendingRemovals.delete(uid);
+      tvUidSet.delete(uid);
+      tvDisplays = tvDisplays.filter(d => d.tv_uid !== uid);
+      renderLobby();
+      tvLog('TV removed after grace: '+uid);
+    }, TV_GRACE_MS);
+    pendingRemovals.set(uid, timer);
+    tvLog('TV disconnect grace: '+uid);
+    return;
+  }
+  // Otherwise a player (or a user we never identified).
+  const p = players[uid];
+  const pid = p?.player_id || null;
+  if (pid) {
+    if (pendingRemovals.has(pid)) return;
+    const timer = setTimeout(() => {
+      pendingRemovals.delete(pid);
+      if (players[uid] && players[uid].player_id === pid) delete players[uid];
+      renderLobby();
+      renderPlayerTiles();
+      tvLog('player removed after grace: '+pid);
+    }, TV_GRACE_MS);
+    pendingRemovals.set(pid, timer);
+    tvLog('player disconnect grace: '+pid);
+  } else {
+    // Unknown — no player_id. Immediate removal.
+    delete players[uid];
+    renderLobby();
+    renderPlayerTiles();
+  }
+}
+
 // ── Lobby rendering ───────────────────────────────────────────
 function renderLobby() {
   const lobbyList   = document.getElementById('tv-lobby-list');
   const invitedEl   = document.getElementById('tv-invited-list');
-  const playerList  = Object.entries(players);
+  // Skip entries still at their '...' placeholder — they're in the brief
+  // window between Agora user-joined and player-join. Hiding the dots
+  // prevents a flicker of '...' rows for paired TVs (whose player-join
+  // never arrives, only tv-display-added does).
+  const playerList  = Object.entries(players).filter(([,p]) => p.name && p.name !== '...');
 
   if (playerList.length === 0) {
     lobbyList.innerHTML = '<div class="lobby-empty">Waiting for players...</div>';
@@ -632,6 +836,46 @@ function renderLobby() {
       </div>`
     ).join('');
   }
+
+  renderTvDisplays();
+}
+
+// Session 4.8 — aggregate paired TVs per owner for display.
+// Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+function renderTvDisplays() {
+  const section = document.getElementById('tv-displays-section');
+  const listEl  = document.getElementById('tv-displays-list');
+  if (!section || !listEl) return;
+  if (tvDisplays.length === 0) { section.style.display = 'none'; return; }
+
+  // Group TVs by owner_id and resolve owner's current name from players map.
+  const byOwner = new Map();
+  tvDisplays.forEach(d => {
+    if (!byOwner.has(d.owner_id)) byOwner.set(d.owner_id, []);
+    byOwner.get(d.owner_id).push(d);
+  });
+  const rows = [];
+  byOwner.forEach((list, owner_id) => {
+    // Find the owner's display name from current players map.
+    let ownerName = null;
+    for (const p of Object.values(players)) {
+      if (p.player_id === owner_id) { ownerName = p.name; break; }
+    }
+    if (!ownerName) ownerName = list[0].tv_name.replace(/'s TV.*$/, '') || 'A player';
+    list.forEach((tv, idx) => {
+      const label = list.length === 1
+        ? `${ownerName}'s TV`
+        : `${ownerName}'s TV (${idx+1})`;
+      rows.push(label);
+    });
+  });
+
+  section.style.display = 'block';
+  listEl.innerHTML = rows.map(label => `
+    <div class="lobby-player-row">
+      <span style="font-size:18px;flex-shrink:0;">📺</span>
+      <div class="lobby-player-name">${label}</div>
+    </div>`).join('');
 }
 
 // ── Last Card rendering ───────────────────────────────────────
@@ -911,6 +1155,24 @@ function tvLog(msg) {
 }
 function toggleLog() { const p=document.getElementById('log-panel'); p.style.display=p.style.display==='none'?'block':'none'; }
 function copyLog()   { navigator.clipboard.writeText(_logs.join('\n')).then(()=>{ const b=document.querySelector('#log-panel span:last-child'); if(b){b.textContent='COPIED ✓';setTimeout(()=>b.textContent='COPY',2000);} }); }
+
+// ── Casting instructions (Session 4.8) ────────────────────────
+// Shown once per device, only on paired TVs. Dismissal persists in
+// localStorage so returning to tv.html on the same device keeps the
+// overlay down. Primary TVs (no paired_by) never see it.
+function dismissCastingInstructions() {
+  try { localStorage.setItem(CASTING_DISMISSED_KEY, '1'); } catch(e) {}
+  const ci = document.getElementById('casting-instructions');
+  if (ci) ci.classList.add('dismissed');
+}
+(function setupCastingInstructions() {
+  if (!isPairedTV) return;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(CASTING_DISMISSED_KEY) === '1'; } catch(e) {}
+  if (dismissed) return;
+  const ci = document.getElementById('casting-instructions');
+  if (ci) ci.classList.add('open');
+})();
 
 // ── Wake lock ─────────────────────────────────────────────────
 // Request at load; re-request when the tab returns to foreground
