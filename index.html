@@ -840,7 +840,11 @@
                   onclick="clearAvatar()"
                   style="display:none;"
                   aria-label="Remove photo">×</button>
-          <input type="file" id="avatar-file-input" accept="image/*" style="display:none;">
+          <input type="file"
+                 id="avatar-file-input"
+                 accept="image/*"
+                 style="display:none;"
+                 onchange="onAvatarFilePicked(event)">
           <div class="avatar-picker-hint">Tap to add a photo</div>
         </div>
 
@@ -1214,14 +1218,25 @@
     // avatar upload in Part E.
     // ══════════════════════════════════════════════════════════
 
+    // Avatar storage: file paths inside the "contact-avatars" bucket follow
+    // a deterministic "<userId>/<contactId>.jpg" shape. We assign the
+    // contactId client-side for new contacts so the upload can go to its
+    // final resting place in one shot, and the DB row uses the same UUID.
+    const AVATAR_BUCKET      = 'contact-avatars';
+    const AVATAR_SIGNED_TTL  = 3600;  // 1 hour — re-signed on every list load
+
+    function newUuid() { return crypto.randomUUID(); }
+    function avatarPathFor(userId, contactId) { return `${userId}/${contactId}.jpg`; }
+
     // Form state mirrors what will be persisted. Lives outside the DOM so
     // we can track dirty state / uploaded-but-not-saved avatars cleanly.
     let contactEditState = {
-      id: null,                 // null on "new", uuid on "edit"
-      avatarUrl: null,          // signed URL of uploaded image, if any
-      avatarStoragePath: null,  // path inside the contact-avatars bucket
-      savePressed: false,       // used to gate the email/phone hint
+      id: null,                   // UUID — set on openNewContact() or openEditContact()
+      avatarPath: null,           // current path in bucket, null if no avatar
+      originalAvatarPath: null,   // path at form-entry — used to know whether to delete on save
+      savePressed: false,         // used to gate the email/phone hint
       contactFieldsTouched: false,
+      baseline: null,
     };
 
     function openContactsFromMenu() {
@@ -1272,13 +1287,50 @@
     }
 
     // RLS enforces the account_id = auth.uid() filter; we only need to order.
+    // avatar_url in the DB is a storage path — we batch-sign the paths into
+    // short-lived URLs here so the list can render them as <img src=...>.
     async function loadContacts() {
       const { data, error } = await window.sb
         .from('contacts')
         .select('id, full_name, nickname, email, phone, avatar_url')
         .order('full_name', { ascending: true });
       if (error) throw error;
-      return data || [];
+      const rows = data || [];
+      await attachSignedAvatarUrls(rows);
+      return rows;
+    }
+
+    async function attachSignedAvatarUrls(rows) {
+      const paths = rows.map(r => r.avatar_url).filter(Boolean);
+      if (paths.length === 0) return;
+      const { data, error } = await window.sb.storage
+        .from(AVATAR_BUCKET)
+        .createSignedUrls(paths, AVATAR_SIGNED_TTL);
+      if (error) {
+        console.warn('[contacts] avatar signing failed', error);
+        // Non-fatal — rows render with initials fallback.
+        for (const r of rows) r.avatar_url = null;
+        return;
+      }
+      const byPath = new Map();
+      for (const entry of data || []) {
+        if (entry?.signedUrl && entry.path) byPath.set(entry.path, entry.signedUrl);
+      }
+      for (const r of rows) {
+        if (r.avatar_url) r.avatar_url = byPath.get(r.avatar_url) || null;
+      }
+    }
+
+    async function signAvatarPath(path) {
+      if (!path) return null;
+      const { data, error } = await window.sb.storage
+        .from(AVATAR_BUCKET)
+        .createSignedUrl(path, AVATAR_SIGNED_TTL);
+      if (error) {
+        console.warn('[contacts] avatar sign failed', error);
+        return null;
+      }
+      return data?.signedUrl || null;
     }
 
     function renderContactsList(rows) {
@@ -1336,7 +1388,9 @@
       resetContactEditForm();
       const screen = document.getElementById('screen-contact-edit');
       screen.dataset.mode = 'new';
-      screen.dataset.contactId = '';
+      // Assign a UUID up-front so avatar uploads land at the final path.
+      contactEditState.id = newUuid();
+      screen.dataset.contactId = contactEditState.id;
       document.getElementById('contact-edit-title').textContent = 'New contact';
       document.getElementById('contact-delete-btn').style.display = 'none';
       captureContactEditBaseline();
@@ -1349,13 +1403,19 @@
       const screen = document.getElementById('screen-contact-edit');
       screen.dataset.mode = 'edit';
       screen.dataset.contactId = row.id;
+      contactEditState.id = row.id;
       document.getElementById('contact-edit-title').textContent = 'Edit contact';
       document.getElementById('contact-full-name').value = row.full_name || '';
       document.getElementById('contact-nickname').value  = row.nickname || '';
       document.getElementById('contact-email').value     = row.email || '';
       document.getElementById('contact-phone').value     = row.phone || '';
-      if (row.avatar_url) {
-        contactEditState.avatarUrl = row.avatar_url;
+      // The row's avatar_url is already a signed URL (set by loadContacts).
+      // We need the underlying path separately so we know what to clean up
+      // on save/delete — derive it from the user id + contact id.
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (row.avatar_url && user) {
+        contactEditState.avatarPath = avatarPathFor(user.id, row.id);
+        contactEditState.originalAvatarPath = contactEditState.avatarPath;
         showAvatarImage(row.avatar_url);
       }
       updateAvatarVisual();
@@ -1368,8 +1428,8 @@
     function resetContactEditForm() {
       contactEditState = {
         id: null,
-        avatarUrl: null,
-        avatarStoragePath: null,
+        avatarPath: null,
+        originalAvatarPath: null,
         savePressed: false,
         contactFieldsTouched: false,
         baseline: null,
@@ -1383,9 +1443,9 @@
       document.getElementById('avatar-picker-image').style.display = 'none';
       document.getElementById('avatar-picker-image').src = '';
       document.getElementById('avatar-upload-overlay').style.display = 'none';
+      document.getElementById('avatar-file-input').value = '';
       // Reset Save button cosmetic state in case a prior save had mutated it.
-      const saveBtn = document.getElementById('contact-save-btn');
-      saveBtn.textContent = 'Save contact';
+      document.getElementById('contact-save-btn').textContent = 'Save contact';
       updateAvatarVisual();
       updateSaveButtonState();
     }
@@ -1398,18 +1458,18 @@
         nickname:  document.getElementById('contact-nickname').value,
         email:     document.getElementById('contact-email').value,
         phone:     document.getElementById('contact-phone').value,
-        avatarUrl: contactEditState.avatarUrl,
+        avatarPath: contactEditState.avatarPath,
       };
     }
     function isContactEditDirty() {
       const b = contactEditState.baseline;
       if (!b) return false;
       return (
-        b.full_name !== document.getElementById('contact-full-name').value ||
-        b.nickname  !== document.getElementById('contact-nickname').value ||
-        b.email     !== document.getElementById('contact-email').value ||
-        b.phone     !== document.getElementById('contact-phone').value ||
-        b.avatarUrl !== contactEditState.avatarUrl
+        b.full_name  !== document.getElementById('contact-full-name').value ||
+        b.nickname   !== document.getElementById('contact-nickname').value ||
+        b.email      !== document.getElementById('contact-email').value ||
+        b.phone      !== document.getElementById('contact-phone').value ||
+        b.avatarPath !== contactEditState.avatarPath
       );
     }
 
@@ -1529,11 +1589,12 @@
         nickname:  nick  || null,
         email:     email || null,
         phone:     phone || null,
-        avatar_url: contactEditState.avatarUrl || null,
+        avatar_url: contactEditState.avatarPath || null,
       };
 
       try {
         if (mode === 'new') {
+          fields.id = id;  // client-generated UUID (matches any uploaded avatar path)
           fields.account_id = user.id;
           const { error } = await window.sb.from('contacts').insert(fields);
           if (error) throw error;
@@ -1541,6 +1602,18 @@
           const { error } = await window.sb.from('contacts').update(fields).eq('id', id);
           if (error) throw error;
         }
+
+        // If the form had an avatar when we opened it and now doesn't, the
+        // user cleared it — remove the storage file AFTER the DB write
+        // succeeded. A failure here leaves an orphan blob but doesn't roll
+        // back the save (the user would have to retry, which is worse UX).
+        if (contactEditState.originalAvatarPath && !contactEditState.avatarPath) {
+          const { error: rmErr } = await window.sb.storage
+            .from(AVATAR_BUCKET)
+            .remove([contactEditState.originalAvatarPath]);
+          if (rmErr) console.warn('[contacts] orphan avatar cleanup failed', rmErr);
+        }
+
         // Clear baseline so back-navigation doesn't re-prompt the discard modal.
         contactEditState.baseline = null;
         goTo('screen-contacts');
@@ -1552,7 +1625,7 @@
       }
     }
 
-    // ── Delete (confirmation modal, then DB delete) ───────────
+    // ── Delete (confirmation modal, then DB delete + storage cleanup) ──
     function requestDeleteContact() {
       const screen = document.getElementById('screen-contact-edit');
       if (screen.dataset.mode !== 'edit') return;
@@ -1575,10 +1648,22 @@
       btn.textContent = 'Deleting\u2026';
       errEl.style.display = 'none';
 
+      const pathToRemove = contactEditState.originalAvatarPath;
+
       try {
         const { error } = await window.sb.from('contacts').delete().eq('id', id);
         if (error) throw error;
-        // Part E: also sb.storage.remove([storagePath]) if the contact had an avatar.
+
+        // Best-effort storage cleanup after the DB row is gone. If it fails,
+        // we end up with an orphaned file that's inaccessible via the app
+        // but still occupies storage — log, don't surface.
+        if (pathToRemove) {
+          const { error: rmErr } = await window.sb.storage
+            .from(AVATAR_BUCKET)
+            .remove([pathToRemove]);
+          if (rmErr) console.warn('[contacts] avatar cleanup failed', rmErr);
+        }
+
         contactEditState.baseline = null;
         closeModal('delete-contact-modal');
         goTo('screen-contacts');
@@ -1591,16 +1676,83 @@
       }
     }
 
-    // ── Avatar (Part E wires this up) ─────────────────────────
+    // ── Avatar picker (file input) ────────────────────────────
     function pickAvatar() {
-      alert('Avatar wiring comes in Part E.');
+      document.getElementById('avatar-file-input').click();
     }
+
     function clearAvatar() {
-      contactEditState.avatarUrl = null;
-      contactEditState.avatarStoragePath = null;
+      contactEditState.avatarPath = null;
       document.getElementById('avatar-picker-image').style.display = 'none';
       document.getElementById('avatar-picker-image').src = '';
       document.getElementById('avatar-clear-btn').style.display = 'none';
+      document.getElementById('avatar-file-input').value = '';
+    }
+
+    async function onAvatarFilePicked(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) {
+        showContactEditError('You need to be signed in to upload a photo.');
+        return;
+      }
+      if (!contactEditState.id) {
+        // Shouldn't happen — openNewContact/openEditContact both set this.
+        showContactEditError('Something went wrong. Reopen the form and try again.');
+        return;
+      }
+
+      const overlay = document.getElementById('avatar-upload-overlay');
+      overlay.style.display = '';
+      hideContactEditError();
+
+      try {
+        const blob = await compressImageToJpegSquare(file, 512, 0.85);
+        const path = avatarPathFor(user.id, contactEditState.id);
+        const { error } = await window.sb.storage
+          .from(AVATAR_BUCKET)
+          .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+        if (error) throw error;
+
+        const signed = await signAvatarPath(path);
+        contactEditState.avatarPath = path;
+        if (signed) showAvatarImage(signed);
+        updateSaveButtonState();
+      } catch (e) {
+        console.error('[contacts] avatar upload failed', e);
+        showContactEditError(e?.message || 'Could not upload photo.');
+      } finally {
+        overlay.style.display = 'none';
+        // Reset so the same file can be re-picked if needed.
+        event.target.value = '';
+      }
+    }
+
+    // Load the file, center-crop-cover to a square, re-encode as JPEG. Off-thread
+    // decoding via createImageBitmap keeps the main thread responsive even on
+    // 4K phone photos.
+    async function compressImageToJpegSquare(file, size, quality) {
+      const bitmap = await createImageBitmap(file);
+      const side = Math.min(bitmap.width, bitmap.height);
+      const sx = Math.floor((bitmap.width  - side) / 2);
+      const sy = Math.floor((bitmap.height - side) / 2);
+
+      const canvas = document.createElement('canvas');
+      canvas.width  = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, size, size);
+      bitmap.close?.();
+
+      return await new Promise((resolve, reject) => {
+        canvas.toBlob(
+          (blob) => blob ? resolve(blob) : reject(new Error('Could not encode JPEG')),
+          'image/jpeg',
+          quality
+        );
+      });
     }
 
     // ── Dev helpers for previewing states (remove if they end up unused) ──
