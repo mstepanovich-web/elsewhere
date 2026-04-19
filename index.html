@@ -682,6 +682,223 @@
     .danger-btn-solid:active   { filter: brightness(0.9); }
     .danger-btn-solid:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    /* ── Groups list ──────────────────────────────────────── */
+    .groups-loading,
+    .groups-empty,
+    .groups-list-wrap {
+      width: 100%;
+      max-width: 540px;
+    }
+    .groups-loading {
+      text-align: center;
+      color: var(--color-text-faint);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider);
+      text-transform: uppercase;
+      padding: 40px 0;
+    }
+    .groups-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: clamp(24px, 8vh, 80px) 12px;
+    }
+    .groups-empty-headline {
+      font-family: var(--font-display);
+      font-size: var(--text-2xl);
+      color: var(--color-gold-bright);
+      letter-spacing: var(--tracking-wide);
+      margin-bottom: 12px;
+    }
+    .groups-empty-sub {
+      font-size: var(--text-sm);
+      color: var(--color-text-faint);
+      line-height: 1.5;
+      max-width: 340px;
+      margin-bottom: 32px;
+    }
+    .groups-empty-cta { max-width: 340px; }
+
+    .groups-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 24px;
+    }
+    .group-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 12px;
+      background: transparent;
+      border: 1px solid var(--color-border-dim);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .group-row:active {
+      background: var(--color-gold-ghost);
+      border-color: var(--color-border);
+    }
+    .group-color-swatch {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .group-row-text {
+      flex: 1;
+      min-width: 0;
+    }
+    .group-row-name {
+      font-size: var(--text-base);
+      color: var(--color-text);
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .group-row-sub {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--color-text-faint);
+      letter-spacing: var(--tracking-wider);
+      line-height: 1.3;
+      margin-top: 2px;
+    }
+    .groups-add-btn {
+      margin-top: 0;
+      max-width: 340px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* ── Group edit form ──────────────────────────────────── */
+    .group-edit-form {
+      width: 100%;
+      max-width: 540px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .group-edit-form .field-group {
+      max-width: 360px;
+      width: 100%;
+    }
+    .color-picker-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 4px 0 2px;
+    }
+    .color-swatch {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      cursor: pointer;
+      padding: 0;
+      border: 2px solid transparent;
+      transition: transform var(--transition-fast), border-color var(--transition-fast);
+      position: relative;
+    }
+    .color-swatch:active { transform: scale(0.92); }
+    .color-swatch.selected {
+      border-color: var(--color-gold-bright);
+      box-shadow: 0 0 0 2px var(--color-bg);
+    }
+
+    .group-members-section {
+      width: 100%;
+      max-width: 360px;
+      margin-top: 4px;
+    }
+    .group-members-label {
+      font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider);
+      text-transform: uppercase;
+      color: var(--color-text-faint);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .group-members-count {
+      font-family: var(--font-mono);
+      color: var(--color-text-dim);
+      text-transform: none;
+      letter-spacing: var(--tracking-wider);
+    }
+    .members-empty {
+      font-size: var(--text-xs);
+      color: var(--color-text-faint);
+      line-height: 1.5;
+      padding: 14px 12px;
+      border: 1px dashed var(--color-border-dim);
+      border-radius: var(--radius-md);
+      text-align: center;
+    }
+    .members-empty a {
+      color: var(--color-gold);
+      text-decoration: none;
+      border-bottom: 1px solid var(--color-gold-dim);
+      cursor: pointer;
+    }
+    .members-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-height: 320px;
+      overflow-y: auto;
+      padding: 2px;
+      border: 1px solid var(--color-border-dim);
+      border-radius: var(--radius-md);
+    }
+    .member-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      -webkit-user-select: none;
+      user-select: none;
+      transition: background var(--transition-fast);
+    }
+    .member-row:active { background: var(--color-gold-ghost); }
+    .member-row.checked { background: var(--color-gold-ghost); }
+    .member-row-name {
+      flex: 1;
+      min-width: 0;
+      font-size: var(--text-base);
+      color: var(--color-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .member-check {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1.5px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: transparent;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .member-row.checked .member-check {
+      background: var(--color-gold);
+      border-color: var(--color-gold);
+      color: var(--color-bg);
+    }
+
     /* ── Version badge ────────────────────────────────────── */
     .ver {
       position: fixed; bottom: 8px; right: 12px;
@@ -705,6 +922,7 @@
       <div id="user-menu">
         <div id="user-menu-email">—</div>
         <button onclick="openContactsFromMenu()">Contacts</button>
+        <button onclick="openGroupsFromMenu()">Groups</button>
         <button onclick="shellSignOut()">Sign out</button>
       </div>
     </div>
@@ -922,6 +1140,92 @@
         </div>
       </div>
     </div>
+
+    <!-- Groups list screen -->
+    <div class="screen" id="screen-groups">
+      <div class="screen-head">
+        <div class="back-link" onclick="goTo('screen-home')">← Back</div>
+        <div class="page-title screen-head-title">Groups</div>
+      </div>
+
+      <div class="screen-error-banner" id="groups-error" style="display:none;"></div>
+
+      <div class="groups-loading" id="groups-loading">Loading…</div>
+
+      <div class="groups-empty" id="groups-empty" style="display:none;">
+        <div class="groups-empty-headline">No groups yet</div>
+        <div class="groups-empty-sub">
+          Group your contacts together to invite them all at once to a game or karaoke session.
+        </div>
+        <button class="cta-btn groups-empty-cta" onclick="openNewGroup()">
+          Create your first group
+        </button>
+      </div>
+
+      <div class="groups-list-wrap" id="groups-list-wrap" style="display:none;">
+        <div class="groups-list" id="groups-list"></div>
+        <button class="ghost-btn groups-add-btn" onclick="openNewGroup()">+ New group</button>
+      </div>
+    </div>
+
+    <!-- Group add/edit screen -->
+    <div class="screen" id="screen-group-edit" data-mode="new" data-group-id="">
+      <div class="screen-head">
+        <div class="back-link" onclick="cancelGroupEdit()">← Cancel</div>
+        <div class="page-title screen-head-title" id="group-edit-title">New group</div>
+      </div>
+
+      <div class="screen-error-banner" id="group-edit-error" style="display:none;"></div>
+
+      <div class="group-edit-form">
+        <div class="field-group">
+          <div class="field-row">
+            <div class="field-label">
+              Name <span class="field-required">*</span>
+            </div>
+            <input class="field-input"
+                   id="group-name"
+                   type="text"
+                   placeholder="e.g. Family game night"
+                   maxlength="60"
+                   autocomplete="off"
+                   autocapitalize="words"
+                   oninput="onGroupFormChange()">
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">Color</div>
+            <div class="color-picker-row" id="color-picker-row"></div>
+          </div>
+
+          <div class="group-members-section">
+            <div class="group-members-label">
+              <span>Members</span>
+              <span class="group-members-count" id="group-members-count">0 selected</span>
+            </div>
+            <div class="members-empty" id="members-empty" style="display:none;">
+              Add contacts first to group them.
+              <a onclick="jumpToContactsFromGroupEdit()">Go to Contacts →</a>
+            </div>
+            <div class="members-list" id="members-list" style="display:none;"></div>
+          </div>
+
+          <button class="cta-btn"
+                  id="group-save-btn"
+                  onclick="saveGroup()">Save group</button>
+
+          <button class="ghost-btn"
+                  id="group-cancel-btn"
+                  style="margin-top:0;"
+                  onclick="cancelGroupEdit()">Cancel</button>
+
+          <button class="danger-btn"
+                  id="group-delete-btn"
+                  onclick="requestDeleteGroup()"
+                  style="display:none;">Delete group</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Modals (outside #app so they overlay everything) -->
@@ -977,6 +1281,20 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="delete-group-modal" onclick="closeModalOnBackdrop(event, 'delete-group-modal')">
+    <div class="modal">
+      <div class="modal-title">Delete group?</div>
+      <div class="modal-body">
+        Delete <strong id="delete-group-name">this group</strong>? The contacts in it are not deleted, but the grouping is lost.
+      </div>
+      <div class="screen-error-banner" id="delete-group-error" style="display:none;margin-bottom:8px;"></div>
+      <div class="modal-actions">
+        <button class="ghost-btn" style="margin-top:0;" onclick="closeModal('delete-group-modal')">Cancel</button>
+        <button class="danger-btn-solid" id="delete-group-confirm-btn" onclick="confirmDeleteGroup()">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="remove-avatar-modal" onclick="closeModalOnBackdrop(event, 'remove-avatar-modal')">
     <div class="modal">
       <div class="modal-title">Remove photo?</div>
@@ -990,7 +1308,7 @@
     </div>
   </div>
 
-  <div class="ver">v2.95</div>
+  <div class="ver">v2.96</div>
 
   <script>
     // ── Wait for shell/auth.js module to initialize ──────────
@@ -998,7 +1316,7 @@
     // time this listener fires, window.elsewhere is guaranteed to exist.
     document.addEventListener('DOMContentLoaded', initShell);
 
-    const SCREENS = ['screen-home', 'screen-account', 'screen-confirm', 'screen-contacts', 'screen-contact-edit'];
+    const SCREENS = ['screen-home', 'screen-account', 'screen-confirm', 'screen-contacts', 'screen-contact-edit', 'screen-groups', 'screen-group-edit'];
     let activeScreen = 'screen-home';
 
     function initShell() {
@@ -1040,6 +1358,8 @@
         }
         if (activeScreen === 'screen-contact-edit') {
           cancelContactEdit();
+        } else if (activeScreen === 'screen-group-edit') {
+          cancelGroupEdit();
         }
       });
 
@@ -1106,6 +1426,9 @@
       }
       if (id === 'screen-contacts') {
         enterContactsScreen();
+      }
+      if (id === 'screen-groups') {
+        enterGroupsScreen();
       }
     }
 
@@ -1504,7 +1827,7 @@
     }
     function confirmDiscardChanges() {
       closeModal('discard-changes-modal');
-      goTo('screen-contacts');
+      goTo(activeScreen === 'screen-group-edit' ? 'screen-groups' : 'screen-contacts');
     }
 
     // Updates initials + color whenever name changes. Called from
@@ -1831,6 +2154,446 @@
           quality
         );
       });
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // Groups (Phase 1 Path B, Session 4)
+    // ══════════════════════════════════════════════════════════
+
+    // Keep in sync with --color-avatar-1..7 in elsewhere-theme.css. The
+    // selected hex is stored verbatim in groups.color (text column).
+    const GROUP_PALETTE = [
+      '#B85C42', '#8B4767', '#5A5A96', '#3E7A82',
+      '#6B8A5F', '#4E6275', '#B06A80',
+    ];
+
+    let groupEditState = {
+      id: null,
+      colorIdx: 0,                        // index into GROUP_PALETTE
+      selectedMemberIds: new Set(),       // Set<contact_id>
+      baseline: null,                     // snapshot for dirty-check
+    };
+
+    function openGroupsFromMenu() {
+      document.getElementById('user-menu').classList.remove('open');
+      goTo('screen-groups');
+    }
+
+    // ── List screen ──────────────────────────────────────────
+    function enterGroupsScreen() {
+      const err   = document.getElementById('groups-error');
+      const load  = document.getElementById('groups-loading');
+      const empty = document.getElementById('groups-empty');
+      const list  = document.getElementById('groups-list-wrap');
+      err.style.display   = 'none';
+      load.style.display  = '';
+      empty.style.display = 'none';
+      list.style.display  = 'none';
+
+      loadGroups().then(rows => {
+        load.style.display = 'none';
+        if (!rows || rows.length === 0) {
+          empty.style.display = 'flex';
+        } else {
+          renderGroupsList(rows);
+          list.style.display = '';
+        }
+      }).catch(e => {
+        console.error('[groups] load failed', e);
+        load.style.display = 'none';
+        showGroupsError((e?.message || 'Could not load groups.') + ' Tap ← Back to try again.');
+      });
+    }
+
+    function renderGroupsList(rows) {
+      const list = document.getElementById('groups-list');
+      list.textContent = '';
+      for (const row of rows) list.appendChild(buildGroupRow(row));
+    }
+
+    function buildGroupRow(row) {
+      const wrap = document.createElement('div');
+      wrap.className = 'group-row';
+      wrap.onclick = async () => {
+        try {
+          const memberIds = await loadGroupMembers(row.id);
+          openEditGroup({ ...row, memberIds });
+        } catch (e) {
+          console.error('[groups] load members failed', e);
+          showGroupsError(e?.message || 'Could not load group.');
+        }
+      };
+
+      const swatch = document.createElement('div');
+      swatch.className = 'group-color-swatch';
+      swatch.style.background = row.color || GROUP_PALETTE[0];
+      wrap.appendChild(swatch);
+
+      const text = document.createElement('div');
+      text.className = 'group-row-text';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'group-row-name';
+      nameEl.textContent = row.name || '(no name)';
+      text.appendChild(nameEl);
+      const subEl = document.createElement('div');
+      subEl.className = 'group-row-sub';
+      const n = row.member_count || 0;
+      subEl.textContent = n === 0 ? 'No members' : (n === 1 ? '1 member' : n + ' members');
+      text.appendChild(subEl);
+      wrap.appendChild(text);
+
+      return wrap;
+    }
+
+    function showGroupsError(msg) {
+      const el = document.getElementById('groups-error');
+      el.textContent = msg;
+      el.style.display = '';
+    }
+
+    // ── Edit screen ──────────────────────────────────────────
+    function openNewGroup() {
+      resetGroupEditForm();
+      const screen = document.getElementById('screen-group-edit');
+      screen.dataset.mode = 'new';
+      screen.dataset.groupId = '';
+      document.getElementById('group-edit-title').textContent = 'New group';
+      document.getElementById('group-delete-btn').style.display = 'none';
+      groupEditState.colorIdx = 0;
+      groupEditState.selectedMemberIds = new Set();
+      renderColorPicker();
+      renderMembersPicker();
+      captureGroupBaseline();
+      onGroupFormChange();
+      goTo('screen-group-edit');
+      setTimeout(() => document.getElementById('group-name').focus(), 80);
+    }
+
+    function openEditGroup(row) {
+      resetGroupEditForm();
+      const screen = document.getElementById('screen-group-edit');
+      screen.dataset.mode = 'edit';
+      screen.dataset.groupId = row.id;
+      groupEditState.id = row.id;
+      document.getElementById('group-edit-title').textContent = 'Edit group';
+      document.getElementById('group-name').value = row.name || '';
+      const idx = GROUP_PALETTE.indexOf(row.color);
+      groupEditState.colorIdx = idx >= 0 ? idx : 0;
+      groupEditState.selectedMemberIds = new Set(row.memberIds || []);
+      renderColorPicker();
+      renderMembersPicker();
+      document.getElementById('group-delete-btn').style.display = '';
+      captureGroupBaseline();
+      onGroupFormChange();
+      goTo('screen-group-edit');
+    }
+
+    function resetGroupEditForm() {
+      groupEditState = {
+        id: null,
+        colorIdx: 0,
+        selectedMemberIds: new Set(),
+        baseline: null,
+      };
+      document.getElementById('group-name').value = '';
+      document.getElementById('group-edit-error').style.display = 'none';
+      const btn = document.getElementById('group-save-btn');
+      btn.textContent = 'Save group';
+      btn.disabled = true;
+    }
+
+    function renderColorPicker() {
+      const row = document.getElementById('color-picker-row');
+      row.textContent = '';
+      GROUP_PALETTE.forEach((hex, idx) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'color-swatch' + (idx === groupEditState.colorIdx ? ' selected' : '');
+        btn.style.background = hex;
+        btn.setAttribute('aria-label', 'Color ' + (idx + 1));
+        btn.onclick = () => {
+          groupEditState.colorIdx = idx;
+          renderColorPicker();
+          onGroupFormChange();
+        };
+        row.appendChild(btn);
+      });
+    }
+
+    function renderMembersPicker() {
+      const listEl  = document.getElementById('members-list');
+      const emptyEl = document.getElementById('members-empty');
+      listEl.textContent = '';
+      listEl.style.display = 'none';
+      emptyEl.style.display = 'none';
+      updateMemberCount();
+
+      loadContacts().then(rows => {
+        if (!rows || rows.length === 0) {
+          emptyEl.innerHTML = 'Add contacts first to group them. <a onclick="jumpToContactsFromGroupEdit()">Go to Contacts →</a>';
+          emptyEl.style.display = '';
+          return;
+        }
+        for (const c of rows) listEl.appendChild(buildMemberRow(c));
+        listEl.style.display = '';
+      }).catch(e => {
+        console.error('[groups] member list load failed', e);
+        emptyEl.textContent = 'Could not load your contacts.';
+        emptyEl.style.display = '';
+      });
+    }
+
+    function buildMemberRow(contact) {
+      const wrap = document.createElement('div');
+      wrap.className = 'member-row';
+      if (groupEditState.selectedMemberIds.has(contact.id)) wrap.classList.add('checked');
+      wrap.onclick = () => {
+        if (groupEditState.selectedMemberIds.has(contact.id)) {
+          groupEditState.selectedMemberIds.delete(contact.id);
+          wrap.classList.remove('checked');
+        } else {
+          groupEditState.selectedMemberIds.add(contact.id);
+          wrap.classList.add('checked');
+        }
+        updateMemberCount();
+      };
+
+      const avatar = document.createElement('div');
+      avatar.className = 'contact-avatar size-sm ' + avatarClassForName(contact.full_name);
+      if (contact.avatar_url) {
+        const img = document.createElement('img');
+        img.className = 'avatar-image';
+        img.src = contact.avatar_url;
+        img.alt = '';
+        avatar.appendChild(img);
+      } else {
+        const initials = document.createElement('span');
+        initials.className = 'avatar-initials';
+        initials.textContent = avatarInitialsForName(contact.full_name);
+        avatar.appendChild(initials);
+      }
+      wrap.appendChild(avatar);
+
+      const name = document.createElement('div');
+      name.className = 'member-row-name';
+      name.textContent = contact.full_name || '(no name)';
+      wrap.appendChild(name);
+
+      const check = document.createElement('div');
+      check.className = 'member-check';
+      check.textContent = '✓';
+      wrap.appendChild(check);
+
+      return wrap;
+    }
+
+    function updateMemberCount() {
+      const n = groupEditState.selectedMemberIds.size;
+      document.getElementById('group-members-count').textContent =
+        n === 0 ? '0 selected' : (n === 1 ? '1 selected' : n + ' selected');
+    }
+
+    function onGroupFormChange() {
+      const name = document.getElementById('group-name').value.trim();
+      document.getElementById('group-save-btn').disabled = !name;
+    }
+
+    // Snapshot everything that factors into dirty-check. Member toggles update
+    // groupEditState.selectedMemberIds in place, so the baseline clones into a
+    // fresh Set — comparison is size + every-member-in-both (order-insensitive).
+    function captureGroupBaseline() {
+      groupEditState.baseline = {
+        name: document.getElementById('group-name').value,
+        colorIdx: groupEditState.colorIdx,
+        memberIds: new Set(groupEditState.selectedMemberIds),
+      };
+    }
+    function isGroupEditDirty() {
+      const b = groupEditState.baseline;
+      if (!b) return false;
+      if (b.name !== document.getElementById('group-name').value) return true;
+      if (b.colorIdx !== groupEditState.colorIdx) return true;
+      const cur = groupEditState.selectedMemberIds;
+      if (cur.size !== b.memberIds.size) return true;
+      for (const id of cur) if (!b.memberIds.has(id)) return true;
+      return false;
+    }
+
+    function cancelGroupEdit() {
+      if (isGroupEditDirty()) {
+        openModal('discard-changes-modal');
+      } else {
+        goTo('screen-groups');
+      }
+    }
+
+    function showGroupEditError(msg) {
+      const el = document.getElementById('group-edit-error');
+      el.textContent = msg;
+      el.style.display = '';
+    }
+    function hideGroupEditError() {
+      document.getElementById('group-edit-error').style.display = 'none';
+    }
+
+    function jumpToContactsFromGroupEdit() {
+      // Member-selector "Add contacts first" affordance. Bypasses the dirty
+      // check because the form is provably empty — no contacts to select
+      // means no membership edits are even possible yet.
+      groupEditState.baseline = null;
+      goTo('screen-contacts');
+    }
+
+    // ── Save (insert/update + replace-all member set) ────────
+    async function saveGroup() {
+      const name = document.getElementById('group-name').value.trim();
+      if (!name) return;
+      const color = GROUP_PALETTE[groupEditState.colorIdx] || GROUP_PALETTE[0];
+
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) {
+        showGroupEditError('You need to be signed in to save groups.');
+        return;
+      }
+
+      const btn = document.getElementById('group-save-btn');
+      const screen = document.getElementById('screen-group-edit');
+      const mode = screen.dataset.mode;
+      btn.disabled = true;
+      btn.textContent = 'Saving\u2026';
+      hideGroupEditError();
+
+      try {
+        let groupId = screen.dataset.groupId;
+        if (mode === 'new') {
+          const created = await createGroup({ accountId: user.id, name, color });
+          groupId = created.id;
+        } else {
+          await updateGroup(groupId, { name, color });
+        }
+        await setGroupMembers(groupId, [...groupEditState.selectedMemberIds]);
+
+        groupEditState.baseline = null;
+        goTo('screen-groups');
+      } catch (e) {
+        console.error('[groups] save failed', e);
+        // Postgres 23505 = unique_violation; the only unique constraint on
+        // groups is (account_id, name), so this is always a name collision.
+        const msg = e?.code === '23505'
+          ? 'A group with that name already exists.'
+          : (e?.message || 'Could not save group.');
+        showGroupEditError(msg);
+        btn.disabled = false;
+        btn.textContent = 'Save group';
+      }
+    }
+
+    // ── Delete ───────────────────────────────────────────────
+    function requestDeleteGroup() {
+      const screen = document.getElementById('screen-group-edit');
+      if (screen.dataset.mode !== 'edit') return;
+      const name = document.getElementById('group-name').value.trim() || 'this group';
+      document.getElementById('delete-group-name').textContent = name;
+      document.getElementById('delete-group-error').style.display = 'none';
+      const btn = document.getElementById('delete-group-confirm-btn');
+      btn.disabled = false;
+      btn.textContent = 'Delete';
+      openModal('delete-group-modal');
+    }
+    async function confirmDeleteGroup() {
+      const screen = document.getElementById('screen-group-edit');
+      const id = screen.dataset.groupId;
+      if (!id) { closeModal('delete-group-modal'); return; }
+
+      const btn = document.getElementById('delete-group-confirm-btn');
+      const errEl = document.getElementById('delete-group-error');
+      btn.disabled = true;
+      btn.textContent = 'Deleting\u2026';
+      errEl.style.display = 'none';
+
+      try {
+        await deleteGroup(id);
+        // contact_groups rows are removed by the FK ON DELETE CASCADE on
+        // contact_groups.group_id — no explicit cleanup needed.
+        groupEditState.baseline = null;
+        closeModal('delete-group-modal');
+        goTo('screen-groups');
+      } catch (e) {
+        console.error('[groups] delete failed', e);
+        errEl.textContent = e?.message || 'Delete failed.';
+        errEl.style.display = '';
+        btn.disabled = false;
+        btn.textContent = 'Delete';
+      }
+    }
+
+    // ── groupsApi: raw DB calls (RLS scopes everything to auth.uid()) ──
+    async function loadGroups() {
+      const { data: groups, error: gErr } = await window.sb
+        .from('groups')
+        .select('id, name, color, created_at')
+        .order('name', { ascending: true });
+      if (gErr) throw gErr;
+      const ids = (groups || []).map(g => g.id);
+      if (ids.length === 0) return [];
+      // Aggregate member counts in JS rather than a PostgREST embed — it's one
+      // extra round-trip but keeps the query legible and dodges any join-RLS
+      // edge cases on the contact_groups policy.
+      const { data: links, error: lErr } = await window.sb
+        .from('contact_groups')
+        .select('group_id')
+        .in('group_id', ids);
+      if (lErr) throw lErr;
+      const counts = new Map();
+      for (const l of links || []) counts.set(l.group_id, (counts.get(l.group_id) || 0) + 1);
+      return groups.map(g => ({ ...g, member_count: counts.get(g.id) || 0 }));
+    }
+
+    async function loadGroupMembers(groupId) {
+      const { data, error } = await window.sb
+        .from('contact_groups')
+        .select('contact_id')
+        .eq('group_id', groupId);
+      if (error) throw error;
+      return (data || []).map(r => r.contact_id);
+    }
+
+    async function createGroup({ accountId, name, color }) {
+      const { data, error } = await window.sb
+        .from('groups')
+        .insert({ account_id: accountId, name, color })
+        .select('id, name, color')
+        .single();
+      if (error) throw error;
+      return data;
+    }
+
+    async function updateGroup(id, { name, color }) {
+      const { error } = await window.sb
+        .from('groups')
+        .update({ name, color })
+        .eq('id', id);
+      if (error) throw error;
+    }
+
+    async function deleteGroup(id) {
+      const { error } = await window.sb.from('groups').delete().eq('id', id);
+      if (error) throw error;
+    }
+
+    // Replace-all: simpler than diffing, and the cascade-safe FK means we
+    // can't leave orphans. Scoped .eq('group_id', ...) keeps the delete
+    // inside one group even if the caller passes garbage.
+    async function setGroupMembers(groupId, contactIds) {
+      const { error: dErr } = await window.sb
+        .from('contact_groups')
+        .delete()
+        .eq('group_id', groupId);
+      if (dErr) throw dErr;
+      if (!contactIds || contactIds.length === 0) return;
+      const rows = contactIds.map(cid => ({ group_id: groupId, contact_id: cid }));
+      const { error: iErr } = await window.sb.from('contact_groups').insert(rows);
+      if (iErr) throw iErr;
     }
 
     // ── Dev helpers for previewing states (remove if they end up unused) ──
