@@ -272,9 +272,9 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
 <div id="set-center-btn" onclick="openCoordsDialog('singer')" style="display:none;position:fixed;top:54px;right:120px;z-index:400;padding:4px 10px;background:rgba(0,232,122,.15);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;font-family:var(--font-mono);">Set Singer View</div>
 <div id="set-aud-btn" onclick="openCoordsDialog('audience')" style="display:none;position:fixed;top:54px;right:240px;z-index:400;padding:4px 10px;background:var(--color-border-dim);border:1px solid var(--color-gold-soft);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-gold-dim);cursor:pointer;font-family:var(--font-mono);">Set Audience View</div>
 
-<!-- Admin gear — visible only when profiles.is_admin = true for the
-     current user. Tapping opens the admin menu; menu currently has one
-     item (Set View Coordinates). -->
+<!-- Admin gear — visible only when profiles.is_platform_admin = true for
+     the current user. Tapping opens the admin menu; menu currently has
+     one item (Set View Coordinates). -->
 <div id="admin-gear" onclick="toggleAdminMenu(event)"
      style="display:none;position:fixed;top:12px;right:12px;z-index:420;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,.5);border:1px solid var(--color-border);align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:var(--color-gold-dim);">⚙️</div>
 <div id="admin-menu"
@@ -4904,8 +4904,8 @@ drawStage();
 // ═══════════════════════════════════════════════════════════════════════════
 // ADMIN — gear icon + Set View Coordinates dialog (Session 4.9)
 // ═══════════════════════════════════════════════════════════════════════════
-// Gated on profiles.is_admin for the current user. Writes go through
-// shell/venue-settings.js helpers (saveVenueDefault / saveVenueOverride).
+// Gated on profiles.is_platform_admin for the current user. Writes go
+// through shell/venue-settings.js helpers (saveVenueDefault / saveVenueOverride).
 // RLS on venue_defaults + karaoke_venue_settings enforces the same admin
 // check server-side, so the UI gate is convenience, not security.
 let currentUserIsAdmin  = false;
@@ -4915,10 +4915,10 @@ async function refreshAdminState() {
   const user = window.elsewhere?.getCurrentUser?.();
   if (!user) { currentUserIsAdmin = false; renderAdminUI(); return; }
   try {
-    const { data, error } = await window.sb.from('profiles').select('is_admin').eq('id', user.id).single();
+    const { data, error } = await window.sb.from('profiles').select('is_platform_admin').eq('id', user.id).single();
     if (error) throw error;
-    currentUserIsAdmin = !!data?.is_admin;
-    log('admin check: is_admin='+currentUserIsAdmin, 'info');
+    currentUserIsAdmin = !!data?.is_platform_admin;
+    log('admin check: is_platform_admin='+currentUserIsAdmin, 'info');
   } catch(e) {
     log('admin check failed: '+e.message, 'warn');
     currentUserIsAdmin = false;
@@ -5087,6 +5087,61 @@ function wireAdminAuth() {
 if (!wireAdminAuth()) {
   document.addEventListener('elsewhere:sb-ready', wireAdminAuth, { once: true });
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// DEV-ONLY SIGN-IN — Session 4.9 Part D verification affordance
+// ════════════════════════════════════════════════════════════════════════════
+// TODO(remove-in-4.10): Temporary bridge for verifying the admin gear +
+// Set View Coordinates dialog on desktop browsers. stage.html has no
+// production sign-in path yet — magic-link redirects to elsewhere://
+// which desktop can't resolve. This block lets a human operator sign in
+// via email+password on a laptop so Part D of Session 4.9 can actually
+// be exercised end-to-end.
+//
+// Remove when the real laptop-compatible landing flow ships (Session 4.10+).
+// Grep this file for "remove-in-4.10" to find this block.
+//
+// Activates only when the URL contains ?dev=1 exactly. In every other
+// context this evaluates the guard, finds it false, and does nothing —
+// no UI, no network, no log noise.
+(function devSignInIfRequested() {
+  if (new URLSearchParams(location.search).get('dev') !== '1') return;
+
+  function start() {
+    // Shell is loaded. Wait for its initial session hydration from
+    // localStorage so we don't prompt when already signed in.
+    window.elsewhere.ready
+      .then(() => attempt())
+      .catch(e => alert('Dev sign-in error: ' + (e?.message || e)));
+  }
+
+  async function attempt() {
+    if (window.elsewhere.getCurrentUser()) return; // already signed in
+
+    const email = prompt('Dev sign-in — email:');
+    if (email === null || email.trim() === '') return; // cancelled or blank
+
+    const password = prompt('Dev sign-in — password:');
+    if (password === null) return; // cancelled
+
+    // Use signInWithPassword directly, NOT window.elsewhere.signInWithEmail
+    // — the helper hardcodes emailRedirectTo: 'elsewhere://auth/callback',
+    // which is what we're trying to bypass on desktop.
+    const { error } = await window.sb.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (error) {
+      alert('Dev sign-in failed: ' + error.message);
+      return;
+    }
+    // Success: the onAuthChange listener registered by wireAdminAuth()
+    // above will fire refreshAdminState() naturally. Nothing to do here.
+  }
+
+  if (window.elsewhere) start();
+  else document.addEventListener('elsewhere:sb-ready', start, { once: true });
+})();
 </script>
 </body>
 </html>
