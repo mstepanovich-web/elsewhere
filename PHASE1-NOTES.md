@@ -14,6 +14,8 @@ Companion context: `CLAUDE.md` (repo layout, conventions, Agora data-channel got
 | 4 | ✅ | 2026-04-18 | v2.96 | `a482edb` | Groups CRUD |
 | 4.7 | ✅ | 2026-04-19 | v2.97 | `ee6b950` | Responsive layouts on `games/player.html` and `games/tv.html` (phone / tablet / TV breakpoints) |
 | 4.8 | ✅ | 2026-04-19 | v2.98 | `e3aaa05` | TV display pairing — any player pairs a secondary device as a TV display, stable `player_id` for reconnect-safe ownership |
+| 4.9 | ✅ | 2026-04-20 | v2.99 | `<commit-hash>` | Karaoke venue polish + admin venue tuning — venues.json manifest (25 venues reachable); `profiles.is_platform_admin` (renamed from `is_admin` via db/004); db/005 splits venue tuning into front/back (global) + singer/audience (karaoke); view-aware resolver in `shell/venue-settings.js`; rewritten admin dialog reads `viewMode` to capture live camera state with "Also apply to Global Defaults" checkbox; gear icon relocated to top bar; temporary `?dev=1` email+password sign-in bridge for desktop admin access. Part D verified end-to-end (both views, both save paths). |
+| 4.10 | 🔜 | upcoming | — | — | Laptop/TV production auth path for `karaoke/stage.html` — replace the temporary `?dev=1` email+password bridge with the tv2.html landing flow (QR-code-to-phone sign-in, shell passes authenticated session into stage). When landed, remove the dev block (grep `remove-in-4.10` in source). |
 | 5 | 🔜 | upcoming | — | — | Invite flow: per-person tokens, `contact_id` linkage, display-name confirmation on join; replaces client-authoritative lobby state with `session_participants` on Supabase realtime |
 
 ## Architecture Decisions
@@ -97,6 +99,24 @@ Built in Session 5:
 - Invite history view (Mike sees who he invited + status)
 - Replaces the current client-authoritative `lobbyPlayers[]` / `tv_displays` pattern with `session_participants` + `session_tv_displays` rows on Supabase realtime — structurally fixes the broadcast-ephemerality fragility documented under "Deferred — Games"
 
+### Venue property override pattern
+
+Two-level settings system: global venue defaults + per-app overrides. Each property can be independently overridden by each app; NULL override means inherit from global. Resolution via shared `resolveVenueYawPitch()` helper in `shell/venue-settings.js`. Generalizes to all venue properties — Phase 1 today implements yaw/pitch for two views (front/back on global, singer/audience on karaoke-specific); schema accommodates future additions via added columns.
+
+Global defaults live in `venue_defaults` table with `front_yaw` / `front_pitch` (audience view) and `back_yaw` / `back_pitch` (singer view). Karaoke-specific overrides live in `karaoke_venue_settings` with `singer_yaw_override` / `singer_pitch_override` and `audience_yaw_override` / `audience_pitch_override`. Post-refactor (when venues become Elsewhere-level shared entities), `venue_defaults` becomes the canonical `venues` table, and per-app tables follow the same pattern (`wellness_venue_settings`, etc.).
+
+Admin gating: `profiles.is_platform_admin` column controls write access. Read is public. Admin gear icon on `karaoke/stage.html` (only visible when `is_platform_admin = true`).
+
+### Three-app runtime split (karaoke)
+
+Karaoke's three apps have distinct runtime targets:
+
+- `stage.html` — TV/desktop browser only. Never runs in the iOS Capacitor wrapper. Admin UI (venue tuning) lives here.
+- `singer.html` — Wrapper-aware: runs inside the iOS Capacitor wrapper as the primary path, falls back to iPhone Safari when the wrapper isn't present. Follows the games manager/player pattern.
+- `audience.html` — Same pattern as `singer.html`. Wrapper-aware with browser fallback.
+
+Consequence for auth: the wrapper owns the `elsewhere://` URL scheme and handles magic-link callbacks. Because `stage.html` never loads in the wrapper, it has no production path to complete a magic-link sign-in on laptop/TV browsers. v2.99 ships with a temporary `?dev=1` sign-in affordance that uses Supabase email+password directly, bypassing the magic-link flow. This is a bridge until the tv2.html landing flow lands in a future session (Session 4.10), at which point `stage.html` will receive an already-authenticated session from the Elsewhere shell (similar to how `games/player.html` receives context from its shell launcher).
+
 ## Pre-Session 5 Blockers
 
 Must-fix before the invite flow ships.
@@ -158,8 +178,11 @@ Karaoke is post-archive (Fashion product archived 2026-04-17 at v2.90). Phase 1 
 - DeepAR `background_segmentation` jsdelivr 404 — `karaoke/stage.html` falls back to MediaPipe, low priority
 - ~143 text-tone hardcoded colors deferred from Session 1 color audit (`rgba(255,220,150,*)` and `rgba(255,200,120,*)` across `karaoke/*.html`) — rebrand-safe enough for now
 - Extract ambient venue effects (Type 1: speakeasy dust, stadium lasers, forest sway, etc.) from `karaoke/stage.html` into `shell/venue-effects.js` when wellness product work begins
-- Create `venues.json` metadata file with product tags when wellness needs it
+- ~~Create `venues.json` metadata file with product tags when wellness needs it~~ — shipped in Session 4.9 Part A (karaoke use case; wellness can extend the manifest when needed)
 - Move karaoke performance effects (Type 2: DeepAR face filters, confetti, crowd reactions) formally under `karaoke/effects/` — physically there already but could be better organized
+- Laptop/TV production auth path for `karaoke/stage.html` (Session 4.10+). Shipped v2.99 uses a temporary `?dev=1` email+password affordance. Long-term fix is the tv2.html landing flow with shell-passes-session-to-stage pattern (matching games manager/player). When that lands, remove the dev block (grep `remove-in-4.10` in `karaoke/stage.html`).
+- Tune `back_yaw` / `back_pitch` for remaining venues via the admin dialog. Most venues have NULL back values today; resolver falls back to `venues.json.startYaw` (no `back_pitch` fallback — uses 0).
+- Bug: `karaoke/stage.html` line ~3085 has `if(viewMode==='singer')` — a dead branch (actual value is `'panorama'`). Cleanup candidate, no functional impact today.
 
 ## Deferred — UX Refinements
 
