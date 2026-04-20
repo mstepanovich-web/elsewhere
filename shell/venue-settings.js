@@ -1,25 +1,37 @@
-// shell/venue-settings.js — two-level venue property resolution.
+// shell/venue-settings.js — two-level venue view-coordinate resolver.
 //
-// Venue properties flow through two layers:
-//   1. venue_defaults (DB)             — canonical per-venue values, shared
-//                                        across every product that renders
-//                                        the venue.
-//   2. <app>_venue_settings (DB)       — per-app overrides. NULL on a
-//                                        column means "inherit from default."
+// Venue view tuning splits into two independent pairs, one per view:
 //
-// Callers pass an app name ('karaoke', 'wellness', ...) and get back both
-// the raw rows and a resolved map { venueId: { yaw, pitch, ... } } ready
-// to apply to the local venue list.
+//   singer / panorama view   ← looks out from the stage
+//   audience view            ← faces the stage
+//
+// Each view has its own { yaw, pitch } pair, and each pair resolves
+// through two layers:
+//
+//   1. venue_defaults (DB)          — canonical per-venue values,
+//                                     shared across every product.
+//                                     Columns: front_* (audience),
+//                                     back_* (singer).
+//   2. <app>_venue_settings (DB)    — per-app overrides, NULL = inherit.
+//                                     Columns: audience_{yaw,pitch}_override
+//                                     and singer_{yaw,pitch}_override.
+//
+// Final fallback is the venue entry from venues.json (startYaw,
+// staticYaw, staticPitch). The caller passes that venue object in; the
+// resolver doesn't look it up.
 //
 // See PHASE1-NOTES "Venue property override pattern" for the decision
-// that motivates this module. See db/003_admin_and_venue_settings.sql for
-// the tables + RLS policies. Depends on window.sb (Supabase client from
-// shell/auth.js) — load this module AFTER shell/auth.js.
+// context and db/005_front_back_venue_tuning.sql for the schema.
+// Depends on window.sb (Supabase client from shell/auth.js) — load this
+// module AFTER shell/auth.js.
 
 /**
- * Fetch venue_defaults + per-app overrides and return a resolved map.
- * @param {string} app  The app name — currently 'karaoke'.
- * @returns {Promise<{defaults: Object[], overrides: Object[], resolved: Object}>}
+ * Fetch venue_defaults + per-app override rows. Returns the raw row
+ * arrays — callers iterate and resolve per venue per view via
+ * resolveVenueYawPitch().
+ *
+ * @param {string} app  The app name — 'karaoke' today.
+ * @returns {Promise<{defaults: Object[], overrides: Object[]}>}
  */
 export async function loadVenueSettings(app = 'karaoke') {
   const sb = window.sb;
@@ -33,79 +45,99 @@ export async function loadVenueSettings(app = 'karaoke') {
   if (defaultsRes.error)  throw defaultsRes.error;
   if (overridesRes.error) throw overridesRes.error;
 
-  const defaults  = defaultsRes.data  || [];
-  const overrides = overridesRes.data || [];
-  const overrideByVenue = {};
-  overrides.forEach(o => { overrideByVenue[o.venue_id] = o; });
+  return {
+    defaults:  defaultsRes.data  || [],
+    overrides: overridesRes.data || [],
+  };
+}
 
-  const resolved = {};
-  defaults.forEach(d => {
-    const o = overrideByVenue[d.venue_id] || null;
-    resolved[d.venue_id] = {
-      yaw:   resolveVenueProperty(d, o, 'yaw'),
-      pitch: resolveVenueProperty(d, o, 'pitch'),
+/**
+ * Resolve yaw + pitch for one venue in one view. Null-coalescing chain:
+ * per-app override → global default → venues.json fallback → 0.
+ *
+ * Pitch fallback differs per view:
+ *   - singer view has no venues.json pitch field, so falls through to 0
+ *   - audience view uses staticPitch from venues.json
+ *
+ * @param {Object|null} defaults    row from venue_defaults for this venue,
+ *                                  or null. Has columns
+ *                                  front_yaw/front_pitch/back_yaw/back_pitch.
+ * @param {Object|null} overrides   row from <app>_venue_settings for this
+ *                                  venue, or null. Has columns
+ *                                  singer_{yaw,pitch}_override and
+ *                                  audience_{yaw,pitch}_override.
+ * @param {'singer'|'audience'} view
+ * @param {Object|null} venueJson   the venue entry from venues.json (has
+ *                                  startYaw / staticYaw / staticPitch).
+ * @returns {{ yaw: number, pitch: number }}
+ */
+export function resolveVenueYawPitch(defaults, overrides, view, venueJson) {
+  if (view === 'singer') {
+    return {
+      yaw:   overrides?.singer_yaw_override   ?? defaults?.back_yaw   ?? venueJson?.startYaw ?? 0,
+      pitch: overrides?.singer_pitch_override ?? defaults?.back_pitch ?? 0,
     };
-  });
-  return { defaults, overrides, resolved };
+  }
+  if (view === 'audience') {
+    return {
+      yaw:   overrides?.audience_yaw_override   ?? defaults?.front_yaw   ?? venueJson?.staticYaw   ?? 0,
+      pitch: overrides?.audience_pitch_override ?? defaults?.front_pitch ?? venueJson?.staticPitch ?? 0,
+    };
+  }
+  throw new Error('resolveVenueYawPitch: unknown view ' + view);
 }
 
 /**
- * Resolve a single property. Non-null override wins; else default.
- * Generalizes to any property — callers pass 'yaw', 'pitch', or future
- * additions like 'sound', 'anim'.
+ * Partial upsert of venue_defaults. `partial` contains any subset of
+ * front_yaw / front_pitch / back_yaw / back_pitch. Unspecified columns
+ * retain their current values (Postgres ON CONFLICT DO UPDATE only
+ * touches columns named in the payload).
+ *
+ * Typical call sites:
+ *   - audience-view save: saveVenueDefault(id, { front_yaw: y, front_pitch: p })
+ *   - singer-view save:   saveVenueDefault(id, { back_yaw:  y, back_pitch:  p })
  */
-export function resolveVenueProperty(defaults, overrides, propertyName) {
-  const overrideKey = propertyName + '_override';
-  const v = overrides?.[overrideKey];
-  return v !== null && v !== undefined ? v : defaults?.[propertyName];
-}
-
-/**
- * Upsert a row in venue_defaults. Pass yaw/pitch as numbers.
- */
-export async function saveVenueDefault(venueId, { yaw, pitch }) {
+export async function saveVenueDefault(venueId, partial) {
   const sb = window.sb;
   const user = window.elsewhere?.getCurrentUser?.();
-  const payload = {
-    venue_id: venueId,
-    yaw, pitch,
-    updated_by: user?.id || null,
-  };
+  const payload = { venue_id: venueId, ...partial, updated_by: user?.id || null };
   const { error } = await sb.from('venue_defaults').upsert(payload, { onConflict: 'venue_id' });
   if (error) throw error;
 }
 
 /**
- * Upsert a row in <app>_venue_settings. yaw/pitch may be numbers OR null
- * (null means "use the default"). Delete when both are null so we don't
- * keep empty override rows around.
+ * Partial upsert of <app>_venue_settings. `partial` contains any subset
+ * of singer_{yaw,pitch}_override / audience_{yaw,pitch}_override.
+ * Passing null for an override column clears it (row stays in place —
+ * NULL resolves as "inherit default" anyway, so all-NULL rows are
+ * functionally equivalent to no row).
+ *
+ * Typical call sites:
+ *   - audience-view save: saveVenueOverride('karaoke', id,
+ *                           { audience_yaw_override: y,
+ *                             audience_pitch_override: p })
+ *   - singer-view save:   saveVenueOverride('karaoke', id,
+ *                           { singer_yaw_override: y,
+ *                             singer_pitch_override: p })
+ *   - "Use default" clears: { audience_yaw_override: null,
+ *                             audience_pitch_override: null }
  */
-export async function saveVenueOverride(app, venueId, { yaw, pitch }) {
+export async function saveVenueOverride(app, venueId, partial) {
   const sb = window.sb;
   const user = window.elsewhere?.getCurrentUser?.();
   const table = app + '_venue_settings';
-  if (yaw === null && pitch === null) {
-    const { error } = await sb.from(table).delete().eq('venue_id', venueId);
-    if (error) throw error;
-    return;
-  }
-  const payload = {
-    venue_id: venueId,
-    yaw_override:   yaw,
-    pitch_override: pitch,
-    updated_by: user?.id || null,
-  };
+  const payload = { venue_id: venueId, ...partial, updated_by: user?.id || null };
   const { error } = await sb.from(table).upsert(payload, { onConflict: 'venue_id' });
   if (error) throw error;
 }
 
 // Expose on window.elsewhere for non-module callers (inline scripts in
-// karaoke/*.html all assume globals — see CLAUDE.md "No build step").
+// karaoke/*.html all assume globals per CLAUDE.md "No build step").
 if (typeof window !== 'undefined') {
   window.elsewhere = window.elsewhere || {};
   window.elsewhere.venueSettings = {
     loadVenueSettings,
-    resolveVenueProperty,
+    resolveVenueYawPitch,
     saveVenueDefault,
     saveVenueOverride,
   };

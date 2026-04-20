@@ -264,39 +264,43 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
 
 <!-- On-screen debug log -->
 <div id="dbg-toggle" onclick="toggleDbg()">LOG</div>
-<!-- Admin-only tuning buttons. Session 4.9: clicking now opens the
-     Set View Coordinates dialog pre-filled with the just-captured camera
-     values, instead of just console.logging. Visibility is double-gated:
-     admin flag (renderAdminUI) + view-mode toggle (only one is visible
-     depending on whether we're in audience or panorama view). -->
-<div id="set-center-btn" onclick="openCoordsDialog('singer')" style="display:none;position:fixed;top:54px;right:120px;z-index:400;padding:4px 10px;background:rgba(0,232,122,.15);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;font-family:var(--font-mono);">Set Singer View</div>
-<div id="set-aud-btn" onclick="openCoordsDialog('audience')" style="display:none;position:fixed;top:54px;right:240px;z-index:400;padding:4px 10px;background:var(--color-border-dim);border:1px solid var(--color-gold-soft);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-gold-dim);cursor:pointer;font-family:var(--font-mono);">Set Audience View</div>
+<!-- The separate Set Singer View / Set Audience View buttons were removed
+     in the Session 4.9 rework. The gear menu's "Set View Coordinates"
+     item now handles both — it reads the current viewMode and opens the
+     dialog pre-filled with the live camera state for that view. -->
 
-<!-- Admin gear — visible only when profiles.is_platform_admin = true for
-     the current user. Tapping opens the admin menu; menu currently has
-     one item (Set View Coordinates). -->
-<div id="admin-gear" onclick="toggleAdminMenu(event)"
-     style="display:none;position:fixed;top:12px;right:12px;z-index:420;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,.5);border:1px solid var(--color-border);align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:var(--color-gold-dim);">⚙️</div>
+<!-- Admin dropdown menu — anchored below the top bar, aligned to its
+     right edge where the gear sits. Trigger element #admin-gear lives
+     inside the top bar (see #bar, after #vtoggle). One item for now. -->
 <div id="admin-menu"
-     style="display:none;position:fixed;top:50px;right:12px;z-index:421;background:rgba(14,6,20,.98);border:1px solid var(--color-border);border-radius:6px;padding:4px 0;min-width:180px;box-shadow:0 6px 20px rgba(0,0,0,.6);">
-  <div onclick="openCoordsDialog()" style="padding:10px 14px;cursor:pointer;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-gold-dim);font-family:var(--font-mono);">Set View Coordinates</div>
+     style="display:none;position:fixed;top:46px;right:12px;z-index:421;background:rgba(14,6,20,.98);border:1px solid var(--color-border);border-radius:4px;padding:4px 0;min-width:200px;box-shadow:0 6px 20px rgba(0,0,0,.6);font-family:var(--font-mono);">
+  <div onclick="openCoordsDialog()"
+       onmouseover="this.style.background='var(--color-gold-faint)';this.style.color='var(--color-text)';"
+       onmouseout="this.style.background='transparent';this.style.color='var(--color-gold-dim)';"
+       style="padding:9px 14px;cursor:pointer;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-gold-dim);transition:background .12s,color .12s;">Set View Coordinates</div>
 </div>
 
-<!-- Set View Coordinates dialog — admin-only. Persists to
-     venue_defaults + karaoke_venue_settings. No backdrop-click
-     dismissal (per Session 4.8 "Add TV display" modal refinement). -->
-<div id="coords-dialog" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(4,2,6,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px;">
-  <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:12px;padding:22px;max-width:380px;width:100%;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.6);max-height:calc(100vh - 40px);overflow-y:auto;">
+<!-- Set View Coordinates dialog — admin-only. Card-style modal (not
+     fullscreen) so the venue stays visible behind. The dialog is
+     view-aware: reads the current viewMode on open and writes to the
+     matching (front/back, audience/singer) column pair. No backdrop-
+     click dismissal — explicit Cancel/Save only (Session 4.8 pattern). -->
+<div id="coords-dialog" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(4,2,6,.45);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:12px;padding:22px;max-width:480px;width:100%;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.6);max-height:calc(100vh - 40px);overflow-y:auto;">
     <div id="coords-title" style="font-family:var(--font-display);font-size:18px;font-weight:300;color:var(--color-text);letter-spacing:.06em;">Adjust View Coordinates</div>
 
+    <!-- Global Defaults — disabled by default; enabled when the
+         "Also apply to Global Defaults" checkbox below is ticked. -->
     <div style="font-size:11px;color:var(--color-text-faint);letter-spacing:.12em;text-transform:uppercase;font-family:var(--font-mono);">Global defaults</div>
     <div style="display:grid;grid-template-columns:70px 1fr;gap:8px;align-items:center;">
       <label style="font-size:13px;color:var(--color-text-dim);font-family:var(--font-mono);">Yaw</label>
-      <input type="number" id="coords-global-yaw" step="1" style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:6px;color:var(--color-text);font-family:var(--font-mono);font-size:14px;padding:8px 10px;outline:none;">
+      <input type="number" id="coords-global-yaw" step="1" disabled style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:6px;color:var(--color-text);font-family:var(--font-mono);font-size:14px;padding:8px 10px;outline:none;opacity:.55;">
       <label style="font-size:13px;color:var(--color-text-dim);font-family:var(--font-mono);">Pitch</label>
-      <input type="number" id="coords-global-pitch" step="1" style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:6px;color:var(--color-text);font-family:var(--font-mono);font-size:14px;padding:8px 10px;outline:none;">
+      <input type="number" id="coords-global-pitch" step="1" disabled style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:6px;color:var(--color-text);font-family:var(--font-mono);font-size:14px;padding:8px 10px;outline:none;opacity:.55;">
     </div>
 
+    <!-- Karaoke overrides — pre-filled with live camera state on open.
+         "Use default" clears only the current view's override pair. -->
     <div style="font-size:11px;color:var(--color-text-faint);letter-spacing:.12em;text-transform:uppercase;font-family:var(--font-mono);padding-top:6px;border-top:1px solid var(--color-border-dim);">Karaoke overrides</div>
     <div style="display:grid;grid-template-columns:70px 1fr auto;gap:8px;align-items:center;">
       <label style="font-size:13px;color:var(--color-text-dim);font-family:var(--font-mono);">Yaw</label>
@@ -307,6 +311,15 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
       <button onclick="useDefault('pitch')" style="font-size:9px;padding:6px 10px;border-radius:var(--radius-pill);border:1px solid var(--color-border-dim);background:transparent;color:var(--color-text-faint);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;font-family:var(--font-mono);white-space:nowrap;">Use default</button>
     </div>
     <div id="coords-inherit-hint" style="font-size:10px;color:var(--color-text-faint);letter-spacing:.04em;font-style:italic;min-height:12px;font-family:var(--font-mono);"></div>
+
+    <!-- Promote captured values to the global default (shared with other
+         apps). Checking this enables the Global Defaults inputs above,
+         pre-filling them with the same captured values; Save then asks
+         for confirmation before writing to venue_defaults. -->
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-dim);font-family:var(--font-mono);cursor:pointer;-webkit-user-select:none;">
+      <input type="checkbox" id="coords-apply-global" onchange="onApplyGlobalChange()" style="margin:0;cursor:pointer;">
+      Also apply to Global Defaults
+    </label>
 
     <div id="coords-status" style="font-size:11px;color:var(--color-green);text-align:center;min-height:14px;letter-spacing:.08em;text-transform:uppercase;font-family:var(--font-mono);"></div>
 
@@ -378,6 +391,11 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
+    <!-- Admin gear — visible only when profiles.is_platform_admin = true.
+         Opens the dropdown menu at #admin-menu below the top bar. -->
+    <div id="admin-gear" onclick="toggleAdminMenu(event)"
+         title="Admin"
+         style="display:none;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.35);border:1px solid var(--color-border);align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:var(--color-gold-dim);flex-shrink:0;transition:border-color .15s,background .15s;">⚙</div>
   </div>
 </div>
 
@@ -2498,25 +2516,34 @@ function waitForVenueSettings(timeoutMs = 5000) {
   });
 }
 
-// Pull venue_defaults + karaoke_venue_settings and overwrite each VENUES
-// entry's staticYaw / staticPitch with the resolved values. Safe to call
-// before the DB tables exist (network error → keeps manifest values) and
-// safe to re-run after admin saves (idempotent).
+// Pull venue_defaults + karaoke_venue_settings and resolve both views
+// (singer + audience) for every venue, writing the resolved yaw/pitch
+// back onto the in-memory VENUES entries. Singer view writes to
+// startYaw/startPitch, audience view writes to staticYaw/staticPitch.
+// Safe to call before the DB tables exist (network error → keeps
+// manifest values) and safe to re-run after admin saves (idempotent).
 async function applyVenueSettingsOverride() {
   const vs = await waitForVenueSettings();
   if (!vs) { log('venue-settings module not loaded — using manifest values only', 'warn'); return; }
   try {
-    const { resolved } = await vs.loadVenueSettings('karaoke');
+    const { defaults, overrides } = await vs.loadVenueSettings('karaoke');
+    const defaultsByVenue  = {}; defaults .forEach(d => { defaultsByVenue[d.venue_id]  = d; });
+    const overridesByVenue = {}; overrides.forEach(o => { overridesByVenue[o.venue_id] = o; });
     let applied = 0;
     VENUES.forEach(v => {
-      const r = resolved[v.id];
-      if (!r) return;
-      if (r.yaw   !== undefined && r.yaw   !== null) { v.staticYaw   = r.yaw;   applied++; }
-      if (r.pitch !== undefined && r.pitch !== null) { v.staticPitch = r.pitch; }
+      const d = defaultsByVenue[v.id]  || null;
+      const o = overridesByVenue[v.id] || null;
+      const aud = vs.resolveVenueYawPitch(d, o, 'audience', v);
+      const sng = vs.resolveVenueYawPitch(d, o, 'singer',   v);
+      v.staticYaw   = aud.yaw;
+      v.staticPitch = aud.pitch;
+      v.startYaw    = sng.yaw;
+      v.startPitch  = sng.pitch;   // new field introduced in the 4.9 rework
+      applied++;
     });
-    log('venue settings applied for '+applied+' venues (of '+Object.keys(resolved).length+' in DB)', 'ok');
+    log('venue settings applied for '+applied+' venues ('+defaults.length+' defaults, '+overrides.length+' overrides in DB)', 'ok');
   } catch(e) {
-    // Most common failure: tables don't exist yet (migration 003 not applied).
+    // Most common failure: tables don't exist yet (migration not applied).
     // Keep manifest values as fallback so the stage still renders.
     log('venue settings load failed: '+e.message+' — using manifest values', 'warn');
   }
@@ -2613,6 +2640,11 @@ function buildPanorama(){
       tYaw = venue.startYaw || 0;
       cYaw = venue.startYaw || 0;
       manualYaw = venue.startYaw || 0;
+      // startPitch is populated by applyVenueSettingsOverride — falls back
+      // to 0 when no DB value exists (venues.json has no pitch counterpart).
+      tPitch = venue.startPitch || 0;
+      cPitch = venue.startPitch || 0;
+      manualPitch = venue.startPitch || 0;
       log('buildPanorama: texture loaded ✓ panReady=true viewMode='+viewMode, 'ok');
       hideVenueTransition(); // hide loading overlay immediately
       initVenueMode();
@@ -2942,23 +2974,9 @@ function buildSpeakeasyEffects3D(){
 // Head tracking (mouse fallback if FaceMesh unavailable)
 let headTrackingAuto = false; // default to manual — auto requires explicit toggle
 
-function logCurrentYaw(type){
-  const venue = VENUES.find(v=>v.id===selectedVenueId);
-  if(type==='audience'){
-    const yaw   = Math.round(venueYaw);
-    const pitch = Math.round(venuePitch);
-    const msg = `${venue?.name||selectedVenueId} staticYaw: ${yaw}, pitch: ${pitch}`;
-    log(msg, 'ok');
-    navigator.clipboard.writeText(String(yaw)).catch(()=>{});
-    showToast('👥 Audience: yaw '+yaw+' pitch '+pitch);
-  } else {
-    const yaw = headTrackingAuto ? Math.round(cYaw) : Math.round(manualYaw);
-    const msg = `${venue?.name||selectedVenueId} startYaw: ${yaw}`;
-    log(msg, 'ok');
-    navigator.clipboard.writeText(String(yaw)).catch(()=>{});
-    showToast('🎤 Singer view set: '+yaw);
-  }
-}
+// logCurrentYaw() was removed in the Session 4.9 rework — the admin
+// dialog now captures live yaw/pitch for the current viewMode directly
+// inside openCoordsDialog(), so the console-log helper is unreferenced.
 
 function toggleHeadTracking(){
   headTrackingAuto = !headTrackingAuto;
@@ -3114,9 +3132,6 @@ function onToggleView(){
   document.getElementById('vtoggle').className   = isAud ? '' : 'pano';
   document.getElementById('compass').style.display     = isAud ? 'none' : 'block';
   document.getElementById('htoggle').style.display     = isAud ? 'none' : 'block';
-  // Session 4.9: double-gated on admin flag. Non-admins never see these.
-  document.getElementById('set-center-btn').style.display = (currentUserIsAdmin && !isAud) ? 'block' : 'none';
-  document.getElementById('set-aud-btn').style.display    = (currentUserIsAdmin &&  isAud) ? 'block' : 'none';
   log('onToggleView → '+viewMode+' venueMode:'+venueMode+' panReady:'+panReady, 'info');
   if(!isAud){
     buildPanoramaIfNeeded();
@@ -4929,16 +4944,6 @@ async function refreshAdminState() {
 function renderAdminUI() {
   const gear = document.getElementById('admin-gear');
   if (gear) gear.style.display = currentUserIsAdmin ? 'flex' : 'none';
-  // Keep Set Singer/Audience View buttons in sync with both the admin
-  // flag AND the current view mode. The view-mode toggle elsewhere in
-  // this file runs on every mode switch; this handler fires when the
-  // admin flag changes (sign-in / sign-out) so they stay right without
-  // requiring a view-mode round-trip.
-  const isAud = (typeof viewMode !== 'undefined' && viewMode === 'audience');
-  const s = document.getElementById('set-center-btn');
-  const a = document.getElementById('set-aud-btn');
-  if (s) s.style.display = (currentUserIsAdmin && !isAud) ? 'block' : 'none';
-  if (a) a.style.display = (currentUserIsAdmin &&  isAud) ? 'block' : 'none';
 }
 
 function toggleAdminMenu(e) {
@@ -4958,24 +4963,55 @@ function hideAdminMenuOnce() {
   if (menu) menu.style.display = 'none';
 }
 
-// Open the Set View Coordinates dialog. `captureFrom`:
-//   - 'singer'    → pre-fill yaw override with current singer/panorama yaw
-//   - 'audience'  → pre-fill yaw + pitch override with live camera values
-//   - null        → load stored override values (gear menu entry point)
-async function openCoordsDialog(captureFrom = null) {
+// Open the Set View Coordinates dialog. Takes no arguments — reads the
+// current viewMode and captures the live camera state for that view.
+// Audience mode captures venueYaw/venuePitch (audience camera target).
+// Panorama/singer mode captures cYaw/manualYaw + cPitch/manualPitch
+// depending on whether head-tracking is in auto or manual mode.
+async function openCoordsDialog() {
   if (!currentUserIsAdmin) return;
   hideAdminMenuOnce();
   const venue = VENUES.find(v => v.id === selectedVenueId);
   if (!venue) { showToast('No venue selected'); return; }
 
+  // View label: 'audience' stays, 'panorama' → 'singer' (the code's
+  // panorama mode is the singer's perspective). This mapping is what
+  // the DB columns + resolver expect.
+  const view = (viewMode === 'audience') ? 'audience' : 'singer';
+
+  // Capture live camera state for the current view.
+  let captured;
+  if (view === 'audience') {
+    captured = { yaw: Math.round(venueYaw), pitch: Math.round(venuePitch) };
+  } else {
+    captured = {
+      yaw:   Math.round(headTrackingAuto ? cYaw   : manualYaw),
+      pitch: Math.round(headTrackingAuto ? cPitch : manualPitch),
+    };
+  }
+
   try {
-    const ctx = await loadCoordsForVenue(venue.id, captureFrom);
+    const ctx = await loadCoordsForVenue(venue.id, view, captured, venue);
     coordsDialogContext = ctx;
-    document.getElementById('coords-title').textContent = 'Adjust View Coordinates — ' + venue.name;
+
+    const viewLabel = view === 'audience' ? 'Audience View' : 'Singer View';
+    document.getElementById('coords-title').textContent =
+      'Adjust View Coordinates — ' + venue.name + ' — ' + viewLabel;
+
+    // Global defaults inputs: read-only by default, pre-filled with the
+    // currently resolved global value (pre-capture).
     document.getElementById('coords-global-yaw').value   = ctx.globalYaw   ?? '';
     document.getElementById('coords-global-pitch').value = ctx.globalPitch ?? '';
-    document.getElementById('coords-ovr-yaw').value      = ctx.ovrYaw   ?? '';
-    document.getElementById('coords-ovr-pitch').value    = ctx.ovrPitch ?? '';
+
+    // Override inputs: pre-filled with the captured live camera values.
+    document.getElementById('coords-ovr-yaw').value   = ctx.captured.yaw;
+    document.getElementById('coords-ovr-pitch').value = ctx.captured.pitch;
+
+    // Reset the "apply to global" checkbox and its gated state.
+    const applyCb = document.getElementById('coords-apply-global');
+    applyCb.checked = false;
+    onApplyGlobalChange();
+
     document.getElementById('coords-status').textContent = '';
     document.getElementById('coords-status').style.color = 'var(--color-green)';
     updateInheritHint();
@@ -4986,37 +5022,37 @@ async function openCoordsDialog(captureFrom = null) {
   }
 }
 
-async function loadCoordsForVenue(venueId, captureFrom) {
+// Load current DB rows for this venue and resolve the global default for
+// the requested view. Returns the context object the dialog and save
+// handlers share.
+async function loadCoordsForVenue(venueId, view, captured, venueJson) {
   const sb = window.sb;
   if (!sb) throw new Error('Supabase client not ready');
+  const vs = window.elsewhere?.venueSettings;
+  if (!vs) throw new Error('venue-settings module not ready');
+
   const [defRes, ovrRes] = await Promise.all([
     sb.from('venue_defaults').select('*').eq('venue_id', venueId).maybeSingle(),
     sb.from('karaoke_venue_settings').select('*').eq('venue_id', venueId).maybeSingle(),
   ]);
   if (defRes.error) throw defRes.error;
   if (ovrRes.error) throw ovrRes.error;
+
   const def = defRes.data;
   const ovr = ovrRes.data;
 
-  let ovrYaw   = ovr?.yaw_override   ?? null;
-  let ovrPitch = ovr?.pitch_override ?? null;
-
-  // Capture modes: overwrite the override inputs with the currently-live
-  // camera values. Audience captures staticYaw/Pitch target; singer
-  // captures the panorama-view yaw (pitch isn't typically set from singer
-  // view, so we leave the stored override in place).
-  if (captureFrom === 'audience') {
-    ovrYaw   = Math.round(venueYaw);
-    ovrPitch = Math.round(venuePitch);
-  } else if (captureFrom === 'singer') {
-    ovrYaw = headTrackingAuto ? Math.round(cYaw) : Math.round(manualYaw);
-  }
+  // For the "Global Defaults" display we want the pre-override global
+  // value for this view (not the override-resolved value). We pass null
+  // for overrides so resolveVenueYawPitch walks straight from
+  // defaults → venues.json → 0.
+  const globalResolved = vs.resolveVenueYawPitch(def, null, view, venueJson);
 
   return {
     venueId,
-    globalYaw:   def?.yaw   ?? 0,
-    globalPitch: def?.pitch ?? 0,
-    ovrYaw, ovrPitch,
+    view,                // 'singer' or 'audience'
+    captured,            // { yaw, pitch } — live camera state at open time
+    globalYaw:   globalResolved.yaw,
+    globalPitch: globalResolved.pitch,
   };
 }
 
@@ -5037,6 +5073,36 @@ function updateInheritHint() {
   hint.textContent = parts.length ? parts.join(' + ') + ' using global default' : '';
 }
 
+// Toggle editability of the Global Defaults inputs based on the
+// "Also apply to Global Defaults" checkbox. When ticked, the inputs
+// become editable and pre-fill with the captured values so the admin
+// can promote them as-is or tweak before saving.
+function onApplyGlobalChange() {
+  const checked = document.getElementById('coords-apply-global').checked;
+  const gYaw   = document.getElementById('coords-global-yaw');
+  const gPitch = document.getElementById('coords-global-pitch');
+  if (checked) {
+    // Seed with captured values (same as override inputs) so the admin
+    // doesn't have to retype. They can edit before Save.
+    const ctx = coordsDialogContext;
+    if (ctx) {
+      gYaw.value   = ctx.captured.yaw;
+      gPitch.value = ctx.captured.pitch;
+    }
+    gYaw.disabled = false;   gYaw.style.opacity = '1';
+    gPitch.disabled = false; gPitch.style.opacity = '1';
+  } else {
+    // Revert to the stored global value for the current view.
+    const ctx = coordsDialogContext;
+    if (ctx) {
+      gYaw.value   = ctx.globalYaw   ?? '';
+      gPitch.value = ctx.globalPitch ?? '';
+    }
+    gYaw.disabled = true;   gYaw.style.opacity = '.55';
+    gPitch.disabled = true; gPitch.style.opacity = '.55';
+  }
+}
+
 function closeCoordsDialog() {
   document.getElementById('coords-dialog').style.display = 'none';
   coordsDialogContext = null;
@@ -5047,25 +5113,64 @@ async function saveCoords() {
   const ctx = coordsDialogContext;
   const btn    = document.getElementById('coords-save-btn');
   const status = document.getElementById('coords-status');
-  btn.disabled = true;
-  status.style.color = 'var(--color-green)';
-  status.textContent = 'Saving…';
 
-  const gYaw   = parseFloat(document.getElementById('coords-global-yaw').value);
-  const gPitch = parseFloat(document.getElementById('coords-global-pitch').value);
+  // Read form values
   const ovrYawRaw   = document.getElementById('coords-ovr-yaw').value;
   const ovrPitchRaw = document.getElementById('coords-ovr-pitch').value;
   const ovrYaw   = ovrYawRaw   === '' ? null : parseFloat(ovrYawRaw);
   const ovrPitch = ovrPitchRaw === '' ? null : parseFloat(ovrPitchRaw);
 
+  const applyGlobal = document.getElementById('coords-apply-global').checked;
+  const gYawRaw   = document.getElementById('coords-global-yaw').value;
+  const gPitchRaw = document.getElementById('coords-global-pitch').value;
+  const gYaw   = gYawRaw   === '' ? null : parseFloat(gYawRaw);
+  const gPitch = gPitchRaw === '' ? null : parseFloat(gPitchRaw);
+
+  // Confirm if the admin is promoting to the global default. Cancelling
+  // here aborts the entire save — including the override — so the user
+  // can uncheck the box and click Save again to write override only.
+  if (applyGlobal) {
+    const venueName = (VENUES.find(v=>v.id===ctx.venueId) || {}).name || ctx.venueId;
+    const ok = confirm(
+      'This will also update the global default for "' + venueName + '" ' +
+      'across all apps. Continue?'
+    );
+    if (!ok) {
+      status.style.color = 'var(--color-text-faint)';
+      status.textContent = 'Cancelled';
+      setTimeout(() => { status.textContent = ''; status.style.color = 'var(--color-green)'; }, 1500);
+      return;
+    }
+  }
+
   const vs = window.elsewhere?.venueSettings;
-  if (!vs) { status.style.color = 'var(--color-red)'; status.textContent = 'Settings module not loaded'; btn.disabled = false; return; }
+  if (!vs) { status.style.color = 'var(--color-red)'; status.textContent = 'Settings module not loaded'; return; }
+
+  btn.disabled = true;
+  status.style.color = 'var(--color-green)';
+  status.textContent = 'Saving…';
 
   try {
-    await vs.saveVenueDefault(ctx.venueId, { yaw: gYaw, pitch: gPitch });
-    await vs.saveVenueOverride('karaoke', ctx.venueId, { yaw: ovrYaw, pitch: ovrPitch });
+    // Always upsert the per-app override, writing only the columns for
+    // the current view. The other view's override pair stays untouched.
+    const overridePartial = ctx.view === 'audience'
+      ? { audience_yaw_override: ovrYaw, audience_pitch_override: ovrPitch }
+      : { singer_yaw_override:   ovrYaw, singer_pitch_override:   ovrPitch };
+    await vs.saveVenueOverride('karaoke', ctx.venueId, overridePartial);
+
+    // If checkbox ticked, also promote to venue_defaults (again, only
+    // the current view's pair: front_* for audience, back_* for singer).
+    if (applyGlobal) {
+      const defaultPartial = ctx.view === 'audience'
+        ? { front_yaw: gYaw, front_pitch: gPitch }
+        : { back_yaw:  gYaw, back_pitch:  gPitch };
+      await vs.saveVenueDefault(ctx.venueId, defaultPartial);
+    }
+
+    // Re-pull settings, re-resolve VENUES entries, re-render current venue.
     await applyVenueSettingsOverride();
     if (ctx.venueId === selectedVenueId) buildPanorama();
+
     status.textContent = '✓ Saved';
     setTimeout(closeCoordsDialog, 700);
   } catch(e) {
