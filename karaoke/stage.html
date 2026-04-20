@@ -5,6 +5,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Elsewhere · Stage</title>
+<!-- Shell modules — load before any inline script runs. auth.js exposes
+     window.sb + window.elsewhere.{getCurrentUser,onAuthChange,ready}; the
+     venue-settings module then hangs loadVenueSettings/saveVenue* off
+     window.elsewhere.venueSettings. Inline scripts below read these
+     globals inside async handlers, so module-load timing is fine. -->
+<script type="module" src="../shell/auth.js"></script>
+<script type="module" src="../shell/venue-settings.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 
@@ -257,8 +264,58 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
 
 <!-- On-screen debug log -->
 <div id="dbg-toggle" onclick="toggleDbg()">LOG</div>
-<div id="set-center-btn" onclick="logCurrentYaw('singer')" style="display:none;position:fixed;top:54px;right:120px;z-index:400;padding:4px 10px;background:rgba(0,232,122,.15);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;font-family:var(--font-mono);">Set Singer View</div>
-<div id="set-aud-btn" onclick="logCurrentYaw('audience')" style="display:none;position:fixed;top:54px;right:240px;z-index:400;padding:4px 10px;background:var(--color-border-dim);border:1px solid var(--color-gold-soft);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-gold-dim);cursor:pointer;font-family:var(--font-mono);">Set Audience View</div>
+<!-- Admin-only tuning buttons. Session 4.9: clicking now opens the
+     Set View Coordinates dialog pre-filled with the just-captured camera
+     values, instead of just console.logging. Visibility is double-gated:
+     admin flag (renderAdminUI) + view-mode toggle (only one is visible
+     depending on whether we're in audience or panorama view). -->
+<div id="set-center-btn" onclick="openCoordsDialog('singer')" style="display:none;position:fixed;top:54px;right:120px;z-index:400;padding:4px 10px;background:rgba(0,232,122,.15);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;font-family:var(--font-mono);">Set Singer View</div>
+<div id="set-aud-btn" onclick="openCoordsDialog('audience')" style="display:none;position:fixed;top:54px;right:240px;z-index:400;padding:4px 10px;background:var(--color-border-dim);border:1px solid var(--color-gold-soft);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-gold-dim);cursor:pointer;font-family:var(--font-mono);">Set Audience View</div>
+
+<!-- Admin gear — visible only when profiles.is_admin = true for the
+     current user. Tapping opens the admin menu; menu currently has one
+     item (Set View Coordinates). -->
+<div id="admin-gear" onclick="toggleAdminMenu(event)"
+     style="display:none;position:fixed;top:12px;right:12px;z-index:420;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,.5);border:1px solid var(--color-border);align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:var(--color-gold-dim);">⚙️</div>
+<div id="admin-menu"
+     style="display:none;position:fixed;top:50px;right:12px;z-index:421;background:rgba(14,6,20,.98);border:1px solid var(--color-border);border-radius:6px;padding:4px 0;min-width:180px;box-shadow:0 6px 20px rgba(0,0,0,.6);">
+  <div onclick="openCoordsDialog()" style="padding:10px 14px;cursor:pointer;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-gold-dim);font-family:var(--font-mono);">Set View Coordinates</div>
+</div>
+
+<!-- Set View Coordinates dialog — admin-only. Persists to
+     venue_defaults + karaoke_venue_settings. No backdrop-click
+     dismissal (per Session 4.8 "Add TV display" modal refinement). -->
+<div id="coords-dialog" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(4,2,6,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:12px;padding:22px;max-width:380px;width:100%;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.6);max-height:calc(100vh - 40px);overflow-y:auto;">
+    <div id="coords-title" style="font-family:var(--font-display);font-size:18px;font-weight:300;color:var(--color-text);letter-spacing:.06em;">Adjust View Coordinates</div>
+
+    <div style="font-size:11px;color:var(--color-text-faint);letter-spacing:.12em;text-transform:uppercase;font-family:var(--font-mono);">Global defaults</div>
+    <div style="display:grid;grid-template-columns:70px 1fr;gap:8px;align-items:center;">
+      <label style="font-size:13px;color:var(--color-text-dim);font-family:var(--font-mono);">Yaw</label>
+      <input type="number" id="coords-global-yaw" step="1" style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:6px;color:var(--color-text);font-family:var(--font-mono);font-size:14px;padding:8px 10px;outline:none;">
+      <label style="font-size:13px;color:var(--color-text-dim);font-family:var(--font-mono);">Pitch</label>
+      <input type="number" id="coords-global-pitch" step="1" style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:6px;color:var(--color-text);font-family:var(--font-mono);font-size:14px;padding:8px 10px;outline:none;">
+    </div>
+
+    <div style="font-size:11px;color:var(--color-text-faint);letter-spacing:.12em;text-transform:uppercase;font-family:var(--font-mono);padding-top:6px;border-top:1px solid var(--color-border-dim);">Karaoke overrides</div>
+    <div style="display:grid;grid-template-columns:70px 1fr auto;gap:8px;align-items:center;">
+      <label style="font-size:13px;color:var(--color-text-dim);font-family:var(--font-mono);">Yaw</label>
+      <input type="number" id="coords-ovr-yaw" step="1" placeholder="(inheriting)" oninput="updateInheritHint()" style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:6px;color:var(--color-text);font-family:var(--font-mono);font-size:14px;padding:8px 10px;outline:none;">
+      <button onclick="useDefault('yaw')" style="font-size:9px;padding:6px 10px;border-radius:var(--radius-pill);border:1px solid var(--color-border-dim);background:transparent;color:var(--color-text-faint);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;font-family:var(--font-mono);white-space:nowrap;">Use default</button>
+      <label style="font-size:13px;color:var(--color-text-dim);font-family:var(--font-mono);">Pitch</label>
+      <input type="number" id="coords-ovr-pitch" step="1" placeholder="(inheriting)" oninput="updateInheritHint()" style="background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:6px;color:var(--color-text);font-family:var(--font-mono);font-size:14px;padding:8px 10px;outline:none;">
+      <button onclick="useDefault('pitch')" style="font-size:9px;padding:6px 10px;border-radius:var(--radius-pill);border:1px solid var(--color-border-dim);background:transparent;color:var(--color-text-faint);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;font-family:var(--font-mono);white-space:nowrap;">Use default</button>
+    </div>
+    <div id="coords-inherit-hint" style="font-size:10px;color:var(--color-text-faint);letter-spacing:.04em;font-style:italic;min-height:12px;font-family:var(--font-mono);"></div>
+
+    <div id="coords-status" style="font-size:11px;color:var(--color-green);text-align:center;min-height:14px;letter-spacing:.08em;text-transform:uppercase;font-family:var(--font-mono);"></div>
+
+    <div style="display:flex;gap:8px;margin-top:4px;">
+      <button onclick="closeCoordsDialog()" style="flex:1;padding:11px;border-radius:var(--radius-pill);border:1px solid var(--color-border-dim);background:transparent;color:var(--color-text-faint);font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;font-family:var(--font-mono);">Cancel</button>
+      <button onclick="saveCoords()" id="coords-save-btn" style="flex:1;padding:11px;border-radius:var(--radius-pill);border:1px solid var(--color-gold);background:var(--color-gold-dim);color:var(--color-bg);font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;font-family:var(--font-mono);font-weight:600;">Save</button>
+    </div>
+  </div>
+</div>
 <div id="dbg"></div>
 
 <div id="rx"></div>
@@ -2408,12 +2465,60 @@ async function loadVenuesManifest() {
       venues: VENUES.filter(v => v.category === cat.id).map(v => v.id)
     }));
     log('venues.json loaded: '+VENUES.length+' venues, '+VENUE_CATEGORIES_META.length+' categories', 'ok');
-    // Now that VENUES is populated, trigger the initial background load.
+    // Layer in admin-tuned values from Supabase on top of manifest values.
+    // Two-level resolution: karaoke_venue_settings wins where non-null,
+    // else venue_defaults. Manifest values serve as a last-resort fallback
+    // if the DB is unreachable (public read, no auth required).
+    await applyVenueSettingsOverride();
+    // Now that VENUES reflects final resolved values, trigger the initial
+    // background load.
     loadVenueImage(VENUES.find(v=>v.id===selectedVenueId)?.skyboxId || null);
     return manifest;
   } catch(e) {
     log('venues.json FAILED to load: '+e.message, 'err');
     return null;
+  }
+}
+
+// Wait for shell/venue-settings.js (loaded as a deferred module) to
+// register its helpers on window.elsewhere.venueSettings. Inline scripts
+// run before type="module" scripts, so on first page load this Promise
+// waits tens of milliseconds before resolving. Gives up at 5s so a
+// broken shell load doesn't hang the whole boot path.
+function waitForVenueSettings(timeoutMs = 5000) {
+  return new Promise(resolve => {
+    if (window.elsewhere?.venueSettings) return resolve(window.elsewhere.venueSettings);
+    const start = Date.now();
+    const tick = () => {
+      if (window.elsewhere?.venueSettings) return resolve(window.elsewhere.venueSettings);
+      if (Date.now() - start > timeoutMs) return resolve(null);
+      setTimeout(tick, 50);
+    };
+    tick();
+  });
+}
+
+// Pull venue_defaults + karaoke_venue_settings and overwrite each VENUES
+// entry's staticYaw / staticPitch with the resolved values. Safe to call
+// before the DB tables exist (network error → keeps manifest values) and
+// safe to re-run after admin saves (idempotent).
+async function applyVenueSettingsOverride() {
+  const vs = await waitForVenueSettings();
+  if (!vs) { log('venue-settings module not loaded — using manifest values only', 'warn'); return; }
+  try {
+    const { resolved } = await vs.loadVenueSettings('karaoke');
+    let applied = 0;
+    VENUES.forEach(v => {
+      const r = resolved[v.id];
+      if (!r) return;
+      if (r.yaw   !== undefined && r.yaw   !== null) { v.staticYaw   = r.yaw;   applied++; }
+      if (r.pitch !== undefined && r.pitch !== null) { v.staticPitch = r.pitch; }
+    });
+    log('venue settings applied for '+applied+' venues (of '+Object.keys(resolved).length+' in DB)', 'ok');
+  } catch(e) {
+    // Most common failure: tables don't exist yet (migration 003 not applied).
+    // Keep manifest values as fallback so the stage still renders.
+    log('venue settings load failed: '+e.message+' — using manifest values', 'warn');
   }
 }
 
@@ -3009,8 +3114,9 @@ function onToggleView(){
   document.getElementById('vtoggle').className   = isAud ? '' : 'pano';
   document.getElementById('compass').style.display     = isAud ? 'none' : 'block';
   document.getElementById('htoggle').style.display     = isAud ? 'none' : 'block';
-  document.getElementById('set-center-btn').style.display = isAud ? 'none' : 'block';
-  document.getElementById('set-aud-btn').style.display = isAud ? 'block' : 'none';
+  // Session 4.9: double-gated on admin flag. Non-admins never see these.
+  document.getElementById('set-center-btn').style.display = (currentUserIsAdmin && !isAud) ? 'block' : 'none';
+  document.getElementById('set-aud-btn').style.display    = (currentUserIsAdmin &&  isAud) ? 'block' : 'none';
   log('onToggleView → '+viewMode+' venueMode:'+venueMode+' panReady:'+panReady, 'info');
   if(!isAud){
     buildPanoramaIfNeeded();
@@ -4794,6 +4900,193 @@ window.addEventListener('resize',()=>{
 
 // Draw stage once on load so start screen has live background
 drawStage();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADMIN — gear icon + Set View Coordinates dialog (Session 4.9)
+// ═══════════════════════════════════════════════════════════════════════════
+// Gated on profiles.is_admin for the current user. Writes go through
+// shell/venue-settings.js helpers (saveVenueDefault / saveVenueOverride).
+// RLS on venue_defaults + karaoke_venue_settings enforces the same admin
+// check server-side, so the UI gate is convenience, not security.
+let currentUserIsAdmin  = false;
+let coordsDialogContext = null;
+
+async function refreshAdminState() {
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!user) { currentUserIsAdmin = false; renderAdminUI(); return; }
+  try {
+    const { data, error } = await window.sb.from('profiles').select('is_admin').eq('id', user.id).single();
+    if (error) throw error;
+    currentUserIsAdmin = !!data?.is_admin;
+    log('admin check: is_admin='+currentUserIsAdmin, 'info');
+  } catch(e) {
+    log('admin check failed: '+e.message, 'warn');
+    currentUserIsAdmin = false;
+  }
+  renderAdminUI();
+}
+
+function renderAdminUI() {
+  const gear = document.getElementById('admin-gear');
+  if (gear) gear.style.display = currentUserIsAdmin ? 'flex' : 'none';
+  // Keep Set Singer/Audience View buttons in sync with both the admin
+  // flag AND the current view mode. The view-mode toggle elsewhere in
+  // this file runs on every mode switch; this handler fires when the
+  // admin flag changes (sign-in / sign-out) so they stay right without
+  // requiring a view-mode round-trip.
+  const isAud = (typeof viewMode !== 'undefined' && viewMode === 'audience');
+  const s = document.getElementById('set-center-btn');
+  const a = document.getElementById('set-aud-btn');
+  if (s) s.style.display = (currentUserIsAdmin && !isAud) ? 'block' : 'none';
+  if (a) a.style.display = (currentUserIsAdmin &&  isAud) ? 'block' : 'none';
+}
+
+function toggleAdminMenu(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById('admin-menu');
+  if (!menu) return;
+  const opening = menu.style.display !== 'block';
+  menu.style.display = opening ? 'block' : 'none';
+  if (opening) {
+    // Close on the next outside click. setTimeout so the click that
+    // opened the menu doesn't immediately close it.
+    setTimeout(() => document.addEventListener('click', hideAdminMenuOnce, { once: true }), 10);
+  }
+}
+function hideAdminMenuOnce() {
+  const menu = document.getElementById('admin-menu');
+  if (menu) menu.style.display = 'none';
+}
+
+// Open the Set View Coordinates dialog. `captureFrom`:
+//   - 'singer'    → pre-fill yaw override with current singer/panorama yaw
+//   - 'audience'  → pre-fill yaw + pitch override with live camera values
+//   - null        → load stored override values (gear menu entry point)
+async function openCoordsDialog(captureFrom = null) {
+  if (!currentUserIsAdmin) return;
+  hideAdminMenuOnce();
+  const venue = VENUES.find(v => v.id === selectedVenueId);
+  if (!venue) { showToast('No venue selected'); return; }
+
+  try {
+    const ctx = await loadCoordsForVenue(venue.id, captureFrom);
+    coordsDialogContext = ctx;
+    document.getElementById('coords-title').textContent = 'Adjust View Coordinates — ' + venue.name;
+    document.getElementById('coords-global-yaw').value   = ctx.globalYaw   ?? '';
+    document.getElementById('coords-global-pitch').value = ctx.globalPitch ?? '';
+    document.getElementById('coords-ovr-yaw').value      = ctx.ovrYaw   ?? '';
+    document.getElementById('coords-ovr-pitch').value    = ctx.ovrPitch ?? '';
+    document.getElementById('coords-status').textContent = '';
+    document.getElementById('coords-status').style.color = 'var(--color-green)';
+    updateInheritHint();
+    document.getElementById('coords-dialog').style.display = 'flex';
+  } catch(e) {
+    showToast('Failed to load: '+e.message);
+    log('openCoordsDialog failed: '+e.message, 'err');
+  }
+}
+
+async function loadCoordsForVenue(venueId, captureFrom) {
+  const sb = window.sb;
+  if (!sb) throw new Error('Supabase client not ready');
+  const [defRes, ovrRes] = await Promise.all([
+    sb.from('venue_defaults').select('*').eq('venue_id', venueId).maybeSingle(),
+    sb.from('karaoke_venue_settings').select('*').eq('venue_id', venueId).maybeSingle(),
+  ]);
+  if (defRes.error) throw defRes.error;
+  if (ovrRes.error) throw ovrRes.error;
+  const def = defRes.data;
+  const ovr = ovrRes.data;
+
+  let ovrYaw   = ovr?.yaw_override   ?? null;
+  let ovrPitch = ovr?.pitch_override ?? null;
+
+  // Capture modes: overwrite the override inputs with the currently-live
+  // camera values. Audience captures staticYaw/Pitch target; singer
+  // captures the panorama-view yaw (pitch isn't typically set from singer
+  // view, so we leave the stored override in place).
+  if (captureFrom === 'audience') {
+    ovrYaw   = Math.round(venueYaw);
+    ovrPitch = Math.round(venuePitch);
+  } else if (captureFrom === 'singer') {
+    ovrYaw = headTrackingAuto ? Math.round(cYaw) : Math.round(manualYaw);
+  }
+
+  return {
+    venueId,
+    globalYaw:   def?.yaw   ?? 0,
+    globalPitch: def?.pitch ?? 0,
+    ovrYaw, ovrPitch,
+  };
+}
+
+function useDefault(field) {
+  const el = document.getElementById('coords-ovr-' + field);
+  if (el) { el.value = ''; el.blur(); }
+  updateInheritHint();
+}
+
+function updateInheritHint() {
+  const yawV   = document.getElementById('coords-ovr-yaw').value;
+  const pitchV = document.getElementById('coords-ovr-pitch').value;
+  const hint   = document.getElementById('coords-inherit-hint');
+  if (!hint) return;
+  const parts = [];
+  if (yawV   === '') parts.push('Yaw');
+  if (pitchV === '') parts.push('Pitch');
+  hint.textContent = parts.length ? parts.join(' + ') + ' using global default' : '';
+}
+
+function closeCoordsDialog() {
+  document.getElementById('coords-dialog').style.display = 'none';
+  coordsDialogContext = null;
+}
+
+async function saveCoords() {
+  if (!coordsDialogContext) return;
+  const ctx = coordsDialogContext;
+  const btn    = document.getElementById('coords-save-btn');
+  const status = document.getElementById('coords-status');
+  btn.disabled = true;
+  status.style.color = 'var(--color-green)';
+  status.textContent = 'Saving…';
+
+  const gYaw   = parseFloat(document.getElementById('coords-global-yaw').value);
+  const gPitch = parseFloat(document.getElementById('coords-global-pitch').value);
+  const ovrYawRaw   = document.getElementById('coords-ovr-yaw').value;
+  const ovrPitchRaw = document.getElementById('coords-ovr-pitch').value;
+  const ovrYaw   = ovrYawRaw   === '' ? null : parseFloat(ovrYawRaw);
+  const ovrPitch = ovrPitchRaw === '' ? null : parseFloat(ovrPitchRaw);
+
+  const vs = window.elsewhere?.venueSettings;
+  if (!vs) { status.style.color = 'var(--color-red)'; status.textContent = 'Settings module not loaded'; btn.disabled = false; return; }
+
+  try {
+    await vs.saveVenueDefault(ctx.venueId, { yaw: gYaw, pitch: gPitch });
+    await vs.saveVenueOverride('karaoke', ctx.venueId, { yaw: ovrYaw, pitch: ovrPitch });
+    await applyVenueSettingsOverride();
+    if (ctx.venueId === selectedVenueId) buildPanorama();
+    status.textContent = '✓ Saved';
+    setTimeout(closeCoordsDialog, 700);
+  } catch(e) {
+    status.style.color = 'var(--color-red)';
+    status.textContent = 'Save failed: '+e.message;
+    log('coords save failed: '+e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Wire admin state on auth changes. Runs once immediately (queueMicrotask
+// inside onAuthChange) + on every sign-in / sign-out.
+function wireAdminAuth() {
+  if (!window.elsewhere) return false;
+  window.elsewhere.onAuthChange(() => refreshAdminState());
+  return true;
+}
+if (!wireAdminAuth()) {
+  document.addEventListener('elsewhere:sb-ready', wireAdminAuth, { once: true });
+}
 </script>
 </body>
 </html>
