@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "baseUrl": "https://mstepanovich-web.github.io/elsewhere/venues/",
+  "soundsUrl": "https://mstepanovich-web.github.io/elsewhere/sounds/",
+  "categories": [
+    { "id": "big",     "label": "🎵 Big Venues" },
+    { "id": "party",   "label": "🎉 Party & Nightlife" },
+    { "id": "bars",    "label": "🍸 Bars & Lounges" },
+    { "id": "fantasy", "label": "🚀 Fantasy & Adventure" },
+    { "id": "kids",    "label": "👑 Kids" }
+  ],
+  "venues": [
+    { "id": "default",         "name": "Classic Stage",    "icon": "🎤", "skyboxId": null,              "category": null,      "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+
+    { "id": "stadium",         "name": "Stadium",          "icon": "🏟️", "skyboxId": "stadium",         "category": "big",     "startYaw": -45,  "staticYaw": 151,  "staticPitch": -17 },
+    { "id": "festival",        "name": "Festival",         "icon": "🎪", "skyboxId": "festival",        "category": "big",     "startYaw": 358,  "staticYaw": 109,  "staticPitch": -6  },
+    { "id": "hollywoodbowl",   "name": "Hollywood Bowl",   "icon": "🎬", "skyboxId": "hollywoodbowl",   "category": "big",     "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+    { "id": "amphitheater",    "name": "Amphitheater",     "icon": "🏛️", "skyboxId": "amphitheater",    "category": "big",     "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+    { "id": "colosseum",       "name": "Colosseum",        "icon": "⚔️", "skyboxId": "colosseum",       "category": "big",     "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+    { "id": "drivein",         "name": "Drive-In",         "icon": "🚗", "skyboxId": "drivein",         "category": "big",     "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+
+    { "id": "disco",           "name": "Disco Club",       "icon": "🪩", "skyboxId": "disco",           "category": "party",   "startYaw": -200, "staticYaw": 23,   "staticPitch": 0   },
+    { "id": "vegas",           "name": "Las Vegas",        "icon": "🎰", "skyboxId": "vegas",           "category": "party",   "startYaw": 79,   "staticYaw": -150, "staticPitch": 2   },
+    { "id": "rooftop",         "name": "Rooftop Party",    "icon": "🌆", "skyboxId": "rooftop",         "category": "party",   "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+    { "id": "broadway",        "name": "Broadway",         "icon": "🎭", "skyboxId": "broadway",        "category": "party",   "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+
+    { "id": "speakeasy",       "name": "Speakeasy",        "icon": "🥃", "skyboxId": "speakeasy",       "category": "bars",    "startYaw": 66,   "staticYaw": 201,  "staticPitch": -1  },
+    { "id": "honkytonk",       "name": "Honky Tonk",       "icon": "🤠", "skyboxId": "honkytonk",       "category": "bars",    "startYaw": 168,  "staticYaw": -71,  "staticPitch": 6   },
+    { "id": "supperclub",      "name": "Supper Club",      "icon": "🍷", "skyboxId": "supperclub",      "category": "bars",    "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+    { "id": "cabaret",         "name": "Cabaret",          "icon": "🪗", "skyboxId": "cabaret",         "category": "bars",    "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+    { "id": "bourbonstreet",   "name": "Bourbon Street",   "icon": "🎺", "skyboxId": "bourbonstreet",   "category": "bars",    "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+    { "id": "saloon",          "name": "Saloon",           "icon": "🍺", "skyboxId": "saloon",          "category": "bars",    "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+
+    { "id": "spacestation",    "name": "Space Station",    "icon": "🚀", "skyboxId": "spacestation",    "category": "fantasy", "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+    { "id": "enchantedforest", "name": "Enchanted Forest", "icon": "🌲", "skyboxId": "enchantedforest", "soundId": "forest", "category": "fantasy", "startYaw": 0, "staticYaw": 0, "staticPitch": 0 },
+    { "id": "dragonlair",      "name": "Dragon's Lair",    "icon": "🐉", "skyboxId": "dragonlair",      "category": "fantasy", "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+
+    { "id": "kids-candy",      "name": "Candy Land",       "icon": "🍬", "skyboxId": "kids-candy",      "category": "kids",    "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+    { "id": "kids-dino",       "name": "Dinosaur World",   "icon": "🦕", "skyboxId": "kids-dino",       "category": "kids",    "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+    { "id": "kids-dino2",      "name": "Dino Adventure",   "icon": "🦖", "skyboxId": "kids-dino2",      "category": "kids",    "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+    { "id": "kids-northpole",  "name": "North Pole",       "icon": "🎅", "skyboxId": "kids-northpole",  "category": "kids",    "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+    { "id": "kids-princess",   "name": "Princess Palace",  "icon": "👸", "skyboxId": "kids-princess",   "category": "kids",    "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   },
+    { "id": "kids-winter",     "name": "Winter Wonderland","icon": "⛄", "skyboxId": "kids-winter",     "category": "kids",    "startYaw": 0,    "staticYaw": 0,    "staticPitch": 0   }
+  ]
+}

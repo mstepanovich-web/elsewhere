@@ -1517,62 +1517,30 @@ function perfStop(){
 
 // ── POST-SONG ──
 // ── STAGE VENUE OVERLAY ──
-const VENUE_CATEGORIES = [
-  {
-    id: 'big', label: '🎵 Big Venues', venues: [
-      { id:'stadium',    name:'Stadium',          icon:'🏟️' },
-      { id:'festival',   name:'Festival',         icon:'🎪' },
-      { id:'hollywood',  name:'Hollywood Bowl',   icon:'🎬' },
-      { id:'amphitheater',name:'Amphitheater',    icon:'🏛️' },
-      { id:'colosseum',  name:'Ancient Colosseum',icon:'⚔️' },
-      { id:'drivein',    name:'Retro Drive-In',   icon:'🚗' },
-    ]
-  },
-  {
-    id: 'party', label: '🎉 Party & Nightlife', venues: [
-      { id:'disco',      name:'Disco Club',       icon:'🪩' },
-      { id:'vegas',      name:'Las Vegas',        icon:'🎰' },
-      { id:'artdeco',    name:'Art Deco Ballroom',icon:'✨' },
-      { id:'rooftop',    name:'Rooftop Party',    icon:'🌃' },
-      { id:'broadway',   name:'Broadway',         icon:'🎭' },
-    ]
-  },
-  {
-    id: 'bars', label: '🍸 Bars & Lounges', venues: [
-      { id:'speakeasy',  name:'Speakeasy',        icon:'🥃' },
-      { id:'honkytonk',  name:'Honky Tonk',       icon:'🤠' },
-      { id:'divebar',    name:'Dive Bar',         icon:'🍺' },
-      { id:'supperclub', name:'Supper Club',      icon:'🍷' },
-      { id:'cabaret',    name:'Cabaret Lounge',   icon:'🎩' },
-      { id:'bourbon',    name:'Bourbon Street',   icon:'🎺' },
-      { id:'skiodge',    name:'Après-Ski Lodge',  icon:'⛷️' },
-      { id:'tikibar',    name:'Tropical Tiki Bar',icon:'🌺' },
-      { id:'wildwest',   name:'Wild West Saloon', icon:'🤠' },
-      { id:'jazz',       name:'Jazz Club',        icon:'🎷' },
-    ]
-  },
-  {
-    id: 'fantasy', label: '🚀 Fantasy & Adventure', venues: [
-      { id:'space',      name:'Space Station',    icon:'🚀' },
-      { id:'forest',     name:'Enchanted Forest', icon:'🌲' },
-      { id:'dragonlair', name:"Dragon's Lair",    icon:'🐉' },
-      { id:'underwater', name:'Underwater Kingdom',icon:'🐠' },
-    ]
-  },
-  {
-    id: 'kids', label: '👑 Kids', venues: [
-      { id:'princess',   name:'Princess Castle',  icon:'👸' },
-      { id:'candyland',  name:'Candy Land',       icon:'🍭' },
-      { id:'icePalace',  name:'Ice Palace',       icon:'❄️' },
-      { id:'northpole',  name:'North Pole',       icon:'🎅' },
-      { id:'dino',       name:'Dinosaur World',   icon:'🦕' },
-      { id:'circus',     name:'Circus Big Top',   icon:'🎪' },
-    ]
-  },
-];
+// Venue data loaded from /venues.json at the repo root — single source of
+// truth shared with karaoke/stage.html and future venue consumers. See
+// CLAUDE.md "How to add a venue" for the process of adding new ones.
+let VENUES = [];                    // populated from venues.json.venues
+let VENUE_CATEGORIES_META = [];     // populated from venues.json.categories
 
-// Flat list for lookup
-const SINGER_VENUES = VENUE_CATEGORIES.flatMap(c=>c.venues).concat([{id:'default',name:'Classic Stage',icon:'🎤'}]);
+async function loadVenuesManifest() {
+  try {
+    const res = await fetch('../venues.json', { cache: 'no-cache' });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const manifest = await res.json();
+    VENUES = manifest.venues || [];
+    VENUE_CATEGORIES_META = manifest.categories || [];
+    log('venues.json loaded ('+VENUES.length+' venues)', 'ok');
+    return manifest;
+  } catch(e) {
+    log('venues.json failed: '+e.message, 'err');
+    return null;
+  }
+}
+
+// Kick off manifest load at script parse time. Picker opens on user tap,
+// which happens long after the fetch resolves in practice.
+const venuesReady = loadVenuesManifest();
 
 let currentVenueId = 'default';
 let expandedCategories = new Set(); // all collapsed by default
@@ -1591,9 +1559,14 @@ function showStageOverlay(){
   classic.onclick = ()=>{ selectVenue({id:'default',name:'Classic Stage',icon:'🎤'}); };
   grid.appendChild(classic);
 
-  // Categories
-  VENUE_CATEGORIES.forEach(cat=>{
+  // Categories — driven from /venues.json manifest (loaded at boot).
+  // Each category's venue list is filtered from the shared VENUES array
+  // by the `category` field, so singer and stage always agree on what's
+  // available.
+  VENUE_CATEGORIES_META.forEach(cat=>{
     const isOpen = expandedCategories.has(cat.id);
+    const catVenues = VENUES.filter(v => v.category === cat.id);
+    if(!catVenues.length) return; // skip empty categories
 
     // Category header
     const header = document.createElement('div');
@@ -1614,7 +1587,7 @@ function showStageOverlay(){
     if(isOpen){
       const venueGrid = document.createElement('div');
       venueGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;';
-      cat.venues.forEach(v=>{
+      catVenues.forEach(v=>{
         const card = document.createElement('div');
         card.style.cssText = `padding:12px 8px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${v.id===currentVenueId?'var(--color-gold-dim)':'var(--color-white-soft)'};background:${v.id===currentVenueId?'var(--color-gold-faint)':'var(--color-white-ghost)'};-webkit-user-select:none;position:relative;`;
         card.innerHTML = `

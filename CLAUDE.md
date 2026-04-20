@@ -71,7 +71,26 @@ All karaoke HTML lives under `karaoke/`. The DeepAR effect bundles live at `kara
 - `karaoke/singer.html` is the phone — picks songs, controls FX (reverb / echo / boost / DeepAR face filters), publishes mic audio.
 - `karaoke/audience.html` is a third role that subscribes to the stage stream as low-latency Agora audience and can also publish a video-chat tile back.
 - DeepAR effects load from `https://cdn.jsdelivr.net/npm/deepar/` (built-ins) and from `https://mstepanovich-web.github.io/elsewhere/karaoke/effects/` (the local `karaoke/effects/*.deepar` files in this repo). New effects = drop the `.deepar` file in `karaoke/effects/` and add an entry to the `DEEPAR_EFFECTS` array in `karaoke/singer.html` (and in `karaoke/stage.html`'s matching list).
-- Venue images live in `venues/` and matching ambient audio in `sounds/` — both stay at repo root so they can be shared across products. Filenames must match (`saloon.jpg` ↔ `saloon.mp3`). Both lists are wired up in `karaoke/stage.html`'s `AMBIENT_PROFILES` (see commit `94f3873` — a stray entry outside that object will silently break venue selection).
+- Venue images live in `venues/` and matching ambient audio in `sounds/` — both stay at repo root so they can be shared across products. Filenames follow the `{id}.jpg` / `{id}.mp3` convention, with `enchantedforest` → `forest.mp3` as the one exception (handled via `soundId` in the manifest). Venue metadata is declared once in `venues.json` and fetched at boot by both `karaoke/stage.html` and `karaoke/singer.html`. Ambient audio + animation hooks remain wired up in `karaoke/stage.html`'s `AMBIENT_PROFILES` (see commit `94f3873` — a stray entry outside that object will silently break venue selection).
+
+### Adding a venue
+
+Venue metadata lives in `/venues.json` at the repo root — single source of truth for karaoke stage + singer, and for any future venue-consuming product (wellness, Room Mode, etc.). To add a new venue:
+
+1. Drop the equirectangular panorama image in `venues/` — name it `{id}.jpg` (e.g. `venues/tavern.jpg`). Filename stem becomes the venue id.
+2. Drop the ambient audio loop in `sounds/` — same stem by default: `sounds/tavern.mp3`. If you're reusing a sound from another venue, set `soundId` in the JSON entry to point at the existing file stem (e.g. `"soundId": "forest"` for `sounds/forest.mp3`).
+3. Add an entry to `venues.json`'s `venues[]` array:
+   ```json
+   { "id": "tavern", "name": "Medieval Tavern", "icon": "🍺", "skyboxId": "tavern", "category": "bars", "startYaw": 0, "staticYaw": 0, "staticPitch": 0 }
+   ```
+   - `id`: must match the filename stem in `venues/`
+   - `skyboxId`: usually equals `id`; set explicitly so a future rename doesn't break the venue
+   - `category`: one of the category ids declared in `venues.json`'s `categories[]` — any venue with an unknown category is orphaned from the picker (silent, no error)
+   - `startYaw` / `staticYaw` / `staticPitch`: start at `0, 0, 0` — the admin-only "Set View Coordinates" dialog in karaoke/stage.html tunes them from there and persists to Supabase (`venue_defaults` table). Session-6 scope; JSON values act as Phase-1 baseline and survive DB loss
+4. For any Three.js ambient animation (spotlights, particles), also add an entry to `AMBIENT_PROFILES` in `karaoke/stage.html`. Audio-only venues work without an `AMBIENT_PROFILES` entry (just file naming).
+5. No code edits beyond the JSON. Singer + stage pickers auto-refresh on next page load; new venue appears in its category.
+
+Phantom/aspirational venues don't stay in the JSON — if there's no `.jpg` in `venues/`, the texture load fails and the picker shows a broken entry. Clean up unused entries promptly.
 
 ### Games (last-card / trivia / euchre)
 - `games/tv.html` is the lobby + board renderer. `games/player.html` is the phone (with controls, the manager bar, and per-player camera tiles).

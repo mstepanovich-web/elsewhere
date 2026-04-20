@@ -529,24 +529,11 @@ const FOV_NARROW = 55;
 const FOV_WIDE   = 90;
 const FOV_SMOOTH = 0.03;
 
-// Stage venue picker — uses same category structure as singer app
-const STAGE_VENUE_CATEGORIES = [
-  {
-    id:'big', label:'🎵 Big Venues', venues:['stadium','festival','hollywood','amphitheater','colosseum','drivein']
-  },
-  {
-    id:'party', label:'🎉 Party & Nightlife', venues:['disco','vegas','artdeco','rooftop','broadway']
-  },
-  {
-    id:'bars', label:'🍸 Bars & Lounges', venues:['speakeasy','honkytonk','divebar','supperclub','cabaret','bourbon','skiodge','tikibar','wildwest','jazz']
-  },
-  {
-    id:'fantasy', label:'🚀 Fantasy & Adventure', venues:['space','forest','dragonlair','underwater']
-  },
-  {
-    id:'kids', label:'👑 Kids', venues:['princess','candyland','icePalace','northpole','dino','circus']
-  },
-];
+// Stage venue picker — categories derived from /venues.json at boot.
+// See loadVenuesManifest() below. Previously a hardcoded array with stale
+// ids that silently filtered out of the picker when they didn't match the
+// venue ids in VENUES[] + files in /venues/.
+let STAGE_VENUE_CATEGORIES = [];
 
 let stageExpandedCats = new Set();
 
@@ -2381,46 +2368,58 @@ function runGuideLoop(gc, W, H){
 }
 
 // ═══════════════════════════════════════
-// VENUES
+// VENUES — loaded from /venues.json at boot
 // ═══════════════════════════════════════
-const VENUES = [
-  { id:'default',       name:'Classic Stage',     icon:'🎤', skyboxId:null,                startYaw:0,    staticYaw:0,    staticPitch:0  },
-  // ── Existing tuned venues ──────────────────────────────────────────────────────
-  { id:'stadium',       name:'Stadium',           icon:'🏟️', skyboxId:'stadium',           startYaw:-45,  staticYaw:151,  staticPitch:-17 },
-  { id:'speakeasy',     name:'Speakeasy',         icon:'🥃', skyboxId:'speakeasy',         startYaw:66,   staticYaw:201,  staticPitch:-1  },
-  { id:'disco',         name:'Disco Club',        icon:'🪩', skyboxId:'disco',             startYaw:-200, staticYaw:23,   staticPitch:0   },
-  { id:'honkytonk',     name:'Honky Tonk',        icon:'🤠', skyboxId:'honkytonk',         startYaw:168,  staticYaw:-71,  staticPitch:6   },
-  { id:'festival',      name:'Festival',          icon:'🎪', skyboxId:'festival',          startYaw:358,  staticYaw:109,  staticPitch:-6  },
-  { id:'vegas',         name:'Las Vegas',         icon:'🎰', skyboxId:'vegas',             startYaw:79,   staticYaw:-150, staticPitch:2   },
-  // ── New venues — skyboxId matches actual filename ──────────────────────────────
-  { id:'broadway',      name:'Broadway',          icon:'🎭', skyboxId:'broadway',          startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'rooftop',       name:'Rooftop Party',     icon:'🌆', skyboxId:'rooftop',           startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'supperclub',    name:'Supper Club',       icon:'🍷', skyboxId:'supperclub',        startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'cabaret',       name:'Cabaret',           icon:'🪗', skyboxId:'cabaret',           startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'dragonlair',    name:"Dragon's Lair",     icon:'🐉', skyboxId:'dragonlair',        startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'enchantedforest',name:'Enchanted Forest', icon:'🌲', skyboxId:'enchantedforest',   startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'spacestation',  name:'Space Station',     icon:'🚀', skyboxId:'spacestation',      startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'hollywoodbowl', name:'Hollywood Bowl',    icon:'🎬', skyboxId:'hollywoodbowl',     startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'amphitheater',  name:'Amphitheater',      icon:'🏛️', skyboxId:'amphitheater',     startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'colosseum',     name:'Colosseum',         icon:'⚔️', skyboxId:'colosseum',        startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'bourbonstreet', name:'Bourbon Street',    icon:'🎺', skyboxId:'bourbonstreet',     startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'saloon',        name:'Saloon',            icon:'🍺', skyboxId:'saloon',            startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'drivein',       name:'Drive-In',          icon:'🚗', skyboxId:'drivein',           startYaw:0,    staticYaw:0,    staticPitch:0   },
-  // ── Kids venues ────────────────────────────────────────────────────────────────
-  { id:'kids-candy',    name:'Candy Land',        icon:'🍬', skyboxId:'kids-candy',        startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'kids-dino',     name:'Dinosaur World',    icon:'🦕', skyboxId:'kids-dino',         startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'kids-dino2',    name:'Dino Adventure',    icon:'🦖', skyboxId:'kids-dino2',        startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'kids-northpole',name:'North Pole',        icon:'🎅', skyboxId:'kids-northpole',    startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'kids-princess', name:'Princess Palace',   icon:'👸', skyboxId:'kids-princess',     startYaw:0,    staticYaw:0,    staticPitch:0   },
-  { id:'kids-winter',   name:'Winter Wonderland', icon:'⛄', skyboxId:'kids-winter',       startYaw:0,    staticYaw:0,    staticPitch:0   },
-];
-
-const VENUE_BASE_URL = 'https://mstepanovich-web.github.io/elsewhere/venues/';
+// Single source of truth for all venue metadata lives in /venues.json at
+// the repo root, shared by karaoke, singer, wellness, and any future
+// consumer. Adding a venue = drop the .jpg in venues/, add a JSON entry.
+// See CLAUDE.md "How to add a venue" for the full process.
+let VENUES = [];                    // populated from venues.json.venues
+let VENUE_CATEGORIES_META = [];     // populated from venues.json.categories
+let VENUE_BASE_URL  = 'https://mstepanovich-web.github.io/elsewhere/venues/';
+let SOUND_BASE_URL  = 'https://mstepanovich-web.github.io/elsewhere/sounds/';
 
 let selectedVenueId = 'default'; // starts with Classic Stage, singer can change via app
 
-// Load default venue image now that VENUES is defined
-loadVenueImage(VENUES.find(v=>v.id===selectedVenueId)?.skyboxId || null);
+// Resolve a venue's sound filename. Falls back to the venue id when no
+// explicit soundId is set in venues.json — matches the repo convention
+// where venues/{id}.jpg pairs with sounds/{id}.mp3 for most venues, with
+// enchantedforest → forest.mp3 as the one real exception.
+function getVenueSoundId(venue) {
+  if (!venue) return null;
+  return venue.soundId ?? venue.id;
+}
+
+async function loadVenuesManifest() {
+  try {
+    const res = await fetch('../venues.json', { cache: 'no-cache' });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const manifest = await res.json();
+    VENUES = manifest.venues || [];
+    VENUE_CATEGORIES_META = manifest.categories || [];
+    if (manifest.baseUrl)   VENUE_BASE_URL = manifest.baseUrl;
+    if (manifest.soundsUrl) SOUND_BASE_URL = manifest.soundsUrl;
+    // Rebuild STAGE_VENUE_CATEGORIES in the { id, label, venues:[id,...] }
+    // shape showStageVenuePicker() already iterates. Keeps the picker
+    // code unchanged.
+    STAGE_VENUE_CATEGORIES = VENUE_CATEGORIES_META.map(cat => ({
+      id: cat.id,
+      label: cat.label,
+      venues: VENUES.filter(v => v.category === cat.id).map(v => v.id)
+    }));
+    log('venues.json loaded: '+VENUES.length+' venues, '+VENUE_CATEGORIES_META.length+' categories', 'ok');
+    // Now that VENUES is populated, trigger the initial background load.
+    loadVenueImage(VENUES.find(v=>v.id===selectedVenueId)?.skyboxId || null);
+    return manifest;
+  } catch(e) {
+    log('venues.json FAILED to load: '+e.message, 'err');
+    return null;
+  }
+}
+
+// Kick off manifest load at script parse. First user interaction happens
+// well after this resolves in practice (fetch is same-origin, ~4KB).
+const venuesReady = loadVenuesManifest();
 
 // ═══════════════════════════════════════
 // PANORAMA (Three.js)
@@ -2475,6 +2474,12 @@ function buildPanorama(){
   panReady = false;
 
   const venue = VENUES.find(v=>v.id===selectedVenueId) || VENUES[VENUES.length-1];
+  if (!venue) {
+    // Narrow race: manifest fetch hasn't resolved yet. Defer until it does.
+    log('buildPanorama: VENUES not yet loaded, deferring', 'warn');
+    venuesReady.then(() => buildPanorama());
+    return;
+  }
   log('buildPanorama: venue='+venue.id+' skyboxId='+venue.skyboxId+' selectedVenueId='+selectedVenueId, 'info');
 
   if(venue.skyboxId){
