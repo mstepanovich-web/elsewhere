@@ -5192,61 +5192,6 @@ function wireAdminAuth() {
 if (!wireAdminAuth()) {
   document.addEventListener('elsewhere:sb-ready', wireAdminAuth, { once: true });
 }
-
-// ════════════════════════════════════════════════════════════════════════════
-// DEV-ONLY SIGN-IN — Session 4.9 Part D verification affordance
-// ════════════════════════════════════════════════════════════════════════════
-// TODO(remove-in-4.10): Temporary bridge for verifying the admin gear +
-// Set View Coordinates dialog on desktop browsers. stage.html has no
-// production sign-in path yet — magic-link redirects to elsewhere://
-// which desktop can't resolve. This block lets a human operator sign in
-// via email+password on a laptop so Part D of Session 4.9 can actually
-// be exercised end-to-end.
-//
-// Remove when the real laptop-compatible landing flow ships (Session 4.10+).
-// Grep this file for "remove-in-4.10" to find this block.
-//
-// Activates only when the URL contains ?dev=1 exactly. In every other
-// context this evaluates the guard, finds it false, and does nothing —
-// no UI, no network, no log noise.
-(function devSignInIfRequested() {
-  if (new URLSearchParams(location.search).get('dev') !== '1') return;
-
-  function start() {
-    // Shell is loaded. Wait for its initial session hydration from
-    // localStorage so we don't prompt when already signed in.
-    window.elsewhere.ready
-      .then(() => attempt())
-      .catch(e => alert('Dev sign-in error: ' + (e?.message || e)));
-  }
-
-  async function attempt() {
-    if (window.elsewhere.getCurrentUser()) return; // already signed in
-
-    const email = prompt('Dev sign-in — email:');
-    if (email === null || email.trim() === '') return; // cancelled or blank
-
-    const password = prompt('Dev sign-in — password:');
-    if (password === null) return; // cancelled
-
-    // Use signInWithPassword directly, NOT window.elsewhere.signInWithEmail
-    // — the helper hardcodes emailRedirectTo: 'elsewhere://auth/callback',
-    // which is what we're trying to bypass on desktop.
-    const { error } = await window.sb.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    if (error) {
-      alert('Dev sign-in failed: ' + error.message);
-      return;
-    }
-    // Success: the onAuthChange listener registered by wireAdminAuth()
-    // above will fire refreshAdminState() naturally. Nothing to do here.
-  }
-
-  if (window.elsewhere) start();
-  else document.addEventListener('elsewhere:sb-ready', start, { once: true });
-})();
 </script>
 </body>
 </html>

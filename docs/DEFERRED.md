@@ -49,6 +49,81 @@ Links to other DEFERRED entries, PHASE1-NOTES sections, session plans.
 
 ---
 
+### Deferred: Phone-as-remote — persistent app launcher on phone, display-only grid on TV
+**Deferred in:** Session 4.10 (Part E Flow 1)
+**Deferred on:** 2026-04-21
+**Priority:** High — blocks real product usability before customer acquisition. Two problems: post-claim phone dead-end, and no way to resume TV control after relaunching the phone app.
+**Area:** Shell / tv2.html / cross-device UX / phone-side TV list
+**Status:** Deferred
+
+#### Context
+Session 4.10 Part E Flow 1 surfaced that post-claim, the phone drops the user at a dead-end "head to the TV" success screen while the TV shows an interactive "Choose an app" grid — mental model inverted. Phone is always in hand; TV is out of reach.
+
+A second gap: relaunching the phone app lands the user on the generic home screen with no entry point back to controlling the TVs they're a member of. To resume TV control they'd have to re-scan a QR — except the TV is on the apps grid with no QR showing.
+
+#### What's deferred
+Three coupled pieces:
+
+1. **Phone home-screen becomes "Your TVs"** when user has one or more `tv_devices` in their households. Queries `tv_devices` (RLS-filtered), shows a tile per TV with household name + `tv_display_name` + `last_seen_at` indicator. Tapping a TV enters "remote control" mode.
+
+2. **Remote-control screen on phone** shows the 3 apps (Karaoke / Games / Wellness) as tiles. Tapping a tile:
+   - Generates a room code (or delegates to TV)
+   - Publishes a `launch_app` broadcast on the `tv_device:<device_key>` channel with `{app, room}`
+   - TV's tv2.html subscribes to `launch_app` in addition to `session_handoff`, navigates to the product page when received
+
+3. **TV's apps grid becomes display-only.** Still shows 3 tiles for visual parity, but subtitle text reads "Use your phone to select an app" and click handlers are removed (or replaced with a gentle tooltip).
+
+Post-claim success screen on phone transitions directly into #2 for the TV just claimed, so first-launch is seamless.
+
+#### Options when picking up
+- **Minimal version:** no new DB tables. Phone queries `tv_devices` + `households` on launch (already works under RLS). Remote-control mode uses the `tv_device:<device_key>` realtime channel (already subscribed by TV post-4.10). Broadcast payloads just get a new event name (`launch_app`) alongside `session_handoff`. Fits in one session.
+- **Bigger version:** introduces "active session" as a proper DB concept (Session 5 `session_participants` territory). Minimal version slots cleanly into this later — same broadcast shape survives.
+
+#### When to pick this up
+Session 4.10.2 or Session 4.11, before any real customer acquisition. Blocks core product usability.
+
+#### Related
+- `docs/PART-E-VERIFICATION.md` Flow 1 — where post-claim gap surfaced
+- Session 5 `session_participants` — bigger refactor this foreshadows
+- Session 4.10 Plan — current design missed both gaps
+- `tv_device:<device_key>` realtime channel — re-used for `launch_app`
+
+---
+
+### Deferred: TV sign-in screen copy implies wrong direction of action
+**Deferred in:** Session 4.10 (Part E Flow 2)
+**Deferred on:** 2026-04-21
+**Priority:** Medium — confuses onboarding but doesn't block
+**Area:** Shell / `screen-tv-signin` copy
+**Status:** Deferred
+
+#### Context
+Session 4.10 Part E Flow 2 verification surfaced that the phone's signin screen reads "Sign in on TV" as its title, implying the user should go do something on the TV. In reality, the phone is doing the auth work and the TV just reflects the result. Copy gets the active agent wrong.
+
+User quote from the Part E run: *"the phone says 'Sign in on TV' but there is nothing to sign in on at the TV — this is confusing."*
+
+#### What's deferred
+Update `screen-tv-signin` copy in index.html:
+- **Title** becomes "Signing in to `<household name>`" once the status resolves, or "Signing you in…" while status is pending (replaces "Sign in on TV")
+- **Sub-text before status** reframes as "Authenticating with your household" (replaces "Connecting…")
+- **Sub-text on success** becomes "Done. Your TV is ready." (replaces "Head to the TV to continue")
+
+The "Head to the TV" message is technically accurate for the pre-phone-as-remote design but loses relevance once the phone becomes the primary launcher — this copy pass should be revisited again when phone-as-remote lands.
+
+#### Options when picking up
+- **Land together with the phone-as-remote milestone (4.10.2)** — that's already a cross-cutting copy pass on signin + claim flows; fold this in naturally.
+- **Standalone 5-minute patch** — if phone-as-remote slips, fix this in any smaller session as a one-file index.html copy edit. No schema, no realtime changes, just string swaps.
+
+#### When to pick this up
+Whenever `screen-tv-signin` copy is next touched, OR at the start of 4.10.2, whichever comes first. Don't defer past customer acquisition.
+
+#### Related
+- DEFERRED.md → "Phone-as-remote — persistent app launcher on phone" — same family of issue, larger scope
+- `docs/PART-E-VERIFICATION.md` Flow 2 — where this surfaced
+- `index.html` → `screen-tv-signin` markup — location of the copy to update
+
+---
+
 ### Deferred: Phone-based household pre-invites (SMS verification)
 **Deferred in:** Session 4.10 (planning)
 **Deferred on:** 2026-04-21
@@ -142,6 +217,108 @@ Post-Session-5 polish pass. Flicker would need to actually annoy someone to just
 #### Related
 - SESSION-4.10-PLAN.md → Session handoff section
 - tv2.html boot sequence `renderCurrentState()` + `handleSessionHandoff()` at the module-level script
+
+---
+
+### Deferred: Part E Flows 3 + 4 — guest access + pre-invited member verification
+**Deferred in:** Session 4.10 (Part E)
+**Deferred on:** 2026-04-21
+**Priority:** Medium — before customer acquisition
+**Area:** Verification / QA / Shell
+**Status:** Deferred
+
+#### Context
+Session 4.10 Part E ran end-to-end verification of the new auth flow (TV claim, returning sign-in with session handoff, stage.html admin gear under production auth). Two of the five planned flows require a second Supabase account to exercise, which wasn't available during the Part E run. Flows 1, 2, and 5 were executed and signed off — see `docs/PART-E-VERIFICATION.md`.
+
+#### What's deferred
+
+**Flow 3 — Guest access (scan TV as non-member, no pre-invite):**
+
+Requirements: A second Supabase account (user 2) that is NOT a member of user 1's household, and NOT present in `pending_household_invites` for that household.
+
+Steps:
+1. User 1 (admin): complete Flow 1 to claim a TV into household A. TV shows apps grid.
+2. Clear laptop browser session (per Flow 2 Step 1 snippet) so TV shows the sign-in QR for household A.
+3. User 2 signs in on phone.
+4. User 2 scans the TV's sign-in QR with iPhone camera.
+5. Expected RPC path: on the phone's handling of `elsewhere:tv-signin`, the shell calls `rpc_request_household_access` (or the signin equivalent) with user 2's auth. It sees user 2 is not a member and has no pending invite.
+6. Expected outcome: either
+   (a) user 2 gets an "access denied — ask an admin to invite you" screen, OR
+   (b) user 2 proceeds as a **guest** — ephemeral session on that TV without a `household_members` row.
+7. The intended Phase 1 behavior per SESSION-4.10-PLAN.md's Roles table is option (b) for now (guest mode), but the UX is untested.
+
+**⚠ Structural question to resolve when picking this up:** the scan-approval flow for non-members is itself separately deferred (see "Scan-approval flow (request-to-join household in real time)" entry below, target Session 4.11). Depending on what lands in 4.11, Flow 3 may need to be rewritten against the new admin-approval surface instead of guest-mode.
+
+**Flow 4 — Pre-invited member (auto-admit on first scan):**
+
+Requirements: A second Supabase account (user 2) + an admin pre-invite.
+
+Steps:
+1. User 1 (admin) adds a `pending_household_invites` row for user 2's email. When the household management UI ships (4.11), do this via the UI. Until then, direct SQL works:
+   ```sql
+   insert into pending_household_invites (household_id, email, invited_by)
+   values ('<household-a-id>', '<user-2-email>', '<user-1-id>');
+   ```
+2. User 2 signs in on phone.
+3. User 1's TV is in sign-in state (Flow 2 Step 1 state).
+4. User 2 scans the sign-in QR.
+5. Expected RPC path: `rpc_request_household_access` matches the `pending_household_invites.email` against user 2's auth email. Auto-admits: inserts `household_members` row with `joined_via = 'pre_invite'`, deletes the pending invite row.
+6. Expected outcome: user 2 lands on apps grid for household A as a full member (not guest). Handoff delivers session to the TV via realtime channel.
+7. Verify in DB: `select * from household_members where user_id = '<user-2-id>'` returns a row with the correct household_id and `joined_via = 'pre_invite'`.
+
+#### Options when picking up
+- **Create a throwaway test Supabase account** — simplest path. Gmail + "test" alias works.
+- **Use a real household member's phone** — more realistic but depends on social setup.
+- **Resolve the Flow 3 structural question first** — check whether the Session 4.11 scan-approval flow has landed. If yes, rewrite Flow 3 against that new UX. If no, test the Phase 1 guest-mode path as originally specified.
+
+Before running, also verify the shell-side UX: does index.html have a screen that gracefully handles both "you're not a member, here's how to request access" AND "pre-invite found, auto-admitted"? If absent, that's a scope gap to surface before running these flows.
+
+#### When to pick this up
+Before any real customer-acquisition campaign. These flows are critical-path for multi-member households — the primary value prop is "multiple people use the same TV." Until Flow 3 + Flow 4 are verified end-to-end, onboarding a second user into an existing household is unverified territory.
+
+Latest acceptable slip point: end of Session 4.11 (admin UI), because 4.11's scope depends on these flows working structurally.
+
+#### Related
+- SESSION-4.10-PLAN.md → Roles table (`guest`, `pre_invite` joined_via values)
+- docs/PART-E-VERIFICATION.md → Flows 1, 2, 5 (completed)
+- DEFERRED.md → "Scan-approval flow (request-to-join household in real time)" — structural dependency for Flow 3
+- DEFERRED.md → "Phone-based household pre-invites (SMS verification)" — when this lands, Flow 4 gains a phone variant worth adding to the checklist
+
+---
+
+### Deferred: Audit inline-script TDZ risk in other pages
+**Deferred in:** Session 4.10 (Part E verification)
+**Deferred on:** 2026-04-21
+**Priority:** Low — no known live bugs, but the pattern that broke tv2.html likely exists elsewhere
+**Area:** Inline `<script>` blocks across pages
+**Status:** Deferred
+
+#### Context
+During Session 4.10 Part E verification, tv2.html threw `Uncaught ReferenceError: Cannot access '_logs' before initialization` on boot. Root cause: an async IIFE at the top of the inline script called `tvLog()` on its first line. `tvLog` was a function declaration (hoisted), but the `const _logs = []` array it mutated was declared further down in a "Log" section and hit the temporal dead zone (TDZ) when accessed from the boot path.
+
+Fixed by hoisting `const _logs = []` to module-top state alongside `DEVICE_KEY_STORAGE` etc., with an inline comment at the new position explaining why it must stay hoisted.
+
+#### What's deferred
+An audit of the other large inline-script files in the repo for the same shape of bug:
+- `index.html` — shell inline script, calls helpers during boot
+- `karaoke/stage.html` — ~5k lines, many IIFEs and boot-time calls
+- `karaoke/singer.html`, `karaoke/audience.html`
+- `games/tv.html`, `games/player.html`
+
+Look for: a hoisted `function` invoked (directly or via an IIFE chain) before the module body executes the `const`/`let` it references. No clean regex catches this — manual boot-sequence review per file is the practical approach.
+
+#### Options when picking up
+- **Per-file boot-order review** — read each file's top-of-script, trace which helpers are called before which `const`/`let` declarations execute. Hoist any affected state declaration with a `// Hoisted because …` comment (mirroring tv2.html's pattern).
+- **Move each IIFE boot block to the bottom of its script** — structural change, higher churn, not recommended.
+
+Don't silently convert `const`/`let` to `var` to sidestep TDZ — loses scope safety, and the real fix (hoist the state declaration) is cheaper.
+
+#### When to pick this up
+Opportunistically. When next touching any of the listed files for other reasons, spend 2 minutes on a boot-order sanity check. A full proactive audit isn't warranted — the specific shape (TDZ from inside an IIFE-called helper) is rare, and every listed page has been exercised end-to-end.
+
+#### Related
+- `tv2.html` — `_logs` hoisted with explanatory comment (the reference implementation)
+- Session 4.10 Part E verification pass — where the bug surfaced
 
 ---
 
