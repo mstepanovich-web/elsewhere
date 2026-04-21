@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elsewhere · Claim TV</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: #0f0a1a;
+      color: #e8e3d4;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 20px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wordmark {
+      font-size: 22px;
+      font-weight: 300;
+      letter-spacing: 0.2em;
+      color: #f5c98c;
+      margin-top: 56px;
+      margin-bottom: 40px;
+      text-transform: uppercase;
+    }
+    .state {
+      width: 100%;
+      max-width: 420px;
+      text-align: center;
+    }
+    .state.hidden { display: none; }
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 2px solid rgba(245, 201, 140, 0.2);
+      border-top-color: #f5c98c;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .msg-title {
+      font-size: 20px;
+      font-weight: 400;
+      color: #e8e3d4;
+      margin-bottom: 12px;
+    }
+    .msg {
+      color: #a59a85;
+      font-size: 15px;
+      margin-bottom: 24px;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px 20px;
+      margin-top: 12px;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 500;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s;
+    }
+    .btn-primary {
+      background: #f5c98c;
+      color: #0f0a1a;
+    }
+    .btn-primary:active { background: #ffd089; }
+    .btn-secondary {
+      background: transparent;
+      color: #f5c98c;
+      border: 1px solid rgba(245, 201, 140, 0.35);
+    }
+    .btn-secondary:active { background: rgba(245, 201, 140, 0.08); }
+    code {
+      background: rgba(245, 201, 140, 0.08);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 13px;
+      color: #f5c98c;
+    }
+  </style>
+</head>
+<body>
+  <div class="wordmark">Elsewhere</div>
+
+  <!-- Default state — we're attempting the elsewhere:// deep link. -->
+  <div id="connecting" class="state">
+    <div class="spinner"></div>
+    <div class="msg">Opening the Elsewhere app…</div>
+  </div>
+
+  <!-- Shown 1.5s after load if we're still visible (app didn't open). -->
+  <div id="fallback" class="state hidden">
+    <div class="msg-title">Get Elsewhere</div>
+    <div class="msg">It looks like the Elsewhere app isn't installed on this phone yet. Install it, then come back to your TV and scan the QR code again.</div>
+    <!--
+      DEFERRED(claim.html App Store URL): href is a placeholder until the
+      iOS App Store listing exists. See docs/DEFERRED.md → "claim.html App
+      Store URL placeholder". Swap "#" for the real URL and update the
+      button label when the listing ships.
+    -->
+    <a class="btn btn-primary" href="#" id="appstore-btn">Coming to the App Store</a>
+    <button class="btn btn-secondary" type="button" id="retry-btn">Try opening the app again</button>
+  </div>
+
+  <!-- Shown when the URL didn't include ?device_key — malformed link. -->
+  <div id="error" class="state hidden">
+    <div class="msg-title">Invalid claim link</div>
+    <div class="msg">This link is missing its device key. Open <code>tv2.html</code> on your TV and try scanning its QR code again.</div>
+  </div>
+
+  <script>
+    // Session 4.10 — claim.html is the HTTPS intermediate landing page
+    // between the TV's QR code and the iOS app's elsewhere://tv-claim
+    // deep link. QR encodes an https:// URL pointing here (not elsewhere://
+    // directly) so a phone without the app installed still lands somewhere
+    // coherent and gets a fallback path. With the app installed, the deep
+    // link fires within ~a second and the user never sees this page for
+    // more than a flash.
+    (function() {
+      const deviceKey = new URLSearchParams(location.search).get('device_key');
+
+      if (!deviceKey) {
+        showState('error');
+        return;
+      }
+
+      attemptDeepLink();
+      // If we're still visible after 1.5s the app didn't open — reveal fallback.
+      setTimeout(revealFallbackIfStuck, 1500);
+
+      document.getElementById('retry-btn').addEventListener('click', () => {
+        showState('connecting');
+        attemptDeepLink();
+        setTimeout(revealFallbackIfStuck, 1500);
+      });
+
+      function attemptDeepLink() {
+        location.href = 'elsewhere://tv-claim?device_key=' + encodeURIComponent(deviceKey);
+      }
+
+      function revealFallbackIfStuck() {
+        // If the page became hidden (iOS opened the app, or user
+        // switched away), don't flash the fallback — their task is
+        // completing elsewhere. The original tab just sits idle.
+        if (document.visibilityState === 'hidden') return;
+        showState('fallback');
+      }
+
+      function showState(id) {
+        ['connecting', 'fallback', 'error'].forEach(s => {
+          document.getElementById(s).classList.toggle('hidden', s !== id);
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -93,10 +93,15 @@ document.dispatchEvent(new CustomEvent('elsewhere:sb-ready'));
 //   elsewhere://auth/callback?code=…       PKCE
 //   elsewhere://auth/callback#access_token=…&refresh_token=…   implicit
 //   elsewhere://games?room=ABC&mgrname=Mike[&t=TOKEN&…]
+//   elsewhere://tv-claim?device_key=<UUID>    Session 4.10 — first-time TV registration
+//   elsewhere://tv-signin?device_key=<UUID>   Session 4.10 — returning TV sign-in
 //
-// AUTH: finish Supabase sign-in; onAuthStateChange fires so pages update naturally.
+// AUTH:  finish Supabase sign-in; onAuthStateChange fires so pages update naturally.
 // GAMES: navigate to games/player.html preserving the full query string so any
 //        future params (invite tokens, etc.) flow through without code changes here.
+// TV:    parse the device_key and dispatch a custom DOM event — routing into the
+//        shell screens lives in index.html, kept separate so auth.js stays
+//        UI-agnostic. Index listens for 'elsewhere:tv-claim' / 'elsewhere:tv-signin'.
 
 if (window.Capacitor?.Plugins?.App) {
   const AppPlugin = window.Capacitor.Plugins.App;
@@ -157,6 +162,29 @@ if (window.Capacitor?.Plugins?.App) {
         location.href = base + qs;
       } catch (e) {
         console.error('[elsewhere] games deep-link parse failed:', e);
+      }
+      return;
+    }
+
+    // Session 4.10 — TV claim / sign-in. Parse device_key and dispatch a
+    // custom event. index.html owns the screen routing; this handler just
+    // delivers the payload.
+    if (url.startsWith('elsewhere://tv-claim') || url.startsWith('elsewhere://tv-signin')) {
+      try {
+        const u = new URL(url);
+        const device_key = u.searchParams.get('device_key') || '';
+        if (!device_key) {
+          document.dispatchEvent(new CustomEvent('elsewhere:auth-error', {
+            detail: { message: 'TV link was missing its device key.' },
+          }));
+          return;
+        }
+        const evtName = url.startsWith('elsewhere://tv-claim')
+          ? 'elsewhere:tv-claim'
+          : 'elsewhere:tv-signin';
+        document.dispatchEvent(new CustomEvent(evtName, { detail: { device_key } }));
+      } catch (e) {
+        console.error('[elsewhere] tv deep-link parse failed:', e);
       }
       return;
     }

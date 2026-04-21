@@ -923,6 +923,7 @@
         <div id="user-menu-email">—</div>
         <button onclick="openContactsFromMenu()">Contacts</button>
         <button onclick="openGroupsFromMenu()">Groups</button>
+        <button onclick="openHouseholdFromMenu()">Manage household</button>
         <button onclick="shellSignOut()">Sign out</button>
       </div>
     </div>
@@ -1226,6 +1227,106 @@
         </div>
       </div>
     </div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- Session 4.10 screens: TV claim / TV sign-in / Household  -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+
+    <!-- TV claim — reached via elsewhere://tv-claim deep link (new TV setup) -->
+    <div class="screen" id="screen-tv-claim" data-device-key="">
+      <div class="screen-head">
+        <div class="back-link" onclick="goTo('screen-home')">← Cancel</div>
+        <div class="page-title screen-head-title">Claim TV</div>
+      </div>
+
+      <div class="screen-error-banner" id="tv-claim-error" style="display:none;"></div>
+
+      <div class="page-sub">Adding this TV to your household.</div>
+
+      <div class="field-group">
+        <div class="field-row">
+          <div class="field-label">TV name</div>
+          <input class="field-input"
+                 id="tv-claim-display-name"
+                 type="text"
+                 placeholder="e.g. Living Room TV"
+                 maxlength="60"
+                 autocomplete="off"
+                 autocapitalize="words">
+        </div>
+
+        <div class="field-row" id="tv-claim-household-row">
+          <div class="field-label">Household</div>
+          <select class="field-input" id="tv-claim-household-select" onchange="onHouseholdSelectChange()">
+            <option value="__new__">Create a new household</option>
+          </select>
+        </div>
+
+        <div class="field-row" id="tv-claim-new-household-row">
+          <div class="field-label">New household name (optional)</div>
+          <input class="field-input"
+                 id="tv-claim-new-household-name"
+                 type="text"
+                 placeholder="e.g. The Stepanovich House"
+                 maxlength="60"
+                 autocomplete="off"
+                 autocapitalize="words">
+        </div>
+
+        <div id="tv-claim-status"></div>
+        <button class="cta-btn" id="tv-claim-submit" onclick="submitTvClaim()">Claim TV →</button>
+      </div>
+    </div>
+
+    <!-- TV sign-in — reached via elsewhere://tv-signin deep link (returning TV) -->
+    <div class="screen" id="screen-tv-signin" data-device-key="">
+      <div class="screen-head">
+        <div class="back-link" onclick="goTo('screen-home')">← Back</div>
+        <div class="page-title screen-head-title">Sign in on TV</div>
+      </div>
+
+      <div class="screen-error-banner" id="tv-signin-error" style="display:none;"></div>
+
+      <div class="page-sub" id="tv-signin-sub">Connecting…</div>
+      <div id="tv-signin-status"></div>
+    </div>
+
+    <!-- Household management — minimal 4.10 surface: pre-invite by email -->
+    <div class="screen" id="screen-household">
+      <div class="screen-head">
+        <div class="back-link" onclick="goTo('screen-home')">← Back</div>
+        <div class="page-title screen-head-title">Household</div>
+      </div>
+
+      <div class="screen-error-banner" id="household-error" style="display:none;"></div>
+
+      <!-- Non-admin state: shown when user hasn't claimed a TV yet -->
+      <div id="household-no-admin" style="display:none;">
+        <div class="page-sub">You haven't claimed a TV yet. Once you set up a TV from your home screen, you'll be able to manage your household here — invite family, add more TVs, etc.</div>
+      </div>
+
+      <!-- Admin state: shown when user is an admin of at least one household -->
+      <div id="household-admin" style="display:none;">
+        <div class="page-sub">Invite someone to your household. When they sign up with this email and scan a household TV, they'll be admitted automatically.</div>
+
+        <div class="field-group">
+          <div class="field-row">
+            <div class="field-label">Email</div>
+            <input class="field-input"
+                   id="household-invite-email"
+                   type="email"
+                   inputmode="email"
+                   placeholder="friend@example.com"
+                   autocomplete="email"
+                   autocapitalize="none"
+                   autocorrect="off"
+                   spellcheck="false">
+          </div>
+          <div id="household-invite-status"></div>
+          <button class="cta-btn" id="household-invite-submit" onclick="submitPendingInvite()">Send invite →</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Modals (outside #app so they overlay everything) -->
@@ -1316,7 +1417,7 @@
     // time this listener fires, window.elsewhere is guaranteed to exist.
     document.addEventListener('DOMContentLoaded', initShell);
 
-    const SCREENS = ['screen-home', 'screen-account', 'screen-confirm', 'screen-contacts', 'screen-contact-edit', 'screen-groups', 'screen-group-edit'];
+    const SCREENS = ['screen-home', 'screen-account', 'screen-confirm', 'screen-contacts', 'screen-contact-edit', 'screen-groups', 'screen-group-edit', 'screen-tv-claim', 'screen-tv-signin', 'screen-household'];
     let activeScreen = 'screen-home';
 
     function initShell() {
@@ -1374,6 +1475,12 @@
 
       // Desktop-only note inside the account screen
       if (!isMobile()) document.getElementById('desktop-note').classList.add('visible');
+
+      // Session 4.10 deep-link listeners. Both fire via shell/auth.js when
+      // iOS routes an elsewhere://tv-claim or elsewhere://tv-signin URL
+      // into the Capacitor app. Payload is { device_key }.
+      document.addEventListener('elsewhere:tv-claim',  onTvClaimDeepLink);
+      document.addEventListener('elsewhere:tv-signin', onTvSigninDeepLink);
     }
 
     // ── Render based on current user ─────────────────────────
@@ -1404,12 +1511,341 @@
         welcome.classList.remove('hidden');
         cta.classList.add('hidden');
         guestLink.classList.add('hidden');
+
+        // Session 4.10 — resume pending TV flow if the user just signed
+        // in AFTER arriving via a tv-claim / tv-signin deep link. The
+        // device_key was stashed in sessionStorage before redirecting to
+        // screen-account; consume it now that we have a session.
+        resumePendingTvFlow();
       } else {
         badge.classList.add('hidden');
         welcome.classList.add('hidden');
         cta.classList.remove('hidden');
         guestLink.classList.remove('hidden');
         document.getElementById('user-menu').classList.remove('open');
+      }
+    }
+
+    // ── Session 4.10: TV claim / sign-in deep-link handling ─────────
+
+    // Keys for the sessionStorage bridge across the sign-in roundtrip.
+    // Cleared by resumePendingTvFlow() once the user is authed and we've
+    // successfully routed into the claim/signin screen.
+    const PENDING_TV_CLAIM_KEY  = 'elsewhere.pending_tv_claim.device_key';
+    const PENDING_TV_SIGNIN_KEY = 'elsewhere.pending_tv_signin.device_key';
+
+    function onTvClaimDeepLink(e) {
+      const dk = e.detail?.device_key;
+      if (!dk) return;
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) {
+        // Not signed in yet. Stash device_key and send user to sign-in.
+        // renderAuthState(user) will consume the key on auth change.
+        try { sessionStorage.setItem(PENDING_TV_CLAIM_KEY, dk); } catch (_) {}
+        goTo('screen-account');
+        showAccountStatus('Sign in to claim this TV.', 'info');
+        return;
+      }
+      enterTvClaimScreen(dk);
+    }
+
+    function onTvSigninDeepLink(e) {
+      const dk = e.detail?.device_key;
+      if (!dk) return;
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) {
+        try { sessionStorage.setItem(PENDING_TV_SIGNIN_KEY, dk); } catch (_) {}
+        goTo('screen-account');
+        showAccountStatus('Sign in to continue on this TV.', 'info');
+        return;
+      }
+      enterTvSigninScreen(dk);
+    }
+
+    function resumePendingTvFlow() {
+      let dk = null;
+      try { dk = sessionStorage.getItem(PENDING_TV_CLAIM_KEY); } catch (_) {}
+      if (dk) {
+        try { sessionStorage.removeItem(PENDING_TV_CLAIM_KEY); } catch (_) {}
+        enterTvClaimScreen(dk);
+        return;
+      }
+      try { dk = sessionStorage.getItem(PENDING_TV_SIGNIN_KEY); } catch (_) {}
+      if (dk) {
+        try { sessionStorage.removeItem(PENDING_TV_SIGNIN_KEY); } catch (_) {}
+        enterTvSigninScreen(dk);
+      }
+    }
+
+    // ── screen-tv-claim ─────────────────────────────────────────────
+
+    async function enterTvClaimScreen(device_key) {
+      const screen = document.getElementById('screen-tv-claim');
+      screen.dataset.deviceKey = device_key;
+      document.getElementById('tv-claim-display-name').value = '';
+      document.getElementById('tv-claim-new-household-name').value = '';
+      document.getElementById('tv-claim-status').textContent = '';
+      document.getElementById('tv-claim-status').style.color = 'var(--color-green)';
+      document.getElementById('tv-claim-error').style.display = 'none';
+      document.getElementById('tv-claim-submit').disabled = false;
+      goTo('screen-tv-claim');
+      // Populate household picker from user's existing households.
+      // RLS ensures only households the user is a member of are returned.
+      await populateHouseholdPicker();
+    }
+
+    async function populateHouseholdPicker() {
+      const select = document.getElementById('tv-claim-household-select');
+      select.innerHTML = '<option value="__new__">Create a new household</option>';
+      try {
+        const { data, error } = await window.sb
+          .from('households')
+          .select('id, name')
+          .order('created_at', { ascending: true });
+        if (error) throw error;
+        (data || []).forEach(h => {
+          const opt = document.createElement('option');
+          opt.value = h.id;
+          opt.textContent = h.name || '(unnamed household)';
+          select.appendChild(opt);
+        });
+      } catch (e) {
+        // Non-fatal — user can still create a new household.
+        console.warn('[tv-claim] households fetch failed:', e?.message || e);
+      }
+      onHouseholdSelectChange();
+    }
+
+    function onHouseholdSelectChange() {
+      const sel = document.getElementById('tv-claim-household-select');
+      const newRow = document.getElementById('tv-claim-new-household-row');
+      newRow.style.display = sel.value === '__new__' ? '' : 'none';
+    }
+
+    async function submitTvClaim() {
+      const screen = document.getElementById('screen-tv-claim');
+      const device_key = screen.dataset.deviceKey || '';
+      if (!device_key) {
+        showTvClaimError('Missing device key. Try re-scanning the TV.');
+        return;
+      }
+      const display_name   = document.getElementById('tv-claim-display-name').value.trim() || null;
+      const householdSel   = document.getElementById('tv-claim-household-select').value;
+      const newHouseholdNm = document.getElementById('tv-claim-new-household-name').value.trim() || null;
+
+      const btn    = document.getElementById('tv-claim-submit');
+      const status = document.getElementById('tv-claim-status');
+      btn.disabled = true;
+      status.style.color = 'var(--color-text-faint)';
+      status.textContent = 'Claiming…';
+      document.getElementById('tv-claim-error').style.display = 'none';
+
+      try {
+        if (householdSel === '__new__') {
+          const { error } = await window.sb.rpc('rpc_claim_tv_device', {
+            p_device_key:      device_key,
+            p_household_name:  newHouseholdNm,
+            p_tv_display_name: display_name,
+          });
+          if (error) throw error;
+        } else {
+          const { error } = await window.sb.rpc('rpc_link_tv_to_existing_household', {
+            p_device_key:   device_key,
+            p_household_id: householdSel,
+          });
+          if (error) throw error;
+        }
+
+        status.textContent = 'Handing off to TV…';
+        await publishSessionHandoff(device_key);
+
+        status.style.color = 'var(--color-green)';
+        status.textContent = '✓ TV claimed — head to the TV to continue.';
+      } catch (e) {
+        showTvClaimError(e?.message || String(e));
+        btn.disabled = false;
+      }
+    }
+
+    function showTvClaimError(msg) {
+      const banner = document.getElementById('tv-claim-error');
+      banner.textContent = msg;
+      banner.style.display = '';
+      const status = document.getElementById('tv-claim-status');
+      status.textContent = '';
+    }
+
+    // ── screen-tv-signin ────────────────────────────────────────────
+
+    async function enterTvSigninScreen(device_key) {
+      const screen = document.getElementById('screen-tv-signin');
+      screen.dataset.deviceKey = device_key;
+      document.getElementById('tv-signin-error').style.display = 'none';
+      document.getElementById('tv-signin-status').textContent = '';
+      document.getElementById('tv-signin-sub').textContent = 'Connecting…';
+      goTo('screen-tv-signin');
+
+      try {
+        const { data, error } = await window.sb.rpc('rpc_request_household_access', {
+          p_device_key: device_key,
+        });
+        if (error) throw error;
+
+        const status = data?.status;
+        const householdName = data?.household_name || 'this TV';
+
+        if (status === 'already_member' || status === 'auto_admitted') {
+          document.getElementById('tv-signin-sub').textContent = 'Signing you in on ' + householdName + '…';
+          await publishSessionHandoff(device_key);
+          document.getElementById('tv-signin-sub').textContent =
+            status === 'auto_admitted'
+              ? '✓ Welcome to ' + householdName + '. Head to the TV to continue.'
+              : '✓ Signed in on ' + householdName + '. Head to the TV to continue.';
+        } else if (status === 'guest') {
+          document.getElementById('tv-signin-sub').textContent =
+            'Continuing as a guest on ' + householdName + '. Head to the TV to continue.';
+          await publishSessionHandoff(device_key);
+        } else {
+          throw new Error('Unexpected response: ' + status);
+        }
+      } catch (e) {
+        const banner = document.getElementById('tv-signin-error');
+        banner.textContent = e?.message || String(e);
+        banner.style.display = '';
+        document.getElementById('tv-signin-sub').textContent = '';
+      }
+    }
+
+    // ── Realtime session handoff to the TV ──────────────────────────
+
+    // Publishes the phone's current Supabase session tokens onto the
+    // 'tv_device:<device_key>' realtime channel so the TV (Part C:
+    // tv2.html) can call supabase.auth.setSession and proceed authed.
+    //
+    // Timing note: the TV must subscribe to this channel BEFORE the
+    // phone publishes. Supabase broadcasts are not buffered for late-
+    // joiners — if the TV hasn't subscribed by the time send() fires,
+    // the handoff is dropped silently and the user ends up stuck on
+    // the TV's QR screen. Part C (tv2.html rewrite) must subscribe
+    // before rendering the QR, not after.
+    async function publishSessionHandoff(device_key) {
+      const { data: { session }, error: sessionErr } = await window.sb.auth.getSession();
+      if (sessionErr) throw sessionErr;
+      if (!session) throw new Error('No session to hand off — please sign in again.');
+
+      const channel = window.sb.channel('tv_device:' + device_key);
+
+      // Subscribe first, then send. 5s timeout to fail fast if realtime
+      // is unreachable rather than silently dropping the handoff.
+      await new Promise((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (!settled) { settled = true; reject(new Error('Realtime subscribe timed out.')); }
+        }, 5000);
+        channel.subscribe(status => {
+          if (settled) return;
+          if (status === 'SUBSCRIBED') {
+            settled = true; clearTimeout(timer); resolve();
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            settled = true; clearTimeout(timer); reject(new Error('Realtime channel ' + status));
+          }
+        });
+      });
+
+      await channel.send({
+        type:  'broadcast',
+        event: 'session_handoff',
+        payload: {
+          access_token:  session.access_token,
+          refresh_token: session.refresh_token,
+        },
+      });
+
+      // Clean up. Broadcast is fire-and-forget; keeping the channel open
+      // would leak realtime sockets across flows.
+      await channel.unsubscribe();
+      window.sb.removeChannel(channel);
+    }
+
+    // ── screen-household (minimal 4.10 pre-invite UI) ───────────────
+
+    function openHouseholdFromMenu() {
+      document.getElementById('user-menu').classList.remove('open');
+      goTo('screen-household');
+      enterHouseholdScreen();
+    }
+
+    async function enterHouseholdScreen() {
+      document.getElementById('household-error').style.display = 'none';
+      document.getElementById('household-invite-email').value = '';
+      document.getElementById('household-invite-status').textContent = '';
+      document.getElementById('household-no-admin').style.display = 'none';
+      document.getElementById('household-admin').style.display    = 'none';
+      document.getElementById('household-invite-submit').disabled = false;
+
+      // Is this user an admin of any household?
+      try {
+        const { data, error } = await window.sb
+          .from('household_members')
+          .select('household_id, role')
+          .eq('role', 'admin')
+          .limit(1);
+        if (error) throw error;
+        const isAdmin = (data || []).length > 0;
+        document.getElementById('household-no-admin').style.display = isAdmin ? 'none' : '';
+        document.getElementById('household-admin').style.display    = isAdmin ? ''    : 'none';
+        document.getElementById('screen-household').dataset.adminHouseholdId =
+          isAdmin ? data[0].household_id : '';
+      } catch (e) {
+        const banner = document.getElementById('household-error');
+        banner.textContent = e?.message || String(e);
+        banner.style.display = '';
+      }
+    }
+
+    async function submitPendingInvite() {
+      const email = document.getElementById('household-invite-email').value.trim();
+      if (!email || !email.includes('@')) {
+        const banner = document.getElementById('household-error');
+        banner.textContent = 'Please enter a valid email address.';
+        banner.style.display = '';
+        return;
+      }
+      const householdId = document.getElementById('screen-household').dataset.adminHouseholdId;
+      if (!householdId) {
+        const banner = document.getElementById('household-error');
+        banner.textContent = 'No household to invite into.';
+        banner.style.display = '';
+        return;
+      }
+
+      const btn    = document.getElementById('household-invite-submit');
+      const status = document.getElementById('household-invite-status');
+      btn.disabled = true;
+      status.style.color = 'var(--color-text-faint)';
+      status.textContent = 'Sending…';
+      document.getElementById('household-error').style.display = 'none';
+
+      try {
+        const user = window.elsewhere?.getCurrentUser?.();
+        const { error } = await window.sb
+          .from('pending_household_invites')
+          .insert({
+            household_id: householdId,
+            email:        email,
+            invited_by:   user?.id,
+          });
+        if (error) throw error;
+        status.style.color = 'var(--color-green)';
+        status.textContent = '✓ Invite staged for ' + email;
+        document.getElementById('household-invite-email').value = '';
+        setTimeout(() => { status.textContent = ''; btn.disabled = false; }, 1800);
+      } catch (e) {
+        const banner = document.getElementById('household-error');
+        banner.textContent = e?.message || String(e);
+        banner.style.display = '';
+        status.textContent = '';
+        btn.disabled = false;
       }
     }
 

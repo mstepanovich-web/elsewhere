@@ -83,6 +83,32 @@ Escalation trigger: if 4.10.1 slips and 4.11 starts without it, note explicitly 
 
 ---
 
+### Deferred: claim.html App Store URL placeholder
+**Deferred in:** Session 4.10 (Part B)
+**Deferred on:** 2026-04-21
+**Priority:** High — blocks real user onboarding for anyone without the app installed
+**Area:** claim.html / onboarding
+**Status:** Deferred
+
+#### Context
+Session 4.10 Part B ships `claim.html` as the intermediate landing page between the TV's QR code and the iOS app's `elsewhere://tv-claim` deep link. When the app isn't installed on the scanning phone, claim.html's 1.5s timeout reveals a "Get Elsewhere on the App Store" button. At implementation time, no App Store listing exists yet, so the button's `href` is a placeholder (`#` with "coming soon" copy).
+
+#### What's deferred
+Replace the placeholder `href` in `claim.html` with the real App Store URL once the listing goes live. Approximately a single-line change.
+
+#### Options when picking up
+1. Open `claim.html`, locate the App Store button, swap the `href`. Update the button label / surrounding copy if needed (e.g. drop "coming soon" wording).
+2. If the listing also publishes a Smart App Banner meta tag, add it to `<head>` so Safari surfaces the native install prompt before users even tap the button.
+
+#### When to pick this up
+When the Elsewhere iOS App Store listing exists. Must land before any real user-acquisition campaign — the "scan → install → claim" path is broken for non-users without a real App Store URL. Until the listing is up, only users who already have the app via TestFlight or ad-hoc build can complete the flow.
+
+#### Related
+- SESSION-4.10-PLAN.md → Scope → claim.html intermediate landing
+- Part B commit — claim.html first landed with placeholder
+
+---
+
 ### Deferred: Scan-approval flow (request-to-join household in real time)
 **Deferred in:** Session 4.10 (planning)
 **Deferred on:** 2026-04-21
