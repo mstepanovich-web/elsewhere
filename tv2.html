@@ -351,6 +351,11 @@
     let deviceKey       = null;
     let realtimeChannel = null;
 
+    // Hoisted: tvLog() (called from boot below) reads _logs. Function
+    // declarations hoist but `const` doesn't — moving this back to the
+    // "Log" section near the bottom throws TDZ on first tvLog() call.
+    const _logs = [];
+
     (async function boot() {
       tvLog('boot: starting');
       try {
@@ -613,7 +618,8 @@
     }
 
     // ─── Log (preserved) ────────────────────────────────────────
-    const _logs = [];
+    // _logs is declared at the module top (search for "Hoisted:") so
+    // tvLog() can be called from the boot IIFE without hitting TDZ.
     function tvLog(msg) {
       const ts = new Date().toISOString().slice(11, 19);
       const line = ts + ' ' + msg;
