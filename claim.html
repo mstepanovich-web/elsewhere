@@ -136,6 +136,12 @@
         return;
       }
 
+      // Session 4.10 Part C — ?intent=claim|signin param. Defaults to
+      // 'claim' for backward compatibility (Part B shipped with claim
+      // as the only flow). tv2.html's sign-in QR appends &intent=signin.
+      const intent = new URLSearchParams(location.search).get('intent') || 'claim';
+      const scheme = intent === 'signin' ? 'elsewhere://tv-signin' : 'elsewhere://tv-claim';
+
       attemptDeepLink();
       // If we're still visible after 1.5s the app didn't open — reveal fallback.
       setTimeout(revealFallbackIfStuck, 1500);
@@ -147,7 +153,7 @@
       });
 
       function attemptDeepLink() {
-        location.href = 'elsewhere://tv-claim?device_key=' + encodeURIComponent(deviceKey);
+        location.href = scheme + '?device_key=' + encodeURIComponent(deviceKey);
       }
 
       function revealFallbackIfStuck() {

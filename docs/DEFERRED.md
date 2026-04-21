@@ -109,6 +109,42 @@ When the Elsewhere iOS App Store listing exists. Must land before any real user-
 
 ---
 
+### Deferred: tv2.html render race — concurrent renderCurrentState calls
+**Deferred in:** Session 4.10 (Part C)
+**Deferred on:** 2026-04-21
+**Priority:** Low — correctness is fine; only cosmetic flicker possible
+**Area:** TV / tv2.html
+**Status:** Deferred
+
+#### Context
+Session 4.10 Part C's `tv2.html` kicks off an async `renderCurrentState()` at boot (step 5 of the boot sequence). If a realtime `session_handoff` arrives before that initial render completes, the handoff handler also calls `renderCurrentState()` — two concurrent invocations. Both query `rpc_tv_is_registered` independently and both transition screens via `goTo(id)`.
+
+Final state resolves correctly (both see the same DB row; both decide to show apps). But the ordering is non-deterministic: the user may briefly see the claim or sign-in screen flash before apps settles in. Correctness ✓, aesthetics ✗.
+
+#### What's deferred
+Serializing `renderCurrentState()` so only one invocation ever transitions the UI at a time. Two implementation options:
+1. **Render-epoch counter** — module-level counter; each call bumps it and captures its epoch at entry; at the `goTo(id)` site, only transition if the captured epoch still matches the current global. Stale renders no-op.
+2. **Rendering lock** — module-level in-flight Promise; a second call awaits the first before executing. Simpler but serializes cost.
+
+Either pattern works; epoch counter is the cheaper fix.
+
+#### Options when picking up
+- Add `let renderEpoch = 0;` at module top
+- At entry: `const myEpoch = ++renderEpoch;`
+- Before `goTo(id)`: `if (myEpoch !== renderEpoch) return;`
+- That's the whole patch, probably 3-4 lines
+
+Alternative: accept the flicker as negligible and close this without implementing.
+
+#### When to pick this up
+Post-Session-5 polish pass. Flicker would need to actually annoy someone to justify the fix. If no complaints by end of Phase 1, deprioritize further.
+
+#### Related
+- SESSION-4.10-PLAN.md → Session handoff section
+- tv2.html boot sequence `renderCurrentState()` + `handleSessionHandoff()` at the module-level script
+
+---
+
 ### Deferred: Scan-approval flow (request-to-join household in real time)
 **Deferred in:** Session 4.10 (planning)
 **Deferred on:** 2026-04-21
@@ -218,7 +254,7 @@ The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captur
 - [ ] Laptop/TV production auth path for karaoke/stage.html (Session 4.10+) — **being addressed by 4.10**
 - [ ] Tune back_yaw / back_pitch for remaining venues via admin dialog (most NULL today)
 - [ ] Bug: karaoke/stage.html line ~3085 has `if(viewMode==='singer')` — dead branch, no functional impact
-- [ ] tv2.html camera init: currently requests camera permission during setup. Per architectural decision, should lazy-init only when entering a camera-requiring product — **likely addressed by 4.10**
+- [x] ~~tv2.html camera init: currently requests camera permission during setup. Per architectural decision, should lazy-init only when entering a camera-requiring product~~ — **Resolved in Session 4.10 Part C.** tv2.html rewritten to a boot-only launcher (claim / signin / apps grid). No camera preview, no DeepAR init, no Agora watchers. Camera permission is now first requested by the product page the user launches (karaoke/stage.html, games/tv.html), which is the correct lazy-init surface per the original architectural decision.
 
 ### Deferred — Games
 - [ ] Lobby state fragility — broadcast-ephemeral lobbyPlayers[] diagnosis; session 5 structural fix via session_participants

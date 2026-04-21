@@ -3,14 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Elsewhere · TV </title>
+  <title>Elsewhere · TV</title>
   <link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
+  <script type="module" src="shell/auth.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* All colors and fonts from elsewhere-theme.css — no hardcoded values */
+    body {
+      font-family: var(--font-ui);
+      color: var(--color-text);
+      background: var(--color-bg);
+      min-height: 100vh;
+      overflow: hidden;
+    }
 
     /* ── Ambient background ─────────────────────── */
     .bg {
@@ -25,194 +31,212 @@
     .wordmark {
       position: fixed; top: 32px; left: 50%; transform: translateX(-50%);
       z-index: 20;
-      font-family: var(--font-display); font-size: clamp(18px, 2vw, 26px);
-      font-weight: 300; letter-spacing: var(--tracking-widest);
-      color: var(--color-gold-dim); text-transform: uppercase;
+      font-family: var(--font-display);
+      font-size: clamp(18px, 2vw, 26px);
+      font-weight: 300;
+      letter-spacing: var(--tracking-widest);
+      color: var(--color-gold-dim);
+      text-transform: uppercase;
       white-space: nowrap;
     }
 
-    /* ── Screens ────────────────────────────────── */
+    /* ── Screens (only one active at a time) ────── */
     .screen {
       position: fixed; inset: 0; z-index: 10;
-      display: none; flex-direction: column;
-      align-items: center; justify-content: center;
-      opacity: 0; transition: opacity 0.35s ease;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.35s ease;
       padding: 80px 40px 40px;
     }
-    .screen.active { display: flex; }
-    .screen.visible { opacity: 1; }
+    .screen.active { display: flex; opacity: 1; }
 
-    /* ── SCREEN 1: Setup ────────────────────────── */
-    .setup-title {
+    .title {
       font-family: var(--font-display);
-      font-size: clamp(32px, 4vw, 56px);
-      font-weight: 300; letter-spacing: var(--tracking-wide);
-      color: var(--color-text); margin-bottom: 8px; text-align: center;
-    }
-    .setup-sub {
-      font-size: var(--text-sm); letter-spacing: var(--tracking-wider);
-      text-transform: uppercase; color: var(--color-text-faint);
-      margin-bottom: clamp(32px, 5vh, 56px); text-align: center;
-    }
-
-    .setup-fields {
-      display: flex; gap: clamp(20px, 4vw, 48px);
-      flex-wrap: wrap; justify-content: center;
-      width: 100%; max-width: 760px; margin-bottom: clamp(32px, 5vh, 56px);
-    }
-
-    .field-group {
-      display: flex; flex-direction: column; gap: 8px;
-      flex: 1 1 280px; max-width: 340px;
-    }
-    .field-label {
-      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
-      text-transform: uppercase; color: var(--color-text-faint);
-      font-family: var(--font-mono);
-    }
-    .field-select {
-      background: var(--color-gold-ghost);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 300;
       color: var(--color-text);
-      font-family: var(--font-mono); font-size: var(--text-md);
-      padding: 14px 16px; cursor: pointer; outline: none;
-      width: 100%;
-      transition: border-color var(--transition-fast);
-      -webkit-appearance: none;
-      /* chevron stroke — hardcoded brand gold; data: URLs cannot reference CSS var() */
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(255,200,80,.4)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 14px center;
-      padding-right: 36px;
+      letter-spacing: var(--tracking-wide);
+      margin-bottom: 12px;
+      text-align: center;
     }
-    .field-select:focus { border-color: var(--color-border-bright); }
-    .field-select option { background: var(--color-bg-mid); }
-
-    .setup-btn {
-      padding: 18px 56px;
-      background: var(--color-gold-dim);
-      border: none; border-radius: var(--radius-pill);
-      color: var(--color-bg);
-      font-family: var(--font-ui); font-size: var(--text-sm);
-      letter-spacing: var(--tracking-wider); text-transform: uppercase;
-      font-weight: 600; cursor: pointer;
-      box-shadow: var(--shadow-gold);
-      transition: background var(--transition-fast), transform var(--transition-fast);
-    }
-    .setup-btn:hover { background: var(--color-gold); }
-    .setup-btn:active { transform: scale(0.98); }
-
-    /* camera preview */
-    .cam-preview-wrap {
-      display: none; align-items: center; gap: 10px;
-      margin-top: 16px;
-    }
-    .cam-preview-wrap.visible { display: flex; }
-    .cam-preview {
-      width: 80px; height: 52px; border-radius: var(--radius-sm);
-      object-fit: cover; border: 1px solid var(--color-border-dim);
-      transform: scaleX(-1);
-    }
-    .cam-preview-label {
-      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
-      text-transform: uppercase; color: var(--color-text-faint);
-      font-family: var(--font-mono);
+    .sub {
+      font-size: var(--text-md);
+      color: var(--color-text-dim);
+      max-width: 440px;
+      text-align: center;
+      margin-bottom: 40px;
     }
 
-    /* ── SCREEN 2: QR codes ─────────────────────── */
-    .qr-header {
-      font-family: var(--font-display);
-      font-size: clamp(18px, 2vw, 26px);
-      font-weight: 300; letter-spacing: var(--tracking-wider);
-      color: var(--color-text-faint); text-align: center;
-      margin-bottom: clamp(32px, 5vh, 56px);
-    }
-
-    .qr-grid {
-      display: flex; gap: clamp(20px, 3vw, 48px);
-      align-items: stretch; flex-wrap: nowrap; justify-content: center;
-      width: 100%; max-width: 1200px;
-    }
-
-    .qr-tile {
-      flex: 1 1 0; min-width: 0; max-width: 340px;
-      display: flex; flex-direction: column; align-items: center;
-      gap: 16px; padding: clamp(20px, 3vw, 36px) clamp(16px, 2vw, 28px);
-      background: var(--color-surface);
-      border: 1px solid var(--color-border-dim);
-      border-radius: var(--radius-xl);
-      transition: border-color var(--transition-normal);
-      position: relative; overflow: hidden;
-    }
-    .qr-tile::before {
-      content: ''; position: absolute; inset: 0; pointer-events: none;
-      background: radial-gradient(ellipse 70% 55% at 50% 100%, var(--color-gold-ghost) 0%, transparent 70%);
-    }
-    .qr-tile:hover { border-color: var(--color-border); }
-
-    .qr-mode-label {
-      font-family: var(--font-display);
-      font-size: clamp(20px, 2.5vw, 34px);
-      font-weight: 300; letter-spacing: var(--tracking-wide);
-      color: var(--color-text); text-align: center;
-    }
-
+    /* ── QR box ─────────────────────────────────── */
     .qr-box {
-      background: var(--color-white);
-      padding: 14px; border-radius: var(--radius-md);
-      display: flex; align-items: center; justify-content: center;
-      box-shadow: var(--shadow-card);
-      flex-shrink: 0;
+      background: #fff;
+      padding: 20px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--color-border);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      margin-bottom: 32px;
     }
     .qr-box canvas { display: block; }
 
-    .qr-url {
-      font-family: var(--font-mono); font-size: clamp(10px, 1.1vw, 13px);
-      letter-spacing: var(--tracking-normal); color: var(--color-text-faint);
-      text-align: center; word-break: break-all; line-height: 1.6;
-    }
-
-    .qr-hint {
-      font-size: clamp(10px, 1vw, 13px); letter-spacing: var(--tracking-wider);
-      text-transform: uppercase; color: var(--color-text-faint);
+    /* ── Backup code (claim screen only, de-emphasized) ── */
+    .backup-code {
       text-align: center;
+      opacity: 0.5;
+    }
+    .backup-label {
+      font-size: 10px;
+      letter-spacing: var(--tracking-widest);
+      text-transform: uppercase;
+      color: var(--color-text-faint);
+      margin-bottom: 6px;
+    }
+    .backup-value {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      letter-spacing: 0.25em;
+      color: var(--color-text-dim);
     }
 
-    /* room code badge */
-    .room-badge {
-      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
-      z-index: 30; display: flex; align-items: center; gap: 10px;
-      background: var(--color-overlay); backdrop-filter: blur(8px);
-      border: 1px solid var(--color-border-dim);
-      border-radius: var(--radius-pill); padding: 8px 20px;
-      opacity: 0; transition: opacity 0.4s ease 0.6s;
-    }
-    .room-badge.visible { opacity: 1; }
-    .room-badge-label {
-      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
-      text-transform: uppercase; color: var(--color-text-faint);
+    /* ── Sign-in meta (household name + reset link) ── */
+    .signin-meta {
+      font-size: var(--text-sm);
+      color: var(--color-text-faint);
+      text-align: center;
       font-family: var(--font-mono);
     }
-    .room-badge-code {
-      font-family: var(--font-mono); font-size: var(--text-md);
-      letter-spacing: var(--tracking-wider); font-weight: 500;
+    .reset-sep { margin: 0 8px; color: var(--color-border-dim); }
+    .reset-link {
+      color: var(--color-gold-dim);
+      text-decoration: none;
+      border-bottom: 1px dotted var(--color-gold-dim);
+      padding-bottom: 1px;
+      cursor: pointer;
+    }
+    .reset-link:hover {
       color: var(--color-gold);
+      border-bottom-color: var(--color-gold);
     }
 
-    /* back button */
-    .back-btn {
-      position: fixed; top: 28px; left: 32px; z-index: 30;
-      font-size: var(--text-xs); letter-spacing: var(--tracking-wider);
-      text-transform: uppercase; color: var(--color-text-faint);
-      cursor: pointer; background: none; border: none;
-      font-family: var(--font-mono); display: none;
+    /* ── Apps grid ──────────────────────────────── */
+    .apps-header {
+      position: absolute;
+      top: 110px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: var(--text-md);
+      color: var(--color-text-dim);
+      font-family: var(--font-display);
+      letter-spacing: var(--tracking-wide);
+      text-align: center;
     }
-    .back-btn.visible { display: block; }
+    .apps-header-sub {
+      font-size: var(--text-xs);
+      color: var(--color-text-faint);
+      letter-spacing: var(--tracking-wider);
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+    .apps-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 220px);
+      gap: 24px;
+    }
+    @media (max-width: 800px) {
+      .apps-grid { grid-template-columns: 1fr; width: 100%; max-width: 320px; }
+    }
+    .app-tile {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    .app-tile:hover {
+      border-color: var(--color-gold-dim);
+      background: var(--color-gold-ghost);
+      transform: translateY(-2px);
+    }
+    .app-tile.disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .app-tile.disabled:hover {
+      border-color: var(--color-border);
+      background: var(--color-surface);
+      transform: none;
+    }
+    .app-icon { font-size: 48px; margin-bottom: 12px; }
+    .app-name {
+      font-family: var(--font-display);
+      font-size: var(--text-lg);
+      color: var(--color-text);
+      margin-bottom: 4px;
+    }
+    .app-sub {
+      font-size: var(--text-xs);
+      color: var(--color-text-faint);
+      letter-spacing: var(--tracking-wider);
+    }
 
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(12px); }
-      to   { opacity: 1; transform: translateY(0); }
+    /* ── Log panel (preserved) ──────────────────── */
+    #log-toggle {
+      position: fixed; bottom: 16px; left: 20px; z-index: 999;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider);
+      color: var(--color-gold-dim);
+      cursor: pointer;
+      padding: 4px 8px;
+      border: 1px solid var(--color-border-dim);
+      border-radius: var(--radius-sm);
+    }
+    #log-panel {
+      display: none;
+      position: fixed; bottom: 40px; left: 20px; right: 20px; z-index: 998;
+      background: var(--color-overlay);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-green);
+      max-height: 40vh;
+      overflow-y: auto;
+    }
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .log-header-label {
+      color: var(--color-text-faint);
+      letter-spacing: var(--tracking-wider);
+      text-transform: uppercase;
+      font-size: 10px;
+    }
+    .log-copy {
+      color: var(--color-gold-dim);
+      cursor: pointer;
+      letter-spacing: var(--tracking-wider);
+      font-size: 10px;
+    }
+
+    /* ── Version badge ──────────────────────────── */
+    .ver {
+      position: fixed; bottom: 16px; right: 20px;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider);
+      color: var(--color-gold-dim);
+      opacity: 0.5;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -220,351 +244,401 @@
 
   <div class="bg"></div>
   <div class="wordmark">Elsewhere</div>
-  <button class="back-btn" id="back-btn">← Back</button>
 
   <!-- ══════════════════════════════════════════ -->
-  <!-- SCREEN 1: Setup                           -->
+  <!-- STATE 1: Claiming (unregistered TV)       -->
   <!-- ══════════════════════════════════════════ -->
-  <div class="screen active" id="screen-setup">
-
-    <div class="setup-title">Set Up Your Stage</div>
-    <div class="setup-sub">Select your camera and quality, then continue</div>
-
-    <div class="setup-fields">
-
-      <div class="field-group">
-        <div class="field-label">Camera</div>
-        <select class="field-select" id="cam-select">
-          <option value="">Detecting cameras…</option>
-        </select>
-        <div class="cam-preview-wrap" id="cam-preview-wrap">
-          <video class="cam-preview" id="cam-preview" autoplay muted playsinline></video>
-          <span class="cam-preview-label">Preview</span>
-        </div>
-      </div>
-
-      <div class="field-group">
-        <div class="field-label">Quality</div>
-        <select class="field-select" id="res-select">
-          <option value="hd">HD — 1280×720  (Recommended)</option>
-          <option value="standard">Standard — 640×480  (Lower CPU)</option>
-          <option value="fhd">Full HD — 1920×1080  (High CPU)</option>
-        </select>
-      </div>
-
+  <div class="screen" id="screen-claiming">
+    <div class="title">Set up this TV</div>
+    <div class="sub">Scan with your iPhone's camera to claim this TV into your household.</div>
+    <div class="qr-box">
+      <canvas id="qr-claim" width="220" height="220"></canvas>
     </div>
-
-    <button class="setup-btn" id="setup-continue">Continue →</button>
-
-    <!-- Fallback room code display — always visible on setup screen -->
-    <div style="margin-top:20px;padding:16px 24px;border:1px solid var(--color-border-dim);border-radius:var(--radius-md);background:rgba(0,0,0,.3);">
-      <div style="font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--color-text-faint);margin-bottom:4px;text-align:center;">Room Code</div>
-      <div id="setup-room-code" style="font-family:var(--font-mono);font-size:28px;letter-spacing:.3em;color:var(--color-gold);text-align:center;font-weight:700;">——————</div>
-      <div style="font-size:10px;color:var(--color-text-faint);text-align:center;margin-top:6px;">Players can type this in Elsewhere app or at <span style="color:var(--color-text-dim);">mstepanovich-web.github.io/elsewhere/games/player.html</span></div>
+    <div class="backup-code">
+      <div class="backup-label">Or enter code manually</div>
+      <div class="backup-value" id="backup-code-value">——————</div>
     </div>
-
-    <div style="font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:var(--tracking-wider);color:var(--color-gold);margin-top:10px;">v2.99</div>
-
   </div>
 
   <!-- ══════════════════════════════════════════ -->
-  <!-- SCREEN 2: QR codes                        -->
+  <!-- STATE 2: Sign-in (registered, no session)  -->
   <!-- ══════════════════════════════════════════ -->
-  <div class="screen" id="screen-qr">
-
-    <div class="qr-header">Scan a code on your phone to begin</div>
-
-    <div class="qr-grid">
-
-      <div class="qr-tile qr-tile--karaoke" id="qr-tile-karaoke" style="cursor:pointer;" title="Click to open Stage on this TV">
-        <div class="qr-mode-label">🎤 Karaoke</div>
-        <div class="qr-box">
-          <canvas id="qr-karaoke" width="160" height="160"></canvas>
-        </div>
-        <div class="qr-url" id="qr-karaoke-url">—</div>
-        <div class="qr-hint">Scan to select Karaoke</div>
-      </div>
-
-      <!-- game-semantic, intentionally not themed — cosmic-purple is the Games product identity accent -->
-      <div class="qr-tile" style="border-color:rgba(124,77,255,.22);background:linear-gradient(160deg,rgba(12,8,18,.94) 0%,rgba(6,4,10,.97) 100%);">
-        <div class="qr-mode-label" style="color:rgba(200,180,255,.9);">🎮 Games</div>
-        <div class="qr-box">
-          <canvas id="qr-games" width="160" height="160"></canvas>
-        </div>
-        <div class="qr-url" id="qr-games-url" style="color:rgba(160,130,255,.4);">—</div>
-        <div class="qr-hint" style="color:rgba(160,130,255,.35);">Scan to select Games</div>
-        <a id="qr-games-fallback" href="#" target="_blank" rel="noopener" style="display:block;margin-top:10px;text-align:center;font-family:var(--font-mono);font-size:10px;letter-spacing:var(--tracking-wider);text-transform:uppercase;color:rgba(160,130,255,.5);text-decoration:none;">Don't have the app? Open in browser →</a>
-      </div>
-
+  <div class="screen" id="screen-signin">
+    <div class="title">Sign in to this TV</div>
+    <div class="sub">Scan with your iPhone to continue.</div>
+    <div class="qr-box">
+      <canvas id="qr-signin" width="220" height="220"></canvas>
     </div>
-
+    <div class="signin-meta">
+      <span id="signin-household-name">—</span>
+      <span class="reset-sep">·</span>
+      <a class="reset-link" onclick="handleReset(event)">Not your TV? Reset</a>
+    </div>
   </div>
 
-  <!-- Room code badge (shown on QR screen) -->
-  <div class="room-badge" id="room-badge">
-    <span class="room-badge-label">Room</span>
-    <span class="room-badge-code" id="room-badge-code">——</span>
+  <!-- ══════════════════════════════════════════ -->
+  <!-- STATE 3: Apps grid (authed + registered)   -->
+  <!-- ══════════════════════════════════════════ -->
+  <div class="screen" id="screen-apps">
+    <div class="apps-header">
+      <div id="apps-household-name">—</div>
+      <div class="apps-header-sub">Choose an app</div>
+    </div>
+    <div class="apps-grid">
+      <div class="app-tile" onclick="launchKaraoke()">
+        <div class="app-icon">🎤</div>
+        <div class="app-name">Karaoke</div>
+        <div class="app-sub">Sing together</div>
+      </div>
+      <div class="app-tile" onclick="launchGames()">
+        <div class="app-icon">🃏</div>
+        <div class="app-name">Games</div>
+        <div class="app-sub">Last Card · Trivia · Euchre</div>
+      </div>
+      <div class="app-tile disabled">
+        <div class="app-icon">🧘</div>
+        <div class="app-name">Wellness</div>
+        <div class="app-sub">Coming soon</div>
+      </div>
+    </div>
   </div>
 
-  <script>
-  // ═══════════════════════════════════════
-  //  Config
-  // ═══════════════════════════════════════
-  const BASE_URL   = 'https://mstepanovich-web.github.io/elsewhere';
-  const STAGE_URL  = BASE_URL + '/karaoke/stage.html';
-  const SINGER_URL  = BASE_URL + '/karaoke/singer.html';
-  const GAMES_URL    = BASE_URL + '/games/player.html';
-  const GAMES_TV_URL = BASE_URL + '/games/tv.html';
-
-  // Generate room code — same charset as karaoke/stage.html
-  const CHARS     = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let roomCode    = '';
-  for (let i = 0; i < 6; i++) roomCode += CHARS[Math.floor(Math.random() * CHARS.length)];
-  // Display it immediately on setup screen
-  try {
-    const setupCodeEl = document.getElementById('setup-room-code');
-    if (setupCodeEl) setupCodeEl.textContent = roomCode;
-  } catch(e) { console.error('room code display failed', e); }
-
-  // ═══════════════════════════════════════
-  //  Screen management
-  // ═══════════════════════════════════════
-  function goTo(id) {
-    document.querySelectorAll('.screen').forEach(s => {
-      s.classList.remove('visible');
-      setTimeout(() => {
-        s.classList.remove('active');
-        if (s.id === id) {
-          s.classList.add('active');
-          requestAnimationFrame(() => s.classList.add('visible'));
-        }
-      }, 200);
-    });
-    document.getElementById('back-btn').classList.toggle('visible', id !== 'screen-setup');
-    document.getElementById('room-badge').classList.toggle('visible', id === 'screen-qr');
-  }
-
-  // Show first screen
-  setTimeout(() => document.getElementById('screen-setup').classList.add('visible'), 60);
-
-  document.getElementById('back-btn').addEventListener('click', () => goTo('screen-setup'));
-
-  // ═══════════════════════════════════════
-  //  Camera detection + preview
-  // ═══════════════════════════════════════
-  let previewStream = null;
-  const camSelect   = document.getElementById('cam-select');
-  const previewWrap = document.getElementById('cam-preview-wrap');
-  const previewVid  = document.getElementById('cam-preview');
-
-  async function detectCameras() {
-    try {
-      // Need a temp stream to trigger permission + get labels
-      if (!navigator.mediaDevices) {
-        camSelect.innerHTML = '<option value="">No camera access (HTTPS required)</option>';
-        return;
-      }
-      const tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      tmp.getTracks().forEach(t => t.stop());
-
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const cams    = devices.filter(d => d.kind === 'videoinput');
-
-      camSelect.innerHTML = '';
-      cams.forEach((cam, i) => {
-        const opt = document.createElement('option');
-        opt.value = cam.deviceId;
-        opt.textContent = cam.label || `Camera ${i + 1}`;
-        camSelect.appendChild(opt);
-      });
-
-      if (cams.length === 0) {
-        camSelect.innerHTML = '<option value="">No cameras found</option>';
-        return;
-      }
-
-      startPreview(cams[0].deviceId);
-    } catch (e) {
-      camSelect.innerHTML = '<option value="">Camera access denied</option>';
-    }
-  }
-
-  async function startPreview(deviceId) {
-    if (previewStream) previewStream.getTracks().forEach(t => t.stop());
-    try {
-      previewStream = await navigator.mediaDevices.getUserMedia({
-        video: deviceId ? { deviceId: { exact: deviceId } } : true,
-        audio: false
-      });
-      previewVid.srcObject = previewStream;
-      previewWrap.classList.add('visible');
-    } catch (e) {
-      previewWrap.classList.remove('visible');
-    }
-  }
-
-  camSelect.addEventListener('change', () => {
-    if (camSelect.value) startPreview(camSelect.value);
-  });
-
-  detectCameras().catch(e => {
-    console.warn('Camera detection failed, continuing anyway:', e);
-    camSelect.innerHTML = '<option value="">No camera (tap Continue to proceed)</option>';
-  });
-
-  // ═══════════════════════════════════════
-  //  Continue → show QR screen
-  // ═══════════════════════════════════════
-  document.getElementById('setup-continue').addEventListener('click', () => {
-    // Stop preview — karaoke/stage.html will open its own camera stream
-    if (previewStream) { previewStream.getTracks().forEach(t => t.stop()); previewStream = null; }
-
-    const selectedCam = camSelect.value;
-    const selectedRes = document.getElementById('res-select').value;
-
-    // Karaoke QR → karaoke/singer.html on the performer's phone
-    // TV navigates itself to karaoke/stage.html with camera/res params
-    const karaokeUrl = `${SINGER_URL}?code=${roomCode}`;
-    // Games QR deep-links the iOS app via the elsewhere:// scheme.
-    // Browsers without the app use the "Open in browser" fallback link below the QR.
-    const gamesMgrName = encodeURIComponent('Manager');
-    const gamesUrl        = `elsewhere://games?room=${roomCode}&mgrname=${gamesMgrName}`;
-    const gamesFallbackUrl = `${GAMES_URL}?room=${roomCode}&mgr=1`;
-    const gamesTvUrl  = `${GAMES_TV_URL}?room=${roomCode}`;
-
-    // TV goes to stage immediately after showing QR
-    const stageUrl = `${STAGE_URL}?room=${roomCode}&cam=${encodeURIComponent(selectedCam)}&res=${selectedRes}`;
-
-    // Set room badge
-    document.getElementById('room-badge-code').textContent = roomCode;
-
-    // Render QR codes
-    renderQR('qr-karaoke', karaokeUrl);
-
-    // Show URLs
-    document.getElementById('qr-karaoke-url').textContent = karaokeUrl;
-    renderQR('qr-games', gamesUrl);
-    document.getElementById('qr-games-url').textContent = gamesUrl;
-    const gamesFallbackEl = document.getElementById('qr-games-fallback');
-    if (gamesFallbackEl) gamesFallbackEl.href = gamesFallbackUrl;
-
-    goTo('screen-qr');
-
-    // Listen for phone scan via Agora — the channel they join tells us the mode.
-    // karaoke/singer.html joins elsewhere_<ROOM> (karaoke); games/player.html joins elsewhere_g<ROOM>.
-    const AGORA_APP_ID = 'b2c6543a9ed946829e6526cb68c7efc9';
-    const CHAN_PREFIX  = 'elsewhere_';
-
-    tvLog('Waiting for phone to join room: ' + roomCode);
-
-    const agoraWatcher = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
-    agoraWatcher.on('user-joined', (user) => {
-      tvLog('→ Phone joined karaoke channel — navigating to stage...');
-      agoraWatcher.leave().catch(()=>{});
-      window.location.href = stageUrl;
-    });
-
-    agoraWatcher.join(AGORA_APP_ID, CHAN_PREFIX + roomCode, null, null)
-      .then(() => tvLog('Agora watching channel: ' + CHAN_PREFIX + roomCode))
-      .catch(e => tvLog('Agora error: ' + e.message));
-
-    // Watch games channel
-    const agoraGamesWatcher = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
-    agoraGamesWatcher.on('user-joined', (user) => {
-      tvLog('Games user joined — navigating to games TV...');
-      agoraGamesWatcher.leave().catch(()=>{});
-      window.location.href = gamesTvUrl;
-    });
-    agoraGamesWatcher.join(AGORA_APP_ID, CHAN_PREFIX + 'g' + roomCode, null, null)
-      .then(() => tvLog('Agora watching games channel: ' + CHAN_PREFIX + 'g' + roomCode))
-      .catch(e => tvLog('Agora games error: ' + e.message));
-  });
-
-  // ═══════════════════════════════════════
-  //  QR rendering (qrcodejs from CDN)
-  // ═══════════════════════════════════════
-  function renderQR(canvasId, url) {
-    const canvas = document.getElementById(canvasId);
-    const size   = canvas.width;
-
-    if (typeof QRCode !== 'undefined') {
-      // qrcodejs — render into temp div then copy to canvas
-      const tmp = document.createElement('div');
-      document.body.appendChild(tmp);
-      tmp.style.cssText = 'position:fixed;left:-9999px;top:0;';
-      new QRCode(tmp, { text: url, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
-      const img = tmp.querySelector('img');
-      if (img) {
-        img.onload = () => {
-          const ctx = canvas.getContext('2d');
-          ctx.fillStyle = '#fff';
-          ctx.fillRect(0, 0, size, size);
-          ctx.drawImage(img, 0, 0, size, size);
-          tmp.remove();
-        };
-      } else {
-        const qrCanvas = tmp.querySelector('canvas');
-        if (qrCanvas) {
-          const ctx = canvas.getContext('2d');
-          ctx.fillStyle = '#fff';
-          ctx.fillRect(0, 0, size, size);
-          ctx.drawImage(qrCanvas, 0, 0, size, size);
-        }
-        tmp.remove();
-      }
-      return;
-    }
-
-    // Fallback: draw a placeholder with the URL as text
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, size, size);
-    ctx.fillStyle = '#333';
-    ctx.font = '11px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('QR loading…', size / 2, size / 2 - 6);
-    ctx.fillText(url.slice(0, 32), size / 2, size / 2 + 12);
-  }
-
-  const _logs = [];
-  function tvLog(msg) {
-    const ts = new Date().toISOString().slice(11,19);
-    const line = ts + ' ' + msg;
-    _logs.push(line);
-    console.log('[TV]', msg);
-    const el = document.getElementById('tv-debug');
-    if (el) el.textContent = msg;
-    const panel = document.getElementById('log-lines');
-    if (panel) {
-      const div = document.createElement('div');
-      div.style.cssText = 'border-bottom:1px solid rgba(255,255,255,.06);padding:3px 0;';
-      div.textContent = line;
-      panel.appendChild(div);
-      panel.scrollTop = panel.scrollHeight;
-    }
-  }
-  function toggleLog() {
-    const p = document.getElementById('log-panel');
-    p.style.display = p.style.display === 'none' ? 'block' : 'none';
-  }
-  function copyLog() {
-    navigator.clipboard.writeText(_logs.join('\n')).then(() => {
-      const btn = document.querySelector('#log-panel span:last-child');
-      if (btn) { btn.textContent = 'COPIED ✓'; setTimeout(() => btn.textContent = 'COPY', 2000); }
-    });
-  }
-  </script>
-
-  <!-- Debug log panel -->
-  <div id="log-toggle" onclick="toggleLog()" style="position:fixed;bottom:16px;left:20px;z-index:999;font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);cursor:pointer;padding:4px 8px;border:1px solid var(--color-border-dim);border-radius:var(--radius-sm);">LOG</div>
-
-  <div id="log-panel" style="display:none;position:fixed;bottom:40px;left:20px;right:20px;z-index:998;background:var(--color-overlay);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;font-family:var(--font-mono);font-size:11px;color:var(--color-green);max-height:40vh;overflow-y:auto;">
-    <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-      <span style="color:var(--color-text-faint);letter-spacing:var(--tracking-wider);text-transform:uppercase;font-size:10px;">Debug Log</span>
-      <span onclick="copyLog()" style="color:var(--color-gold-dim);cursor:pointer;letter-spacing:var(--tracking-wider);font-size:10px;">COPY</span>
+  <!-- Log panel -->
+  <div id="log-toggle" onclick="toggleLog()">LOG</div>
+  <div id="log-panel">
+    <div class="log-header">
+      <span class="log-header-label">Debug Log</span>
+      <span class="log-copy" onclick="copyLog()">COPY</span>
     </div>
     <div id="log-lines"></div>
   </div>
+
+  <div class="ver">v2.99</div>
+
+  <script>
+    // ════════════════════════════════════════════════════════════
+    //  Session 4.10 Part C — tv2.html boot + state machine
+    // ════════════════════════════════════════════════════════════
+    //
+    // This TV browser doesn't have a Supabase session on first paint.
+    // The boot sequence is:
+    //
+    //   1. get-or-create device_key in localStorage
+    //   2. wait for shell/auth.js to register window.sb + window.elsewhere
+    //   3. subscribe to 'tv_device:<device_key>' realtime channel BEFORE
+    //      rendering any QR — Supabase broadcasts aren't buffered for
+    //      late-joiners, so a claim flow on the phone that publishes
+    //      before we subscribe is lost
+    //   4. resolve current state: (authed? registered?) — via a session
+    //      check + rpc_tv_is_registered (anon-callable, db/007)
+    //   5. branch: show claim QR / show signin QR / show apps grid
+    //
+    //  When a handoff message arrives on the realtime channel, the
+    //  handler calls supabase.auth.setSession() then re-runs the state
+    //  resolution from step 4. This covers the race where the TV
+    //  started unregistered, the user claimed it on their phone, and
+    //  the handoff arrived mid-flight — the re-query finds the newly
+    //  inserted tv_devices row and we transition to apps.
+    //
+    //  Concurrent renderCurrentState calls can cause a brief visual
+    //  flicker (final state resolves correctly regardless). Render-
+    //  epoch fix is deferred — see docs/DEFERRED.md "tv2.html render
+    //  race — concurrent renderCurrentState calls".
+
+    const DEVICE_KEY_STORAGE = 'elsewhere.tv.device_key';
+    const CLAIM_BASE_URL     = 'https://mstepanovich-web.github.io/elsewhere/claim.html';
+
+    let deviceKey       = null;
+    let realtimeChannel = null;
+
+    (async function boot() {
+      tvLog('boot: starting');
+      try {
+        deviceKey = getOrCreateDeviceKey();
+        tvLog('device_key: ' + deviceKey.slice(0, 8) + '…');
+
+        await waitForShell();
+        tvLog('shell: ready');
+
+        await subscribeToHandoffChannel();
+        tvLog('realtime: subscribed');
+
+        await renderCurrentState();
+      } catch (e) {
+        tvLog('boot error: ' + (e?.message || e));
+        // Safest fallback — show claim screen.
+        showClaimScreen();
+      }
+    })();
+
+    // ─── Device key lifecycle ───────────────────────────────────
+    function getOrCreateDeviceKey() {
+      let key = null;
+      try { key = localStorage.getItem(DEVICE_KEY_STORAGE); } catch (_) {}
+      if (!key) {
+        key = (crypto.randomUUID && crypto.randomUUID()) ||
+              (Date.now().toString(36) + Math.random().toString(36).slice(2));
+        try { localStorage.setItem(DEVICE_KEY_STORAGE, key); } catch (_) {}
+        tvLog('device_key: generated new');
+      }
+      return key;
+    }
+
+    function handleReset(ev) {
+      if (ev) ev.preventDefault();
+      try { localStorage.removeItem(DEVICE_KEY_STORAGE); } catch (_) {}
+      tvLog('reset: cleared device_key, reloading');
+      location.reload();
+    }
+
+    // ─── Shell readiness ────────────────────────────────────────
+    // shell/auth.js is loaded as a type=module script (deferred).
+    // The inline <script> that runs this IIFE executes before module
+    // scripts. Wait for either the ready promise (if already there)
+    // or the sb-ready event.
+    async function waitForShell() {
+      if (window.elsewhere?.ready) {
+        await window.elsewhere.ready;
+        return;
+      }
+      await new Promise(resolve => {
+        document.addEventListener('elsewhere:sb-ready', async () => {
+          await window.elsewhere.ready;
+          resolve();
+        }, { once: true });
+      });
+    }
+
+    // ─── Realtime subscription (must happen BEFORE rendering QR) ──
+    async function subscribeToHandoffChannel() {
+      realtimeChannel = window.sb.channel('tv_device:' + deviceKey);
+      realtimeChannel.on('broadcast', { event: 'session_handoff' }, handleSessionHandoff);
+
+      await new Promise((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (!settled) { settled = true; reject(new Error('realtime subscribe timed out')); }
+        }, 5000);
+        realtimeChannel.subscribe(status => {
+          if (settled) return;
+          if (status === 'SUBSCRIBED') {
+            settled = true; clearTimeout(timer); resolve();
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            settled = true; clearTimeout(timer); reject(new Error('realtime ' + status));
+          }
+        });
+      });
+    }
+
+    // ─── State resolution + render ──────────────────────────────
+    async function renderCurrentState() {
+      const { data: sessionData } = await window.sb.auth.getSession();
+      const session = sessionData?.session || null;
+
+      const { data: info, error } = await window.sb.rpc('rpc_tv_is_registered', {
+        p_device_key: deviceKey,
+      });
+      if (error) {
+        tvLog('rpc_tv_is_registered error: ' + error.message);
+        // Safest default: claim screen. The user can try to claim;
+        // if the device is already claimed to someone else, the RPC
+        // will refuse.
+        showClaimScreen();
+        return;
+      }
+
+      if (session && info?.registered) {
+        tvLog('state: authed + registered → apps');
+        bumpHeartbeat();
+        showAppsScreen(info);
+      } else if (info?.registered) {
+        tvLog('state: registered, no session → signin');
+        showSigninScreen(info);
+      } else {
+        tvLog('state: unregistered → claim');
+        showClaimScreen();
+      }
+    }
+
+    // Idempotent handoff handler — re-queries state + re-renders so
+    // the "was unregistered when handoff started, claimed mid-flight"
+    // race resolves correctly. setSession is effectively idempotent
+    // (calling it twice with the same tokens is fine).
+    async function handleSessionHandoff({ payload }) {
+      tvLog('realtime: received session_handoff');
+      try {
+        const { error } = await window.sb.auth.setSession({
+          access_token:  payload.access_token,
+          refresh_token: payload.refresh_token,
+        });
+        if (error) throw error;
+        tvLog('auth: setSession OK');
+        await renderCurrentState();
+      } catch (e) {
+        tvLog('handoff error: ' + (e?.message || e));
+      }
+    }
+
+    async function bumpHeartbeat() {
+      try {
+        await window.sb.rpc('rpc_tv_heartbeat', { p_device_key: deviceKey });
+        tvLog('heartbeat: ok');
+      } catch (e) {
+        // Non-fatal — don't block rendering on heartbeat failure.
+        tvLog('heartbeat error (non-fatal): ' + (e?.message || e));
+      }
+    }
+
+    // ─── Screen helpers ─────────────────────────────────────────
+    function showClaimScreen() {
+      const url = CLAIM_BASE_URL + '?device_key=' + encodeURIComponent(deviceKey);
+      renderQR('qr-claim', url);
+
+      // Backup code: first 6 hex chars of the UUID, uppercased,
+      // hyphens stripped. Deliberately de-emphasized in styling —
+      // the QR is the primary affordance.
+      const backup = deviceKey.replace(/-/g, '').slice(0, 6).toUpperCase();
+      document.getElementById('backup-code-value').textContent = backup;
+
+      goTo('screen-claiming');
+    }
+
+    function showSigninScreen(info) {
+      const url = CLAIM_BASE_URL + '?device_key=' + encodeURIComponent(deviceKey) + '&intent=signin';
+      renderQR('qr-signin', url);
+
+      const displayed =
+        info?.tv_display_name ? (info.household_name || '') + ' · ' + info.tv_display_name :
+        (info?.household_name || 'this TV');
+      document.getElementById('signin-household-name').textContent = displayed;
+
+      goTo('screen-signin');
+    }
+
+    function showAppsScreen(info) {
+      const displayed =
+        info?.tv_display_name ? (info.household_name || '') + ' · ' + info.tv_display_name :
+        (info?.household_name || '');
+      document.getElementById('apps-household-name').textContent = displayed;
+      goTo('screen-apps');
+    }
+
+    function goTo(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      const el = document.getElementById(id);
+      if (el) el.classList.add('active');
+    }
+
+    // ─── App launchers ──────────────────────────────────────────
+    // Room codes stay unchanged from pre-4.10 behavior: tv2.html
+    // generates a per-launch code and passes ?room=X. Session 5's
+    // session_participants work will replace room codes with a
+    // proper session identity; for 4.10 we keep compatibility.
+    function launchKaraoke() {
+      const room = generateRoomCode();
+      tvLog('launch: karaoke room=' + room);
+      location.href = 'karaoke/stage.html?room=' + room;
+    }
+
+    function launchGames() {
+      const room = generateRoomCode();
+      tvLog('launch: games room=' + room);
+      location.href = 'games/tv.html?room=' + room;
+    }
+
+    function generateRoomCode() {
+      const ALPHABET = 'ABCDEFGHIJKLMNPQRSTUVWXYZ23456789'; // no 0/1/O/I
+      const bytes = new Uint8Array(6);
+      crypto.getRandomValues(bytes);
+      let out = '';
+      for (const b of bytes) out += ALPHABET[b % ALPHABET.length];
+      return out;
+    }
+
+    // ─── QR rendering (qrcodejs) ────────────────────────────────
+    // Prefer the synchronously-drawn canvas inside the temp div over
+    // the data-URL <img> sibling. Session 4.9 lesson: drawImage on a
+    // fresh data-URL img can paint nothing if the pixel buffer hasn't
+    // decoded yet even when .complete flips to true.
+    function renderQR(canvasId, url) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const size = canvas.width;
+      const ctx  = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, size, size);
+
+      if (typeof QRCode === 'undefined') {
+        ctx.fillStyle = '#333';
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('QR library loading…', size / 2, size / 2);
+        return;
+      }
+
+      const tmp = document.createElement('div');
+      tmp.style.cssText = 'position:fixed;left:-9999px;top:0;';
+      document.body.appendChild(tmp);
+      try {
+        new QRCode(tmp, { text: url, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
+      } catch (e) {
+        tvLog('QR ctor error: ' + (e?.message || e));
+        tmp.remove();
+        return;
+      }
+
+      const qrCanvas = tmp.querySelector('canvas');
+      const qrImg    = tmp.querySelector('img');
+
+      if (qrCanvas) {
+        try { ctx.drawImage(qrCanvas, 0, 0, size, size); } catch (e) { tvLog('QR draw: ' + e.message); }
+        tmp.remove();
+        return;
+      }
+
+      if (qrImg) {
+        const paint = () => {
+          try { ctx.drawImage(qrImg, 0, 0, size, size); } catch (e) { tvLog('QR draw: ' + e.message); }
+          tmp.remove();
+        };
+        if (typeof qrImg.decode === 'function') {
+          qrImg.decode().then(paint).catch(() => tmp.remove());
+        } else {
+          qrImg.onload = paint;
+          if (qrImg.complete && qrImg.naturalWidth > 0) paint();
+        }
+        return;
+      }
+
+      tmp.remove();
+    }
+
+    // ─── Log (preserved) ────────────────────────────────────────
+    const _logs = [];
+    function tvLog(msg) {
+      const ts = new Date().toISOString().slice(11, 19);
+      const line = ts + ' ' + msg;
+      _logs.push(line);
+      console.log('[TV]', msg);
+      const panel = document.getElementById('log-lines');
+      if (panel) {
+        const div = document.createElement('div');
+        div.style.cssText = 'border-bottom:1px solid rgba(255,255,255,.06);padding:3px 0;';
+        div.textContent = line;
+        panel.appendChild(div);
+        panel.scrollTop = panel.scrollHeight;
+      }
+    }
+    function toggleLog() {
+      const p = document.getElementById('log-panel');
+      p.style.display = p.style.display === 'none' || !p.style.display ? 'block' : 'none';
+    }
+    function copyLog() {
+      navigator.clipboard.writeText(_logs.join('\n')).then(() => {
+        const btn = document.querySelector('.log-copy');
+        if (btn) { btn.textContent = 'COPIED ✓'; setTimeout(() => btn.textContent = 'COPY', 2000); }
+      });
+    }
+  </script>
 
 </body>
 </html>
