@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Session-start orientation
+
+At the start of any session, read these docs in order for current context:
+
+- **`docs/ROADMAP.md`** — current session pipeline, active work, queued sessions. Points at the active `SESSION-X.X.X-PLAN.md` if one exists.
+- **`docs/DEFERRED.md`** — backlog items, append-only. Check for items relevant to the session's scope before planning so they can be promoted or re-scoped.
+- **`docs/SESSION-X.X.X-PLAN.md`** — individual session plans, created at the start of each planning session. The active one is named in `ROADMAP.md` under "Active session".
+
+Both `ROADMAP.md` and `DEFERRED.md` are updated at the end of each session. To check freshness, compare `git log -1 --format=%H docs/ROADMAP.md` against `git log -1 --format=%H` on main. If ROADMAP.md wasn't updated in the most recent feature commit or within 2-3 commits of it, flag to the user that the roadmap may be out of date before acting on it.
+
 ## What this repo is
 
 Elsewhere is a multi-device browser party app (Karaoke, Games) that pairs a TV/big-screen "host" page with phone "client" pages over Agora RTC. There is no build step — every entry point is a static HTML file served from GitHub Pages at `https://mstepanovich-web.github.io/elsewhere`.
