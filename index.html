@@ -961,26 +961,6 @@
       color: var(--color-text-dim);
       margin-top: 4px;
     }
-    .now-playing-banner {
-      display: none;
-      padding: 12px 16px;
-      background: var(--color-gold-ghost);
-      border-left: 3px solid var(--color-gold-dim);
-      border-radius: var(--radius-sm);
-      margin-bottom: 20px;
-    }
-    .now-playing-banner.visible { display: block; }
-    .now-playing-label {
-      color: var(--color-gold-dim);
-      font-size: 10px;
-      letter-spacing: var(--tracking-widest);
-      text-transform: uppercase;
-      margin-bottom: 4px;
-    }
-    .now-playing-body {
-      font-size: var(--text-sm);
-      color: var(--color-text);
-    }
     .app-tiles {
       display: flex;
       flex-direction: column;
@@ -1444,10 +1424,6 @@
       <div class="tv-remote-header">
         <div class="page-title" id="tv-remote-title">—</div>
         <div class="tv-remote-household" id="tv-remote-household">—</div>
-      </div>
-      <div class="now-playing-banner" id="now-playing-banner">
-        <div class="now-playing-label">Now playing</div>
-        <div class="now-playing-body" id="now-playing-body">—</div>
       </div>
       <div class="app-tiles">
         <div class="app-tile" onclick="handleTvRemoteTileTap('karaoke')">
@@ -1918,13 +1894,6 @@
     // Session 4.10.2 — Phone-as-remote
     // ════════════════════════════════════════════════════════════════════
 
-    // Module-level state: last-launched app per TV, keyed by device_key.
-    // Persists across screen mount/unmount (Decision 2a) — re-entering
-    // screen-tv-remote for the same TV re-renders the banner without
-    // losing it. Staleness risk accepted per Decision 7 (no TV→phone
-    // sync in Phase 1).
-    const nowPlayingByDeviceKey = new Map();
-
     // ── Part A: loadUserTvs + Your TVs picker ───────────────────────
 
     // Returns [{device_key, household_id, household_name, tv_display_name,
@@ -2063,27 +2032,36 @@
       const back = document.getElementById('tv-remote-back');
       back.style.display = (origin === 'picker') ? '' : 'none';
 
-      // Restore any persisted "now playing" state for this device_key.
-      const np = nowPlayingByDeviceKey.get(device_key);
-      if (np) showNowPlaying(np.app, np.room);
-      else clearNowPlaying();
-
       goTo('screen-tv-remote');
     }
 
+    // Phone follows the TV into the app as the launching user's role
+    // (singer for karaoke, manager for games). Navigation is
+    // unconditional on publish success — if the broadcast fails, the
+    // phone still enters the participant app; the user can back out
+    // to elsewhere home if the TV didn't launch. The phone's session
+    // is independent of the TV's, so the phone-side app page will
+    // function regardless.
     async function handleTvRemoteTileTap(app) {
       const screen     = document.getElementById('screen-tv-remote');
       const device_key = screen.dataset.deviceKey;
       if (!device_key) return;
 
+      if (app === 'wellness') return; // no destination yet; Wellness is hidden on phone anyway
+
       const room = generateRoomCode();
-      try {
-        await publishLaunchApp(device_key, app, room);
-        nowPlayingByDeviceKey.set(device_key, { app, room, at: Date.now() });
-        showNowPlaying(app, room);
-      } catch (e) {
-        console.error('[elsewhere] launch_app publish failed:', e);
-        alert('Could not reach your TV. Check its connection and try again.');
+
+      // Fire-and-forget the broadcast. Log failures but don't block
+      // navigation or alert the user — the phone-side app works on
+      // its own regardless of TV state.
+      publishLaunchApp(device_key, app, room).catch(e => {
+        console.error('[elsewhere] launch_app publish failed (non-blocking):', e);
+      });
+
+      if (app === 'karaoke') {
+        location.href = 'karaoke/singer.html?code=' + encodeURIComponent(room);
+      } else if (app === 'games') {
+        location.href = 'games/player.html?room=' + encodeURIComponent(room) + '&mgr=1';
       }
     }
 
@@ -2126,20 +2104,6 @@
 
       await channel.unsubscribe();
       window.sb.removeChannel(channel);
-    }
-
-    function showNowPlaying(app, room) {
-      const banner = document.getElementById('now-playing-banner');
-      const body   = document.getElementById('now-playing-body');
-      const label  = app === 'karaoke' ? 'Karaoke' : app === 'games' ? 'Games' : app;
-      body.textContent = label + ' · Room ' + room;
-      banner.classList.add('visible');
-    }
-
-    function clearNowPlaying() {
-      const banner = document.getElementById('now-playing-banner');
-      banner.classList.remove('visible');
-      document.getElementById('now-playing-body').textContent = '';
     }
 
     // ── Foreground refresh ──────────────────────────────────────────
