@@ -1782,8 +1782,15 @@
         status.textContent = 'Handing off to TV…';
         await publishSessionHandoff(device_key);
 
-        status.style.color = 'var(--color-green)';
-        status.textContent = '✓ TV claimed — head to the TV to continue.';
+        // Session 4.10.2 Part E (shipped in 4.10.3 follow-up):
+        // auto-route phone into screen-tv-remote for the claimed TV
+        // instead of stranding user on a "head to the TV" success
+        // screen. Targets the specific claimed TV directly (skipping
+        // the n-branch in enterYourTvsFlow) so it works cleanly even
+        // when user has ≥2 TVs. Reuses the sessionStorage bridge
+        // added in 4.10.3 Part A for in-app back-nav consistency.
+        try { sessionStorage.setItem('elsewhere.active_tv.device_key', device_key); } catch (_) {}
+        enterTvRemoteScreen(device_key, { origin: 'post-claim' });
       } catch (e) {
         showTvClaimError(e?.message || String(e));
         btn.disabled = false;
