@@ -83,7 +83,11 @@ On landing at `tv2.html`, its existing boot logic runs: device_key lookup → `r
 
 ### 5. Button placement and style
 
-**Placement:** Fixed position top-left of the viewport. Inset 12px from both edges. `z-index` above app chrome but below modals.
+**Placement:** Fixed position top-right of the viewport. `z-index` above app chrome but below modals.
+
+**Specific coordinates:** `top: max(14px, env(safe-area-inset-top)); right: 14px;`
+
+**Deviation from original spec:** Original plan specified top-left, matching iOS back-button convention. During pre-Part-B re-read of singer.html, we discovered its existing LOG button (line 1776) already occupies top-left at `top: max(14px, env(safe-area-inset-top)); left: 14px;` and is production-visible per CLAUDE.md's "primary way users report bugs" convention. Stacking a back-button below LOG felt cluttered for a two-purpose top-left region. Top-right preserves clear single-purpose navigation semantics; the "← Elsewhere" leading arrow remains semantically unambiguous regardless of corner.
 
 **Style:**
 - Text: `← Elsewhere`
@@ -111,6 +115,25 @@ TV-side consequence if publish fails: TV stays on `stage.html` / `games/tv.html`
 **Decision:** Acceptable for Phase 1. Same risk tier as `launch_app`'s own delivery failure. Adding heartbeat + auto-reconnect on TV pages is out of scope — it's a broader resilience concern that would need to apply to the whole realtime layer (session_handoff, launch_app, exit_app) consistently. Cross-reference: tracked implicitly under the general "Phase 1 tolerates manual recovery seams" philosophy established in Session 4.10's planning.
 
 If the manual-refresh recovery turns out to be a real pain point during customer testing, file as DEFERRED with a follow-up scope.
+
+### 8. In-app pages need `shell/auth.js` loaded
+
+Any phone or TV page that publishes or subscribes to realtime events needs `window.sb` (the Supabase client) on the global scope. The shell — `shell/auth.js` — is what exposes this.
+
+**Pages in scope during 4.10.3:**
+- `karaoke/stage.html` — already loaded shell/auth.js pre-4.10.3 (at line 13, for admin gear feature from Session 4.9)
+- `games/tv.html` — **added in Part A** (commit `f43369a`) to support the exit_app listener
+- `karaoke/singer.html` — **add in Part B** to support publishExitApp
+- `games/player.html` — **add in Part C** (expected; verify at Part C start)
+
+**Bounded risk profile (same for each addition):**
+- Module script loads async, no blocking work on page init
+- No DOM mutation triggered by shell on load
+- Deep-link handlers only fire on Capacitor `appUrlOpen` events from `elsewhere://` URLs; internal same-origin navigation does not trigger them
+- Pre-existing page code in each target doesn't use `window.sb` or `window.elsewhere`, so no namespace collision
+- Cost: one extra ~50kb network download on first page visit, cached afterward
+
+The pattern emerged during Part A when games/tv.html surfaced the missing dependency. Consolidating here so Parts B and C don't rediscover the same decision.
 
 ---
 
@@ -147,7 +170,7 @@ Each part is a standalone commit. Review pause point between each.
 Covers `karaoke/singer.html` only. `karaoke/audience.html` intentionally deferred — its role semantics (how audience joins, whether they have agency to leave, what "home" means for a non-household member) aren't specified yet; depends on Session 5's per-app role manifest work. Filed as separate DEFERRED entry.
 
 - Add inline `<style>` for `.back-to-elsewhere` class on each page (style block duplicated — acceptable per no-build-step convention)
-- Add `<button onclick="handleBackToElsewhere()">← Elsewhere</button>` top-left on each page
+- Add `<button onclick="handleBackToElsewhere()">← Elsewhere</button>` top-right on each page (see Architecture Decision 5 for rationale)
 - Inline `publishExitApp` helper in each page's script block
 - Inline `handleBackToElsewhere()` wrapper: reads device_key from localStorage or pre-launch query param state (see note below), calls `publishExitApp`, then `location.href = '../index.html'`
 
@@ -160,13 +183,13 @@ Covers `karaoke/singer.html` only. `karaoke/audience.html` intentionally deferre
 
 This requires a **small index.html adjustment in Part A** (or Part B — flag during execution): set the sessionStorage key inside `handleTvRemoteTileTap` just before `location.href`. Minor, one line.
 
-**Files touched in Part B:** `karaoke/singer.html`. (`index.html` sessionStorage bridge was folded into Part A, commit `f43369a`.)
+**Files touched in Part B:** `karaoke/singer.html` (adds `<script type="module" src="../shell/auth.js">` to `<head>` per Architecture Decision 8, plus inline back-button markup, CSS, and JS helpers). (`index.html` sessionStorage bridge was folded into Part A, commit `f43369a`.)
 
 ### Part C — Back-to-Elsewhere button on `games/player.html`
 
 Same pattern as Part B: inline style block, inline button, inline `publishExitApp`, inline `handleBackToElsewhere`. Reads the same `elsewhere.active_tv.device_key` sessionStorage key set by index.html.
 
-**Files touched in Part C:** `games/player.html`.
+**Files touched in Part C:** `games/player.html`. Per Architecture Decision 8, expect to also add `<script type="module" src="../shell/auth.js">` to player.html's `<head>` — confirm at Part C start by grepping for existing shell references.
 
 ### Part D — Verification
 
@@ -188,6 +211,11 @@ Create `docs/SESSION-4.10.3-VERIFICATION.md` patterned on `PART-E-VERIFICATION.m
    - Game starts cleanly (Last Card or Trivia)
    - Game state syncs between phone and TV
    - Manager bar on phone works as expected
+7. **Shell-load smoke test (cumulative Part A + B + C addition).** For each page where `shell/auth.js` was added during 4.10.3 (`games/tv.html` in Part A; `karaoke/singer.html` in Part B; `games/player.html` in Part C), verify:
+   - Page loads without console errors on fresh browser visit
+   - Existing app functionality works end-to-end (singing on singer.html, game play on player.html, TV lobby on games/tv.html)
+   - No auth-related prompts or flows fire spontaneously on page load
+   - `window.sb` is defined post-load (devtools console check: `typeof window.sb === 'object'`)
 
 Skip flows requiring a second account (still gated on Part E Flows 3+4 DEFERRED).
 
