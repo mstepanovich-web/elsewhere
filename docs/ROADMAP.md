@@ -6,43 +6,17 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 
 ## Active session
 
-**Session 4.10.2 — Phone-as-remote UX fixes**
-- **Status:** Parts A+B+C shipped + navigation/await fixes landed. Phone-as-remote verified working end-to-end on real hardware. Parts D–G (sign-in copy rewrite, post-claim transition, verification doc, PHASE1-NOTES + version bump) remain.
-- **Estimated:** 1.5–2 hours
-- **Includes:** phone-as-remote redesign + TV sign-in screen copy rewrite
-- **Why it's next:** Session 4.10 verified end-to-end (see `PART-E-VERIFICATION.md`) but exposed three coupled UX failures that block real customer usability. Smaller follow-up session to resolve.
-
-### Commits shipped in 4.10.2
-
-- `4a331d6` — Parts A+B (phone Your TVs + remote control)
-- `4372a20` — Part C (TV launch listener + display-only grid)
-- `56e6e3d` — Navigation fix (phone follows TV into app)
-- `7b81f70` — Await fix (phone waits for publish before navigating)
-
-### Deferred items that emerged during 4.10.2
-
-Five High-priority DEFERRED entries captured during design discussion + testing. All feed into Session 5's multi-user + session-manager work:
-
-- Phone back-to-Elsewhere + TV teardown
-- Multi-phone session coordination + session manager role
-- Proximity self-declaration
-- Session manager inactivity + household-admin override
-- Per-app role manifest
-
-See `docs/DEFERRED.md` for full entries.
+**Session 4.10.1 — Phone-based household pre-invites (SMS)**
+- **Status:** queued, not yet started (promoted after 4.10.3 closed)
+- **Estimated:** 1–2 hours
+- **Why it's next:** 4.10.2 and 4.10.3 shipped their core UX work. 4.10.1 is the remaining 4.10-family follow-up. Non-blocking for current usage but needed before scaling household onboarding past direct email invites.
+- **Reference:** `DEFERRED.md` → "Phone-based household pre-invites (SMS verification)"
 
 ---
 
 ## Queued sessions
 
-> **Note on numbering:** Session numbers reflect topical relation to 4.10, not execution order. 4.10.2 ships before 4.10.1 because 4.10.2 fixes user-blocking UX issues surfaced in 4.10's verification, while 4.10.1 (SMS pre-invites) is a scaling concern that doesn't block current usage.
-
-### Session 4.10.1 — Phone-based household pre-invites (SMS)
-
-- **Why:** needed before scaling household onboarding past direct email invites
-- **Estimated:** 1–2 hours
-- **Depends on:** nothing (orthogonal to 4.10.2 — can swap order if needed)
-- **Reference:** `DEFERRED.md` → "Phone-based household pre-invites (SMS verification)"
+> **Note on numbering:** Session numbers reflect topical relation to 4.10, not execution order. 4.10.2 and 4.10.3 shipped before 4.10.1 because they addressed user-blocking UX issues; 4.10.1 (SMS pre-invites) is a scaling concern that doesn't block current usage.
 
 ### Session 4.11 — Admin management UI
 
@@ -57,6 +31,61 @@ See `docs/DEFERRED.md` for full entries.
 - **Estimated:** 4–6 hours, possibly split across sessions
 - **Depends on:** 4.11 (some admin context flows feed into session ownership)
 - **Reference:** `DEFERRED.md` → "Lobby state fragility", "Games deep-link auto-manager bug", "Last Card leakage", related entries
+
+---
+
+## Completed sessions
+
+### Session 4.10.3 — Phone back-to-Elsewhere + coordinated TV teardown
+
+**Completed:** 2026-04-22
+
+Shipped the reverse of 4.10.2's phone-as-remote forward loop. Phone back-tap on singer.html / player.html navigates to Elsewhere and publishes `exit_app` realtime event; TV listens on stage.html / games/tv.html and returns to apps grid. Verified end-to-end on real hardware.
+
+**Commits (chronological):**
+- `cab9a38` — docs: Session 4.10.3 plan
+- `3319ce8` — docs: scope-down Part B + defer audience back-nav
+- `f43369a` — Part A: exit_app realtime wiring (index.html + stage.html + games/tv.html)
+- `97014c2` — docs: Part B placement + shell-load pattern
+- `2c2d5fe` — Part B: singer.html back button + helpers + shell load
+- `50a9f5c` — fix: viewport-fit=cover on singer.html
+- `40e4f4b` — Part C: fix games/player.html Back to Home link
+- `1416c52` — docs: verification doc
+
+**DEFERRED entries that emerged:**
+- Audience back-to-Elsewhere navigation (Medium) — filed during Part B scope-down
+- Extract `publishExitApp` + realtime helpers into `shell/realtime.js` (Low) — filed at session-end
+- Post-claim direct transition to remote-control screen (Low-medium) — filed at session-end, carried forward from 4.10.2 plan Part E
+
+Details: `docs/SESSION-4.10.3-PLAN.md`, `docs/SESSION-4.10.3-VERIFICATION.md`
+
+### Session 4.10.2 — Phone-as-remote UX fixes
+
+**Completed:** 2026-04-22 (core Parts A+B+C + fixes shipped; Parts D–G superseded by 4.10.3 follow-up)
+
+Shipped the phone-as-remote redesign: "Your TVs" picker, remote-control screen, display-only TV apps grid. Forward loop works end-to-end. Parts D–G of the original plan (TV sign-in copy rewrite, post-claim direct transition, dedicated verification doc, v3.0 → v3.1 version bump) did NOT ship — development attention shifted to 4.10.3's follow-up work addressing issues surfaced during 4.10.2 testing.
+
+**Commits:**
+- `4a331d6` — Parts A+B (phone Your TVs + remote control)
+- `4372a20` — Part C (TV launch listener + display-only grid)
+- `56e6e3d` — Navigation fix (phone follows TV into app)
+- `7b81f70` — Await fix (phone waits for publish before navigating)
+
+**DEFERRED entries that emerged** (now in DEFERRED.md):
+- Phone back-to-Elsewhere + TV teardown (→ resolved in 4.10.3)
+- Multi-phone session coordination + session manager role
+- Proximity self-declaration
+- Session manager inactivity + household-admin override
+- Per-app role manifest
+- TV sign-in screen copy implies wrong direction of action (still deferred; was Part D of original plan)
+
+**Parts from 4.10.2 plan that remain unfinished:**
+- Part D — TV sign-in copy rewrite (captured as DEFERRED entry, not yet scheduled)
+- Part E — Post-claim direct transition to remote-control screen (filed as DEFERRED during 4.10.3 session-end)
+- Part F — Dedicated 4.10.2 verification doc (not created; 4.10.3's doc subsumes some coverage)
+- Part G — v3.0 → v3.1 version bump (never ran; current badge still v2.99 on pages that carry it)
+
+Details: `docs/SESSION-4.10.2-PLAN.md`
 
 ---
 

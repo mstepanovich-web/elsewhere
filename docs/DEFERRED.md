@@ -739,6 +739,109 @@ Before real customer-acquisition campaigns. First-time onboarding UX matters mos
 
 ---
 
+### Deferred: Extract publishExitApp + related realtime helpers into shell/realtime.js
+
+**Deferred in:** Session 4.10.3 session-end (per plan's "Deferred items likely to emerge")
+**Deferred on:** 2026-04-22
+**Priority:** Low — no functional impact; inline duplication is manageable through Phase 1
+**Area:** Shell / infrastructure — realtime helpers
+**Status:** Deferred (trigger-based, not calendar-based)
+
+#### Context
+
+Sessions 4.10, 4.10.2, and 4.10.3 incrementally added Supabase realtime event publishers and listeners across the phone and TV pages. Each is a ~30-line inline function that subscribes to the `tv_device:<device_key>` channel, sends a broadcast, and tears down the channel (or the listener mirror for receivers). The pattern is identical across every consumer.
+
+**Publishers (phone/shell side):**
+- `publishSessionHandoff` — `index.html`, added in Session 4.10 Part B (commit `b9b3ca1`)
+- `publishLaunchApp` — `index.html`, added in Session 4.10.2 Parts A+B (commit `4a331d6`), refined in await fix (`7b81f70`)
+- `publishExitApp` — inlined in three places:
+  - `index.html`, added in Session 4.10.3 Part A (commit `f43369a`)
+  - `karaoke/singer.html`, added in Session 4.10.3 Part B (commit `2c2d5fe`)
+  - `games/player.html`, added in Session 4.10.3 Part C (commit `40e4f4b`)
+
+**Listeners (TV side):**
+- `handleSessionHandoff` — `tv2.html`, added in Session 4.10 Part C (commit `e2bc6bb`)
+- `handleLaunchApp` — `tv2.html`, added in Session 4.10.2 Part C (commit `4372a20`)
+- `handleExitApp` — inlined in two places:
+  - `karaoke/stage.html`, added in Session 4.10.3 Part A (`f43369a`)
+  - `games/tv.html`, added in Session 4.10.3 Part A (`f43369a`)
+
+Each consumer has its own copy of the subscribe-send-unsubscribe-removeChannel ceremony (or the subscribe-listen-unsubscribe ceremony for receivers). This works fine at today's volume of 3 events × 5 consumers, but it's N² boilerplate that will explode when Session 5 adds `session_participants` events (e.g., `member_joined`, `member_left`, `session_ended`, `manager_transferred`, potentially more).
+
+Also noted in the Session 4.10.3 plan's "Scope / On ship, also do" section and in "Deferred items likely to emerge."
+
+#### What's deferred
+
+Create `shell/realtime.js` that exports:
+
+- A shared `publish(device_key, event, payload)` helper encapsulating the subscribe → send → unsubscribe → removeChannel pattern (5s subscribe timeout, error-throwing on channel errors, etc.)
+- A shared `subscribe(device_key, handlers)` helper for listeners — `handlers` is `{[event]: callback}` map; returns a teardown function
+- Named wrappers for each event (`publishExitApp`, `publishLaunchApp`, etc.) that just call the base helper with the event name
+
+Consumers replace their inline ~30-line function with a ~3-line call. Estimated cumulative diff: ~200 lines removed, ~60 lines added (shell/realtime.js), net ~140-line reduction across the codebase.
+
+#### Options when picking up
+
+Bundle with Session 5's multi-user work — that's when the number of realtime events crosses the threshold where the duplication becomes painful. Extract all existing helpers (session_handoff, launch_app, exit_app) at the same time; Session 5 adds its new events using the helper from day one.
+
+Alternative: extract sooner as a standalone polish commit if something else drives touching these pages (e.g., a bug fix across realtime behavior). Unlikely to be worth a dedicated session on its own.
+
+#### When to pick this up
+
+During Session 5, before any new realtime events get inlined. Adding `session_ended` / `member_joined` / etc. inline would compound the duplication and make the eventual extraction larger.
+
+Don't defer past Session 5.
+
+#### Related
+
+- Session 4.10.3 plan ("Scope / On ship, also do" + "Deferred items likely to emerge") — source of this entry
+- DEFERRED "Per-app role manifest for multi-user sessions" — Session 5 scope cluster
+- DEFERRED "Multi-phone session coordination + session manager role" — adds new events that will drive extraction
+- Commits enumerated above — consumers of the inline pattern today
+
+---
+
+### Deferred: Post-claim direct transition to remote-control screen (4.10.2 Part E)
+
+**Deferred in:** Session 4.10.3 session-end (carried forward from 4.10.2 plan, Part E)
+**Deferred on:** 2026-04-22
+**Priority:** Low-medium — user-facing UX gap but not blocking
+**Area:** Shell / post-claim flow
+**Status:** Deferred
+
+#### Context
+
+Session 4.10.2's plan included Part E: after a user successfully claims a new TV via the phone claim flow, the phone should auto-route into `screen-tv-remote` for the newly-claimed TV (same pattern as 4.10.2 Decision 5's n=1 auto-route). This mirrors the "phone is the remote" model — immediately after claiming, the natural next action is to launch an app on the freshly-paired TV.
+
+Current behavior: post-claim, the phone lands on a "head to your TV to finish" success state that's effectively a dead-end. Users must manually navigate back to home and then (for n=1) get auto-routed to the remote — an extra step for no benefit.
+
+Part E did not ship during 4.10.2 — focus shifted to 4.10.3 follow-up work addressing issues surfaced during 4.10.2 testing.
+
+#### What's deferred
+
+After `rpc_claim_tv_device` resolves successfully in the index.html claim flow:
+- Stash the claimed device_key via the existing `elsewhere.active_tv.device_key` sessionStorage bridge (added in Session 4.10.3 Part A)
+- Navigate phone into `screen-tv-remote` for that TV (same code path as Decision 5's n=1 auto-route)
+- Skip the current "head to your TV" success screen
+
+Estimated scope: ~5-10 lines in index.html's claim success handler. Single commit, no coordinating changes needed.
+
+#### Options when picking up
+
+Pick up alongside any other index.html claim-flow work, or as a standalone micro-session. Low risk — pure phone-side navigation change, no realtime events involved, no new dependencies.
+
+#### When to pick this up
+
+Before real customer acquisition (first-time claim is the most visible onboarding moment). Not scheduled yet.
+
+#### Related
+
+- `docs/SESSION-4.10.2-PLAN.md` → Part E (original spec)
+- 4.10.2 plan Architecture Decision 5 — n=1 auto-route pattern this mirrors
+- Session 4.10.3 Part A (commit `f43369a`) — introduced the `elsewhere.active_tv.device_key` sessionStorage bridge this feature can reuse
+
+---
+
 ## Migrated from PHASE1-NOTES.md
 
 The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captured here in summary form; the full original text lives in PHASE1-NOTES.md git history (commit `9296a50` or earlier). Future fill-outs should flesh these into the full entry format above when someone picks one up.
