@@ -295,6 +295,8 @@ Add a back-to-Elsewhere button to `karaoke/audience.html` once Session 5's role 
 
 Also extends to any future audience-equivalent pages (e.g., hypothetical games/spectator.html, wellness audience modes).
 
+**Prerequisite:** audience.html currently lacks `viewport-fit=cover` in its viewport meta. Add it before the back button, or the button will render behind iOS status bar (singer.html hit this during 4.10.3 Part B; see commit `50a9f5c`).
+
 #### Options when picking up
 
 Bundle with Session 5's role manifest design + implementation. The role manifest will declare, per audience role:
