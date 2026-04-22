@@ -2051,12 +2051,15 @@
 
       const room = generateRoomCode();
 
-      // Fire-and-forget the broadcast. Log failures but don't block
-      // navigation or alert the user — the phone-side app works on
-      // its own regardless of TV state.
-      publishLaunchApp(device_key, app, room).catch(e => {
-        console.error('[elsewhere] launch_app publish failed (non-blocking):', e);
-      });
+      // Await the broadcast before navigating. Fire-and-forget doesn't
+      // work because location.href below would unload the page before
+      // Supabase finishes the subscribe handshake. Log failures but
+      // navigate anyway — phone-side app functions regardless of TV state.
+      try {
+        await publishLaunchApp(device_key, app, room);
+      } catch (e) {
+        console.error('[elsewhere] launch_app publish failed:', e);
+      }
 
       if (app === 'karaoke') {
         location.href = 'karaoke/singer.html?code=' + encodeURIComponent(room);
