@@ -153,24 +153,11 @@
       border-radius: var(--radius-lg);
       padding: 32px 20px;
       text-align: center;
-      cursor: pointer;
-      transition: all 0.2s;
       -webkit-user-select: none;
       user-select: none;
     }
-    .app-tile:hover {
-      border-color: var(--color-gold-dim);
-      background: var(--color-gold-ghost);
-      transform: translateY(-2px);
-    }
     .app-tile.disabled {
       opacity: 0.4;
-      cursor: not-allowed;
-    }
-    .app-tile.disabled:hover {
-      border-color: var(--color-border);
-      background: var(--color-surface);
-      transform: none;
     }
     .app-icon { font-size: 48px; margin-bottom: 12px; }
     .app-name {
@@ -282,15 +269,15 @@
   <div class="screen" id="screen-apps">
     <div class="apps-header">
       <div id="apps-household-name">—</div>
-      <div class="apps-header-sub">Choose an app</div>
+      <div class="apps-header-sub">Use your phone to select an app</div>
     </div>
     <div class="apps-grid">
-      <div class="app-tile" onclick="launchKaraoke()">
+      <div class="app-tile">
         <div class="app-icon">🎤</div>
         <div class="app-name">Karaoke</div>
         <div class="app-sub">Sing together</div>
       </div>
-      <div class="app-tile" onclick="launchGames()">
+      <div class="app-tile">
         <div class="app-icon">🃏</div>
         <div class="app-name">Games</div>
         <div class="app-sub">Last Card · Trivia · Euchre</div>
@@ -418,6 +405,7 @@
     async function subscribeToHandoffChannel() {
       realtimeChannel = window.sb.channel('tv_device:' + deviceKey);
       realtimeChannel.on('broadcast', { event: 'session_handoff' }, handleSessionHandoff);
+      realtimeChannel.on('broadcast', { event: 'launch_app' },      handleLaunchApp);
 
       await new Promise((resolve, reject) => {
         let settled = false;
@@ -534,30 +522,50 @@
       if (el) el.classList.add('active');
     }
 
-    // ─── App launchers ──────────────────────────────────────────
-    // Room codes stay unchanged from pre-4.10 behavior: tv2.html
-    // generates a per-launch code and passes ?room=X. Session 5's
-    // session_participants work will replace room codes with a
-    // proper session identity; for 4.10 we keep compatibility.
-    function launchKaraoke() {
-      const room = generateRoomCode();
-      tvLog('launch: karaoke room=' + room);
-      location.href = 'karaoke/stage.html?room=' + room;
-    }
+    // ─── Session 4.10.2: launch_app broadcast handler ──────────
+    // Phone publishes { app, room } on the tv_device:<device_key>
+    // channel. TV navigates to the product page. Room codes are
+    // generated phone-side now (index.html); tv2.html no longer
+    // generates its own.
+    function handleLaunchApp({ payload }) {
+      const app  = payload?.app;
+      const room = payload?.room;
+      tvLog('realtime: received launch_app app=' + app + ' room=' + room);
 
-    function launchGames() {
-      const room = generateRoomCode();
-      tvLog('launch: games room=' + room);
-      location.href = 'games/tv.html?room=' + room;
-    }
+      // Guardrail 1: only act when the TV is on the apps screen.
+      // Launch_app on claim/signin states means no session to
+      // inherit — stage.html / games/tv.html would land unauthed.
+      const onApps = document.getElementById('screen-apps')?.classList.contains('active');
+      if (!onApps) {
+        tvLog('launch_app ignored: not on apps screen');
+        return;
+      }
 
-    function generateRoomCode() {
-      const ALPHABET = 'ABCDEFGHIJKLMNPQRSTUVWXYZ23456789'; // no 0/1/O/I
-      const bytes = new Uint8Array(6);
-      crypto.getRandomValues(bytes);
-      let out = '';
-      for (const b of bytes) out += ALPHABET[b % ALPHABET.length];
-      return out;
+      // Guardrail 2: payload shape.
+      if (typeof app !== 'string' || typeof room !== 'string') {
+        tvLog('launch_app ignored: bad payload shape');
+        return;
+      }
+
+      // Guardrail 3: room code sanity. Phone uses a 6-char
+      // 0/1/O/I-safe alphabet; accept [A-HJ-NP-Z2-9]{4,12} so
+      // future length tweaks don't break the check.
+      if (!/^[A-HJ-NP-Z2-9]{4,12}$/.test(room)) {
+        tvLog('launch_app ignored: bad room code');
+        return;
+      }
+
+      // App whitelist. encodeURIComponent is belt-and-suspenders
+      // — room already passed the regex above.
+      if (app === 'karaoke') {
+        location.href = 'karaoke/stage.html?room=' + encodeURIComponent(room);
+      } else if (app === 'games') {
+        location.href = 'games/tv.html?room=' + encodeURIComponent(room);
+      } else if (app === 'wellness') {
+        tvLog('launch_app: wellness has no TV destination yet — ignoring');
+      } else {
+        tvLog('launch_app: unknown app "' + app + '" — ignoring');
+      }
     }
 
     // ─── QR rendering (qrcodejs) ────────────────────────────────
