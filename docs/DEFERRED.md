@@ -807,7 +807,7 @@ Don't defer past Session 5.
 **Deferred on:** 2026-04-22
 **Priority:** Low-medium — user-facing UX gap but not blocking
 **Area:** Shell / post-claim flow
-**Status:** Deferred
+**Status:** Completed in Session 4.10.2 Part E (shipped 2026-04-22 as follow-up via 4.10.3 cycle, commit `b994df7`)
 
 #### Context
 
