@@ -7,10 +7,29 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 ## Active session
 
 **Session 4.10.2 — Phone-as-remote UX fixes**
-- **Status:** planning complete (see `SESSION-4.10.2-PLAN.md`), not yet started
+- **Status:** Parts A+B+C shipped + navigation/await fixes landed. Phone-as-remote verified working end-to-end on real hardware. Parts D–G (sign-in copy rewrite, post-claim transition, verification doc, PHASE1-NOTES + version bump) remain.
 - **Estimated:** 1.5–2 hours
 - **Includes:** phone-as-remote redesign + TV sign-in screen copy rewrite
 - **Why it's next:** Session 4.10 verified end-to-end (see `PART-E-VERIFICATION.md`) but exposed three coupled UX failures that block real customer usability. Smaller follow-up session to resolve.
+
+### Commits shipped in 4.10.2
+
+- `4a331d6` — Parts A+B (phone Your TVs + remote control)
+- `4372a20` — Part C (TV launch listener + display-only grid)
+- `56e6e3d` — Navigation fix (phone follows TV into app)
+- `7b81f70` — Await fix (phone waits for publish before navigating)
+
+### Deferred items that emerged during 4.10.2
+
+Five High-priority DEFERRED entries captured during design discussion + testing. All feed into Session 5's multi-user + session-manager work:
+
+- Phone back-to-Elsewhere + TV teardown
+- Multi-phone session coordination + session manager role
+- Proximity self-declaration
+- Session manager inactivity + household-admin override
+- Per-app role manifest
+
+See `docs/DEFERRED.md` for full entries.
 
 ---
 
