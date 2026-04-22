@@ -418,7 +418,7 @@
           <div><div class="game-name">Speed Quiz</div><div class="game-desc">Coming soon</div></div>
         </div>
       </div>
-      <div class="home-link" onclick="window.location.href='https://mstepanovich-web.github.io/elsewhere/tv2.html'">⌂ Back to Home</div>
+      <div class="home-link" onclick="handleBackToElsewhere()">⌂ Back to Home</div>
     </div>
 
     <!-- GAME INFO -->
@@ -3206,6 +3206,67 @@ function onMyTvPaired(tvName) {
   document.getElementById('add-tv-status').textContent = '📺 ' + (tvName || 'TV display') + ' paired';
   setTimeout(closeAddTvModal, 900);
   showToast('📺 TV display paired');
+}
+
+// ── Session 4.10.3: Back-to-Elsewhere (Part C) ──
+// Extracted from inline onclick on the "⌂ Back to Home" link at
+// screen-lobby. Publishes exit_app on the tv_device:<device_key>
+// realtime channel so the TV returns to apps grid, then navigates
+// this phone to Elsewhere's shell. Navigation is unconditional —
+// if publish fails (no TV, no network, Supabase flake), we still
+// take the user home; TV may stay stuck and need manual refresh.
+//
+// Fixed pre-existing bug here: link previously navigated to
+// https://mstepanovich-web.github.io/elsewhere/tv2.html via hardcoded
+// URL, which broke the iOS Capacitor wrapper and sent phones to the
+// TV page. Now uses relative ../index.html (Elsewhere shell).
+//
+// Phase 1: publishes unconditionally regardless of manager status.
+// Multi-user refinement deferred; see DEFERRED "Multi-phone session
+// coordination + session manager role".
+async function handleBackToElsewhere() {
+  let device_key = null;
+  try { device_key = sessionStorage.getItem('elsewhere.active_tv.device_key'); } catch (_) {}
+
+  if (device_key) {
+    try {
+      await publishExitApp(device_key);
+    } catch (e) {
+      console.error('[elsewhere] exit_app publish failed:', e);
+    }
+    try { sessionStorage.removeItem('elsewhere.active_tv.device_key'); } catch (_) {}
+  }
+
+  location.href = '../index.html';
+}
+
+// Mirrors index.html's publishExitApp (commit f43369a).
+async function publishExitApp(device_key, reason = 'user-exit') {
+  const channel = window.sb.channel('tv_device:' + device_key);
+
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) { settled = true; reject(new Error('Realtime subscribe timed out.')); }
+    }, 5000);
+    channel.subscribe(status => {
+      if (settled) return;
+      if (status === 'SUBSCRIBED') {
+        settled = true; clearTimeout(timer); resolve();
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        settled = true; clearTimeout(timer); reject(new Error('Realtime channel ' + status));
+      }
+    });
+  });
+
+  await channel.send({
+    type:  'broadcast',
+    event: 'exit_app',
+    payload: { reason },
+  });
+
+  await channel.unsubscribe();
+  window.sb.removeChannel(channel);
 }
 </script>
 
