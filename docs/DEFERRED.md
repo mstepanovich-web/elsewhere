@@ -49,6 +49,120 @@ Links to other DEFERRED entries, PHASE1-NOTES sections, session plans.
 
 ---
 
+### Deferred: Multi-phone session coordination + session manager role
+
+**Deferred in:** Session 4.10.2 design discussion (post-Parts A+B+C testing)
+**Deferred on:** 2026-04-22
+**Priority:** High — platform foundation for all multi-user flows
+**Area:** Platform architecture — session model
+**Status:** Deferred (design decided; no implementation until Session 5+)
+
+#### Context
+
+Today, `tv_devices` rows track TV identity but not TV *state*. The platform has no concept of "what session is currently running on this TV." This gap is what causes multi-phone race conditions (failure modes identified during Session 4.10.2 testing: phone A taps Karaoke, phone B taps Games seconds later, TV races/hijacks/strands users).
+
+#### What's deferred
+
+Introduce a session concept. Each TV hosts at most one active session at a time. Session = `{tv_device, app, room_code, manager_user_id, started_at, last_activity_at}`. One user is the session manager; the role is transferable by the current manager. When any phone taps an app tile, the platform checks the TV's current session state and branches:
+
+1. TV idle → phone launches fresh and becomes manager
+2. TV on same app the phone tapped → phone joins as non-manager via app's role rules (see per-app role manifest DEFERRED entry)
+3. TV on different app → blocked with "Karaoke is playing — interrupt or back?" prompt, with household admin override (admins can always hijack)
+
+#### Options when picking up
+
+Land with Session 5's `session_participants` schema. Likely a new `sessions` table (one row per active session, unique per `tv_device`) plus extensions to `tv_devices` for quick-read current state. Design alongside per-app role manifest — they're tightly coupled.
+
+#### When to pick this up
+
+Session 5, Part 1 (alongside `session_participants` + role manifest). Blocks all multi-user app flows.
+
+#### Related
+
+- Per-app role manifest (DEFERRED below) — defines how non-manager roles work; this entry defines the manager role and session identity
+- Session manager inactivity + household-admin override (DEFERRED below) — the governance edge cases
+- `docs/SESSION-4.10.2-PLAN.md` Decision 7 — original "multi-TV, multi-phone, who triggered" question that punted to Session 5
+- Session 5 plan (doesn't exist yet — create when starting)
+
+---
+
+### Deferred: Proximity self-declaration ("are you at home?")
+
+**Deferred in:** Session 4.10.2 design discussion (post-Parts A+B+C testing)
+**Deferred on:** 2026-04-22
+**Priority:** High — blocks multi-user flows; required for honest manager/singer role assignment
+**Area:** Platform UX — session-state gating
+**Status:** Deferred (design decided; implement with Session 5 multi-user work)
+
+#### Context
+
+Household membership grants TV access conceptually, but physical presence matters too. Husband at his office with Elsewhere app open shouldn't be able to act as karaoke manager for the Living Room TV that his wife is using at home. No way for the platform to detect location reliably from phone-side alone (wifi hints are not trustworthy gates; purely client-side geolocation doesn't prove proximity to a specific TV).
+
+#### What's deferred
+
+A trust-based self-declaration flow. On first interaction with a TV per session (and after reasonable inactivity periods or wifi-change hints), the platform asks: "Are you at home?" User answers yes or no. "Yes" unlocks manager-eligibility, singer-eligibility, active-player-eligibility. "No" keeps audience access and account/household management but blocks control roles.
+
+Wifi-network hint (same public IP as previous "yes" answer) can skip the question — but the hint is an optimization, not a gate. Trust-based means the platform doesn't try to enforce truthfulness; if a family member lies to gain TV control, that's a household matter, not a product matter. Cross-household / non-member guest flows (scan TV QR to confirm presence) are a separate, later concern.
+
+#### Options when picking up
+
+Ship as part of Session 5's manager/session work. UX should be contextual: if TV is idle, ask on any TV-control attempt; if TV has active session, ask when user enters the session viewer. One concrete flow: open app → see "Living Room is playing Karaoke" → tap → "Are you in the room?" → Yes/No → appropriate participant mode.
+
+Design note for testing: developer needs a "remember for the day" or "always at home" override so testing doesn't hit this prompt on every interaction. Capture at implementation.
+
+#### When to pick this up
+
+Session 5, alongside session manager concept and role manifest.
+
+#### Related
+
+- Multi-phone session coordination (DEFERRED above) — parent concern
+- Per-app role manifest (DEFERRED) — "at home" is one of the role-entry requirements apps can declare
+- Launch-conflict / multi-phone coordination (not yet filed — migrate from `docs/SESSION-4.10.2-PLAN.md` Decision 7 at 4.10.2's session-end ritual)
+
+---
+
+### Deferred: Session manager inactivity + household-admin override
+
+**Deferred in:** Session 4.10.2 design discussion (post-Parts A+B+C testing)
+**Deferred on:** 2026-04-22
+**Priority:** High — governance edge case; required for livable multi-user UX
+**Area:** Platform UX — session lifecycle
+**Status:** Deferred (design partially decided; finalize during Session 5 implementation)
+
+#### Context
+
+When a TV session has a manager, non-managers can't launch new apps or take control. This is correct Phase-1 behavior to prevent hijack. But: what if the manager goes inactive? Kid is mid-karaoke, closes phone to take a call, wife wants to start games, can't — because kid is still formally the manager, even though they've walked away.
+
+#### What's deferred
+
+Two governance mechanisms.
+
+**(1) Inactivity-based reclaim.** If the manager's phone hasn't registered activity (any session interaction: singer queue, tile-tap, app-foreground event, etc.) for a threshold duration, the session becomes "orphaned" and any household member can claim manager role. Phase-1 recommendation: 10 minutes. Worth revisiting after real usage.
+
+**(2) Household-admin override.** Household admins (the existing 4.10 role) can always force-reclaim manager role, regardless of session state or inactivity. This is the "I'm the head of this household, I yank the remote back" escape hatch. Critical for family dynamics; without it, the platform creates governance problems it shouldn't solve.
+
+Open questions for implementation:
+- Inactivity threshold tunable per-app? (Karaoke might want 15 min; games might want 30.)
+- Force-reclaim UX: silent or does manager get notified?
+- If manager's phone regains activity after a reclaim, what happens? (Probably: they become a regular non-manager participant; their role was already transferred.)
+
+#### Options when picking up
+
+Design heartbeat + inactivity tracking alongside `session_participants`. Simplest implementation: session row stores `last_activity_at`; phone pings on interaction; any phone can query "is this session orphaned?" (`last_activity_at < now - 10min`); if yes, any household member can call `rpc_claim_manager`. Household admin override: separate `rpc_force_claim_manager` that bypasses orphan check but requires admin role.
+
+#### When to pick this up
+
+Session 5, tied to session manager concept.
+
+#### Related
+
+- Multi-phone session coordination (DEFERRED above) — parent concept
+- 4.10 admin roles (`rpc_approve_household_member`, `rpc_designate_admin`) — household-admin override leverages existing admin designation
+- DEFERRED "Scan-approval flow" — different admin flow but overlapping concept
+
+---
+
 ### Deferred: Per-app role manifest for multi-user sessions
 
 **Deferred in:** Session 4.10.2 design discussion (post-Parts A+B+C testing)
