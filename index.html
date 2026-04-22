@@ -909,6 +909,107 @@
       opacity: 0.5;
       pointer-events: none;
     }
+
+    /* ── Session 4.10.2: Your TVs picker ────────────────────── */
+    .your-tvs-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px 0;
+    }
+    .tv-tile {
+      padding: 18px 20px;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .tv-tile:active { background: var(--color-gold-ghost); }
+    .tv-tile-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .tv-tile-household {
+      font-size: var(--text-lg);
+      color: var(--color-text);
+      font-weight: 500;
+    }
+    .tv-tile-display {
+      font-size: var(--text-sm);
+      color: var(--color-text-dim);
+      margin-top: 2px;
+    }
+    .freshness-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .freshness-dot.fresh-green  { background: var(--color-green); }
+    .freshness-dot.fresh-yellow { background: #facc15; }
+    .freshness-dot.fresh-gray   { background: var(--color-text-faint); }
+
+    /* ── Session 4.10.2: TV remote-control screen ──────────── */
+    .tv-remote-header {
+      text-align: center;
+      margin: 8px 0 24px;
+    }
+    .tv-remote-household {
+      font-size: var(--text-sm);
+      color: var(--color-text-dim);
+      margin-top: 4px;
+    }
+    .now-playing-banner {
+      display: none;
+      padding: 12px 16px;
+      background: var(--color-gold-ghost);
+      border-left: 3px solid var(--color-gold-dim);
+      border-radius: var(--radius-sm);
+      margin-bottom: 20px;
+    }
+    .now-playing-banner.visible { display: block; }
+    .now-playing-label {
+      color: var(--color-gold-dim);
+      font-size: 10px;
+      letter-spacing: var(--tracking-widest);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .now-playing-body {
+      font-size: var(--text-sm);
+      color: var(--color-text);
+    }
+    .app-tiles {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .app-tile {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 20px;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .app-tile:active { background: var(--color-gold-ghost); }
+    .app-tile-emoji { font-size: 32px; line-height: 1; }
+    .app-tile-body { flex: 1; }
+    .app-tile-label {
+      font-size: var(--text-lg);
+      color: var(--color-text);
+      font-weight: 500;
+    }
+    .app-tile-sub {
+      font-size: var(--text-sm);
+      color: var(--color-text-dim);
+      margin-top: 2px;
+    }
   </style>
 </head>
 <body>
@@ -923,6 +1024,7 @@
         <div id="user-menu-email">—</div>
         <button onclick="openContactsFromMenu()">Contacts</button>
         <button onclick="openGroupsFromMenu()">Groups</button>
+        <button onclick="openYourTvsFromMenu()">Your TVs</button>
         <button onclick="openHouseholdFromMenu()">Manage household</button>
         <button onclick="shellSignOut()">Sign out</button>
       </div>
@@ -1327,6 +1429,44 @@
         </div>
       </div>
     </div>
+
+    <!-- Session 4.10.2: Your TVs picker (n≥2) -->
+    <div class="screen" id="screen-your-tvs">
+      <div class="back-link" onclick="goTo('screen-home')">← Back</div>
+      <div class="page-title">Your TVs</div>
+      <div class="page-sub">Tap a TV to control it</div>
+      <div class="your-tvs-list" id="your-tvs-list"></div>
+    </div>
+
+    <!-- Session 4.10.2: TV remote-control screen (single TV) -->
+    <div class="screen" id="screen-tv-remote" data-device-key="" data-origin="">
+      <div class="back-link" id="tv-remote-back" onclick="goTo('screen-your-tvs')">← Back</div>
+      <div class="tv-remote-header">
+        <div class="page-title" id="tv-remote-title">—</div>
+        <div class="tv-remote-household" id="tv-remote-household">—</div>
+      </div>
+      <div class="now-playing-banner" id="now-playing-banner">
+        <div class="now-playing-label">Now playing</div>
+        <div class="now-playing-body" id="now-playing-body">—</div>
+      </div>
+      <div class="app-tiles">
+        <div class="app-tile" onclick="handleTvRemoteTileTap('karaoke')">
+          <div class="app-tile-emoji">🎤</div>
+          <div class="app-tile-body">
+            <div class="app-tile-label">Karaoke</div>
+            <div class="app-tile-sub">Sing together</div>
+          </div>
+        </div>
+        <div class="app-tile" onclick="handleTvRemoteTileTap('games')">
+          <div class="app-tile-emoji">🃏</div>
+          <div class="app-tile-body">
+            <div class="app-tile-label">Games</div>
+            <div class="app-tile-sub">Last Card · Trivia · Euchre</div>
+          </div>
+        </div>
+        <!-- Wellness tile intentionally hidden on phone per Decision 8 -->
+      </div>
+    </div>
   </div>
 
   <!-- Modals (outside #app so they overlay everything) -->
@@ -1417,7 +1557,7 @@
     // time this listener fires, window.elsewhere is guaranteed to exist.
     document.addEventListener('DOMContentLoaded', initShell);
 
-    const SCREENS = ['screen-home', 'screen-account', 'screen-confirm', 'screen-contacts', 'screen-contact-edit', 'screen-groups', 'screen-group-edit', 'screen-tv-claim', 'screen-tv-signin', 'screen-household'];
+    const SCREENS = ['screen-home', 'screen-account', 'screen-confirm', 'screen-contacts', 'screen-contact-edit', 'screen-groups', 'screen-group-edit', 'screen-tv-claim', 'screen-tv-signin', 'screen-household', 'screen-your-tvs', 'screen-tv-remote'];
     let activeScreen = 'screen-home';
 
     function initShell() {
@@ -1516,7 +1656,12 @@
         // in AFTER arriving via a tv-claim / tv-signin deep link. The
         // device_key was stashed in sessionStorage before redirecting to
         // screen-account; consume it now that we have a session.
-        resumePendingTvFlow();
+        const resumed = resumePendingTvFlow();
+        // Session 4.10.2 — if no pending TV deep-link flow, route user
+        // to their TVs per Decision 5 (n=0 stays home; n=1 → remote;
+        // n≥2 → picker). enterYourTvsFlow gates itself on
+        // activeScreen === 'screen-home' to avoid yanking deeper surfaces.
+        if (!resumed) enterYourTvsFlow();
       } else {
         badge.classList.add('hidden');
         welcome.classList.add('hidden');
@@ -1568,13 +1713,15 @@
       if (dk) {
         try { sessionStorage.removeItem(PENDING_TV_CLAIM_KEY); } catch (_) {}
         enterTvClaimScreen(dk);
-        return;
+        return true;
       }
       try { dk = sessionStorage.getItem(PENDING_TV_SIGNIN_KEY); } catch (_) {}
       if (dk) {
         try { sessionStorage.removeItem(PENDING_TV_SIGNIN_KEY); } catch (_) {}
         enterTvSigninScreen(dk);
+        return true;
       }
+      return false;
     }
 
     // ── screen-tv-claim ─────────────────────────────────────────────
@@ -1765,6 +1912,250 @@
       // would leak realtime sockets across flows.
       await channel.unsubscribe();
       window.sb.removeChannel(channel);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Session 4.10.2 — Phone-as-remote
+    // ════════════════════════════════════════════════════════════════════
+
+    // Module-level state: last-launched app per TV, keyed by device_key.
+    // Persists across screen mount/unmount (Decision 2a) — re-entering
+    // screen-tv-remote for the same TV re-renders the banner without
+    // losing it. Staleness risk accepted per Decision 7 (no TV→phone
+    // sync in Phase 1).
+    const nowPlayingByDeviceKey = new Map();
+
+    // ── Part A: loadUserTvs + Your TVs picker ───────────────────────
+
+    // Returns [{device_key, household_id, household_name, tv_display_name,
+    // last_seen_at}, ...] — sorted by last_seen_at desc (freshest first).
+    // Empty array means user has no household membership OR RLS filtered
+    // everything out. Either way, caller keeps user on screen-home.
+    async function loadUserTvs() {
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) return [];
+      const { data, error } = await window.sb
+        .from('tv_devices')
+        .select('device_key, household_id, display_name, last_seen_at, households(name)')
+        .order('last_seen_at', { ascending: false });
+      if (error) {
+        console.error('[elsewhere] loadUserTvs error:', error);
+        return [];
+      }
+      return (data || []).map(row => ({
+        device_key:      row.device_key,
+        household_id:    row.household_id,
+        household_name:  row.households?.name || '',
+        tv_display_name: row.display_name || '',
+        last_seen_at:    row.last_seen_at,
+      }));
+    }
+
+    // Entry-point dispatcher. Only navigates if user is currently on
+    // screen-home — avoids ripping users off deeper surfaces (Contacts,
+    // Groups, etc.) when auth state re-confirms mid-session.
+    async function enterYourTvsFlow() {
+      if (activeScreen !== 'screen-home') return;
+      const tvs = await loadUserTvs();
+      if (tvs.length === 0) return; // n=0 → pre-existing home state
+      if (tvs.length === 1) {
+        enterTvRemoteScreen(tvs[0].device_key, { origin: 'n1-skip', tvCache: tvs[0] });
+        return;
+      }
+      renderYourTvsScreen(tvs);
+      goTo('screen-your-tvs');
+    }
+
+    // Called from the user-menu "Your TVs" button. Forces navigation
+    // even from non-home screens (user-initiated, unlike auto-routing).
+    async function openYourTvsFromMenu() {
+      document.getElementById('user-menu').classList.remove('open');
+      const tvs = await loadUserTvs();
+      if (tvs.length === 0) {
+        goTo('screen-home');
+        return;
+      }
+      if (tvs.length === 1) {
+        enterTvRemoteScreen(tvs[0].device_key, { origin: 'picker', tvCache: tvs[0] });
+        return;
+      }
+      renderYourTvsScreen(tvs);
+      goTo('screen-your-tvs');
+    }
+
+    function renderYourTvsScreen(tvs) {
+      const list = document.getElementById('your-tvs-list');
+      list.innerHTML = '';
+      for (const tv of tvs) list.appendChild(renderTvTile(tv));
+    }
+
+    function renderTvTile(tv) {
+      const el = document.createElement('div');
+      el.className = 'tv-tile';
+      el.onclick = () => enterTvRemoteScreen(tv.device_key, { origin: 'picker', tvCache: tv });
+
+      const row = document.createElement('div');
+      row.className = 'tv-tile-row';
+
+      const dot = document.createElement('span');
+      dot.className = 'freshness-dot ' + freshnessDotClass(tv.last_seen_at);
+      row.appendChild(dot);
+
+      const household = document.createElement('span');
+      household.className = 'tv-tile-household';
+      household.textContent = tv.household_name || 'Unnamed household';
+      row.appendChild(household);
+
+      el.appendChild(row);
+
+      if (tv.tv_display_name) {
+        const display = document.createElement('div');
+        display.className = 'tv-tile-display';
+        display.textContent = tv.tv_display_name;
+        el.appendChild(display);
+      }
+      return el;
+    }
+
+    function freshnessDotClass(last_seen_at) {
+      if (!last_seen_at) return 'fresh-gray';
+      const ageMs = Date.now() - new Date(last_seen_at).getTime();
+      if (ageMs < 60 * 1000) return 'fresh-green';
+      if (ageMs < 24 * 60 * 60 * 1000) return 'fresh-yellow';
+      return 'fresh-gray';
+    }
+
+    // ── Part B: TV remote-control screen ────────────────────────────
+
+    // Origins:
+    //   'picker'          — user tapped a tile in screen-your-tvs
+    //   'n1-skip'         — auto-routed because length=1 (Decision 5)
+    //   'signin-success'  — Part D (future): "Open TV apps" button
+    //   'post-claim'      — Part E (future): claim success transition
+    //
+    // Non-picker origins hide the back-link entirely (Decision 1b —
+    // "no back on a real remote"). Picker origin backs to screen-your-tvs.
+    async function enterTvRemoteScreen(device_key, opts = {}) {
+      const origin = opts.origin || 'picker';
+      let tv       = opts.tvCache || null;
+
+      // If no cached row was handed in (Part D/E future callers), look it up.
+      if (!tv) {
+        const tvs = await loadUserTvs();
+        tv = tvs.find(t => t.device_key === device_key) || null;
+      }
+
+      const screen = document.getElementById('screen-tv-remote');
+      screen.dataset.deviceKey = device_key;
+      screen.dataset.origin    = origin;
+
+      const title     = document.getElementById('tv-remote-title');
+      const household = document.getElementById('tv-remote-household');
+      if (tv) {
+        title.textContent     = tv.tv_display_name || 'Your TV';
+        household.textContent = tv.household_name || '';
+      } else {
+        title.textContent     = 'Your TV';
+        household.textContent = '';
+      }
+
+      // Decision 1b: hide back-link for non-picker origins.
+      const back = document.getElementById('tv-remote-back');
+      back.style.display = (origin === 'picker') ? '' : 'none';
+
+      // Restore any persisted "now playing" state for this device_key.
+      const np = nowPlayingByDeviceKey.get(device_key);
+      if (np) showNowPlaying(np.app, np.room);
+      else clearNowPlaying();
+
+      goTo('screen-tv-remote');
+    }
+
+    async function handleTvRemoteTileTap(app) {
+      const screen     = document.getElementById('screen-tv-remote');
+      const device_key = screen.dataset.deviceKey;
+      if (!device_key) return;
+
+      const room = generateRoomCode();
+      try {
+        await publishLaunchApp(device_key, app, room);
+        nowPlayingByDeviceKey.set(device_key, { app, room, at: Date.now() });
+        showNowPlaying(app, room);
+      } catch (e) {
+        console.error('[elsewhere] launch_app publish failed:', e);
+        alert('Could not reach your TV. Check its connection and try again.');
+      }
+    }
+
+    // 6-char room, 0/1/O/I-safe alphabet — matches tv2.html's generator.
+    function generateRoomCode() {
+      const ALPHABET = 'ABCDEFGHIJKLMNPQRSTUVWXYZ23456789';
+      const bytes = new Uint8Array(6);
+      crypto.getRandomValues(bytes);
+      let out = '';
+      for (const b of bytes) out += ALPHABET[b % ALPHABET.length];
+      return out;
+    }
+
+    // Publishes 'launch_app' on the tv_device:<device_key> realtime channel.
+    // Mirrors publishSessionHandoff's subscribe-then-send-then-unsubscribe
+    // pattern for consistency. TV side (tv2.html) listener lands in Part C.
+    async function publishLaunchApp(device_key, app, room) {
+      const channel = window.sb.channel('tv_device:' + device_key);
+
+      await new Promise((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (!settled) { settled = true; reject(new Error('Realtime subscribe timed out.')); }
+        }, 5000);
+        channel.subscribe(status => {
+          if (settled) return;
+          if (status === 'SUBSCRIBED') {
+            settled = true; clearTimeout(timer); resolve();
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            settled = true; clearTimeout(timer); reject(new Error('Realtime channel ' + status));
+          }
+        });
+      });
+
+      await channel.send({
+        type:  'broadcast',
+        event: 'launch_app',
+        payload: { app, room },
+      });
+
+      await channel.unsubscribe();
+      window.sb.removeChannel(channel);
+    }
+
+    function showNowPlaying(app, room) {
+      const banner = document.getElementById('now-playing-banner');
+      const body   = document.getElementById('now-playing-body');
+      const label  = app === 'karaoke' ? 'Karaoke' : app === 'games' ? 'Games' : app;
+      body.textContent = label + ' · Room ' + room;
+      banner.classList.add('visible');
+    }
+
+    function clearNowPlaying() {
+      const banner = document.getElementById('now-playing-banner');
+      banner.classList.remove('visible');
+      document.getElementById('now-playing-body').textContent = '';
+    }
+
+    // ── Foreground refresh ──────────────────────────────────────────
+
+    // When the app returns to foreground, re-query TVs if user is currently
+    // viewing the picker. Deliberately NOT re-querying from screen-tv-remote
+    // to avoid ripping the user away mid-interaction with the remote.
+    if (window.Capacitor?.Plugins?.App) {
+      window.Capacitor.Plugins.App.addListener('appStateChange', (state) => {
+        if (state.isActive && activeScreen === 'screen-your-tvs') {
+          loadUserTvs().then(tvs => {
+            if (tvs.length >= 2) renderYourTvsScreen(tvs);
+            else goTo('screen-home'); // TVs gone → fall back; next auth eval re-routes
+          });
+        }
+      });
     }
 
     // ── screen-household (minimal 4.10 pre-invite UI) ───────────────
