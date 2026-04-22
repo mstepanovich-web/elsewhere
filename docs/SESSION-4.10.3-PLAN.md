@@ -9,7 +9,7 @@
 
 ## Goal
 
-Add the reverse of Session 4.10.2's forward path. A user in `karaoke/singer.html`, `karaoke/audience.html`, or `games/player.html` can tap a "back to Elsewhere" affordance, which navigates their phone to Elsewhere's shell AND publishes a realtime event that sends the TV back to `tv2.html`'s apps grid. Closes the stuck-in-app dead-end identified in 4.10.2 testing.
+Add the reverse of Session 4.10.2's forward path. A user in `karaoke/singer.html` or `games/player.html` can tap a "back to Elsewhere" affordance, which navigates their phone to Elsewhere's shell AND publishes a realtime event that sends the TV back to `tv2.html`'s apps grid. Closes the stuck-in-app dead-end identified in 4.10.2 testing. (audience.html deferred pending role-semantics work in Session 5.)
 
 ---
 
@@ -17,10 +17,10 @@ Add the reverse of Session 4.10.2's forward path. A user in `karaoke/singer.html
 
 ### In scope
 
-- **Phone-side `publishExitApp` helper** — inline in each consumer page (`index.html`, `karaoke/singer.html`, `karaoke/audience.html`, `games/player.html`). Mirrors `publishLaunchApp`'s subscribe/send/unsubscribe pattern.
+- **Phone-side `publishExitApp` helper** — inline in each consumer page (`index.html`, `karaoke/singer.html`, `games/player.html`). Mirrors `publishLaunchApp`'s subscribe/send/unsubscribe pattern.
 - **`exit_app` realtime event** on the existing `tv_device:<device_key>` channel — new event, channel unchanged.
 - **TV-side `handleExitApp`** in `karaoke/stage.html` and `games/tv.html` — each page gains a realtime subscription on load (NEW surface area for these pages), a listener for `exit_app`, and clean teardown before navigation.
-- **Back-to-Elsewhere button** on `karaoke/singer.html`, `karaoke/audience.html`, and `games/player.html`. Same visual style across all three.
+- **Back-to-Elsewhere button** on `karaoke/singer.html` and `games/player.html`. Same visual style across both.
 - **Verification doc** — `docs/SESSION-4.10.3-VERIFICATION.md` patterned on `PART-E-VERIFICATION.md`. Includes explicit regression checks for existing karaoke/games functionality (venue rendering, Agora, game state) given the new realtime subscription on stage.html and games/tv.html.
 
 ### Out of scope (referenced in DEFERRED, not this session)
@@ -59,7 +59,7 @@ Including a structured payload now avoids a breaking-change migration later.
 
 ### 3. Phone navigation target
 
-`location.href = '../index.html'` — relative up from `karaoke/singer.html`, `karaoke/audience.html`, `games/player.html`, and any future same-depth pages.
+`location.href = '../index.html'` — relative up from `karaoke/singer.html`, `games/player.html`, and any future same-depth pages.
 
 On landing at `index.html`, the existing `renderAuthState(user)` → `resumePendingTvFlow()` → `enterYourTvsFlow()` chain runs. Per 4.10.2 Decision 5 (n=1 skip):
 - n=0 household TVs → stays on `screen-home` (signed-out or no-membership)
@@ -142,16 +142,16 @@ Each part is a standalone commit. Review pause point between each.
 
 **Failure-mode check:** verified in Architecture Decision 7. Loss of realtime between forward navigation and phone-tap-back results in a stuck TV; documented and accepted.
 
-### Part B — Back-to-Elsewhere button on karaoke phone pages
+### Part B — Back-to-Elsewhere button on karaoke singer page
 
-Covers both `karaoke/singer.html` AND `karaoke/audience.html` in a single commit — same directory, same style, same publishExitApp helper inlined on each.
+Covers `karaoke/singer.html` only. `karaoke/audience.html` intentionally deferred — its role semantics (how audience joins, whether they have agency to leave, what "home" means for a non-household member) aren't specified yet; depends on Session 5's per-app role manifest work. Filed as separate DEFERRED entry.
 
 - Add inline `<style>` for `.back-to-elsewhere` class on each page (style block duplicated — acceptable per no-build-step convention)
 - Add `<button onclick="handleBackToElsewhere()">← Elsewhere</button>` top-left on each page
 - Inline `publishExitApp` helper in each page's script block
 - Inline `handleBackToElsewhere()` wrapper: reads device_key from localStorage or pre-launch query param state (see note below), calls `publishExitApp`, then `location.href = '../index.html'`
 
-**Device_key on phone side:** the phone doesn't have `elsewhere.tv.device_key` in its own localStorage — that key is the TV's identity, stored TV-side. The phone knows which TV it's controlling via the `screen-tv-remote` context during launch. After navigation to singer/audience/player, that context is gone. Solutions:
+**Device_key on phone side:** the phone doesn't have `elsewhere.tv.device_key` in its own localStorage — that key is the TV's identity, stored TV-side. The phone knows which TV it's controlling via the `screen-tv-remote` context during launch. After navigation to singer/player, that context is gone. Solutions:
 - **(a)** Pass device_key via URL query string during launch (e.g., `karaoke/singer.html?code=X&tv=<device_key>`)
 - **(b)** Stash device_key in sessionStorage before the launch `location.href`, consume it in the in-app page
 - **(c)** Phone-side re-queries `tv_devices` on in-app page load to find the user's TV
@@ -160,7 +160,7 @@ Covers both `karaoke/singer.html` AND `karaoke/audience.html` in a single commit
 
 This requires a **small index.html adjustment in Part A** (or Part B — flag during execution): set the sessionStorage key inside `handleTvRemoteTileTap` just before `location.href`. Minor, one line.
 
-**Files touched in Part B:** `karaoke/singer.html`, `karaoke/audience.html`. Also a one-line touch in `index.html` if the sessionStorage set wasn't folded into Part A.
+**Files touched in Part B:** `karaoke/singer.html`. (`index.html` sessionStorage bridge was folded into Part A, commit `f43369a`.)
 
 ### Part C — Back-to-Elsewhere button on `games/player.html`
 
@@ -173,7 +173,7 @@ Same pattern as Part B: inline style block, inline button, inline `publishExitAp
 Create `docs/SESSION-4.10.3-VERIFICATION.md` patterned on `PART-E-VERIFICATION.md`. Flows:
 
 1. **Karaoke back (singer):** launch Karaoke → phone on singer.html + TV on stage.html → tap "← Elsewhere" → phone returns to screen-tv-remote (or picker, depending on n) + TV returns to apps grid within ~1-2s.
-2. **Karaoke back (audience):** if reachable from singer via within-karaoke nav, repeat Flow 1 from audience.html. If not reachable in Phase 1, note as untested.
+2. ~~**Karaoke back (audience):**~~ Deferred — see DEFERRED "Audience back-to-Elsewhere navigation" entry. Audience role semantics need clarification in Session 5's per-app role manifest work before this flow can be tested meaningfully.
 3. **Games back:** launch Games → phone on player.html + TV on games/tv.html → tap "← Elsewhere" → same expected behavior as Flow 1.
 4. **Realtime failure posture check:** disable wifi on phone before tapping back → phone still navigates to Elsewhere; TV stays on stage.html/games/tv.html (documented failure mode; user manually refreshes TV).
 5. **Regression: karaoke functionality intact after subscription added to stage.html.** Verify:
@@ -207,8 +207,7 @@ The regression flows (Flow 5 + Flow 6) are load-bearing — they guard against t
 
 Pre-log these so we catch them during session-end ritual:
 
-- **Extract `publishExitApp` + related realtime helpers into `shell/realtime.js` when Session 5 adds more events.** Low priority — inline duplication across 3 consumer pages (index, singer/audience, player) is manageable today. When Session 5 adds richer events (session_ended, member_left, etc.), the repeated subscribe-send-unsubscribe boilerplate will justify extraction. File at session-end per Additional Requirement 2.
-- **Audience.html back button may need different semantics** — if a user is in audience role and taps back, is that "leave karaoke entirely" or "leave audience role but stay in karaoke"? Phase 1: treat as full exit (matches singer.html's behavior). Session 5's role manifest could formalize this.
+- **Extract `publishExitApp` + related realtime helpers into `shell/realtime.js` when Session 5 adds more events.** Low priority — inline duplication across 3 consumer pages (index, singer, player) is manageable today. When Session 5 adds richer events (session_ended, member_left, etc.), the repeated subscribe-send-unsubscribe boilerplate will justify extraction. File at session-end per Additional Requirement 2.
 - **Heartbeat / auto-reconnect for TV realtime** — see Architecture Decision 7. File only if customer testing shows the manual-refresh recovery is a real pain point.
 
 ---
@@ -216,7 +215,7 @@ Pre-log these so we catch them during session-end ritual:
 ## Open questions for implementation
 
 None — all major design questions resolved during planning review:
-- Q1 (audience.html inclusion): **Yes, in Part B.**
+- Q1 (audience.html inclusion): **No — deferred pending Session 5 role-semantics work.** See DEFERRED "Audience back-to-Elsewhere navigation".
 - Q2 (TV-side scope expansion): **Yes, accepted; regression checks in Part D.**
 
 If new questions surface during Part-level execution, update this file rather than punting.

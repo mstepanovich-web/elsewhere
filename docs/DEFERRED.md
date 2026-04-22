@@ -266,6 +266,59 @@ At the start of Session 5, as part of session_participants schema design. Should
 
 ---
 
+### Deferred: Audience back-to-Elsewhere navigation
+
+**Deferred in:** Session 4.10.3 scope adjustment (pre-Part B)
+**Deferred on:** 2026-04-22
+**Priority:** Medium — not blocking; partial escape exists via karaoke in-app home button
+**Area:** Platform UX — session lifecycle, role-dependent
+**Status:** Deferred (pending role-semantics clarification in Session 5)
+
+#### Context
+
+Session 4.10.3's Part B originally scoped a back-to-Elsewhere button onto both `karaoke/singer.html` AND `karaoke/audience.html`. During pre-implementation review, the audience.html case was pulled because its role semantics aren't specified yet:
+
+- How audience members join the session (household member? guest? passive observer with no account?)
+- Whether audience members have agency to leave the current app (is "back" even meaningful for a non-member?)
+- What "home" means for them — if they're not a household member, landing on `screen-home` is a dead-end
+
+These answers depend on Session 5's per-app role manifest work, which will formalize how apps declare their roles and what capabilities each role has. Shipping a back button with unclear semantics now risks either (a) giving non-members a confusing dead-end destination, or (b) locking in Phase-1 behavior that Session 5 has to walk back.
+
+The audience path has the karaoke in-app "home" button as a partial escape — a user on audience.html can use within-karaoke navigation to leave the audience role — so this gap isn't totally blocking. Just unresolved.
+
+#### What's deferred
+
+Add a back-to-Elsewhere button to `karaoke/audience.html` once Session 5's role manifest clarifies:
+- Who can reach audience.html (household members only, or guests/passive observers too)
+- What destination makes sense for each role after tapping back
+- Whether the TV teardown should fire (audience leaving ≠ session ending, if other singers/players remain)
+
+Also extends to any future audience-equivalent pages (e.g., hypothetical games/spectator.html, wellness audience modes).
+
+#### Options when picking up
+
+Bundle with Session 5's role manifest design + implementation. The role manifest will declare, per audience role:
+- Who qualifies for entry (household membership? invite? open?)
+- What "leaving the app" does (session teardown? just leave role?)
+- What phone destination is appropriate on back-tap
+
+Then the back button implementation becomes a mechanical application of those declared rules — no new design decisions at implementation time.
+
+Alternative: ship a Phase-1 button now that unconditionally navigates phone to `../index.html` and publishes `exit_app` like singer.html does. This was the original Part B plan. Rejected during scope review because it hardcodes semantics that Session 5 may need to override.
+
+#### When to pick this up
+
+During Session 5, alongside the per-app role manifest implementation. Don't land standalone — the semantics can't be settled in isolation.
+
+#### Related
+
+- DEFERRED "Per-app role manifest for multi-user sessions" — design dependency
+- DEFERRED "Multi-phone session coordination + session manager role" — audience is a non-manager role, relevant to session-ownership questions
+- `docs/SESSION-4.10.3-PLAN.md` — Part B's scope-down decision documented inline
+- commit `f43369a` — Part A of 4.10.3 (exit_app realtime wiring; audience.html already capable of calling publishExitApp if a button were added later)
+
+---
+
 ### Deferred: Phone-as-remote — persistent app launcher on phone, display-only grid on TV
 **Deferred in:** Session 4.10 (Part E Flow 1)
 **Deferred on:** 2026-04-21
