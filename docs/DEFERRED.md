@@ -49,6 +49,58 @@ Links to other DEFERRED entries, PHASE1-NOTES sections, session plans.
 
 ---
 
+### Deferred: Per-app role manifest for multi-user sessions
+
+**Deferred in:** Session 4.10.2 design discussion (post-Parts A+B+C testing)
+**Deferred on:** 2026-04-22
+**Priority:** High — required for any multi-user app behavior
+**Area:** Platform architecture — cross-cutting (affects platform + every app)
+**Status:** Deferred (design only; no implementation until Session 5+)
+
+#### Context
+
+Part E testing of Session 4.10 exposed that the platform has no concept of "who controls a TV session." Parts A+B+C of Session 4.10.2 shipped phone-as-remote UX but still assume single-user usage. Real households are multi-user by default — husband, wife, kids each with a phone, all household members, all eligible to interact with the same TV.
+
+Session 4.10.2 design discussion worked out the multi-user model: one TV hosts at most one active session, one user is the session manager, manager can transfer the role, non-managers interact with the session through app-specific roles (singer, player, audience, etc.).
+
+The specific roles are per-app, not platform-uniform. Karaoke has "singer" (one at a time, request-based). Games has "player" (rules vary per game) and "manager" (one). Wellness has "participant" and "audience." New apps will invent new roles. The platform shouldn't hardcode knowledge of singers or games or breathing exercises.
+
+#### What's deferred
+
+Design and implement a declarative per-app role manifest. Each app (karaoke, games, wellness, future apps) declares:
+
+- What roles exist in the app (singer, player, audience, etc.)
+- How each role is entered (open join / request-to-manager / restricted / manager-only)
+- What each role requires (household membership / TV-device presence / "at home" confirmation / open to anyone)
+- Capacity rules (one singer at a time, N players max, unlimited audience, etc.)
+- Default role for a user tapping the app tile when the session is active (usually "request singer" or "join audience" — app-specific)
+
+The platform reads these manifests and:
+- Routes a phone tap on an active TV session to the right flow (request vs join vs blocked)
+- Enforces capacity and permission rules uniformly
+- Surfaces "who's in what role" on the phone's TV-state display
+
+App-internal UX (karaoke's singer queue with song search, games' lobby vs active-game join flow) lives in each app's HTML file, not in the manifest. Manifest only declares structure; apps implement their own role-specific UIs.
+
+#### Options when picking up
+
+- **Land with Session 5's session_participants schema.** The manifest + session_participants are natural partners: manifest declares roles, session_participants tracks who holds each role. Design together.
+- **Could land earlier** as a standalone design exercise if Session 5 gets pushed. But implementation requires session_participants, so design-only doesn't unblock anything.
+
+Don't try to design the manifest schema now. Too many unknowns until we're building the first real multi-user flow (likely karaoke singer queue). Design when concrete.
+
+#### When to pick this up
+
+At the start of Session 5, as part of session_participants schema design. Should be Part 1 of Session 5's scope: "design the role manifest + session_participants together, then build karaoke's multi-user flow as the first user of both."
+
+#### Related
+
+- Session 5 plan (doesn't exist yet — create docs/SESSION-5-PLAN.md when starting that session, with this entry as a required input)
+- Launch-conflict / multi-phone coordination (not yet filed as a DEFERRED entry — see docs/SESSION-4.10.2-PLAN.md Decision 7 and "Deferred items likely to emerge". Migrate to DEFERRED.md at 4.10.2's session-end ritual.)
+- docs/SESSION-4.10.2-PLAN.md — original plan, pre-dates this insight
+
+---
+
 ### Deferred: Phone-as-remote — persistent app launcher on phone, display-only grid on TV
 **Deferred in:** Session 4.10 (Part E Flow 1)
 **Deferred on:** 2026-04-21
