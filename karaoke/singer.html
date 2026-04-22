@@ -167,6 +167,25 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
 #toast{position:fixed;top:max(60px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(4,2,6,.95);border:1px solid var(--color-border-dim);border-radius:8px;padding:10px 18px;font-size:12px;color:var(--color-text);z-index:999;display:none;white-space:nowrap;pointer-events:none;backdrop-filter:blur(6px);max-width:90vw;overflow:hidden;text-overflow:ellipsis;}
 ::-webkit-scrollbar{width:2px;}
 ::-webkit-scrollbar-thumb{background:var(--color-border);border-radius:1px;}
+
+/* Session 4.10.3: back-to-Elsewhere pill button (top-right).
+   Top-left occupied by LOG button; see Architecture Decision 5. */
+.back-to-elsewhere {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  right: 14px;
+  z-index: 8000;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--color-text-dim);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
 </style>
 </head>
 <body>
@@ -530,6 +549,11 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
 <script>if(typeof AgoraRTC==='undefined'){document.write('<script src="https://cdn.jsdelivr.net/npm/agora-rtc-sdk-ng@4.20.0/AgoraRTC_N-4.20.0.js"><\/script>');}</script>
+<!-- Session 4.10.3: shell exposes window.sb for publishExitApp used
+     by the back-to-Elsewhere button. No other shell behavior is
+     triggered on this page. Per Architecture Decision 8 in
+     docs/SESSION-4.10.3-PLAN.md. -->
+<script type="module" src="../shell/auth.js"></script>
 
 <script>
 'use strict';
@@ -1761,6 +1785,57 @@ function toggleSingerLog(){
 }
 
 document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#home-body,#aud-list,#singer-venue-grid,#singer-dbg,#stage-venue-grid,#screen-costume,#singer-costume-grid,#singer-deepar-grid,#perf-costume-grid,#perf-deepar-grid,#perf-costume-overlay')) e.preventDefault();},{passive:false});
+
+// ── Session 4.10.3: Back-to-Elsewhere ──
+// Tapped from the top-right pill button. Publishes exit_app on the
+// tv_device:<device_key> realtime channel so the TV returns to apps
+// grid, then navigates this phone to Elsewhere's shell. Navigation is
+// unconditional — if publish fails (no TV, no network, Supabase flake),
+// we still take the user home; TV may stay stuck and need manual refresh.
+async function handleBackToElsewhere() {
+  let device_key = null;
+  try { device_key = sessionStorage.getItem('elsewhere.active_tv.device_key'); } catch (_) {}
+
+  if (device_key) {
+    try {
+      await publishExitApp(device_key);
+    } catch (e) {
+      console.error('[elsewhere] exit_app publish failed:', e);
+    }
+    try { sessionStorage.removeItem('elsewhere.active_tv.device_key'); } catch (_) {}
+  }
+
+  location.href = '../index.html';
+}
+
+// Mirrors index.html's publishExitApp (commit f43369a).
+async function publishExitApp(device_key, reason = 'user-exit') {
+  const channel = window.sb.channel('tv_device:' + device_key);
+
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) { settled = true; reject(new Error('Realtime subscribe timed out.')); }
+    }, 5000);
+    channel.subscribe(status => {
+      if (settled) return;
+      if (status === 'SUBSCRIBED') {
+        settled = true; clearTimeout(timer); resolve();
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        settled = true; clearTimeout(timer); reject(new Error('Realtime channel ' + status));
+      }
+    });
+  });
+
+  await channel.send({
+    type:  'broadcast',
+    event: 'exit_app',
+    payload: { reason },
+  });
+
+  await channel.unsubscribe();
+  window.sb.removeChannel(channel);
+}
 </script>
 
 <!-- Debug log panel -->
@@ -1771,6 +1846,11 @@ document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#h
   </div>
   <div id="singer-dbg" style="flex:1;overflow-y:auto;font-family:var(--font-mono);-webkit-overflow-scrolling:touch;padding:4px 10px;"></div>
 </div>
+
+<!-- Session 4.10.3: Back-to-Elsewhere button (top-right; singer.html only,
+     audience.html deferred). Publishes exit_app then navigates to
+     Elsewhere shell. -->
+<button type="button" class="back-to-elsewhere" onclick="handleBackToElsewhere()">← Elsewhere</button>
 
 <!-- Log button — fixed top left -->
 <div onclick="toggleSingerLog()" style="position:fixed;top:max(14px,env(safe-area-inset-top));left:14px;z-index:8000;padding:4px 8px;background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.5);cursor:pointer;font-family:var(--font-mono);">LOG</div>
