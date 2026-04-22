@@ -7,6 +7,44 @@ Paste-ready prompt book for starting the next Elsewhere session. Lives at the re
 
 ---
 
+## Current state
+
+As of commit `8e493ce` (2026-04-22):
+
+- **Shipped today:** Session 4.10.2 (phone-as-remote forward) + Session 4.10.3 (back-to-Elsewhere reverse) + 4.10.2 Part E follow-up. Phone-as-remote loop verified end-to-end on hardware in both directions.
+- **Next active:** Session 4.10.1 — SMS pre-invites.
+- See `docs/ROADMAP.md` § Completed sessions for per-session commit lists.
+
+---
+
+## Architectural decisions locked (for future-session context)
+
+Read-only guardrails — don't relitigate without strong cause.
+
+- **Phone-as-remote model:** interactive app launcher lives on phone, not TV. TV apps grid is display-only (subtitle: "Use your phone to select an app"). See `docs/SESSION-4.10.2-PLAN.md`.
+- **n=1 skip:** users with a single claimed TV auto-route past the picker into remote-control mode. Multi-TV users get the picker. Same pattern used for post-claim auto-route. See 4.10.2 plan Decision 5.
+- **Single realtime channel:** `session_handoff`, `launch_app`, `exit_app` all live on `tv_device:<device_key>`. Session 5 adds more events to the same channel. Don't fork channels for new event types.
+- **Await-before-navigate:** when phone publishes a realtime event before navigating via `location.href`, await the publish. Fire-and-forget drops the handshake before it completes. See commit `7b81f70`.
+- **sessionStorage bridge:** cross-page device_key context uses `elsewhere.active_tv.device_key` sessionStorage. Established in 4.10.3 Part A; reused by 4.10.2 Part E follow-up.
+- **In-app pages need shell/auth.js:** any page that publishes or subscribes to realtime events needs `window.sb`. Added incrementally (games/tv.html in 4.10.3 Part A; singer.html in Part B). See 4.10.3 plan Decision 8.
+- **Phase 1 tolerates manual-recovery seams:** realtime failures, orphaned sessions, etc. Don't build heartbeat/reconnect layers unless customer testing surfaces real pain.
+
+---
+
+## Working conventions
+
+These aren't captured in ROADMAP or DEFERRED — they're how we work together. Preserve across sessions.
+
+- **Review-partner split:** Claude Code proposes → user pastes proposals to Claude.ai chat for review → user approves with "1" in Claude Code (never "2"). See section 3 below for the Claude.ai chat context prompt.
+- **Plans before code for new sessions:** every X.Y.Z session gets a `docs/SESSION-X.Y.Z-PLAN.md` with Goal, Scope, Architecture decisions (all resolved explicitly), Parts breakdown. See section 2 below for the plan-creation prompt.
+- **Small standalone commits:** one commit per logical unit (Part A, bug fix, doc update). Don't batch semantic changes with mechanical ones (version bumps, etc.).
+- **Show diffs before applying:** propose as diff in chat first, apply only after explicit approval. "Yes-all-edits for this session" is acceptable shorthand for pre-approved multi-edit work.
+- **~/sync-app.sh after every phone/TV-page change:** pushes changes into the iOS Capacitor wrapper at `~/Projects/elsewhere-app`. Xcode rebuild + kill/reopen on device needed to test changes on iPhone.
+- **Flag before fabricating:** if a dependency, file, or behavior doesn't exist the way a plan assumes, stop and flag. Don't guess; don't add a "drive-by fix" that isn't real.
+- **Close DEFERRED entries on pickup:** when a deferred item ships, update its Status line to "Completed in Session X.Y" in place. Don't delete — completed items are useful history.
+
+---
+
 ## 1. Start the next queued session (Claude Code)
 
 Paste this into a fresh Claude Code session when you're ready to pick up work:
@@ -65,7 +103,7 @@ Context: I'm working on a project called Elsewhere in parallel across two tools.
 
 Repo: https://github.com/mstepanovich-web/elsewhere
 Branch: main
-As of NEXT-SESSION.md being authored, most recent commit was 3274e5a. This will drift; check main for current state when I ask.
+As of NEXT-SESSION.md being authored, most recent commit was 8e493ce. This will drift; check main for current state when I ask.
 
 Your job in this chat:
 - When I paste a proposed diff, code, or plan from Claude Code, review it against the active plan + common-sense correctness. Flag bugs, scope creep, plan divergence, or risky choices before I approve.
