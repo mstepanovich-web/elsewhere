@@ -6,6 +6,11 @@
   <title>Elsewhere · Games TV</title>
   <link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
   <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
+  <!-- Session 4.10.3: shell exposes window.sb for the exit_app realtime
+       subscription at end of this file's inline script. No other shell
+       behavior is triggered on this page; see DEFERRED "Phone back-to-
+       Elsewhere navigation + coordinated TV teardown" for context. -->
+  <script type="module" src="../shell/auth.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1217,6 +1222,33 @@ window.addEventListener('resize', () => {
 
 // ── Boot ──────────────────────────────────────────────────────
 initAgora();
+
+// Session 4.10.3 — exit_app listener. Phone publishes when user taps
+// "← Elsewhere" on player.html. TV tears down the realtime channel
+// cleanly, then navigates back to tv2.html's apps grid. No-op if no
+// device_key is present (direct-nav dev flow).
+// If-ready-else-wait pattern: shell/auth.js (added to <head> in this
+// commit) loads as a module, so window.sb may not exist at the time
+// this script runs. Fall back to the elsewhere:sb-ready event.
+let _exitAppChannel = null;
+function wireExitAppListener() {
+  if (!window.sb) return false;
+  let device_key = null;
+  try { device_key = localStorage.getItem('elsewhere.tv.device_key'); } catch (_) {}
+  if (!device_key) return true; // no TV identity — nothing to subscribe to, don't retry
+
+  _exitAppChannel = window.sb.channel('tv_device:' + device_key);
+  _exitAppChannel.on('broadcast', { event: 'exit_app' }, async () => {
+    try { await _exitAppChannel.unsubscribe(); } catch (_) {}
+    try { window.sb.removeChannel(_exitAppChannel); } catch (_) {}
+    location.href = '../tv2.html';
+  });
+  _exitAppChannel.subscribe();
+  return true;
+}
+if (!wireExitAppListener()) {
+  document.addEventListener('elsewhere:sb-ready', wireExitAppListener, { once: true });
+}
 </script>
 </body>
 </html>

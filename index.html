@@ -2051,6 +2051,12 @@
 
       const room = generateRoomCode();
 
+      // Session 4.10.3: stash device_key so in-app pages (singer.html,
+      // audience.html, player.html) can read it for the exit_app
+      // back-nav publish. Matches pattern of PENDING_TV_CLAIM_KEY /
+      // PENDING_TV_SIGNIN_KEY sessionStorage bridges.
+      try { sessionStorage.setItem('elsewhere.active_tv.device_key', device_key); } catch (_) {}
+
       // Await the broadcast before navigating. Fire-and-forget doesn't
       // work because location.href below would unload the page before
       // Supabase finishes the subscribe handshake. Log failures but
@@ -2103,6 +2109,38 @@
         type:  'broadcast',
         event: 'launch_app',
         payload: { app, room },
+      });
+
+      await channel.unsubscribe();
+      window.sb.removeChannel(channel);
+    }
+
+    // Publishes 'exit_app' on the tv_device:<device_key> realtime channel.
+    // Mirrors publishLaunchApp's subscribe → send → unsubscribe → removeChannel
+    // pattern. Called from phone-side back-to-Elsewhere buttons on
+    // singer.html / audience.html / player.html (4.10.3 Parts B + C).
+    async function publishExitApp(device_key, reason = 'user-exit') {
+      const channel = window.sb.channel('tv_device:' + device_key);
+
+      await new Promise((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (!settled) { settled = true; reject(new Error('Realtime subscribe timed out.')); }
+        }, 5000);
+        channel.subscribe(status => {
+          if (settled) return;
+          if (status === 'SUBSCRIBED') {
+            settled = true; clearTimeout(timer); resolve();
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            settled = true; clearTimeout(timer); reject(new Error('Realtime channel ' + status));
+          }
+        });
+      });
+
+      await channel.send({
+        type:  'broadcast',
+        event: 'exit_app',
+        payload: { reason },
       });
 
       await channel.unsubscribe();

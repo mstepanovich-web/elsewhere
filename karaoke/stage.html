@@ -5192,6 +5192,32 @@ function wireAdminAuth() {
 if (!wireAdminAuth()) {
   document.addEventListener('elsewhere:sb-ready', wireAdminAuth, { once: true });
 }
+
+// Session 4.10.3 — exit_app listener. Phone publishes when user taps
+// "← Elsewhere" on singer.html / audience.html. TV tears down the
+// realtime channel cleanly, then navigates back to tv2.html's apps
+// grid. No-op if no device_key is present (direct-nav dev flow where
+// stage.html was opened without going through tv2.html first).
+// Mirrors wireAdminAuth's if-ready-else-wait pattern for shell load.
+let _exitAppChannel = null;
+function wireExitAppListener() {
+  if (!window.sb) return false;
+  let device_key = null;
+  try { device_key = localStorage.getItem('elsewhere.tv.device_key'); } catch (_) {}
+  if (!device_key) return true; // no TV identity — nothing to subscribe to, don't retry
+
+  _exitAppChannel = window.sb.channel('tv_device:' + device_key);
+  _exitAppChannel.on('broadcast', { event: 'exit_app' }, async () => {
+    try { await _exitAppChannel.unsubscribe(); } catch (_) {}
+    try { window.sb.removeChannel(_exitAppChannel); } catch (_) {}
+    location.href = '../tv2.html';
+  });
+  _exitAppChannel.subscribe();
+  return true;
+}
+if (!wireExitAppListener()) {
+  document.addEventListener('elsewhere:sb-ready', wireExitAppListener, { once: true });
+}
 </script>
 </body>
 </html>
