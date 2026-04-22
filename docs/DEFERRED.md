@@ -488,6 +488,55 @@ Opportunistically. When next touching any of the listed files for other reasons,
 
 ---
 
+### Deferred: Home-screen flash before auto-route on app launch
+
+**Deferred in:** Session 4.10.2 testing (post-commit 56e6e3d)
+**Deferred on:** 2026-04-22
+**Priority:** Low — cosmetic, not functional
+**Area:** Shell UX — auth/routing timing
+**Status:** Deferred
+
+#### Context
+
+On app launch, the default `screen-home` is visible while auth state hydrates and `loadUserTvs()` query runs. For n=1 users who auto-route to screen-tv-remote (per Decision 5), there's a visible flash of the home tile-grid before the remote screen replaces it. Observed at ~100-500ms on fast networks; likely longer on slow networks.
+
+Flow causing the flash:
+1. DOM loads with `screen-home` marked active (default markup state)
+2. Home tile-grid renders
+3. Shell JS initializes, `window.sb` created, auth state hydrates
+4. `renderAuthState(user)` fires
+5. `resumePendingTvFlow()` returns false
+6. `enterYourTvsFlow()` fires, `loadUserTvs()` async query runs
+7. Result comes back (n=1), `enterTvRemoteScreen()` navigates away
+8. User sees remote screen
+
+The flash is the visible gap between steps 2 and 7.
+
+#### What's deferred
+
+Eliminate or mask the flash. Two viable approaches:
+
+1. **Loading screen default.** Make a minimal spinner/blank screen the default active screen on boot. `enterYourTvsFlow` replaces it with the correct destination. Requires adding a new screen and updating default markup state.
+2. **Home with loading overlay.** Keep `screen-home` active by default but render a dimming overlay + spinner until auth+query complete. Less disruptive to existing shell structure.
+
+Both are ~15-30 min of shell work.
+
+#### Options when picking up
+
+Opportunistic — land during any future session that touches shell initialization or auth routing. Session 5's multi-user work will likely touch `renderAuthState`; good candidate to bundle this fix.
+
+#### When to pick this up
+
+Low priority. No user-blocking behavior. Pick up when polish work cycle permits or bundled with adjacent shell changes.
+
+#### Related
+
+- `enterYourTvsFlow` / `renderAuthState` hook in `index.html`
+- `shell/auth.js` initialization
+- DEFERRED "Phone-as-remote" (parent — this flash is polish on the flow that entry establishes)
+
+---
+
 ### Deferred: Scan-approval flow (request-to-join household in real time)
 **Deferred in:** Session 4.10 (planning)
 **Deferred on:** 2026-04-21
