@@ -49,6 +49,57 @@ Links to other DEFERRED entries, PHASE1-NOTES sections, session plans.
 
 ---
 
+### Deferred: Phone back-to-Elsewhere navigation + coordinated TV teardown
+
+**Deferred in:** Session 4.10.2 testing (post-commit 7b81f70)
+**Deferred on:** 2026-04-22
+**Priority:** High — blocks real usage; once user is in an app, no clean way back
+**Area:** Platform UX — session lifecycle
+**Status:** Deferred (design partially clear; ties into multi-user model)
+
+#### Context
+
+Session 4.10.2's phone-as-remote loop ships the forward path: phone taps Karaoke → phone navigates to singer.html + TV navigates to stage.html. But the reverse path is missing. Once the user is on singer.html, there's no persistent "back to Elsewhere" affordance. Karaoke has its own "home" button but it goes somewhere else (within-karaoke navigation, not out-of-app). Even if the phone could navigate back to Elsewhere home, the TV would stay on stage.html — user would need to manually refresh the TV.
+
+Current user experience: tap Karaoke on phone → stuck in karaoke until app is killed and relaunched. Not shippable as-is for real customers.
+
+#### What's deferred
+
+Two coordinated pieces:
+
+**(1) Phone-side back-to-Elsewhere navigation.**
+Every in-app page (`karaoke/singer.html`, `games/player.html`, future wellness pages, etc.) needs a visible "back to Elsewhere" affordance — probably a consistent top-left or top-right UI element. Tapping it should navigate the phone to the Elsewhere shell home (or directly to the TV remote-control screen, given Decision 5's n=1 skip).
+
+**(2) TV-side coordinated teardown.**
+When the phone leaves the app, the TV should return to tv2.html's apps grid. Implementation likely mirrors `launch_app`: a new realtime event (e.g., `end_session`) published by the phone on `tv_device:<device_key>`. TV listens, on receive navigates back to tv2.html.
+
+Important design question: in a multi-user session (future), one phone leaving shouldn't kill the session for others. The natural answer is: phone-back only affects that user; the session manager can formally "end session" which navigates the TV. For Phase 1 (single-user), simplest rule is: phone-back = TV-back. Matches current mental model that phone-tapper controls the TV.
+
+#### Options when picking up
+
+Land as part of Session 5's multi-user work (`session_participants` + session manager role make the "who can end the session" question answerable). Or ship a Phase-1 simpler version earlier: phone-back unconditionally triggers TV-back, revisit when multi-user lands.
+
+Phase-1 simpler version is ~1-2 hours of work:
+- Add "back to Elsewhere" button to `singer.html`, `player.html`, and any other in-app pages (check what exists)
+- New realtime event publish from phone on nav
+- Extend tv2.html's realtime listener (already has `launch_app` handler from Part C) to handle `end_session` → navigate back to tv2.html
+
+#### When to pick this up
+
+High priority for real customer usability. Either:
+- Ship Phase-1 simpler version as its own small session (4.10.3?) before Session 5
+- Or bundle with Session 5's session-manager work
+
+Don't defer past real customer testing.
+
+#### Related
+
+- DEFERRED "Multi-phone session coordination + session manager role" — ties into "who can end the session" question
+- DEFERRED "Per-app role manifest" — each app declares its exit UX?
+- commit `7b81f70` — Session 4.10.2's forward navigation (reverse is this entry)
+
+---
+
 ### Deferred: Multi-phone session coordination + session manager role
 
 **Deferred in:** Session 4.10.2 design discussion (post-Parts A+B+C testing)
