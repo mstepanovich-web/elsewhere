@@ -8,6 +8,7 @@
   <title>Elsewhere</title>
   <link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
   <script type="module" src="shell/auth.js"></script>
+  <script type="module" src="shell/realtime.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -1846,57 +1847,6 @@
       }
     }
 
-    // ── Realtime session handoff to the TV ──────────────────────────
-
-    // Publishes the phone's current Supabase session tokens onto the
-    // 'tv_device:<device_key>' realtime channel so the TV (Part C:
-    // tv2.html) can call supabase.auth.setSession and proceed authed.
-    //
-    // Timing note: the TV must subscribe to this channel BEFORE the
-    // phone publishes. Supabase broadcasts are not buffered for late-
-    // joiners — if the TV hasn't subscribed by the time send() fires,
-    // the handoff is dropped silently and the user ends up stuck on
-    // the TV's QR screen. Part C (tv2.html rewrite) must subscribe
-    // before rendering the QR, not after.
-    async function publishSessionHandoff(device_key) {
-      const { data: { session }, error: sessionErr } = await window.sb.auth.getSession();
-      if (sessionErr) throw sessionErr;
-      if (!session) throw new Error('No session to hand off — please sign in again.');
-
-      const channel = window.sb.channel('tv_device:' + device_key);
-
-      // Subscribe first, then send. 5s timeout to fail fast if realtime
-      // is unreachable rather than silently dropping the handoff.
-      await new Promise((resolve, reject) => {
-        let settled = false;
-        const timer = setTimeout(() => {
-          if (!settled) { settled = true; reject(new Error('Realtime subscribe timed out.')); }
-        }, 5000);
-        channel.subscribe(status => {
-          if (settled) return;
-          if (status === 'SUBSCRIBED') {
-            settled = true; clearTimeout(timer); resolve();
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            settled = true; clearTimeout(timer); reject(new Error('Realtime channel ' + status));
-          }
-        });
-      });
-
-      await channel.send({
-        type:  'broadcast',
-        event: 'session_handoff',
-        payload: {
-          access_token:  session.access_token,
-          refresh_token: session.refresh_token,
-        },
-      });
-
-      // Clean up. Broadcast is fire-and-forget; keeping the channel open
-      // would leak realtime sockets across flows.
-      await channel.unsubscribe();
-      window.sb.removeChannel(channel);
-    }
-
     // ════════════════════════════════════════════════════════════════════
     // Session 4.10.2 — Phone-as-remote
     // ════════════════════════════════════════════════════════════════════
@@ -2089,69 +2039,6 @@
       let out = '';
       for (const b of bytes) out += ALPHABET[b % ALPHABET.length];
       return out;
-    }
-
-    // Publishes 'launch_app' on the tv_device:<device_key> realtime channel.
-    // Mirrors publishSessionHandoff's subscribe-then-send-then-unsubscribe
-    // pattern for consistency. TV side (tv2.html) listener lands in Part C.
-    async function publishLaunchApp(device_key, app, room) {
-      const channel = window.sb.channel('tv_device:' + device_key);
-
-      await new Promise((resolve, reject) => {
-        let settled = false;
-        const timer = setTimeout(() => {
-          if (!settled) { settled = true; reject(new Error('Realtime subscribe timed out.')); }
-        }, 5000);
-        channel.subscribe(status => {
-          if (settled) return;
-          if (status === 'SUBSCRIBED') {
-            settled = true; clearTimeout(timer); resolve();
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            settled = true; clearTimeout(timer); reject(new Error('Realtime channel ' + status));
-          }
-        });
-      });
-
-      await channel.send({
-        type:  'broadcast',
-        event: 'launch_app',
-        payload: { app, room },
-      });
-
-      await channel.unsubscribe();
-      window.sb.removeChannel(channel);
-    }
-
-    // Publishes 'exit_app' on the tv_device:<device_key> realtime channel.
-    // Mirrors publishLaunchApp's subscribe → send → unsubscribe → removeChannel
-    // pattern. Called from phone-side back-to-Elsewhere buttons on
-    // singer.html / audience.html / player.html (4.10.3 Parts B + C).
-    async function publishExitApp(device_key, reason = 'user-exit') {
-      const channel = window.sb.channel('tv_device:' + device_key);
-
-      await new Promise((resolve, reject) => {
-        let settled = false;
-        const timer = setTimeout(() => {
-          if (!settled) { settled = true; reject(new Error('Realtime subscribe timed out.')); }
-        }, 5000);
-        channel.subscribe(status => {
-          if (settled) return;
-          if (status === 'SUBSCRIBED') {
-            settled = true; clearTimeout(timer); resolve();
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            settled = true; clearTimeout(timer); reject(new Error('Realtime channel ' + status));
-          }
-        });
-      });
-
-      await channel.send({
-        type:  'broadcast',
-        event: 'exit_app',
-        payload: { reason },
-      });
-
-      await channel.unsubscribe();
-      window.sb.removeChannel(channel);
     }
 
     // ── Foreground refresh ──────────────────────────────────────────

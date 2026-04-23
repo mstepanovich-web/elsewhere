@@ -14,6 +14,7 @@
        handles elsewhere://auth/callback deep links. Auth UI lives on the
        shell (index.html); this page only reads currentUser to prefill name. -->
   <script type="module" src="../shell/auth.js"></script>
+  <script type="module" src="../shell/realtime.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; background: var(--color-bg); color: var(--color-text); font-family: var(--font-ui); overflow: hidden; }
@@ -3240,34 +3241,6 @@ async function handleBackToElsewhere() {
   location.href = '../index.html';
 }
 
-// Mirrors index.html's publishExitApp (commit f43369a).
-async function publishExitApp(device_key, reason = 'user-exit') {
-  const channel = window.sb.channel('tv_device:' + device_key);
-
-  await new Promise((resolve, reject) => {
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (!settled) { settled = true; reject(new Error('Realtime subscribe timed out.')); }
-    }, 5000);
-    channel.subscribe(status => {
-      if (settled) return;
-      if (status === 'SUBSCRIBED') {
-        settled = true; clearTimeout(timer); resolve();
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        settled = true; clearTimeout(timer); reject(new Error('Realtime channel ' + status));
-      }
-    });
-  });
-
-  await channel.send({
-    type:  'broadcast',
-    event: 'exit_app',
-    payload: { reason },
-  });
-
-  await channel.unsubscribe();
-  window.sb.removeChannel(channel);
-}
 </script>
 
 <!-- Add TV display modal (Session 4.8) -->
