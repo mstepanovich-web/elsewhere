@@ -745,7 +745,7 @@ Before real customer-acquisition campaigns. First-time onboarding UX matters mos
 **Deferred on:** 2026-04-22
 **Priority:** Low — no functional impact; inline duplication is manageable through Phase 1
 **Area:** Shell / infrastructure — realtime helpers
-**Status:** Deferred (trigger-based, not calendar-based)
+**Status:** Completed in Session 5 Part 1c (commit `9e10bf4`)
 
 #### Context
 

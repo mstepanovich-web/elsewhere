@@ -6,17 +6,37 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 
 ## Active session
 
-**Session 4.10.1 — Phone-based household pre-invites (SMS)**
-- **Status:** queued, not yet started (promoted after 4.10.3 closed)
-- **Estimated:** 1–2 hours
-- **Why it's next:** 4.10.2 and 4.10.3 shipped their core UX work. 4.10.1 is the remaining 4.10-family follow-up. Non-blocking for current usage but needed before scaling household onboarding past direct email invites.
-- **Reference:** `DEFERRED.md` → "Phone-based household pre-invites (SMS verification)"
+**Session 5 — Universal session + participants + queue model**
+- **Status:** In progress. Part 1 complete (schema + RPCs + `shell/realtime.js` extraction). Part 2a complete (realtime event publishers). Parts 2b–2f and 3–5 pending.
+- **Estimated:** 4–6 hours remaining (multi-session work)
+- **References:** `docs/SESSION-5-PLAN.md`, `docs/SESSION-5-PART-2-BREAKDOWN.md`
+
+### Commits shipped in Session 5
+
+**Part 1 — Schema + RPCs + shell/realtime.js extraction:**
+- `253e077` — Part 1a: sessions + session_participants schema with RLS (db/008)
+- `979f70d` — Part 1b.1: session lifecycle RPCs (db/009)
+- `a0373e0` — Part 1b.2: manager mechanics RPCs (db/010)
+- `5f60d13` — Part 1b.3: role and queue mutation RPCs (db/011)
+- `9e10bf4` — Part 1c: extract realtime helpers into `shell/realtime.js`
+
+**Part 2a — Session 5 event publishers:**
+- `d1b4edd` — 5 new realtime event publishers (`session_started`, `manager_changed`, `participant_role_changed`, `queue_updated`, `session_ended`)
+
+**Next up:** Part 2b — session lifecycle wiring. See `docs/SESSION-5-PART-2-BREAKDOWN.md` for full scope + locked decisions.
 
 ---
 
 ## Queued sessions
 
-> **Note on numbering:** Session numbers reflect topical relation to 4.10, not execution order. 4.10.2 and 4.10.3 shipped before 4.10.1 because they addressed user-blocking UX issues; 4.10.1 (SMS pre-invites) is a scaling concern that doesn't block current usage.
+> **Note on numbering:** Session numbers reflect topical relation to 4.10, not execution order. 4.10.2 and 4.10.3 shipped before 4.10.1. Session 5 is now in progress ahead of both 4.10.1 and 4.11 because its multi-user schema unblocks real multi-user apps. 4.10.1 (SMS pre-invites) and 4.11 (admin UI) remain queued behind Session 5.
+
+### Session 4.10.1 — Phone-based household pre-invites (SMS)
+
+- **Why:** needed before scaling household onboarding past direct email invites
+- **Estimated:** 1–2 hours
+- **Depends on:** nothing (orthogonal to Session 5)
+- **Reference:** `DEFERRED.md` → "Phone-based household pre-invites (SMS verification)"
 
 ### Session 4.11 — Admin management UI
 
@@ -24,13 +44,6 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 - **Estimated:** 2–3 hours
 - **Depends on:** 4.10 RPCs (already shipped — `rpc_approve_household_member`, `rpc_designate_admin`)
 - **Reference:** `DEFERRED.md` → "Scan-approval flow", "Pending Invitations inbox"
-
-### Session 5 — session_participants schema
-
-- **Why:** room codes are a hack. `session_participants` replaces them with proper session identity, fixes the games lobby fragility, the deep-link auto-manager bug, the karaoke shared-state issues. Big refactor.
-- **Estimated:** 4–6 hours, possibly split across sessions
-- **Depends on:** 4.11 (some admin context flows feed into session ownership)
-- **Reference:** `DEFERRED.md` → "Lobby state fragility", "Games deep-link auto-manager bug", "Last Card leakage", related entries
 
 ---
 

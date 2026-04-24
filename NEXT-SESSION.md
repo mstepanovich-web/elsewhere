@@ -7,13 +7,19 @@ Paste-ready prompt book for starting the next Elsewhere session. Lives at the re
 
 ---
 
-## Current state
+## Current state — Session 5 in progress
 
-As of commit `8e493ce` (2026-04-22):
+As of commit `a48258e` (2026-04-23):
 
-- **Shipped today:** Session 4.10.2 (phone-as-remote forward) + Session 4.10.3 (back-to-Elsewhere reverse) + 4.10.2 Part E follow-up. Phone-as-remote loop verified end-to-end on hardware in both directions.
-- **Next active:** Session 4.10.1 — SMS pre-invites.
-- See `docs/ROADMAP.md` § Completed sessions for per-session commit lists.
+- **Active:** Session 5 — Universal session + participants + queue model. Part 1 complete (schema + RPCs + `shell/realtime.js` extraction). Part 2a complete (realtime event publishers). Parts 2b–2f and 3–5 pending.
+- **Next up:** Part 2b — session lifecycle wiring.
+- **Hydration for the next session:** Read `docs/SESSION-5-PLAN.md` (commit `2b40313`) for architecture decisions, `docs/SESSION-5-PART-2-BREAKDOWN.md` for Part 2 sub-part scope and locked decisions, and this file's later sections for working conventions. All design decisions are locked — start Part 2b directly.
+- **Key references:**
+  - `docs/SESSION-5-PLAN.md` — architecture decisions
+  - `docs/SESSION-5-PART-2-BREAKDOWN.md` — Part 2 sub-part scope + locked decisions + "do not relitigate" list
+  - `db/008`–`db/011` — schema and RPC surface (all applied in Supabase)
+  - `shell/realtime.js` — publisher/listener surface including Part 2a's 5 new event publishers
+- See `docs/ROADMAP.md` § Active session for the per-Part commit manifest.
 
 ---
 
