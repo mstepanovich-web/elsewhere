@@ -41,7 +41,7 @@ Session 5 breaks into 5 parts. Part 1 (schema + RPCs + `shell/realtime.js` extra
 - Await-before-navigate (commit `7b81f70`).
 
 **Entry criteria:** 2a complete ✓
-**Exit criteria:** DB session rows created at app-tile tap; TV stays on stage when manager navigates back to Elsewhere home; TV navigates to apps grid on `session_ended` (fired by End Session, orphan reclaim, admin reclaim, or cross-app switch in 2c).
+**Exit criteria:** DB session rows created at app-tile tap; TV stays on stage when manager navigates back to Elsewhere home; TV navigates to apps grid on `session_ended` (fired by End Session or cross-app switch in 2c). Reclaim paths (`rpc_session_reclaim_manager`, `rpc_session_admin_reclaim`) fire `manager_changed`, not `session_ended` — the session continues through reclaim.
 **Files touched:** `index.html`, `tv2.html`, `karaoke/stage.html`, `games/tv.html`. (No longer touches `karaoke/singer.html` or `games/player.html`.)
 **Rough commit count:** 1
 

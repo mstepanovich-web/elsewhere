@@ -268,7 +268,7 @@ All mutations go through RPCs. No direct inserts/updates/deletes from client.
 
 Core surface:
 
-- `rpc_session_start(p_tv_device_id uuid, p_app text) → sessions` — creates session; inserts caller as manager
+- `rpc_session_start(p_tv_device_id uuid, p_app text, p_admission_mode text, p_capacity int, p_ask_proximity boolean, p_turn_completion text, p_room_code text default null) → sessions` — creates session; inserts caller as manager. (Manifest values are client-supplied rather than server-resolved; this was the implementation choice at Part 1b.1 — the pre-1b.1 spec assumed a 2-param server-manifest-lookup form.)
 - `rpc_session_join(p_session_id uuid, p_participation_role text) → session_participants` — adds caller; enforces proximity gate for non-audience roles
 - `rpc_session_leave(p_session_id uuid) → session_participants` — sets caller's `left_at`
 - `rpc_session_end(p_session_id uuid) → sessions` — manager-only; sets `ended_at`
@@ -279,7 +279,7 @@ Core surface:
 - `rpc_session_update_queue_position(p_session_id uuid, p_user_id uuid, p_new_position int) → session_participants` — manager/host only
 - `rpc_session_promote_self_from_queue(p_session_id uuid) → session_participants` — caller-initiated; works only when session is in `self_join` admission_mode AND capacity allows
 
-RPC bodies handle all permission checks, proximity gating, and realtime broadcast emission. Client-side realtime handlers react to broadcasts but do not duplicate authority checks.
+RPC bodies handle all permission checks and proximity gating. Realtime broadcast emission is client-side — callers publish the relevant event via shell/realtime.js after the RPC returns successfully. (The pre-1b.1 spec assumed server-side emission from inside RPC bodies; Part 1b.1 shipped client-publish instead. See the emission matrix in shell/realtime.js header.) Client-side realtime handlers react to broadcasts but do not duplicate authority checks.
 
 ---
 
