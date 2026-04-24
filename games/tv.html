@@ -1229,8 +1229,51 @@ initAgora();
 // window.elsewhere.ready internally. Called with our navigation target as
 // the onExit callback. DOMContentLoaded ensures the deferred realtime.js
 // module has set window.wireExitAppListener before we call it.
+//
+// Session 5 Part 2b — callback wraps navigation in a session-state check.
+// Under Session 5, phone Back-to-Elsewhere = navigate-only; the session
+// stays alive with the manager still as manager. On exit_app receive, we
+// check whether a live session still exists for this TV. If yes: stay on
+// the game. If no (session ended, dev/direct-nav, or query failed):
+// navigate back to tv2.html as pre-2b behavior.
+//
+// Known limitation: shell/realtime.js's wireExitAppListener tears down
+// the channel BEFORE calling onExit. If we stay, the exit_app subscription
+// is gone — a subsequent exit_app (e.g., user re-enters player.html then
+// Backs out again) won't reach us. Phase 1 recovery seam; expected to be
+// addressed in the games-side equivalent of Part 2d's subscription
+// redesign (future Part 3 scope). Until then, if the session ends while
+// the TV is stayed-on-game, manual refresh recovers.
+async function onExit() {
+  let device_key = null;
+  try { device_key = localStorage.getItem('elsewhere.tv.device_key'); } catch (_) {}
+
+  if (device_key) {
+    try {
+      const { data: tv } = await window.sb
+        .from('tv_devices').select('id').eq('device_key', device_key).maybeSingle();
+      if (tv?.id) {
+        const { data: s } = await window.sb
+          .from('sessions').select('id').eq('tv_device_id', tv.id).is('ended_at', null).maybeSingle();
+        if (s?.id) {
+          tvLog('exit_app: session ' + s.id + ' still active — staying on game');
+          return;
+        }
+      }
+    } catch (e) {
+      // SELECT errors: fall through to navigation. Safer to navigate on
+      // unknown state than strand the TV on games/tv.html with a
+      // possibly-ended session.
+      tvLog('exit_app: session-check query failed (' + (e?.message || e) + ') — navigating');
+    }
+  }
+
+  tvLog('exit_app: no active session — navigating to tv2.html');
+  location.href = '../tv2.html';
+}
+
 function wireUp() {
-  window.wireExitAppListener(() => { location.href = '../tv2.html'; });
+  window.wireExitAppListener(onExit);
 }
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', wireUp, { once: true });

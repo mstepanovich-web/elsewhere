@@ -1853,8 +1853,10 @@
 
     // ── Part A: loadUserTvs + Your TVs picker ───────────────────────
 
-    // Returns [{device_key, household_id, household_name, tv_display_name,
-    // last_seen_at}, ...] — sorted by last_seen_at desc (freshest first).
+    // Returns [{tv_device_id, device_key, household_id, household_name,
+    // tv_display_name, last_seen_at}, ...] — sorted by last_seen_at desc
+    // (freshest first). tv_device_id added in Session 5 Part 2b for
+    // rpc_session_start's p_tv_device_id param.
     // Empty array means user has no household membership OR RLS filtered
     // everything out. Either way, caller keeps user on screen-home.
     async function loadUserTvs() {
@@ -1862,13 +1864,14 @@
       if (!user) return [];
       const { data, error } = await window.sb
         .from('tv_devices')
-        .select('device_key, household_id, display_name, last_seen_at, households(name)')
+        .select('id, device_key, household_id, display_name, last_seen_at, households(name)')
         .order('last_seen_at', { ascending: false });
       if (error) {
         console.error('[elsewhere] loadUserTvs error:', error);
         return [];
       }
       return (data || []).map(row => ({
+        tv_device_id:    row.id,
         device_key:      row.device_key,
         household_id:    row.household_id,
         household_name:  row.households?.name || '',
@@ -1972,8 +1975,9 @@
       }
 
       const screen = document.getElementById('screen-tv-remote');
-      screen.dataset.deviceKey = device_key;
-      screen.dataset.origin    = origin;
+      screen.dataset.deviceKey  = device_key;
+      screen.dataset.tvDeviceId = tv?.tv_device_id || '';
+      screen.dataset.origin     = origin;
 
       const title     = document.getElementById('tv-remote-title');
       const household = document.getElementById('tv-remote-household');
@@ -1992,13 +1996,20 @@
       goTo('screen-tv-remote');
     }
 
+    // Per-app session manifest values passed to rpc_session_start. App-level
+    // defaults for Session 5 Part 2b; game-engine-specific manifests (trivia,
+    // last-card, euchre) land in Part 3. Adding a new app is a data change
+    // here, not a logic change in handleTvRemoteTileTap.
+    const APP_MANIFEST = {
+      karaoke: { admission_mode: 'manager_approved_single', capacity: 1,    ask_proximity: true,  turn_completion: 'app_declared' },
+      games:   { admission_mode: 'self_join',               capacity: null, ask_proximity: false, turn_completion: 'app_declared' },
+    };
+
     // Phone follows the TV into the app as the launching user's role
-    // (singer for karaoke, manager for games). Navigation is
-    // unconditional on publish success — if the broadcast fails, the
-    // phone still enters the participant app; the user can back out
-    // to elsewhere home if the TV didn't launch. The phone's session
-    // is independent of the TV's, so the phone-side app page will
-    // function regardless.
+    // (singer for karaoke, manager for games). Under Session 5 Part 2b:
+    // rpc_session_start failure aborts the tap (alert + no navigation);
+    // broadcast failures (session_started, launch_app) are logged but
+    // still navigate — phone-side app functions regardless of TV state.
     async function handleTvRemoteTileTap(app) {
       const screen     = document.getElementById('screen-tv-remote');
       const device_key = screen.dataset.deviceKey;
@@ -2008,16 +2019,56 @@
 
       const room = generateRoomCode();
 
+      // Session 5 Part 2b: create the session row before broadcasting.
+      // Client-supplied manifest (plan-doc-confirmed in commit 157d920).
+      // RPC failure: surface error, no broadcast, no navigation.
+      const tv_device_id = screen.dataset.tvDeviceId;
+      if (!tv_device_id) {
+        alert("Couldn't start session: TV id missing. Reopen the TV from Your TVs and try again.");
+        return;
+      }
+      const manifest = APP_MANIFEST[app];
+      const { data, error: startErr } = await window.sb.rpc('rpc_session_start', {
+        p_tv_device_id:    tv_device_id,
+        p_app:             app,
+        p_admission_mode:  manifest.admission_mode,
+        p_capacity:        manifest.capacity,
+        p_ask_proximity:   manifest.ask_proximity,
+        p_turn_completion: manifest.turn_completion,
+        p_room_code:       room,
+      });
+      if (startErr) {
+        alert("Couldn't start session: " + (startErr.message || 'unknown error'));
+        return;
+      }
+      const session = data;
+
       // Session 4.10.3: stash device_key so in-app pages (singer.html,
       // audience.html, player.html) can read it for the exit_app
       // back-nav publish. Matches pattern of PENDING_TV_CLAIM_KEY /
       // PENDING_TV_SIGNIN_KEY sessionStorage bridges.
       try { sessionStorage.setItem('elsewhere.active_tv.device_key', device_key); } catch (_) {}
 
-      // Await the broadcast before navigating. Fire-and-forget doesn't
+      // Await all broadcasts before navigating. Fire-and-forget doesn't
       // work because location.href below would unload the page before
-      // Supabase finishes the subscribe handshake. Log failures but
-      // navigate anyway — phone-side app functions regardless of TV state.
+      // Supabase finishes each subscribe handshake. Log broadcast
+      // failures but navigate anyway — phone-side app functions
+      // regardless of TV state. Note: a dropped session_started broadcast
+      // leaves a live DB session row that realtime subscribers never
+      // heard about. Subsequent consumers (Part 2c tile relabeling,
+      // Part 2d stage state) must tolerate missed session_started events
+      // by reading the sessions table on mount rather than relying
+      // purely on broadcast.
+      try {
+        await publishSessionStarted(device_key, {
+          session_id:      session.id,
+          app:             session.app,
+          manager_user_id: session.manager_user_id,
+          room_code:       session.room_code,
+        });
+      } catch (e) {
+        console.error('[elsewhere] session_started publish failed:', e);
+      }
       try {
         await publishLaunchApp(device_key, app, room);
       } catch (e) {

@@ -406,6 +406,7 @@
       realtimeChannel = window.sb.channel('tv_device:' + deviceKey);
       realtimeChannel.on('broadcast', { event: 'session_handoff' }, handleSessionHandoff);
       realtimeChannel.on('broadcast', { event: 'launch_app' },      handleLaunchApp);
+      realtimeChannel.on('broadcast', { event: 'session_ended' },   handleSessionEnded);
 
       await new Promise((resolve, reject) => {
         let settled = false;
@@ -469,6 +470,25 @@
         await renderCurrentState();
       } catch (e) {
         tvLog('handoff error: ' + (e?.message || e));
+      }
+    }
+
+    // Session 5 Part 2b — session_ended broadcast handler.
+    // Fires on the tv_device:<device_key> channel when rpc_session_end
+    // or rpc_session_leave-collapse-to-session-end terminates a session
+    // (see shell/realtime.js emission matrix). tv2.html is almost
+    // certainly showing screen-apps when this arrives; re-rendering is
+    // a no-op visually in 2b (the apps grid is identical before and
+    // after) but becomes meaningful once Part 2c adds session-state-
+    // reflecting UI — per-app tile badging ("Rejoin Karaoke" / "Karaoke
+    // (active)" / normal) that the re-render naturally updates on
+    // session termination. Defensive wiring for 2c's consumer.
+    async function handleSessionEnded({ payload }) {
+      tvLog('realtime: received session_ended (reason: ' + (payload?.reason || 'unknown') + ')');
+      try {
+        await renderCurrentState();
+      } catch (e) {
+        tvLog('session_ended error: ' + (e?.message || e));
       }
     }
 
