@@ -21,20 +21,29 @@ Session 5 breaks into 5 parts. Part 1 (schema + RPCs + `shell/realtime.js` extra
 ### 2b — Session lifecycle wiring [PENDING — NEXT]
 
 **Scope:**
-- `index.html` `handleTvRemoteTileTap`: call `rpc_session_start` before `publishLaunchApp`; emit `session_started` after RPC succeeds
-- `karaoke/singer.html` + `games/player.html` `handleBackToElsewhere`: call `rpc_session_leave`; SELECT follow-up to detect if session ended as side effect (manager-alone branch); emit `session_ended` + `exit_app` only if session ended
-- `tv2.html`: subscribe to `session_ended`; navigate to apps grid on receive
-- `karaoke/stage.html` + `games/tv.html`: on `exit_app`, check session state before navigating; stay if session still active
+
+- `index.html` `handleTvRemoteTileTap`: await `rpc_session_start` before `publishLaunchApp`; emit `session_started` after RPC succeeds. On RPC failure, surface error and do NOT navigate.
+- `tv2.html`: subscribe to `session_ended` on the existing `tv_device:<device_key>` channel; navigate to apps grid on receive.
+- `karaoke/stage.html` + `games/tv.html`: on `exit_app`, SELECT active session for this `tv_device_id`; stay on current screen if session still active, navigate as before if not. Under Session 5, phone navigating back to Elsewhere home does NOT end the session, so the TV must ignore `exit_app` when a session is still live.
+
+**What's NOT in 2b (deliberate):**
+
+- `karaoke/singer.html` / `games/player.html` `handleBackToElsewhere` get NO wiring changes. The manager-only Back-to-Elsewhere button becomes navigate-only: no `rpc_session_leave` call, no SELECT follow-up, no `publishSessionEnded`, no `publishExitApp`. The phone navigates away; the TV sees the implicit `exit_app` fire (from page unload) and ignores it because the session is still active. Session stays alive with the manager still as manager.
+- Session termination paths are unchanged from Part 1: explicit End Session button (`rpc_session_end`), inactivity orphan timeout (`rpc_session_reclaim_manager`), admin force-reclaim (`rpc_session_admin_reclaim`), and cross-app switch confirmation (Part 2c).
 
 **Locked decisions:**
-- (a) SELECT follow-up (not RPC return-type change) to detect session-ended-as-side-effect
-- Sessions always created on app-tile tap in Session 5; "no session" fallback is for dev/direct-nav only
-- 2b may be split into 2b.1 (phone-side) + 2b.2 (TV-side) if scope feels sprawling — judgment call at implementation
+
+- Back-to-Elsewhere = navigate only. Supersedes earlier breakdown language about `rpc_session_leave` + SELECT follow-up on Back tap. That design was rejected in favor of "navigate but stay in session" — matches the plan doc's "Back to Elsewhere behavior" cross-cutting decision.
+- Only managers see the Back-to-Elsewhere button. Hosts and participants are app-scoped and cannot navigate to Elsewhere home from inside an app.
+- "Potential participant" is a derived UI state from `(control_role, participation_role, has_tv_device, proximity)`, NOT a new schema value.
+- Sessions always created on app-tile tap in Session 5; "no session" fallback in stage/tv.html is for dev/direct-nav only.
+- Object-payload signatures for Session 5 publishers (Part 2a convention).
+- Await-before-navigate (commit `7b81f70`).
 
 **Entry criteria:** 2a complete ✓
-**Exit criteria:** DB session rows created/ended at correct lifecycle points; no stale rows; TV stays on stage when session continues, navigates back on `session_ended`
-**Files touched:** `index.html`, `karaoke/singer.html`, `games/player.html`, `tv2.html`, `karaoke/stage.html`, `games/tv.html`
-**Rough commit count:** 1–2
+**Exit criteria:** DB session rows created at app-tile tap; TV stays on stage when manager navigates back to Elsewhere home; TV navigates to apps grid on `session_ended` (fired by End Session, orphan reclaim, admin reclaim, or cross-app switch in 2c).
+**Files touched:** `index.html`, `tv2.html`, `karaoke/stage.html`, `games/tv.html`. (No longer touches `karaoke/singer.html` or `games/player.html`.)
+**Rough commit count:** 1
 
 ### 2c — Apps grid session-awareness [PENDING]
 
@@ -83,6 +92,7 @@ Session 5 breaks into 5 parts. Part 1 (schema + RPCs + `shell/realtime.js` extra
 - On promotion (queued → active via `participant_role_changed` event): switch modes, adopt current TV state
 - Manager/host external state changes: subscribe to `participant_role_changed`, reflect changes
 - Queue UI for managers: list of queued singers with pre_selections visible, promote-next button (calls `rpc_session_update_participant`)
+- Queued-singer self-drop: queued singers can flip themselves back to `participation_role='audience'` via `rpc_session_update_participant`. This is a role change, NOT `rpc_session_leave` — the user stays in the session. Matches the active-singer-finishes-song pattern.
 
 **Locked decisions:**
 - Audience-role users on singer.html redirect to audience.html (not inline read-only state)
@@ -101,6 +111,7 @@ Session 5 breaks into 5 parts. Part 1 (schema + RPCs + `shell/realtime.js` extra
 - Hide picker UIs entirely (not greyed — hidden)
 - Subscribe to `participant_role_changed`, `queue_updated`, `session_ended`
 - Read-only spectator display of current stage state
+- Audience exit is implicit. Closing the phone app or navigating away does NOT fire any RPC. Audience rows remain with `left_at = null` until a future cleanup mechanism runs. Ghost audience count is an accepted Phase 1 trade-off — see DEFERRED "Participant cleanup mechanism" for the eventual solution.
 
 **Locked decisions:**
 - Audience is fully read-only: NO song/venue/costume picker (hidden, not greyed)
@@ -151,12 +162,28 @@ Under Session 5, tapping any app tile creates a session via `rpc_session_start`.
 
 ### Back to Elsewhere behavior
 
-Per Session 5 design: Back to Elsewhere = navigate but stay in session. The phone navigates to apps grid; the TV stays on the current session UNLESS the session ends (manager was alone, no eligible promotee).
+Per Session 5 design: Back to Elsewhere = navigate but stay in session. The phone navigates to apps grid; the TV stays on the current session. The session ending is orthogonal — see "Non-manager exit semantics" and the termination paths listed below.
 
 No user-facing "Leave session" button. Exits happen via:
 - Explicit end session (manager only)
-- Going inactive (10-min threshold)
-- Auto-promote-then-leave for managers
+- Going inactive (10-min threshold) → orphan reclaim by another household member, or admin force-reclaim
+
+### Back-to-Elsewhere button visibility
+
+Only managers see the Back-to-Elsewhere navigation button in `karaoke/singer.html` and `games/player.html`. Hosts and regular participants do not — they are app-scoped, meaning they can navigate within the app (songs, games) but cannot leave to Elsewhere home without going through a manager-initiated flow (end session, inactivity, admin reclaim).
+
+This informs 2e (singer.html) and the Part 2 audience flow (2f): the Back button's DOM presence is conditional on `control_role === 'manager'`.
+
+### Non-manager exit semantics
+
+No non-manager participant calls `rpc_session_leave` via a user-facing action in Session 5 Part 2. Exit mechanics by role:
+
+- **Active singer finishes song:** role transition (`active` → `audience` or `queued`) via `rpc_session_update_participant`. Not a leave.
+- **Queued singer drops out:** role transition (`queued` → `audience`) via `rpc_session_update_participant` (Part 2e). Not a leave.
+- **Audience closes app:** no RPC. Implicit; row persists. Ghost audience accepted as Phase 1 trade-off (Part 2f).
+- **Host / participant wanting to exit the app entirely:** no UI for this in Session 5. Would require manager to end session or admin reclaim.
+
+`rpc_session_leave` itself is retained in the DB for future use (background cleanup, heartbeat-based stale-participant sweep) but is not called from any Session 5 Part 2 UI.
 
 ### Manager/host authority semantics
 
@@ -183,7 +210,10 @@ These decisions are locked. Don't revisit unless a concrete problem surfaces in 
 - Proximity "No" → confirm dialog → audience role
 - 10-min orphan threshold flat across apps (not per-app tunable in Phase 1)
 - Object-payload signatures for Session 5 publishers
-- SELECT follow-up to detect session-ended-as-side-effect
+- Back-to-Elsewhere is navigate-only, no `rpc_session_leave` call (supersedes earlier "SELECT follow-up on Back tap" design)
+- Only managers see the Back-to-Elsewhere button
+- "Potential participant" is derived UI state, not a schema value
+- Non-manager exits use role transitions or implicit accumulation, never `rpc_session_leave` in Session 5 Part 2
 
 ## Applied migrations
 
