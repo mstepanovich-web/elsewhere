@@ -133,3 +133,14 @@ Before the final session commit, update docs/ROADMAP.md:
 2. Promote the top entry from **Queued sessions** into **Active session**.
 3. If new deferred items emerged, confirm they're captured in docs/DEFERRED.md before closing the session.
 4. Commit all roadmap + DEFERRED updates as part of the session's final commit (usually the Part G version-bump commit or equivalent closing commit). Don't leave them dangling for the next session to discover.
+
+---
+
+## Open items for Session 5 closeout
+
+When Session 5 fully closes (after Parts 2–5 ship), update `docs/ROADMAP.md` to include a "Future work / Triggered" section referencing:
+
+- DEFERRED `087923a` — Venues as cross-app service (trigger: wellness app start OR games visual parity priority)
+- Other DEFERRED entries that are architecture (not bugs) worth surfacing at ROADMAP level
+
+Rationale: DEFERRED is archaeology; ROADMAP is where next work gets planned. Converting persistent-architecture DEFERRED entries to ROADMAP pointers at session close ensures they surface when planning next sessions.
