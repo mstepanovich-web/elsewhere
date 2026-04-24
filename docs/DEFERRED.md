@@ -893,6 +893,269 @@ Not urgent for Session 5. Don't bundle with Session 5 — the scope creep risk i
 
 ---
 
+## Venues integration (post-Session-5)
+
+Cluster of items surfaced during Session 5 Part 2b scope review that resolve when venues-as-cross-app-service work begins (see "Venues as cross-app service (games, wellness, future apps)" entry above for the parent refactor). All six are architectural or design-clarification items, not bugs — they capture decisions deferred from Session 5 that affect games visual parity, proximity semantics, and participant lifecycle cleanup.
+
+---
+
+### Deferred: Games TV rendering matrix (post-venues integration)
+
+**Deferred in:** Session 5 Part 2b scope refinement (2026-04-24)
+**Deferred on:** 2026-04-24
+**Priority:** High — architectural; needed before venues-as-cross-app work starts
+**Area:** Games / Shell — TV rendering
+**Status:** Deferred
+
+#### Context
+
+Karaoke's TV viewer (stage.html) renders singers composited into a 360° venue panorama. When venues integrate into games (post-Session-5), the rendering contract needs to be explicit about which players get inserted into the venue vs. rendered as name + avatar + video tile.
+
+Core principle to preserve: the TV device is a *rendering capability*, not a visibility gate. Every TV viewer sees every player regardless of whether the viewer or the player has a TV device — what varies is *how* they're rendered.
+
+#### What's deferred
+
+Document and implement the rendering matrix:
+
+- **TV viewer WITH TV device:** renders 360° venue + TV-device players inserted into venue background (camera composite like karaoke singers) + non-TV-device players as name + avatar + video stream (if on).
+- **TV viewer WITHOUT TV device:** renders 360° venue + all players (both TV-device and non-TV-device) as name + avatar + video stream. No insertion.
+
+Implications for the design work:
+
+- Participant TV device availability is a *player capability* ("can I be inserted?"), separate from viewer TV device ("can I render insertion?"). Both need to be modeled.
+- Preserves today's any-player-can-add-a-TV behavior for games.
+
+#### Options when picking up
+
+Bundle with the venues extraction work ("Venues as cross-app service (games, wellness, future apps)" parent entry). Natural place to make the rendering matrix explicit is inside `shell/venue-renderer.js` as it's being extracted — the two-axis (viewer capability × participant capability) branching lives there.
+
+#### When to pick this up
+
+Start of venues-as-cross-app-service work. Before writing any games-side venue integration code.
+
+#### Related
+
+- DEFERRED "Venues as cross-app service (games, wellness, future apps)" — parent refactor
+- DEFERRED "Games `ask_proximity` revision (post-venues integration)" — sibling concern (participant capability modeling)
+- `karaoke/stage.html` — today's reference implementation of TV-viewer-with-TV-device rendering
+
+---
+
+### Deferred: Games `ask_proximity` revision (post-venues integration)
+
+**Deferred in:** Session 5 Part 2b scope refinement (2026-04-24)
+**Deferred on:** 2026-04-24
+**Priority:** High — architectural; targets revising SESSION-5-PLAN.md Decision 8
+**Area:** Games / Shell — role manifest / proximity semantics
+**Status:** Deferred
+
+#### Context
+
+SESSION-5-PLAN.md Decision 8 sets `games: ask_proximity: false`. Correct for Session 5's shipping scope (games without venue rendering) — proximity only matters when the TV needs to composite the user into the venue background.
+
+When venues integrate into games, proximity becomes relevant, but not in the same way as karaoke. Games should keep non-proximity users as *full participants* — they still play, see the game, show up on TV as name + avatar + video — they just can't be inserted into the venue background.
+
+#### What's deferred
+
+Revise the games role manifest: `ask_proximity: false` → `ask_proximity: true` with *soft-gate* semantics. Unlike karaoke's hard gate (no proximity = audience role), the games soft gate:
+
+- Prompts the proximity question
+- "No" answer: user remains a player (not demoted to audience), but TV renders them as name + avatar + video tile instead of venue composite
+- "Yes" answer: user is eligible for venue-background insertion (subject to TV-device capability check, see "Games TV rendering matrix" sibling entry)
+
+This pattern (soft-gate-on-capability rather than hard-gate-on-participation) may indicate proximity semantics need a broader revision at that time — see "Proximity meaning refined" sibling entry.
+
+#### Options when picking up
+
+Land alongside the games venue integration work. The manifest field itself is cheap to change (schema already supports per-app flags). The behavioral branching in games/tv.html and games/player.html is the real work.
+
+Consider whether the manifest field's boolean shape is expressive enough or needs to become a tri-state (`'hard'` / `'soft'` / `false`) — see "Proximity meaning refined" for the fuller discussion.
+
+#### When to pick this up
+
+Start of venues-as-cross-app-service work, before games venue integration lands.
+
+#### Related
+
+- SESSION-5-PLAN.md → Architecture Decision 8 (the `ask_proximity: false` setting this revises)
+- DEFERRED "Proximity meaning refined (hard gate vs. soft gate)" — sibling concern; the broader semantic question
+- DEFERRED "Games TV rendering matrix (post-venues integration)" — sibling concern; participant capability modeling
+
+---
+
+### Deferred: "Potential participant" as derived UI state
+
+**Deferred in:** Session 5 Part 2b scope refinement (2026-04-24)
+**Deferred on:** 2026-04-24
+**Priority:** Medium — design clarification
+**Area:** Shell / UX — phone UI branching
+**Status:** Deferred
+
+#### Context
+
+During Session 5 Part 2b scope review, "potential participant" surfaced as a distinct UI state: a user who's at home (proximity = yes) with a TV device but hasn't joined a queue. Surface-level this feels like a fourth `participation_role` value.
+
+It's not. The existing three roles (`active`, `queued`, `audience`) plus proximity + TV-device availability already encode this state via UI logic. Adding a schema value would duplicate what's already derivable.
+
+#### What's deferred
+
+Formalize the "potential participant" state as a *derived UI branching rule* in the phone UI (singer.html / audience.html / future games player.html):
+
+- Logged in + proximity = yes + has TV device + role = `audience` → show "Queue Up to Sing" button (karaoke) or "Join as player" (games with venues)
+- Logged in + (proximity = no OR no TV device) + role = `audience` → audience view only; no queue button
+
+Implementation is a client-side conditional render, not a schema change.
+
+#### Options when picking up
+
+Apply when singer.html / audience.html get their Session 5 polish pass (post-Part 2f), or when venues integration starts — either surfaces the UI branching as a first-class concern.
+
+#### When to pick this up
+
+Either trigger suffices. Not urgent before real multi-user testing surfaces the UX need.
+
+#### Related
+
+- SESSION-5-PLAN.md → participation_role enum (three values: active / queued / audience)
+- DEFERRED "Proximity meaning refined (hard gate vs. soft gate)" — proximity input to this branching rule
+- DEFERRED "Games TV rendering matrix (post-venues integration)" — TV-device availability input
+
+---
+
+### Deferred: Proximity meaning refined (hard gate vs. soft gate)
+
+**Deferred in:** Session 5 Part 2b scope refinement (2026-04-24)
+**Deferred on:** 2026-04-24
+**Priority:** Medium — design clarification; targets revising SESSION-5-PLAN.md Decision 8 flag approach
+**Area:** Shell / Schema — role manifest proximity semantics
+**Status:** Deferred
+
+#### Context
+
+Proximity answers one question: *"can this user be rendered by the TV's camera?"* Its *effect* varies by app, though, and the current binary `ask_proximity: true/false` flag on the role manifest doesn't capture that variation.
+
+Per-app proximity semantics:
+
+- **Karaoke:** hard gate. Proximity = no → user cannot sing. UX routes to audience via confirm dialog. Current Session 5 design.
+- **Games (post-venues):** soft gate. Proximity = no → user still plays, just not inserted into venue background. No demote.
+- **Wellness (when it lands):** hard gate (form tracking requires camera).
+
+The current `ask_proximity: true/false` flag is binary. Post-venues-integration, the manifest may need a tri-state (`'hard'` / `'soft'` / `false`) or a different shape entirely.
+
+#### What's deferred
+
+Revise the role manifest's proximity field to express hard vs. soft gating. Options:
+
+- Tri-state enum: `'hard'` / `'soft'` / `false` (or `null`)
+- Separate flags: `ask_proximity: true/false` + `proximity_is_hard_gate: true/false`
+- App-declared handler: each app registers a `handleProximityAnswer(role, answer)` function the shell invokes
+
+Any of these work; the second option (separate flags) is probably the clearest read but adds two fields where one expressive one might suffice.
+
+#### Options when picking up
+
+Ship alongside "Games `ask_proximity` revision" — those two entries touch the same manifest surface and should land together. Don't split.
+
+#### When to pick this up
+
+When venues integration starts, or when the proximity prompt UX gets its second design pass — whichever comes first.
+
+#### Related
+
+- SESSION-5-PLAN.md → Architecture Decision 8 — current binary flag shape
+- DEFERRED "Games `ask_proximity` revision (post-venues integration)" — sibling concern; same manifest surface
+- DEFERRED "'Potential participant' as derived UI state" — consumer of refined proximity semantics
+
+---
+
+### Deferred: Participant cleanup mechanism (audience left_at / inactivity sweep)
+
+**Deferred in:** Session 5 Part 2b scope refinement (2026-04-24)
+**Deferred on:** 2026-04-24
+**Priority:** Medium — becomes High once real multi-user usage accumulates ghost participants
+**Area:** Schema / Shell — session_participants lifecycle
+**Status:** Deferred
+
+#### Context
+
+In Session 5 Part 2, non-manager participant exits are largely implicit. Audience members who close the phone app leave their `session_participants` row with `left_at = null`. This accumulates "ghost audience" rows that the platform doesn't currently clean up.
+
+Ghost-audience count is an accepted Phase 1 trade-off — a data-hygiene nuisance, not a correctness bug. Real multi-user usage will reveal whether ghost counts show up as usability problems (wrong audience counter on stage.html, confusing queue displays, etc.) or stay invisible.
+
+#### What's deferred
+
+Build a participant cleanup mechanism. Options, not yet decided:
+
+- **Scheduled job** — periodic Supabase edge function or cron that sets `left_at = now()` for participants with stale `last_activity_at`.
+- **Heartbeat + sweep** — each participant page pings to keep `last_activity_at` fresh; a separate sweep marks stale rows as left. More responsive than pure scheduled job but more plumbing.
+- **`beforeunload` / `pagehide`** best-effort — first layer that catches most clean exits; pair with inactivity sweep as the backstop for ungraceful exits (tab crashes, phone force-quits, dead batteries).
+
+Design depends on real usage data. The right threshold (5 min? 15? 60?) isn't decidable in advance.
+
+#### Options when picking up
+
+Start with inactivity-sweep-only (simplest; covers all ghost paths). Layer `beforeunload` on top if UX testing shows sweep alone is too slow. Heartbeat is probably overkill for Phase 1.
+
+Implementation can piggyback on existing `sessions.last_activity_at` infrastructure — the RPCs already bump this on participant actions.
+
+#### When to pick this up
+
+Customer testing surfaces ghost-audience or ghost-queued counts as a usability problem, OR Session 5 Verification flows surface it. Not a Session 5 concern unless testing explicitly blocks on it.
+
+#### Related
+
+- SESSION-5-PART-2-BREAKDOWN.md § 2f — "Audience exit is implicit" scope note establishing this trade-off
+- SESSION-5-PLAN.md → session_participants schema (`left_at` column, `last_activity_at` on sessions)
+- DEFERRED "Session manager inactivity + household-admin override" — adjacent inactivity-tracking mechanism; share infrastructure
+
+---
+
+### Deferred: `rpc_session_leave` manager auto-promote branch is dead code
+
+**Deferred in:** Session 5 Part 2b scope refinement (2026-04-24)
+**Deferred on:** 2026-04-24
+**Priority:** Low — cleanup; no functional impact
+**Area:** Schema — db/009 + db/010 cleanup
+**Status:** Deferred
+
+#### Context
+
+`rpc_session_leave` is defined in two migrations: `db/009_session_lifecycle_rpcs.sql` ships the original (raises if the manager has other active participants), and `db/010_manager_mechanics_rpcs.sql` replaces it with the auto-promote-to-host-or-next-participant logic per SESSION-5-PLAN Decision 7. The live version in a fully-migrated database is db/010's. The auto-promote branch covers the case where the manager leaves the session and an eligible participant gets promoted before the leaving manager's row is finalized.
+
+Under the revised Session 5 Part 2 UX (Back-to-Elsewhere is navigate-only; no user-facing action calls `rpc_session_leave` from the phone), no phone UI path exercises the auto-promote branch:
+
+- Managers exit via `rpc_session_end` (explicit End Session button)
+- Orphaned sessions are handled by `rpc_session_reclaim_manager` (any household member claims)
+- Admin overrides use `rpc_session_admin_reclaim` (household admin only)
+
+None of these call `rpc_session_leave`. The manager auto-promote branch is therefore defensive / unreachable in Session 5 Part 2 UI.
+
+#### What's deferred
+
+Cleanup decision:
+
+- **Leave in place** (current disposition): costs nothing, preserves flexibility for future cleanup mechanisms (heartbeat sweep, background job) that might legitimately call `rpc_session_leave` on a manager row.
+- **Strip the manager branch**: reduces `rpc_session_leave` to non-manager semantics only. Smaller surface, but rebuilds if the cleanup mechanism later needs the auto-promote path.
+
+Current recommendation: leave alone unless the file is being touched for another reason.
+
+#### Options when picking up
+
+When next touching `db/010_manager_mechanics_rpcs.sql` (where the live auto-promote branch lives — db/009 has the original simpler version but db/010 supersedes it) for any reason, check whether the manager auto-promote branch has any caller. If still unused, strip it in a new migration and document the removal. If a caller has emerged (e.g. cleanup mechanism per sibling DEFERRED entry), keep it.
+
+#### When to pick this up
+
+Opportunistic — next time `db/010_manager_mechanics_rpcs.sql` (the file holding the auto-promote branch) or its sibling `db/009_session_lifecycle_rpcs.sql` is touched for any reason. OR scheduled cleanup pass after real usage data clarifies which branches are actually exercised.
+
+#### Related
+
+- `db/009_session_lifecycle_rpcs.sql` — original `rpc_session_leave` (raise-on-manager-with-others)
+- `db/010_manager_mechanics_rpcs.sql` — current live `rpc_session_leave` with auto-promote branch; replaces db/009's version
+- SESSION-5-PART-2-BREAKDOWN.md → "Non-manager exit semantics" section — documents why no phone UI calls this RPC
+- DEFERRED "Participant cleanup mechanism (audience left_at / inactivity sweep)" — potential future caller if background cleanup lands
+
+---
+
 ## Migrated from PHASE1-NOTES.md
 
 The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captured here in summary form; the full original text lives in PHASE1-NOTES.md git history (commit `9296a50` or earlier). Future fill-outs should flesh these into the full entry format above when someone picks one up.
