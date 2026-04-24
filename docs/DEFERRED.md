@@ -842,6 +842,57 @@ Before real customer acquisition (first-time claim is the most visible onboardin
 
 ---
 
+### Deferred: Venues as cross-app service (games, wellness, future apps)
+
+**Deferred in:** Session 5 planning discussion (2026-04-23)
+**Deferred on:** 2026-04-23
+**Priority:** Medium — enables games visual parity with karaoke; unlocks Phase 2 camera-insertion across all apps
+**Area:** Shell / cross-app rendering
+**Status:** Deferred
+
+#### Context
+
+Karaoke has a fully-built 360° venue system: equirectangular panorama sphere in Three.js, particle systems, floating video planes, spatial Web Audio with beat detection. Infrastructure is partially extracted (`shell/venue-settings.js` handles admin view-coordinates; `venues.json` is the metadata registry) but the rendering itself lives inside `karaoke/stage.html`.
+
+During Session 5 planning, surfaced the idea: games already have blockade images for each game (Last Card, Trivia, Poker, etc.). These could become proper 360° venues. Games render on top of a venue panorama. Wellness when it ships would do the same.
+
+Session 5 treats "venue" as an opaque identifier in `session_participants.pre_selections` — the schema supports cross-app venues already. What's missing is (a) the cross-app rendering module and (b) games/wellness integration.
+
+#### What's deferred
+
+Three-part work:
+
+1. Extract 360° panorama rendering from `karaoke/stage.html` into `shell/venue-renderer.js` (or similar). Three.js setup, texture loading, transition UX. Keep karaoke's ambient effects separate (that's the DEFERRED "shell/venue-effects.js" entry from PHASE1-NOTES).
+
+2. Games integration: each game's blockade image becomes a venue entry in `venues.json` with product tag 'games'. Session-wide venue selection (manager/host picks one venue for the whole game, not per-player). Games pages consume the shared renderer.
+
+3. Phase 2 follow-up: DeepAR camera insertion for player/participant presence in games (same technique karaoke uses for singers).
+
+#### Options when picking up
+
+- Bundle with wellness app start (natural trigger — wellness needs venue system, games benefit). Pairs cleanly with the "shell/venue-effects.js" extraction already deferred.
+- Ship standalone as a Session 6.x refactor if games venue support becomes a product priority before wellness.
+
+Per-session vs session-wide venue: Karaoke is per-singer (each queue entry has its own pre-selected venue). Games should be session-wide (one venue for the whole game round). Wellness likely session-wide too.
+
+#### When to pick this up
+
+When either:
+- Wellness app work begins (natural bundling), OR
+- Games visual parity with karaoke becomes a product priority
+
+Not urgent for Session 5. Don't bundle with Session 5 — the scope creep risk is real.
+
+#### Related
+
+- DEFERRED "Extract ambient venue effects into `shell/venue-effects.js`" (from PHASE1-NOTES migrated section) — same extraction family
+- `shell/venue-settings.js` (existing admin dialog)
+- `venues.json` (existing metadata with product tags)
+- Session 4.9 Part A — shipped `venues.json` cross-app metadata
+- Session 5 Part 2d — keeps venue logic inline in stage.html per current architecture; this entry is the follow-up extraction
+
+---
+
 ## Migrated from PHASE1-NOTES.md
 
 The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captured here in summary form; the full original text lives in PHASE1-NOTES.md git history (commit `9296a50` or earlier). Future fill-outs should flesh these into the full entry format above when someone picks one up.
