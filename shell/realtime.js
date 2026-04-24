@@ -18,6 +18,39 @@
 //   window.publishExitApp(device_key, reason = 'user-exit')
 //   window.wireExitAppListener(onExit)
 //
+//   Session 5 publishers (object-payload signatures; all async/awaitable,
+//   all throw on failure matching the existing publishers' contract):
+//   window.publishSessionStarted(device_key, { session_id, app, manager_user_id, room_code })
+//   window.publishManagerChanged(device_key, { session_id, new_manager_user_id, reason })
+//   window.publishParticipantRoleChanged(device_key, { session_id, user_id, control_role, participation_role })
+//   window.publishQueueUpdated(device_key, { session_id })
+//   window.publishSessionEnded(device_key, { session_id, reason })
+//
+// Session 5 event emission matrix — which RPC success triggers which publish:
+//
+//   rpc_session_start                        → session_started
+//   rpc_session_end                          → session_ended (reason: 'user_ended')
+//   rpc_session_leave (manager alone OR no
+//     eligible promotee → session ends)      → session_ended (reason: 'manager_left')
+//   rpc_session_leave (auto-promoted new
+//     manager)                               → manager_changed (reason: 'auto_promote')
+//                                              + participant_role_changed for the leaver
+//   rpc_session_leave (non-manager leave)    → participant_role_changed
+//   rpc_session_reclaim_manager              → manager_changed (reason: 'reclaim')
+//   rpc_session_admin_reclaim                → manager_changed (reason: 'admin')
+//   rpc_session_join                         → participant_role_changed
+//   rpc_session_update_participant (with
+//     control_role or participation_role)    → participant_role_changed
+//   rpc_session_update_participant (with
+//     only pre_selections)                   → queue_updated
+//   rpc_session_update_queue_position        → queue_updated
+//   rpc_session_promote_self_from_queue      → participant_role_changed
+//
+// Narrow rule: queue_updated fires ONLY for pure queue metadata changes
+// (reorder, pre_selection update). Role transitions that affect queue
+// composition fire participant_role_changed instead. Consumers interested
+// in queue state subscribe to BOTH events.
+//
 // NOT extracted: tv2.html's subscribeToHandoffChannel. Its multi-event
 // subscribe-with-timeout state machine doesn't compose cleanly with the
 // simpler single-listener pattern used by stage.html / games/tv.html.
@@ -180,4 +213,79 @@ window.wireExitAppListener = function wireExitAppListener(onExit) {
     });
     channel.subscribe();
   });
+};
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// Session 5 event publishers.
+// Each wraps the shared broadcast() helper with an event-specific name.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Shared subscribe/send/unsubscribe/removeChannel ceremony. Private to
+// this module. Not exposed on window. Used by the 5 Session-5 publishers
+// below. Existing 4.10/4.10.2/4.10.3 publishers (publishSessionHandoff,
+// publishLaunchApp, publishExitApp) retain their inline bodies — factoring
+// them through broadcast() is a separate refactor.
+async function broadcast(device_key, event, payload) {
+  const channel = window.sb.channel('tv_device:' + device_key);
+
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) { settled = true; reject(new Error('Realtime subscribe timed out.')); }
+    }, 5000);
+    channel.subscribe(status => {
+      if (settled) return;
+      if (status === 'SUBSCRIBED') {
+        settled = true; clearTimeout(timer); resolve();
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        settled = true; clearTimeout(timer); reject(new Error('Realtime channel ' + status));
+      }
+    });
+  });
+
+  await channel.send({ type: 'broadcast', event, payload });
+
+  await channel.unsubscribe();
+  window.sb.removeChannel(channel);
+}
+
+// Fired after rpc_session_start success.
+// Payload: { session_id, app, manager_user_id, room_code }.
+window.publishSessionStarted = async function publishSessionStarted(device_key, payload) {
+  return broadcast(device_key, 'session_started', payload);
+};
+
+// Fired after rpc_session_reclaim_manager / rpc_session_admin_reclaim /
+// rpc_session_leave-triggered auto-promote. See file-top emission matrix.
+// Payload: { session_id, new_manager_user_id, reason }.
+//   reason ∈ {'auto_promote', 'reclaim', 'admin'}
+window.publishManagerChanged = async function publishManagerChanged(device_key, payload) {
+  return broadcast(device_key, 'manager_changed', payload);
+};
+
+// Fired when a participant's control_role or participation_role changes.
+// See file-top emission matrix for the full list of triggering RPCs.
+// Payload: { session_id, user_id, control_role, participation_role } —
+// always includes the CURRENT values of both roles (not a delta).
+window.publishParticipantRoleChanged = async function publishParticipantRoleChanged(device_key, payload) {
+  return broadcast(device_key, 'participant_role_changed', payload);
+};
+
+// Fired for pure queue metadata changes that don't involve role transitions:
+// queue-position reorder, or pre-selection update. Consumers re-query
+// session_participants to get authoritative state.
+// Payload: { session_id }.
+window.publishQueueUpdated = async function publishQueueUpdated(device_key, payload) {
+  return broadcast(device_key, 'queue_updated', payload);
+};
+
+// Fired after rpc_session_end or after rpc_session_leave results in session
+// ending (manager alone or no eligible promotee). Phase 1 does not
+// distinguish "manager alone" from "no eligible promotee" — both emit
+// reason 'manager_left'.
+// Payload: { session_id, reason }.
+//   reason ∈ {'user_ended', 'manager_left'}
+window.publishSessionEnded = async function publishSessionEnded(device_key, payload) {
+  return broadcast(device_key, 'session_ended', payload);
 };
