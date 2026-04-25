@@ -963,35 +963,131 @@
       color: var(--color-text-dim);
       margin-top: 4px;
     }
-    .app-tiles {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .app-tile {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 20px;
-      background: var(--color-surface);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-lg);
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .app-tile:active { background: var(--color-gold-ghost); }
-    .app-tile-emoji { font-size: 32px; line-height: 1; }
-    .app-tile-body { flex: 1; }
-    .app-tile-label {
-      font-size: var(--text-lg);
-      color: var(--color-text);
-      font-weight: 500;
-    }
-    .app-tile-sub {
+    /* ── 2c.2: Home — n>1 TV-switch subtitle ─────────────────────── */
+    .home-tv-switch {
+      margin-top: 6px;
       font-size: var(--text-sm);
       color: var(--color-text-dim);
-      margin-top: 2px;
     }
+    .home-tv-switch a {
+      color: var(--color-text-dim);
+      text-decoration: underline;
+    }
+    .home-tv-switch a:active { color: var(--color-text); }
+
+    /* ── 2c.2: Tile state — greyed (Mode B karaoke) ──────────────── */
+    /* Visually muted; tap still fires (silent no-op in handleHomeTileTap).
+       Distinct from .tile.disabled which sets pointer-events: none. */
+    .tile.greyed {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    /* ── 2c.2: Proximity banner ──────────────────────────────────── */
+    .proximity-banner {
+      width: 100%;
+      max-width: 720px;
+      margin-bottom: clamp(20px, 3vh, 32px);
+      padding: 16px 20px;
+      background: var(--color-gold-ghost);
+      border: 1px solid var(--color-gold-faint);
+      border-radius: var(--radius-lg);
+    }
+    .proximity-banner-question {
+      font-size: var(--text-base);
+      color: var(--color-text);
+      margin-bottom: 14px;
+      text-align: center;
+      font-weight: 500;
+    }
+    .proximity-banner-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    /* Shared button base — variants below add specifics. Mirrors the
+       .cta-btn / .ghost-btn aesthetic established in this codebase. */
+    .proximity-btn {
+      width: 100%;
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      letter-spacing: var(--tracking-wider);
+      text-transform: uppercase;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .proximity-btn-primary {
+      padding: 12px 20px;
+      background: var(--color-gold-dim);
+      border: 1px solid var(--color-gold);
+      color: var(--color-bg);
+      font-weight: 600;
+    }
+    .proximity-btn-primary:active { background: var(--color-gold); }
+    .proximity-btn-secondary {
+      padding: 12px 16px;
+      background: transparent;
+      color: var(--color-text-dim);
+      border: 1px solid var(--color-border-dim);
+      font-size: var(--text-xs);
+    }
+    .proximity-btn-secondary:active { background: var(--color-gold-ghost); border-color: var(--color-border); }
+    /* Tertiary "Don't ask again" — visually less prominent than Yes/No
+       (R1 from Section 6 review). Text-link aesthetic; smaller, no border. */
+    .proximity-btn-tertiary {
+      background: transparent;
+      border: none;
+      color: var(--color-text-faint);
+      font-size: var(--text-xs);
+      text-decoration: underline;
+      padding: 8px;
+    }
+    .proximity-btn-tertiary:active { color: var(--color-text); }
+
+    /* ── 2c.2: Proximity Settings drill-in ────────────────────────── */
+    .proximity-settings-empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--color-text-dim);
+      font-size: var(--text-sm);
+    }
+    .proximity-settings-section {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 16px 0;
+    }
+    .proximity-settings-tv-name {
+      font-size: var(--text-base);
+      color: var(--color-text-dim);
+    }
+    .proximity-settings-tv-name strong { color: var(--color-text); }
+    .proximity-settings-toggle {
+      display: flex;
+      gap: 8px;
+    }
+    .seg-btn {
+      flex: 1;
+      padding: 12px 16px;
+      background: transparent;
+      color: var(--color-text-dim);
+      border: 1px solid var(--color-border-dim);
+      border-radius: var(--radius-pill);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider);
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .seg-btn.active {
+      background: var(--color-gold-dim);
+      border-color: var(--color-gold);
+      color: var(--color-bg);
+      font-weight: 600;
+    }
+    .seg-btn:active:not(.active) { background: var(--color-gold-ghost); }
   </style>
 </head>
 <body>
@@ -1007,13 +1103,17 @@
         <button onclick="openContactsFromMenu()">Contacts</button>
         <button onclick="openGroupsFromMenu()">Groups</button>
         <button onclick="openYourTvsFromMenu()">Your TVs</button>
+        <button id="menu-proximity-settings" class="hidden" onclick="openProximitySettingsFromMenu()">Proximity Settings</button>
         <button onclick="openHouseholdFromMenu()">Manage household</button>
         <button onclick="shellSignOut()">Sign out</button>
       </div>
     </div>
 
-    <!-- Home screen -->
-    <div class="screen active" id="screen-home">
+    <!-- Home screen — unified post-login home (2c.2). Conditional rendering
+         for Modes A/B/C per docs/PHONE-AND-TV-STATE-MODEL.md. dataset
+         attributes carry TV context for Modes A/B (set by enterHomeForTv;
+         empty in Mode C and pre-login). -->
+    <div class="screen active" id="screen-home" data-device-key="" data-tv-device-id="">
       <div class="wordmark">Elsewhere</div>
 
       <div id="home-welcome" class="hidden">
@@ -1024,18 +1124,40 @@
         <button class="cta-btn" onclick="goTo('screen-account')">Sign in / Create account →</button>
       </div>
 
+      <!-- 2c.2: TV header for Modes A/B. Hidden by default; revealed by
+           enterHomeForTv when user is a household member with TV access. -->
+      <div id="home-tv-header" class="tv-remote-header hidden">
+        <div class="page-title" id="home-tv-title">—</div>
+        <div class="tv-remote-household" id="home-tv-household">—</div>
+        <div id="home-tv-switch" class="home-tv-switch hidden">
+          Showing: <strong id="home-tv-switch-name">—</strong> · <a href="#" onclick="event.preventDefault(); openYourTvsFromMenu();">Switch in Your TVs</a>
+        </div>
+      </div>
+
+      <!-- 2c.2: Proximity banner. Shown when 4-condition firing rule is met
+           (household member + post-login home landing + not previously
+           dismissed for this TV + not yet answered this session). -->
+      <div id="home-proximity-banner" class="proximity-banner hidden">
+        <div class="proximity-banner-question">Are you at home?</div>
+        <div class="proximity-banner-actions">
+          <button class="proximity-btn proximity-btn-primary"   onclick="handleProximityYes()">Yes, I'm at home</button>
+          <button class="proximity-btn proximity-btn-secondary" onclick="handleProximityNo()">No, I'm not</button>
+          <button class="proximity-btn proximity-btn-tertiary"  onclick="handleProximityDontShowAgain()">Don't ask again</button>
+        </div>
+      </div>
+
       <div class="tile-grid">
-        <div class="tile" onclick="handleKaraokeTap()">
+        <div class="tile" id="home-tile-karaoke" onclick="handleHomeTileTap('karaoke')">
           <div class="tile-emoji">🎤</div>
           <div class="tile-label">Karaoke</div>
           <div class="tile-sub">Sing together</div>
         </div>
-        <div class="tile" onclick="handleGamesTap()">
+        <div class="tile" id="home-tile-games" onclick="handleHomeTileTap('games')">
           <div class="tile-emoji">🃏</div>
           <div class="tile-label">Games</div>
           <div class="tile-sub">Last Card · Trivia · Euchre</div>
         </div>
-        <div class="tile disabled">
+        <div class="tile disabled" id="home-tile-wellness">
           <div class="tile-emoji">🧘</div>
           <div class="tile-label">Wellness</div>
           <div class="tile-sub">Coming soon</div>
@@ -1420,29 +1542,14 @@
       <div class="your-tvs-list" id="your-tvs-list"></div>
     </div>
 
-    <!-- Session 4.10.2: TV remote-control screen (single TV) -->
-    <div class="screen" id="screen-tv-remote" data-device-key="" data-origin="">
-      <div class="back-link" id="tv-remote-back" onclick="goTo('screen-your-tvs')">← Back</div>
-      <div class="tv-remote-header">
-        <div class="page-title" id="tv-remote-title">—</div>
-        <div class="tv-remote-household" id="tv-remote-household">—</div>
-      </div>
-      <div class="app-tiles">
-        <div class="app-tile" onclick="handleTvRemoteTileTap('karaoke')">
-          <div class="app-tile-emoji">🎤</div>
-          <div class="app-tile-body">
-            <div class="app-tile-label">Karaoke</div>
-            <div class="app-tile-sub">Sing together</div>
-          </div>
-        </div>
-        <div class="app-tile" onclick="handleTvRemoteTileTap('games')">
-          <div class="app-tile-emoji">🃏</div>
-          <div class="app-tile-body">
-            <div class="app-tile-label">Games</div>
-            <div class="app-tile-sub">Last Card · Trivia · Euchre</div>
-          </div>
-        </div>
-        <!-- Wellness tile intentionally hidden on phone per Decision 8 -->
+    <!-- 2c.2: Proximity Settings drill-in. Linked from badge menu's
+         "Proximity Settings" item. Body rendered by renderProximitySettings(). -->
+    <div class="screen" id="screen-proximity-settings">
+      <div class="back-link" onclick="goTo('screen-home')">← Back</div>
+      <div class="page-title">Proximity Settings</div>
+      <div class="page-sub">Manage how Elsewhere asks if you're at the TV</div>
+      <div class="proximity-settings-body" id="proximity-settings-body">
+        <!-- Rendered by renderProximitySettings() -->
       </div>
     </div>
   </div>
@@ -1535,7 +1642,7 @@
     // time this listener fires, window.elsewhere is guaranteed to exist.
     document.addEventListener('DOMContentLoaded', initShell);
 
-    const SCREENS = ['screen-home', 'screen-account', 'screen-confirm', 'screen-contacts', 'screen-contact-edit', 'screen-groups', 'screen-group-edit', 'screen-tv-claim', 'screen-tv-signin', 'screen-household', 'screen-your-tvs', 'screen-tv-remote'];
+    const SCREENS = ['screen-home', 'screen-account', 'screen-confirm', 'screen-contacts', 'screen-contact-edit', 'screen-groups', 'screen-group-edit', 'screen-tv-claim', 'screen-tv-signin', 'screen-household', 'screen-your-tvs', 'screen-proximity-settings'];
     let activeScreen = 'screen-home';
 
     function initShell() {
@@ -1646,6 +1753,7 @@
         cta.classList.remove('hidden');
         guestLink.classList.remove('hidden');
         document.getElementById('user-menu').classList.remove('open');
+        clearHomeTvBinding();
       }
     }
 
@@ -1785,14 +1893,15 @@
         await publishSessionHandoff(device_key);
 
         // Session 4.10.2 Part E (shipped in 4.10.3 follow-up):
-        // auto-route phone into screen-tv-remote for the claimed TV
-        // instead of stranding user on a "head to the TV" success
-        // screen. Targets the specific claimed TV directly (skipping
+        // auto-route phone into the unified home (screen-home) bound
+        // to the claimed TV (2c.2 unification), instead of stranding
+        // user on a "head to the TV" success screen. Targets the
+        // specific claimed TV directly (skipping
         // the n-branch in enterYourTvsFlow) so it works cleanly even
         // when user has ≥2 TVs. Reuses the sessionStorage bridge
         // added in 4.10.3 Part A for in-app back-nav consistency.
         try { sessionStorage.setItem('elsewhere.active_tv.device_key', device_key); } catch (_) {}
-        enterTvRemoteScreen(device_key, { origin: 'post-claim' });
+        enterHomeForTv(device_key);
       } catch (e) {
         showTvClaimError(e?.message || String(e));
         btn.disabled = false;
@@ -1852,6 +1961,458 @@
     // Session 4.10.2 — Phone-as-remote
     // ════════════════════════════════════════════════════════════════════
 
+    // ── 2c.2: Home mode detection helpers ───────────────────────────
+    //
+    // Per docs/PHONE-AND-TV-STATE-MODEL.md, the unified post-login home
+    // renders in one of three modes based on user context:
+    //   A — household member with TV access, proximity = yes (or default)
+    //   B — household member with TV access, proximity = no
+    //   C — no TV available (no household, or no claimed TV)
+    //
+    // Mode detection is synchronous; the banner shown in Mode A defaults
+    // to "yes" while async preference fetches resolve. Banner logic is
+    // in Section 3; tile rendering per mode is in Section 4.
+
+    // Module-level cache for proximity_prompt_dismissed DB preference,
+    // keyed by `${user_id}::${tv_device_id}`. Avoids re-fetching on every
+    // home render. Invalidated on auth change (wired below).
+    //
+    // Cache scope edge case: invalidation only fires on auth-change. Stale
+    // entries can persist if the user's household membership changes or a
+    // TV is unclaimed during the same auth session — both rare in Phase 1.
+    // Acceptable for 2c.2; revisit if usage surfaces a real problem.
+    const _proximityDismissedCache = new Map();
+
+    // SessionStorage key prefix for proximity answer per TV.
+    // Values: 'yes' | 'no' | (absent = unanswered).
+    //
+    // Edge case: keyed by tv_device_id only, not user_id. If
+    // a different user signs in on the same browser session
+    // and binds the same TV, they inherit the prior answer.
+    // Rare in Phase 1; revisit when multi-user-on-same-phone
+    // becomes a usage pattern. They can correct via banner or
+    // Proximity Settings.
+    const PROXIMITY_ANSWER_PREFIX = 'elsewhere.proximity.';
+
+    function proximityAnswerKey(tv_device_id) {
+      return PROXIMITY_ANSWER_PREFIX + tv_device_id;
+    }
+    function getProximityAnswer(tv_device_id) {
+      if (!tv_device_id) return null;
+      try { return sessionStorage.getItem(proximityAnswerKey(tv_device_id)); } catch (_) { return null; }
+    }
+    function setProximityAnswer(tv_device_id, value) {
+      if (!tv_device_id) return;
+      try { sessionStorage.setItem(proximityAnswerKey(tv_device_id), value); } catch (_) {}
+    }
+    function clearProximityAnswer(tv_device_id) {
+      if (!tv_device_id) return;
+      try { sessionStorage.removeItem(proximityAnswerKey(tv_device_id)); } catch (_) {}
+    }
+
+    // Returns { device_key, tv_device_id } for the TV currently bound to
+    // the home, or null if no TV is bound (Mode C or pre-login).
+    // Source of truth: screen-home dataset, set by enterHomeForTv (Section 5).
+    function getHomeTvContext() {
+      const screen = document.getElementById('screen-home');
+      const device_key   = screen.dataset.deviceKey   || '';
+      const tv_device_id = screen.dataset.tvDeviceId  || '';
+      if (!device_key || !tv_device_id) return null;
+      return { device_key, tv_device_id };
+    }
+
+    // Returns the current home rendering mode synchronously.
+    // Pre-login users return 'C' too — same tile state as a signed-in
+    // non-household user (auth-state visibility on welcome/CTA is handled
+    // separately by renderAuthState).
+    function getHomeMode() {
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) return 'C';
+
+      const ctx = getHomeTvContext();
+      if (!ctx) return 'C';
+
+      const answer = getProximityAnswer(ctx.tv_device_id);
+      if (answer === 'no') return 'B';
+      // 'yes' OR null (unanswered) both render as Mode A — default-yes per
+      // state model. Banner visibility (Section 3) reflects unanswered
+      // separately.
+      return 'A';
+    }
+
+    // Cache helpers for proximity_prompt_dismissed DB preference. Returns
+    // boolean | null (null = not yet fetched). Section 3's banner logic
+    // populates the cache on first home render.
+    function getCachedProximityDismissed(user_id, tv_device_id) {
+      const v = _proximityDismissedCache.get(user_id + '::' + tv_device_id);
+      return v === undefined ? null : v;
+    }
+    function setCachedProximityDismissed(user_id, tv_device_id, value) {
+      _proximityDismissedCache.set(user_id + '::' + tv_device_id, value);
+    }
+    function invalidateProximityDismissedCache() {
+      _proximityDismissedCache.clear();
+      _proximityFetchInitiated.clear();
+    }
+
+    // Wire cache invalidation to auth change. shell/auth.js exposes
+    // window.elsewhere.onAuthChange; wait for the shell-ready event if
+    // it's not yet defined at this point in script execution.
+    function wireProximityCacheInvalidation() {
+      if (!window.elsewhere?.onAuthChange) return false;
+      window.elsewhere.onAuthChange(() => invalidateProximityDismissedCache());
+      return true;
+    }
+    if (!wireProximityCacheInvalidation()) {
+      document.addEventListener('elsewhere:sb-ready', wireProximityCacheInvalidation, { once: true });
+    }
+
+    // ── 2c.2: Proximity banner show/hide rules + action handlers ────
+    //
+    // 4-condition AND for banner firing (per state model):
+    //   1. Mode is A or B (household member with TV)         — getHomeMode()
+    //   2. Landed on post-login home directly                — implicit (we're on screen-home)
+    //   3. Not previously dismissed for this TV              — getCachedProximityDismissed
+    //   4. Not yet answered for this TV-connection-session   — getProximityAnswer
+
+    function shouldShowProximityBanner() {
+      const mode = getHomeMode();
+      if (mode !== 'A' && mode !== 'B') return false; // condition 1: Mode C disqualifies
+
+      const ctx = getHomeTvContext();
+      if (!ctx) return false; // safety guard
+
+      const answer = getProximityAnswer(ctx.tv_device_id);
+      if (answer !== null) return false; // condition 4: already answered
+
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) return false; // safety guard
+
+      const dismissed = getCachedProximityDismissed(user.id, ctx.tv_device_id);
+      if (dismissed === true) return false; // condition 3: previously dismissed
+
+      // dismissed === false (resolved-not-dismissed) OR null (fetch in flight):
+      // both render as "show banner" synchronously. The async fetch
+      // (fetchProximityDismissed) will hide later if dismissed was true.
+      return true;
+    }
+
+    // Idempotent — safe to call from any code path that may have changed
+    // banner-relevant state. Used by handlers below + by Section 4's
+    // renderHome orchestrator.
+    function applyProximityBannerVisibility() {
+      const banner = document.getElementById('home-proximity-banner');
+      if (!banner) return;
+      if (shouldShowProximityBanner()) {
+        banner.classList.remove('hidden');
+      } else {
+        banner.classList.add('hidden');
+      }
+    }
+
+    // Async DB preference fetch. Populates the cache, then re-applies
+    // banner visibility (which hides the banner if dismissed was true).
+    // Silent on errors — banner stays visible; user can dismiss manually.
+    // Skips the fetch if the cache is already populated for this user/TV.
+    async function fetchProximityDismissed() {
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) return;
+
+      const ctx = getHomeTvContext();
+      if (!ctx) return;
+
+      if (getCachedProximityDismissed(user.id, ctx.tv_device_id) !== null) return;
+
+      try {
+        const v = await window.elsewhere.preferences.getUserPreference(
+          ctx.tv_device_id,
+          'proximity_prompt_dismissed'
+        );
+        // shell/preferences.js returns true | false | null. Application
+        // default for 2c.2: null (no row) treated as not-dismissed.
+        setCachedProximityDismissed(user.id, ctx.tv_device_id, v === true);
+        applyProximityBannerVisibility();
+      } catch (e) {
+        console.error('[elsewhere] fetchProximityDismissed failed:', e);
+      }
+    }
+
+    // Banner action: "Yes, I'm at home"
+    // Stores 'yes' in sessionStorage, hides banner, re-renders tiles
+    // (Mode A — same as default, but renderHomeTiles is idempotent).
+    function handleProximityYes() {
+      const ctx = getHomeTvContext();
+      if (!ctx) return;
+      setProximityAnswer(ctx.tv_device_id, 'yes');
+      renderHome();
+    }
+
+    // Banner action: "No, I'm not"
+    // Confirms intent (state model: "You'll join as audience..."), then
+    // stores 'no' in sessionStorage and re-renders to Mode B.
+    //
+    // Native confirm() — browser shows [OK]/[Cancel] rather
+    // than the locked [Continue]/[Cancel] copy. OK semantically
+    // maps to Continue here. Custom modal deferred as polish;
+    // tracked as 2c.x.
+    function handleProximityNo() {
+      const ok = confirm("You'll join as audience for sessions that need a TV. Continue?");
+      if (!ok) return; // banner stays visible; no answer stored
+      const ctx = getHomeTvContext();
+      if (!ctx) return;
+      setProximityAnswer(ctx.tv_device_id, 'no');
+      renderHome();
+    }
+
+    // Banner action: "Don't ask again"
+    // Locks sessionStorage answer to 'yes' (default at-home per state
+    // model), persists dismissal in DB, hides banner. If DB write fails,
+    // banner reappears next session — acceptable degradation for 2c.2.
+    async function handleProximityDontShowAgain() {
+      const ctx = getHomeTvContext();
+      if (!ctx) return;
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) return;
+
+      setProximityAnswer(ctx.tv_device_id, 'yes');
+
+      try {
+        await window.elsewhere.preferences.setUserPreference(
+          ctx.tv_device_id,
+          'proximity_prompt_dismissed',
+          true
+        );
+        setCachedProximityDismissed(user.id, ctx.tv_device_id, true);
+      } catch (e) {
+        console.error('[elsewhere] setUserPreference proximity_prompt_dismissed failed:', e);
+        // Continue — sessionStorage answer is still 'yes' so banner hides
+        // for this session. Next session: cache miss → fetch returns null
+        // (no row) → banner reappears. User can re-dismiss.
+      }
+
+      renderHome();
+    }
+
+    // ── 2c.2: Tile rendering + renderHome orchestrator ──────────────
+    //
+    // Tile state matrix (per state model § Phone post-login home):
+    //   Mode A — karaoke + games active; wellness disabled (Coming soon)
+    //   Mode B — karaoke greyed (TV required); games active; wellness disabled
+    //   Mode C — karaoke + games active (legacy direct-nav flow per
+    //            handleHomeTileTap dispatch); wellness disabled
+    //
+    // The `.greyed` class is applied to the karaoke tile in Mode B only.
+    // Mode A/C remove it. Tap behavior (active vs no-op vs cross-app
+    // confirm) is dispatched at runtime by handleHomeTileTap (Section 5)
+    // — the visual class is the only thing this function controls.
+    function renderHomeTiles() {
+      const mode = getHomeMode();
+      const karaoke = document.getElementById('home-tile-karaoke');
+      const games   = document.getElementById('home-tile-games');
+      // Wellness tile stays as-is (always disabled in 2c.2).
+
+      if (!karaoke || !games) return;
+
+      // Mode B is the only mode that greys karaoke. Mode A and Mode C
+      // both render karaoke as active.
+      karaoke.classList.toggle('greyed', mode === 'B');
+
+      // Games is always active in 2c.2 (proximity doesn't affect games
+      // today — see DEFERRED "Games ask_proximity revision (post-venues
+      // integration)").
+      games.classList.remove('greyed');
+    }
+
+    // Tracks (user_id, tv_device_id) pairs for which
+    // fetchProximityDismissed has been initiated this session.
+    // Prevents duplicate fetches when renderHome fires multiple
+    // times. Cleared on auth change alongside
+    // _proximityDismissedCache. Limitation: if the first fetch
+    // errors, no retry happens in this session — cache stays
+    // unpopulated and banner stays visible. User can still
+    // dismiss manually. Acceptable for 2c.2.
+    const _proximityFetchInitiated = new Set();
+
+    // Single home-render orchestrator. Call this from any home-render
+    // entry point: enterHomeForTv (Section 5) on dataset bind, banner
+    // action handlers (Section 3) after state mutation, and the settings
+    // drill-in (Section 6) on return-to-home. Idempotent.
+    //
+    // Fires:
+    //   - renderHomeTiles() synchronously (tile classes per current mode)
+    //   - applyProximityBannerVisibility() synchronously (banner show/hide
+    //     per 4-condition AND)
+    //   - fetchProximityDismissed() async, gated by _proximityFetchInitiated
+    //     so a single fetch happens per (user, TV) per session
+    function renderHome() {
+      renderHomeTiles();
+      applyProximityBannerVisibility();
+      applyProximitySettingsMenuVisibility();
+
+      const user = window.elsewhere?.getCurrentUser?.();
+      const ctx = getHomeTvContext();
+      if (user && ctx) {
+        const fetchKey = user.id + '::' + ctx.tv_device_id;
+        if (!_proximityFetchInitiated.has(fetchKey)) {
+          _proximityFetchInitiated.add(fetchKey);
+          fetchProximityDismissed();
+        }
+      }
+    }
+
+    // Toggles the badge-menu "Proximity Settings" item per state model:
+    // visible in Mode A/B (TV bound), hidden in Mode C and pre-login.
+    // Called from renderHome on every mode-change-relevant render.
+    function applyProximitySettingsMenuVisibility() {
+      const btn = document.getElementById('menu-proximity-settings');
+      if (!btn) return;
+      const mode = getHomeMode();
+      if (mode === 'A' || mode === 'B') {
+        btn.classList.remove('hidden');
+      } else {
+        btn.classList.add('hidden');
+      }
+    }
+
+    // Clears the home's TV binding. Called from renderAuthState's
+    // signed-out branch so a stale TV-bound state doesn't persist into
+    // the signed-out home (which should render as Mode C tile state).
+    // Idempotent.
+    function clearHomeTvBinding() {
+      const screen = document.getElementById('screen-home');
+      screen.dataset.deviceKey  = '';
+      screen.dataset.tvDeviceId = '';
+      document.getElementById('home-tv-header').classList.add('hidden');
+      document.getElementById('home-tv-switch').classList.add('hidden');
+      renderHome(); // Mode C → tiles render as active legacy
+    }
+
+    // ── 2c.2: Proximity Settings drill-in handlers ──────────────────
+
+    // Menu opener. Matches openContactsFromMenu / openHouseholdFromMenu
+    // pattern: close menu → goTo → render.
+    function openProximitySettingsFromMenu() {
+      document.getElementById('user-menu').classList.remove('open');
+      goTo('screen-proximity-settings');
+      renderProximitySettings();
+    }
+
+    // Renders the body of screen-proximity-settings based on current mode
+    // and proximity state. Built via DOM API (not innerHTML interpolation)
+    // because TV display_name comes from user input — escape-safe.
+    function renderProximitySettings() {
+      const body = document.getElementById('proximity-settings-body');
+      body.innerHTML = '';
+
+      const ctx = getHomeTvContext();
+      const mode = getHomeMode();
+
+      // Edge case: Mode C / no TV bound. Shouldn't normally happen because
+      // the menu item is hidden in Mode C, but back-button return or
+      // direct nav could land us here.
+      if (mode === 'C' || !ctx) {
+        const empty = document.createElement('div');
+        empty.className = 'proximity-settings-empty';
+        empty.textContent = 'No TV is currently selected. Connect to a TV via "Your TVs" to manage proximity settings.';
+        body.appendChild(empty);
+        return;
+      }
+
+      // TV name comes from home-tv-title (set by enterHomeForTv).
+      // Safe in 2c.2: only entry to this screen is via the badge
+      // menu, which is only visible when home is rendered with a
+      // bound TV. If future entry paths bypass home, look up
+      // the TV row from loadUserTvs() instead.
+      const tvName = document.getElementById('home-tv-title')?.textContent || 'Your TV';
+      const answer = getProximityAnswer(ctx.tv_device_id) || 'yes'; // default 'yes' if unanswered
+      const user = window.elsewhere?.getCurrentUser?.();
+      const dismissed = user ? getCachedProximityDismissed(user.id, ctx.tv_device_id) : null;
+      // Show the re-enable button when the banner won't fire naturally:
+      // either DB-dismissed or the user has answered this session.
+      const sessionAnswer = getProximityAnswer(ctx.tv_device_id);
+      const showReEnable = dismissed === true || sessionAnswer !== null;
+
+      const section = document.createElement('div');
+      section.className = 'proximity-settings-section';
+
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'proximity-settings-tv-name';
+      nameDiv.append('Currently for ');
+      const strong = document.createElement('strong');
+      strong.textContent = tvName;
+      nameDiv.appendChild(strong);
+      section.appendChild(nameDiv);
+
+      const toggle = document.createElement('div');
+      toggle.className = 'proximity-settings-toggle';
+      const yesBtn = document.createElement('button');
+      yesBtn.className = 'seg-btn' + (answer === 'yes' ? ' active' : '');
+      yesBtn.textContent = 'At home';
+      yesBtn.onclick = () => setProximityFromSettings('yes');
+      toggle.appendChild(yesBtn);
+      const noBtn = document.createElement('button');
+      noBtn.className = 'seg-btn' + (answer === 'no' ? ' active' : '');
+      noBtn.textContent = 'Not at home';
+      noBtn.onclick = () => setProximityFromSettings('no');
+      toggle.appendChild(noBtn);
+      section.appendChild(toggle);
+
+      if (showReEnable) {
+        const reEnable = document.createElement('button');
+        reEnable.className = 'ghost-btn';
+        reEnable.textContent = 'Show the proximity banner again next time';
+        reEnable.onclick = () => reEnableBanner();
+        section.appendChild(reEnable);
+      }
+
+      body.appendChild(section);
+    }
+
+    // Toggle handler — writes the new answer to sessionStorage,
+    // re-renders settings (toggle visual state) and home (tile
+    // state matrix).
+    //
+    // Unlike handleProximityNo (Section 3), no confirm() prompt
+    // here. The settings screen is an explicit, deliberate
+    // change context — the user navigated through the badge
+    // menu specifically to adjust this setting. Tile greying
+    // in Mode B provides immediate post-change feedback.
+    function setProximityFromSettings(value) {
+      const ctx = getHomeTvContext();
+      if (!ctx) return;
+      setProximityAnswer(ctx.tv_device_id, value);
+      renderProximitySettings();
+      renderHome();
+    }
+
+    // Re-enable handler — clears the sessionStorage answer (so the banner
+    // can fire per condition 4) and persists not-dismissed in DB. After
+    // this, returning to home will show the banner.
+    async function reEnableBanner() {
+      const ctx = getHomeTvContext();
+      if (!ctx) return;
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) return;
+
+      clearProximityAnswer(ctx.tv_device_id);
+
+      try {
+        await window.elsewhere.preferences.setUserPreference(
+          ctx.tv_device_id,
+          'proximity_prompt_dismissed',
+          false
+        );
+        setCachedProximityDismissed(user.id, ctx.tv_device_id, false);
+      } catch (e) {
+        console.error('[elsewhere] reEnableBanner setUserPreference failed:', e);
+        // Continue — the sessionStorage clear already lets the banner
+        // fire this session. Persistence will retry next interaction.
+      }
+
+      renderProximitySettings();
+      renderHome();
+    }
+
     // ── Part A: loadUserTvs + Your TVs picker ───────────────────────
 
     // Returns [{tv_device_id, device_key, household_id, household_name,
@@ -1889,7 +2450,7 @@
       const tvs = await loadUserTvs();
       if (tvs.length === 0) return; // n=0 → pre-existing home state
       if (tvs.length === 1) {
-        enterTvRemoteScreen(tvs[0].device_key, { origin: 'n1-skip', tvCache: tvs[0] });
+        enterHomeForTv(tvs[0].device_key, { tvCache: tvs[0], tvCount: tvs.length });
         return;
       }
       renderYourTvsScreen(tvs);
@@ -1906,7 +2467,7 @@
         return;
       }
       if (tvs.length === 1) {
-        enterTvRemoteScreen(tvs[0].device_key, { origin: 'picker', tvCache: tvs[0] });
+        enterHomeForTv(tvs[0].device_key, { tvCache: tvs[0], tvCount: tvs.length });
         return;
       }
       renderYourTvsScreen(tvs);
@@ -1922,7 +2483,10 @@
     function renderTvTile(tv) {
       const el = document.createElement('div');
       el.className = 'tv-tile';
-      el.onclick = () => enterTvRemoteScreen(tv.device_key, { origin: 'picker', tvCache: tv });
+      // tvCount not threaded through renderTvTile; enterHomeForTv will
+      // re-query for the count. Acceptable — the picker is the rare path
+      // (only fires for n>1). 2c.x optimization opportunity.
+      el.onclick = () => enterHomeForTv(tv.device_key, { tvCache: tv });
 
       const row = document.createElement('div');
       row.className = 'tv-tile-row';
@@ -1955,46 +2519,86 @@
       return 'fresh-gray';
     }
 
-    // ── Part B: TV remote-control screen ────────────────────────────
-
-    // Origins:
-    //   'picker'          — user tapped a tile in screen-your-tvs
-    //   'n1-skip'         — auto-routed because length=1 (Decision 5)
-    //   'signin-success'  — Part D (future): "Open TV apps" button
-    //   'post-claim'      — Part E (future): claim success transition
+    // ── Part B: home TV binding (2c.2) ──────────────────────────────
     //
-    // Non-picker origins hide the back-link entirely (Decision 1b —
-    // "no back on a real remote"). Picker origin backs to screen-your-tvs.
-    async function enterTvRemoteScreen(device_key, opts = {}) {
-      const origin = opts.origin || 'picker';
-      let tv       = opts.tvCache || null;
+    // Binds a TV's context onto the unified post-login home (screen-home),
+    // shows the TV header, and triggers a renderHome() pass to apply tile
+    // state per the current mode and proximity answer.
+    //
+    // Replaces 4.10.2's enterTvRemoteScreen (back-link + screen-tv-remote
+    // navigation) with a direct home binding. No origin/back-link logic
+    // — the home has no back button (it's home).
+    async function enterHomeForTv(device_key, opts = {}) {
+      let tv      = opts.tvCache || null;
+      let tvCount = opts.tvCount;
 
-      // If no cached row was handed in (Part D/E future callers), look it up.
-      if (!tv) {
+      // Look up the tv row and/or count if either wasn't cached.
+      if (!tv || tvCount === undefined) {
         const tvs = await loadUserTvs();
-        tv = tvs.find(t => t.device_key === device_key) || null;
+        if (!tv) tv = tvs.find(t => t.device_key === device_key) || null;
+        if (tvCount === undefined) tvCount = tvs.length;
       }
 
-      const screen = document.getElementById('screen-tv-remote');
+      const screen = document.getElementById('screen-home');
       screen.dataset.deviceKey  = device_key;
       screen.dataset.tvDeviceId = tv?.tv_device_id || '';
-      screen.dataset.origin     = origin;
 
-      const title     = document.getElementById('tv-remote-title');
-      const household = document.getElementById('tv-remote-household');
+      const header     = document.getElementById('home-tv-header');
+      const title      = document.getElementById('home-tv-title');
+      const household  = document.getElementById('home-tv-household');
+      const switchEl   = document.getElementById('home-tv-switch');
+      const switchName = document.getElementById('home-tv-switch-name');
+
       if (tv) {
         title.textContent     = tv.tv_display_name || 'Your TV';
         household.textContent = tv.household_name || '';
+        header.classList.remove('hidden');
+
+        // n>1: show "Showing: [TV name] · Switch in Your TVs" subtitle.
+        // n=1: hide subtitle (no point advertising a switch with one TV).
+        if (tvCount > 1) {
+          switchName.textContent = tv.tv_display_name || 'Your TV';
+          switchEl.classList.remove('hidden');
+        } else {
+          switchEl.classList.add('hidden');
+        }
       } else {
-        title.textContent     = 'Your TV';
-        household.textContent = '';
+        // Fallback: lookup failed (deleted TV, RLS issue, etc.). Clear
+        // header and dataset; getHomeMode will return 'C'.
+        header.classList.add('hidden');
+        switchEl.classList.add('hidden');
+        screen.dataset.deviceKey  = '';
+        screen.dataset.tvDeviceId = '';
       }
 
-      // Decision 1b: hide back-link for non-picker origins.
-      const back = document.getElementById('tv-remote-back');
-      back.style.display = (origin === 'picker') ? '' : 'none';
+      goTo('screen-home');
+      renderHome();
+    }
 
-      goTo('screen-tv-remote');
+    // ── 2c.2: home tile tap dispatcher ──────────────────────────────
+    //
+    // Dispatches based on current mode (per state model § Tile state matrix
+    // and per breakdown § 2c.3 / DECISION-B in 2c.2 scoping):
+    //   Mode A — household member at home → session-start flow (2b)
+    //   Mode B — household member not at home:
+    //              karaoke → silent no-op (greyed; banner already explained)
+    //              games   → legacy direct-nav (no session in 2c.2; games
+    //                        is session-aware in Part 3)
+    //   Mode C — non-household user → legacy direct-nav handlers
+    //
+    // Wellness is never dispatched here — its tile is non-interactive
+    // (class="disabled", no onclick).
+    function handleHomeTileTap(app) {
+      const mode = getHomeMode();
+      if (mode === 'A') return handleTvRemoteTileTap(app);
+      if (mode === 'B') {
+        if (app === 'karaoke') return; // silent no-op
+        if (app === 'games')   return handleGamesTap();
+      }
+      if (mode === 'C') {
+        if (app === 'karaoke') return handleKaraokeTap();
+        if (app === 'games')   return handleGamesTap();
+      }
     }
 
     // Per-app session manifest values passed to rpc_session_start. App-level
@@ -2012,7 +2616,7 @@
     // broadcast failures (session_started, launch_app) are logged but
     // still navigate — phone-side app functions regardless of TV state.
     async function handleTvRemoteTileTap(app) {
-      const screen     = document.getElementById('screen-tv-remote');
+      const screen     = document.getElementById('screen-home');
       const device_key = screen.dataset.deviceKey;
       if (!device_key) return;
 
@@ -2022,7 +2626,9 @@
 
       // Session 5 Part 2b: create the session row before broadcasting.
       // Client-supplied manifest (plan-doc-confirmed in commit 157d920).
-      // RPC failure: surface error, no broadcast, no navigation.
+      // RPC failure: surface error, no broadcast, no navigation. 2c.2
+      // adds a defensive 23505 ("active session exists") catch — see R4
+      // design in the SESSION-5-PART-2-BREAKDOWN.md § 2c discussion.
       const tv_device_id = screen.dataset.tvDeviceId;
       if (!tv_device_id) {
         alert("Couldn't start session: TV id missing. Reopen the TV from Your TVs and try again.");
@@ -2039,6 +2645,41 @@
         p_room_code:       room,
       });
       if (startErr) {
+        // 2c.2 R4: defensive handling for "active session exists" (errcode 23505).
+        // Same-app: best-effort rejoin. Different-app: surface a message.
+        if (startErr.code === '23505') {
+          const { data: existing } = await window.sb
+            .from('sessions')
+            .select('id, app, room_code')
+            .eq('tv_device_id', tv_device_id)
+            .is('ended_at', null)
+            .maybeSingle();
+
+          if (existing && existing.app === app) {
+            // Same-app rejoin. Best-effort join (idempotent — 23505 if
+            // already a participant; swallow either way).
+            await window.sb.rpc('rpc_session_join', {
+              p_session_id: existing.id,
+              p_participation_role: 'audience',
+            }).catch(() => { /* already participant — fine */ });
+
+            try { sessionStorage.setItem('elsewhere.active_tv.device_key', device_key); } catch (_) {}
+
+            if (app === 'karaoke') {
+              location.href = 'karaoke/singer.html?code=' + encodeURIComponent(existing.room_code);
+            } else if (app === 'games') {
+              location.href = 'games/player.html?room=' + encodeURIComponent(existing.room_code) + '&mgr=1';
+            }
+            return;
+          }
+
+          if (existing && existing.app !== app) {
+            alert(`A ${existing.app} session is already active on this TV. End it from a phone in the active session, or wait for it to finish.`);
+            return;
+          }
+
+          // 23505 fired but no row found (race): fall through to generic.
+        }
         alert("Couldn't start session: " + (startErr.message || 'unknown error'));
         return;
       }
@@ -2096,8 +2737,9 @@
     // ── Foreground refresh ──────────────────────────────────────────
 
     // When the app returns to foreground, re-query TVs if user is currently
-    // viewing the picker. Deliberately NOT re-querying from screen-tv-remote
-    // to avoid ripping the user away mid-interaction with the remote.
+    // viewing the picker. Deliberately NOT re-querying from screen-home
+    // dataset to avoid disrupting the user's bound-TV context
+    // mid-interaction with the home.
     if (window.Capacitor?.Plugins?.App) {
       window.Capacitor.Plugins.App.addListener('appStateChange', (state) => {
         if (state.isActive && activeScreen === 'screen-your-tvs') {
