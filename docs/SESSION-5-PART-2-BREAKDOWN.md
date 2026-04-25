@@ -1,6 +1,6 @@
 # Session 5 Part 2 Breakdown
 
-**Status:** Part 2a complete (commit `d1b4edd`). Parts 2b–2f pending.
+**Status:** Parts 2a, 2b, 2c.1, 2c.2 complete. Part 2c.3 next, then 2d–2f pending.
 **Created:** 2026-04-23
 **Parent plan:** `docs/SESSION-5-PLAN.md` (commit `2b40313`)
 **Canonical state model:** [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md) (added 2026-04-24, commit `36353ca`). Parts 2c onward operate against the model defined there. Where this breakdown's older language conflicts with the state model, the state model wins.
@@ -19,7 +19,7 @@ Session 5 breaks into 5 parts. Part 1 (schema + RPCs + `shell/realtime.js` extra
 - Full event emission matrix in file header documents which RPC fires which event
 - NO consumer wiring yet — that's 2b+
 
-### 2b — Session lifecycle wiring [PENDING — NEXT]
+### 2b — Session lifecycle wiring ✓ SHIPPED (`601d125`)
 
 **Scope:**
 
@@ -46,13 +46,13 @@ Session 5 breaks into 5 parts. Part 1 (schema + RPCs + `shell/realtime.js` extra
 **Files touched:** `index.html`, `tv2.html`, `karaoke/stage.html`, `games/tv.html`. (No longer touches `karaoke/singer.html` or `games/player.html`.)
 **Rough commit count:** 1
 
-### 2c — Apps grid session-awareness + post-login home unification + proximity banner [PENDING]
+### 2c — Apps grid session-awareness + post-login home unification + proximity banner [IN PROGRESS]
 
 **Scope:**
 
 Per [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md), the post-login home screen on the phone unifies into a single conditional-rendering element with a proximity banner and active-session relabeling. Part 2c splits into three sub-parts to keep each commit reviewable:
 
-**2c.1 — User preferences storage:**
+**2c.1 — User preferences storage:** ✓ SHIPPED (commit `daa8718`)
 - New DB table `user_preferences` (or equivalent column on `auth.users` / `household_members`) for per-user-per-TV preferences
 - Initial preference: `proximity_prompt_dismissed` (boolean, default false) — captures the "Don't show me again" choice
 - Designed to accommodate future preferences without schema churn (e.g., per-app notification opt-outs, UI variant choices)
@@ -60,7 +60,7 @@ Per [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md), the post-
 - Migration in `db/012` (or next available number)
 - Helper functions in `shell/` (e.g., `getUserPreference(tv_device_id, key)`, `setUserPreference(tv_device_id, key, value)`)
 
-**2c.2 — Post-login home unification + proximity banner:**
+**2c.2 — Post-login home unification + proximity banner:** ✓ SHIPPED (commit `0a3a9ea`)
 - Merge `screen-home` and `screen-tv-remote` into a single DOM section
 - Remove the back button from the unified post-login home (it was a symptom of the split design)
 - Implement Mode A / Mode B / Mode C rendering per the state model's tile state matrix
@@ -75,7 +75,29 @@ Per [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md), the post-
 - "Your TVs" menu item becomes informational/picker rather than a navigation drill-in
 - Tap behavior dispatches based on (user role, proximity, active sessions)
 
-**2c.3 — Active session relabeling + rejoin:**
+**Delivered in 2c.2 (stats: +728 / −86 on index.html, 7 sections applied via section-by-section review):**
+- DOM unification: `screen-home` absorbed `screen-tv-remote`; back button removed; TV header + proximity banner + 3-mode tile rendering
+- Banner 4-condition firing rule + three action handlers (Yes / No-with-confirm / Don't-ask-again)
+- Proximity Settings drill-in via badge menu; visible only in Mode A/B
+- R4 23505 catch: same-app rejoin via best-effort `rpc_session_join('audience')`; cross-app surfaced with user-facing copy ("A {app} session is already active…")
+- `enterTvRemoteScreen` → `enterHomeForTv` renamed; all 4 callers updated (post-claim, enterYourTvsFlow, openYourTvsFromMenu, renderTvTile)
+- `clearHomeTvBinding` helper wired into `renderAuthState`'s signed-out branch
+- `.app-tile*` CSS block deleted; new `.proximity-banner*`, `.seg-btn*`, `.tile.greyed`, `.home-tv-switch`, `.proximity-settings-*` styles added
+
+**Decisions baked in:**
+- DECISION-A: `fetchProximityDismissed` — first attempt per (user, TV) per session; no retry. If the first fetch errors, banner stays visible until manual dismiss.
+- DECISION-B: Mode B greyed-karaoke tap = silent no-op. Banner and Proximity Settings provide recovery; no inline tooltip or alert.
+- Confirm dialog for "No" uses native `confirm()` with browser-default [OK]/[Cancel]. Locked copy specified [Continue]/[Cancel] — mismatch acknowledged; custom modal deferred as 2c.x polish (tracked inline).
+
+**On-device watch items (non-blocking; fix in 2c.x if real friction):**
+- WATCH-1: Banner background visual weight (gold-ghost + gold-faint border) against tile grid. If competes for the eye, drop to transparent + border-only.
+- WATCH-2: Tertiary "Don't ask again" styling (text-faint + underline) is a new pattern with no codebase precedent. If it reads as out-of-place, drop the underline.
+- WATCH-3: Three vertical stacked buttons may read as parallel choices rather than primary/alternate/escape-hatch hierarchy. If off, restructure to Yes/No row + tertiary below.
+
+**Known acceptable carryover (not a 2c.x item):**
+- `.tv-remote-header`, `.tv-remote-household` CSS class names are reused on the unified home. Names are slightly anachronistic post-unification but pure aesthetic — no functional payoff to renaming. Leave as-is.
+
+**2c.3 — Active session relabeling + rejoin:** [PENDING — NEXT]
 - Query active sessions on home render: `SELECT id, app FROM sessions WHERE tv_device_id = <selected TV> AND ended_at IS NULL`
 - Relabel matching app tiles with "Active Session" / "Rejoin [App]" / "[App] (active)" — exact label per implementation-time UX call (state model uses "Active Session" as umbrella; user-facing copy may be more specific)
 - Tap behavior on active-session tile: `rpc_session_join` if needed (caller not yet a participant), then navigate. Role determined by user context: manager rejoin vs. at-home rejoin vs. not-home audience/player join.
