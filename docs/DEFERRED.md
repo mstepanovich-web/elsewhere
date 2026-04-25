@@ -211,6 +211,7 @@ Session 5, tied to session manager concept.
 - Multi-phone session coordination (DEFERRED above) — parent concept
 - 4.10 admin roles (`rpc_approve_household_member`, `rpc_designate_admin`) — household-admin override leverages existing admin designation
 - DEFERRED "Scan-approval flow" — different admin flow but overlapping concept
+- docs/PHONE-AND-TV-STATE-MODEL.md — defines the manager orphan timeout as one of three platform-level configurable timeouts. 10-min default is from this entry; the state model doc references it.
 
 ---
 
@@ -1065,6 +1066,7 @@ When venues integration starts, or when the proximity prompt UX gets its second 
 - SESSION-5-PLAN.md → Architecture Decision 8 — current binary flag shape
 - DEFERRED "Games `ask_proximity` revision (post-venues integration)" — sibling concern; same manifest surface
 - DEFERRED "'Potential participant' as derived UI state" — consumer of refined proximity semantics
+- docs/PHONE-AND-TV-STATE-MODEL.md — canonical state model. Proximity prompting is now at TV-connect; this entry's hard-gate-vs-soft-gate semantics define what apps do with the answer.
 
 ---
 
@@ -1107,6 +1109,7 @@ Customer testing surfaces ghost-audience or ghost-queued counts as a usability p
 - SESSION-5-PART-2-BREAKDOWN.md § 2f — "Audience exit is implicit" scope note establishing this trade-off
 - SESSION-5-PLAN.md → session_participants schema (`left_at` column, `last_activity_at` on sessions)
 - DEFERRED "Session manager inactivity + household-admin override" — adjacent inactivity-tracking mechanism; share infrastructure
+- docs/PHONE-AND-TV-STATE-MODEL.md — establishes the ghost-audience trade-off this entry solves. Cleanup mechanism picks up when phase 1 ghost-audience accumulation becomes a real usability issue.
 
 ---
 
@@ -1153,6 +1156,191 @@ Opportunistic — next time `db/010_manager_mechanics_rpcs.sql` (the file holdin
 - `db/010_manager_mechanics_rpcs.sql` — current live `rpc_session_leave` with auto-promote branch; replaces db/009's version
 - SESSION-5-PART-2-BREAKDOWN.md → "Non-manager exit semantics" section — documents why no phone UI calls this RPC
 - DEFERRED "Participant cleanup mechanism (audience left_at / inactivity sweep)" — potential future caller if background cleanup lands
+
+---
+
+## State model implementation (post-Session-5)
+
+Cluster of items surfaced during Session 5 Part 2 state model design (see [PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md) — canonical state model, added 2026-04-24, commit `36353ca`). The state model defines behavior across phone and TV that implementation doesn't yet cover end-to-end. These four entries capture the post-Session-5 work items the state model implies.
+
+---
+
+### Deferred: Configurable platform timeouts
+
+**Deferred in:** Session 5 Part 2 state model design (2026-04-24)
+**Deferred on:** 2026-04-24
+**Priority:** Low — current hardcoded values are fine for Phase 1; becomes Medium when ops needs runtime tuning without redeploys
+**Area:** Schema / Shell — platform settings
+**Status:** Deferred
+
+#### Context
+
+The Phone and TV state model (docs/PHONE-AND-TV-STATE-MODEL.md) defines three platform-level timeouts that govern session and device state cleanup:
+
+- TV inactivity (State 2 → State 1 transition) — default 10 min
+- Manager orphan threshold — default 10 min
+- Phone proximity persistence — default 10 min
+
+Today these are hardcoded constants. Tuning requires code changes + redeploy. Real operational usage will likely benefit from runtime configurability — letting an ops admin set different values for different deployments or experiment with thresholds.
+
+#### What's deferred
+
+Build a `platform_settings` DB table with rows for each configurable timeout. Read at runtime by relevant code paths (stage.html session-state checks, manager-orphan polls, proximity-persistence check). Default values stored as table seed data; admin overrides applied per-row.
+
+Depends on a platform-admin role to scope who can edit (see sibling entry "Platform admin role + UI"). Platform settings are global, not household-scoped — a household admin shouldn't be able to extend their TV inactivity timeout to game the session-orphan rules.
+
+#### Options when picking up
+
+- Single `platform_settings` table with key-value pairs, schema validated by application code
+- Multiple narrow tables per concern (timeouts, feature flags, etc.) — overkill for Phase 1
+- Environment variables instead of DB — simpler but loses runtime tunability
+
+Recommendation: single `platform_settings` table, schema-validated in application code, edited via platform admin UI.
+
+#### When to pick this up
+
+When ops feedback surfaces specific tuning needs, OR when post-Phase-1 work necessarily includes platform-level admin features.
+
+#### Related
+
+- docs/PHONE-AND-TV-STATE-MODEL.md — defines the three timeouts this entry would make configurable
+- DEFERRED "Platform admin role + UI" — prerequisite role scoping
+- DEFERRED "Session manager inactivity + household-admin override" — describes manager orphan timeout's current hardcoded behavior
+
+---
+
+### Deferred: Platform admin role + UI
+
+**Deferred in:** Session 5 Part 2 state model design (2026-04-24)
+**Deferred on:** 2026-04-24
+**Priority:** Low — required for "Configurable platform timeouts" pickup; otherwise no production trigger
+**Area:** Schema / Shell — auth + authorization
+**Status:** Deferred
+
+#### Context
+
+Today's authorization model has household-admin (defined in db/006 Session 4.10 — admin within a single household, can manage TVs, members, household settings). There's no concept of platform-level admin authority that spans households.
+
+Several deferred items require platform-level scoping:
+
+- Configurable platform timeouts (sibling entry)
+- Cross-household analytics / observability (future)
+- Force-reset device claims (future operational tool)
+- Platform feature flag rollouts (future)
+
+A platform admin role distinct from household-admin lets a small operations team manage these without giving household-level users cross-household authority.
+
+#### What's deferred
+
+Define a `platform_admins` table (`user_id`, `granted_at`, `granted_by`, `active`) — simple list of platform-admin user IDs. Add a UI page (probably outside the regular Elsewhere phone app — e.g., a dedicated admin page at `mstepanovich-web.github.io/elsewhere/admin/` or similar) gated to those users. Initial scope of the UI: edit configurable timeouts (per sibling entry), maybe view session-stats dashboards.
+
+#### Options when picking up
+
+- Separate web UI (no Capacitor wrapper, just web page) — cleanest separation; doesn't bloat phone app
+- Hidden routes inside main Elsewhere phone app — simpler but blurs concern boundaries
+- Pure CLI / SQL access — minimal UI but doesn't scale to non-engineering ops
+
+Recommendation: separate web UI, simple page rather than full SPA. Auth via the existing Supabase session.
+
+#### When to pick this up
+
+When the first platform-admin-only operational task surfaces (most likely: configurable platform timeouts, see sibling entry).
+
+#### Related
+
+- DEFERRED "Configurable platform timeouts" — first concrete use case for this role
+- db/006 — `household_members.role` definition; `platform_admins` is a parallel but distinct role table
+
+---
+
+### Deferred: Guest flow design (under state model)
+
+**Deferred in:** Session 5 Part 2 state model design (2026-04-24)
+**Deferred on:** 2026-04-24
+**Priority:** Medium — required before sessions can be initiated by non-household users
+**Area:** Shell / Schema — auth + session participation
+**Status:** Deferred
+
+#### Context
+
+The Phone and TV state model (docs/PHONE-AND-TV-STATE-MODEL.md) notes that a guest (non-household user) can scan the QR code on a TV in State 1 (at-rest), sign in or create an account, and bootstrap a session on that TV without becoming a household member. The state model defines this scenario at a high level but defers implementation specifics to a separate design pass.
+
+Pre-state-model, guest flow was partially captured in "Part E Flows 3 + 4 — guest access + pre-invited member verification" and "Scan-approval flow" entries. Those entries predate the state model's unified post-login home and need to be reconciled with the new framing.
+
+#### What's deferred
+
+Decide and implement:
+
+- Can a guest be a session manager? (State model says "probably yes" — they originated the session.)
+- Can a host promote a guest to a participant role? (Probably yes.)
+- Does the guest's `session_participants` row persist after the session ends? (Yes — they have an `auth.users` record; they just aren't a `household_members` row.)
+- Does the guest see any household-themed UI on the phone post-login? (Mode C in state model: no household, no TV header, only non-TV-required app tiles active.)
+- Does the household see "guests participated" in any history/log? (Future observability; out of scope for guest flow itself.)
+- How does a guest "graduate" to household member? (Existing invitation flows from Session 4.10; not new mechanics.)
+
+#### Options when picking up
+
+Approach 1: Unify with Part E Flows 3+4 — one consolidated guest flow design that supersedes those entries. Cleanest final shape but requires reading the prior entries' detail.
+
+Approach 2: Layered — Part E entries cover the auth + claim mechanics; this entry covers the state-model-specific UI behaviors (Mode C rendering, tile state matrix for guests, etc.). Less consolidation but smaller scope per pickup.
+
+Recommendation: Approach 1 (unified) when this is scheduled. The state model's Mode C is the umbrella concept that deserves first-class treatment.
+
+#### When to pick this up
+
+When the first real guest-participation use case surfaces (typically: friend visits, scans the TV's QR, wants to play games or sing). Post-Session-5.
+
+#### Related
+
+- docs/PHONE-AND-TV-STATE-MODEL.md — defines Mode C (non-household-user) state and guest flow at a high level
+- DEFERRED "Part E Flows 3 + 4 — guest access + pre-invited member verification" — predecessor entry; needs reconciling with state model
+- DEFERRED "Scan-approval flow (request-to-join household in real time)" — adjacent flow for guest-becomes-member scenarios
+- Session 4.10 plans — household membership mechanics
+
+---
+
+### Deferred: Multi-TV picker and selection persistence
+
+**Deferred in:** Session 5 Part 2 state model design (2026-04-24)
+**Deferred on:** 2026-04-24
+**Priority:** Low — only relevant once a real multi-TV household exists; n=1 case is the dominant Phase 1 reality
+**Area:** Shell / UX — phone home screen
+**Status:** Deferred
+
+#### Context
+
+The Phone and TV state model (docs/PHONE-AND-TV-STATE-MODEL.md) specifies that users with more than one claimed TV (n>1) see an inline TV picker on the post-login home before the proximity prompt fires. The state model captures the high-level flow:
+
+- Picker fires before proximity prompt
+- Selection persists across app launches as long as user stays signed in
+- Switching TVs via the badge menu's "Your TVs" returns to the picker; new selection resets proximity (since the question is "are you at home with *this* TV")
+
+Today's index.html implements n=1 auto-skip. The picker UI for n>1 doesn't yet exist.
+
+#### What's deferred
+
+Build the picker UI: list TVs by display name + household name + last-seen timestamp; tap to select; visual indication of currently-selected TV. Persist selection in sessionStorage or per-user DB column.
+
+Reset proximity when selection changes (per state model's explicit rule).
+
+Multi-TV households are rare in Phase 1 — most users have one TV. Building this picker is low priority until real n>1 households surface usability issues with the current auto-routing.
+
+#### Options when picking up
+
+- Inline picker on post-login home as state model specifies — reads cleanly with the unified-home design
+- Modal/drawer picker (alternative to inline) — more conventional but adds a navigation level
+- Per-app last-used-TV memory — alternative persistence mechanism if simple TV-selected-once doesn't fit usage
+
+Recommendation: inline picker per state model. No drill-in.
+
+#### When to pick this up
+
+When real multi-TV households emerge in usage. Probably post-Phase-1 unless sales/marketing surfaces specific multi-TV use cases (e.g., bar/restaurant deployments).
+
+#### Related
+
+- docs/PHONE-AND-TV-STATE-MODEL.md — defines multi-TV selection at a high level
+- DEFERRED "Phone-as-remote — persistent app launcher on phone, display-only grid on TV" — predecessor concept; Session 4.10.2 implemented n=1 auto-skip from this design
 
 ---
 
