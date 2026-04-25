@@ -1,6 +1,6 @@
 # Session 5 Part 2 Breakdown
 
-**Status:** Parts 2a, 2b, 2c.1, 2c.2, 2c.3.1 complete. Part 2c.3.2 next, then 2d–2f pending.
+**Status:** Parts 2a, 2b, 2c (all sub-parts) complete. Part 2d next, then 2e–2f pending.
 **Created:** 2026-04-23
 **Parent plan:** `docs/SESSION-5-PLAN.md` (commit `2b40313`)
 **Canonical state model:** [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md) (added 2026-04-24, commit `36353ca`). Parts 2c onward operate against the model defined there. Where this breakdown's older language conflicts with the state model, the state model wins.
@@ -46,7 +46,7 @@ Session 5 breaks into 5 parts. Part 1 (schema + RPCs + `shell/realtime.js` extra
 **Files touched:** `index.html`, `tv2.html`, `karaoke/stage.html`, `games/tv.html`. (No longer touches `karaoke/singer.html` or `games/player.html`.)
 **Rough commit count:** 1
 
-### 2c — Apps grid session-awareness + post-login home unification + proximity banner [IN PROGRESS]
+### 2c — Apps grid session-awareness + post-login home unification + proximity banner ✓ SHIPPED
 
 **Scope:**
 
@@ -130,15 +130,32 @@ Sub-split into 2c.3.1 and 2c.3.2 per pre-implementation audit.
 - Active-session state flash on `enterHomeForTv` (~200-500ms while `refreshActiveSession` resolves). R4 catches race-clicks during the flash. If visually disruptive, add sessionStorage hydration of last-known active-session state in 2c.x.
 - Cross-app switch native `confirm()` shows [OK]/[Cancel] vs. locked [Continue]/[Cancel] — same papercut as 2c.2's "No" confirm. Custom modal still deferred to 2c.x.
 
-**2c.3.2 — Back-to-Elsewhere visibility across play-pages:** [PENDING — NEXT]
+**2c.3.2 — Back-to-Elsewhere visibility across play-pages:** ✓ SHIPPED (commit `5617689`)
 - Implement `isLikelyHouseholdMember()` heuristic: authenticated + `sessionStorage.elsewhere.active_tv.device_key` present (DECISION-4 from 2c.3 planning audit). Helper name flags it as a heuristic, not RPC-verified, so future swap stays surgical.
 - `karaoke/singer.html`: gate the existing `.back-to-elsewhere` button visibility on `isLikelyHouseholdMember()`.
 - `games/player.html`: gate the existing `.home-link` button visibility on `isLikelyHouseholdMember()`.
 - `karaoke/audience.html`: add new Back-to-Elsewhere button (markup + style + `handleBackToElsewhere` handler), styled to match singer.html's `.back-to-elsewhere` pill style (DECISION-5 from 2c.3 planning audit). Visibility gated on `isLikelyHouseholdMember()`. Closes DEFERRED "Audience back-to-Elsewhere navigation".
 - State model basis: household members (Mode A/B) see the button; non-household (Mode C, deep-link only) do not.
 
-**Files touched:** `karaoke/singer.html`, `games/player.html`, `karaoke/audience.html`. Possible new helper in `shell/` module if `isLikelyHouseholdMember` is shared (decision at Section 1 of 2c.3.2 implementation).
-**Rough commit count:** 1
+**Delivered in 2c.3.2 (stats: +155 / −6 across 5 files, 4 sections applied via section-by-section review):**
+- `shell/auth.js`: `window.elsewhere.isLikelyHouseholdMember()` heuristic (auth + sessionStorage `active_tv.device_key` check)
+- `karaoke/singer.html`: existing `.back-to-elsewhere` button gated on `isLikelyHouseholdMember()`; two-tier wire pattern (onAuthChange + elsewhere:sb-ready fallback)
+- `games/player.html`: existing `.home-link` gated on same helper; independent subscriber to onAuthChange (parallel to existing applyAuthState wiring)
+- `karaoke/audience.html`: net-new shell module imports (auth.js + realtime.js) + `.back-to-elsewhere` button (markup + CSS duplicated from singer.html + `handleBackToElsewhere` handler + visibility wiring)
+- `docs/DEFERRED.md`: "Audience back-to-Elsewhere navigation" marked Completed in Session 5 Part 2c.3.2
+- Cross-file function naming: `applyBackToElsewhereVisibility` + `wireBackToElsewhereVisibility` reused identically across all three pages (grep affordance for future maintenance).
+
+**Decisions baked in:**
+- DECISION-4: `isLikelyHouseholdMember` = simple heuristic (authenticated + `sessionStorage.elsewhere.active_tv.device_key` present). "Likely" naming flags the heuristic; future RPC-verified swap can replace method body without changing call sites.
+- DECISION-5: audience.html Back button styled to match singer.html's `.back-to-elsewhere` pill (top-right, `position:fixed`). Karaoke peer consistency.
+- Helper placement: `window.elsewhere` namespace in `shell/auth.js` (Option C from Section 1 audit). Single update site for future RPC-verified swap.
+- Visibility init pattern: start hidden in HTML (`style="display:none;"`), reveal in JS via `onAuthChange`. Avoids flash for non-household deep-link users.
+
+**On-device watch items (non-blocking; fix in 2c.x if real friction):**
+- audience.html Back-to-Elsewhere pill may visually collide with topbar right-side content (both top-right; z-index resolved but vertical overlap possible). Reposition or integrate into topbar if conflict surfaces.
+
+**Files touched:** `shell/auth.js`, `karaoke/singer.html`, `games/player.html`, `karaoke/audience.html`, `docs/DEFERRED.md`.
+**Commit count:** 1 (code) + 1 (this docs update).
 
 **Locked decisions:**
 - Single post-login home screen — no separate `screen-tv-remote`
