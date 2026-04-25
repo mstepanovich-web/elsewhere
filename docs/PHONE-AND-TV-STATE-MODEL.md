@@ -179,22 +179,46 @@ If a session is active and the user taps a *different* app's tile, a confirm dia
 
 ## Proximity model
 
-### When the prompt fires
+### When the banner fires
 
-**On post-login home render**, automatically, when the user is a household member with TV access:
+**On post-login home render**, an inline banner appears at the top of the home when ALL of the following are true:
 
-- **n=1 (single TV):** prompt fires immediately on render
-- **n>1 (multiple TVs):** TV picker fires first; on TV selection, proximity prompt fires
-- **Non-household user:** no prompt; the question doesn't apply
+1. User is a household member with at least one TV claimed (Mode A/B candidate)
+2. User landed on the post-login home directly (not via a deep-link to audience.html, player.html, or another in-app destination)
+3. User has not previously selected "Don't show me again" for the currently-selected TV (per-TV persistence — see Banner UI subsection)
+4. User has not yet answered the proximity question for this TV-connection-session
 
-The prompt does NOT fire on app-tile tap (that was the prior Plan doc Decision 8 design).
+The banner does NOT fire when:
+- User has no household (Mode C — never)
+- User deep-linked into an audience or player invite flow (skips home entirely)
+- User previously chose "Don't show me again" for this TV (default applies; no banner)
+- User already answered the question for this TV-connection-session
 
-### Prompt UX
+For multi-TV households (n>1): the TV picker resolves first, then the banner fires for the selected TV. The "Don't show me again" preference is per-TV, not global — a user can opt out for one TV but still be prompted for another.
 
-"Are you at home?"
+### Banner UI
 
-- **Yes** → user proceeds in Mode A (at home, full TV-device access)
-- **No** → confirm dialog: "You'll join as audience for sessions that need a TV. Continue?" → confirm routes to Mode B (not at home), cancel returns to prompt
+The proximity banner is an inline element rendered at the top of the post-login home when the firing conditions above are met. It does not block the rest of the home — tiles render below it — but it is visually prominent.
+
+The banner shows three actions:
+
+- **"Yes, I'm at home"** → user proceeds in Mode A; answer stored in sessionStorage for the current TV-connection-session
+- **"No, I'm not"** → confirm dialog: "You'll join as audience for sessions that need a TV. Continue?" → on confirm, user proceeds in Mode B; on cancel, banner remains visible
+- **"Don't show me again"** → answer locked to "yes" by default; preference stored in DB (per-user-per-TV); banner does not fire on future post-login-home renders for this TV. User can revisit this choice via the new "Proximity Settings" menu item (see below).
+
+### Default proximity for first-time interaction
+
+If the user has not yet answered and has not selected "Don't show me again," the home renders in **Mode A by default** while the banner is visible. The user is treated as at-home until they explicitly answer otherwise. This minimizes friction for the dominant case (household members at home most of the time) while still surfacing the question.
+
+### "Proximity Settings" menu item
+
+A new menu item under the user's badge menu, alongside Contacts / Groups / Manage Household / Your TVs / Sign Out. Drilling in shows:
+
+- Current proximity for current TV: at-home / not-at-home toggle
+- "Always ask me on next session" — re-enables the banner (clears the "Don't show me again" preference)
+- For users with multiple claimed TVs (n>1): per-TV settings
+
+Back from this drill-in returns to the post-login home. Settings changes apply immediately.
 
 ### Per-app interpretation of the answer
 
@@ -206,21 +230,25 @@ Proximity is one answer from the user, but apps interpret it differently:
 
 ### Persistence
 
-Proximity is remembered per **TV-connection session**, not per app launch. The answer expires when:
+Two layers of persistence:
 
-1. User explicitly disconnects from the TV (e.g., switches TVs in a multi-TV household, signs out)
-2. App is force-closed or phone restarts
-3. **Phone-side inactivity timeout** expires (configurable, default 10 minutes — see Timeouts section)
+**Per-TV-connection-session (sessionStorage):**
+- The user's answer to the proximity prompt for the currently-active TV-connection
+- Cleared on app force-close, phone restart, explicit TV switch (multi-TV scenario), or sign-out
+- 10-minute inactivity expiration is **deferred** for Phase 1 (see DEFERRED.md "Phone proximity persistence — 10-minute inactivity expiration"). 2c.x ships sessionStorage-only.
 
-Within the persistence window, switching between apps does NOT re-prompt. The user answered once for this TV-connection; that answer covers all subsequent app launches until persistence expires.
+**Per-user-per-TV (DB):**
+- The "Don't show me again" preference, stored in a new `user_preferences` table (or equivalent — per 2c.1 design)
+- Persists across app reinstalls, new devices, and sign-out → sign-in cycles
+- Editable via the "Proximity Settings" menu item
 
 ### Recovery
 
-If the user answered incorrectly (said "no" but actually is at home, or vice versa), recovery is via natural disengagement:
+If the user answered incorrectly (said "no" but actually is at home, or vice versa), recovery is via:
 
-- Walk away long enough for inactivity timeout to expire → re-prompted on next interaction
-- Force-close the app → re-prompted on next launch
-- (Future) Explicit "change proximity" UI — out of scope Phase 1
+- **Banner answer change:** if the banner is still visible, tap a different option
+- **Menu navigation:** drill into "Proximity Settings" via the badge menu, change the answer
+- **Natural disengagement:** force-close the app → re-prompted on next launch (assuming "Don't show me again" not selected)
 
 ---
 
@@ -236,7 +264,7 @@ If the user answered incorrectly (said "no" but actually is at home, or vice ver
 
 - **Post-login home (single screen):** Conditional rendering per Mode A/B/C above. No back button.
 - **Badge menu drill-ins (Contacts, Groups, Manage Household, Your TVs):** Back button → post-login home. The home re-renders in whatever mode matches current state.
-- **In-app pages (singer.html, player.html, audience.html):** Manager-only Back-to-Elsewhere → post-login home. Hosts and participants are app-scoped (no Back).
+- **In-app pages (singer.html, player.html, audience.html):** Back-to-Elsewhere visible for household members → post-login home. Non-household users (deep-link only) are app-scoped (no Back). See "Back-to-Elsewhere navigation" section for details.
 
 ### "Your TVs" menu item
 
@@ -249,18 +277,32 @@ The current code's `screen-tv-remote` (small-tile screen with back button) is **
 
 ---
 
-## Manager Back-to-Elsewhere
+## Back-to-Elsewhere navigation
 
-Per Session 5 Part 2 design: **Back-to-Elsewhere is navigate-only**. The manager's session stays alive and they retain the manager role. The manager:
+Per Session 5 Part 2 design: **Back-to-Elsewhere is navigate-only**. Tapping the button navigates the user from a participant page (singer.html, player.html, audience.html) to the post-login home. The session continues running on the TV regardless of who navigates back; the button does not end the session.
 
-- Phone navigates from `karaoke/singer.html` (or `games/player.html`) to the post-login home
-- The home renders with the active session's app tile showing "Active Session"
-- Tapping that tile rejoins the manager as manager
-- Tapping a different tile triggers the cross-app switch confirm dialog
+### Visibility rule
 
-The TV is unaffected — it stays on stage.html (or games/tv.html) because the session is still active. The TV's `exit_app` handler (Part 2b) checks session state and stays put when the session is live.
+**Back-to-Elsewhere visibility = household membership status.**
 
-This applies only to managers. Hosts and participants don't have a Back-to-Elsewhere button — they're app-scoped.
+- **Household member with TV access (Modes A/B):** sees the button on `karaoke/singer.html`, `games/player.html`, and `karaoke/audience.html`. They can navigate to the post-login home anytime.
+- **Non-household user (Mode C, deep-link only):** does not see the button. They are app-scoped to the link target.
+
+This revises an earlier draft of the state model that restricted Back-to-Elsewhere to managers only. The earlier framing assumed Back-to-Elsewhere was a manager-authority concept ("I'm running this, I can step away"). In practice, cross-app switching is gated by RPC-level authority (`rpc_session_end` is manager-only), so a non-manager household member who navigates back to the home and accidentally taps a different app's tile will see the cross-app-switch RPC fail safely. UI-level navigation restriction was protecting against a non-issue.
+
+### Behavior when a household member navigates back
+
+1. Phone navigates from the participant page to the post-login home
+2. The home renders with the active session's app tile showing "Active Session" (per Mode A/B logic in the home unification section)
+3. Tapping that tile rejoins the user in their existing role (manager rejoin if manager; singer/player/audience rejoin otherwise)
+4. Tapping a different app's tile triggers the cross-app switch confirm dialog. On confirm:
+   - If user is the manager: `rpc_session_end` succeeds, session ends, new session starts in the new app
+   - If user is not the manager: `rpc_session_end` fails (RPC-level rejection). User sees an error; session continues; user remains on the home
+5. The TV is unaffected by the navigation. It stays on stage.html (or games/tv.html) because the session is still active. The TV's `exit_app` handler (Part 2b) checks session state and stays put when the session is live.
+
+### Notes on hosts
+
+In edge cases, a manager may promote a non-household-member (deep-link audience user) to the host role. Such a host does NOT gain Back-to-Elsewhere visibility under this rule, because their household-membership status is unchanged by the role promotion. They remain app-scoped. This is a deliberate safety guarantee — promoted hosts can't navigate to a household home they're not part of.
 
 ---
 

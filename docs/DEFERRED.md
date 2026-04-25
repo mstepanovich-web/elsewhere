@@ -1344,6 +1344,47 @@ When real multi-TV households emerge in usage. Probably post-Phase-1 unless sale
 
 ---
 
+### Deferred: Phone proximity persistence — 10-minute inactivity expiration
+
+**Deferred in:** Session 5 Part 2c.x scoping (2026-04-24)
+**Deferred on:** 2026-04-24
+**Priority:** Low — sessionStorage-only persistence is sufficient for Phase 1; revisit when usage shows persistence is too sticky
+**Area:** Shell — phone state management
+**Status:** Deferred
+
+#### Context
+
+The Phone and TV state model (docs/PHONE-AND-TV-STATE-MODEL.md) defines a 10-minute phone-side inactivity expiration for the proximity answer — meaning if the user has been inactive on the phone for 10+ minutes, the next interaction re-prompts the proximity question.
+
+2c.x (Session 5 Part 2c.1 / 2c.2 / 2c.3) ships proximity persistence using sessionStorage only. The answer survives until app force-close, phone restart, sign-out, or explicit TV switch. The 10-minute inactivity expiration is not implemented.
+
+#### What's deferred
+
+Add a timestamp to the sessionStorage proximity record. On read, check whether the timestamp is older than 10 minutes (configurable per the platform-timeouts entry). If older, treat as unanswered and re-prompt.
+
+Could optionally migrate to localStorage with the timestamp check, persisting the answer across app close/reopen but still expiring on inactivity. That choice is a 2c.x-followup design decision.
+
+#### Options when picking up
+
+- **(a) sessionStorage with timestamp:** minimal change, answer expires after 10 min OR app close (whichever comes first)
+- **(b) localStorage with timestamp:** answer survives app close, expires only on inactivity
+- **(c) DB-backed with timestamp:** survives reinstalls; consistent with "Don't show me again" persistence model
+- **(d) Configurable via platform_settings:** per "Configurable platform timeouts" entry; opt for a uniform timeouts model
+
+Recommendation: (a) for simplest pickup. Promote to (c) if usage shows users want their answer to survive reinstalls or if the platform-timeouts work lands first.
+
+#### When to pick this up
+
+When real usage surfaces complaints about proximity persistence being "too sticky" — users walking away from the TV, returning later, and the app still treating them as at-home. Or when the broader platform-timeouts work picks up and this becomes a uniform implementation case.
+
+#### Related
+
+- docs/PHONE-AND-TV-STATE-MODEL.md — defines the 10-minute timeout that this entry defers
+- DEFERRED "Configurable platform timeouts" — sibling entry; this proximity timeout is one of three platform-level timeouts
+- SESSION-5-PART-2-BREAKDOWN.md § 2c.2 — implementation that ships sessionStorage-only persistence
+
+---
+
 ## Migrated from PHASE1-NOTES.md
 
 The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captured here in summary form; the full original text lives in PHASE1-NOTES.md git history (commit `9296a50` or earlier). Future fill-outs should flesh these into the full entry format above when someone picks one up.

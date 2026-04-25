@@ -46,38 +46,55 @@ Session 5 breaks into 5 parts. Part 1 (schema + RPCs + `shell/realtime.js` extra
 **Files touched:** `index.html`, `tv2.html`, `karaoke/stage.html`, `games/tv.html`. (No longer touches `karaoke/singer.html` or `games/player.html`.)
 **Rough commit count:** 1
 
-### 2c — Apps grid session-awareness + post-login home unification [PENDING]
+### 2c — Apps grid session-awareness + post-login home unification + proximity banner [PENDING]
 
 **Scope:**
 
-Per [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md), the post-login home screen on the phone unifies into a single conditional-rendering element. Part 2c implements that unification along with active-session relabeling. Likely splits into 2c.1 (structural) and 2c.2 (relabeling + rejoin) — implementation-time call.
+Per [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md), the post-login home screen on the phone unifies into a single conditional-rendering element with a proximity banner and active-session relabeling. Part 2c splits into three sub-parts to keep each commit reviewable:
 
-**2c.1 — Structural unification of post-login home screen:**
+**2c.1 — User preferences storage:**
+- New DB table `user_preferences` (or equivalent column on `auth.users` / `household_members`) for per-user-per-TV preferences
+- Initial preference: `proximity_prompt_dismissed` (boolean, default false) — captures the "Don't show me again" choice
+- Designed to accommodate future preferences without schema churn (e.g., per-app notification opt-outs, UI variant choices)
+- RLS: users can only read/write their own preferences
+- Migration in `db/012` (or next available number)
+- Helper functions in `shell/` (e.g., `getUserPreference(tv_device_id, key)`, `setUserPreference(tv_device_id, key, value)`)
+
+**2c.2 — Post-login home unification + proximity banner:**
 - Merge `screen-home` and `screen-tv-remote` into a single DOM section
 - Remove the back button from the unified post-login home (it was a symptom of the split design)
-- Add the proximity prompt firing automatically on home render for household users with TV access (n=1 fires immediately, n>1 fires after TV picker)
+- Implement Mode A / Mode B / Mode C rendering per the state model's tile state matrix
+- Add the inline proximity banner per the state model's "Banner UI" subsection (three actions: Yes / No / Don't show me again)
+- Banner firing rule per the state model's 4-condition AND (household member + post-login home landing + not previously dismissed for this TV + not yet answered this session)
+- Default mode = A while banner is visible (default-yes per state model)
+- "No" answer triggers confirm dialog before applying Mode B
+- "Don't show me again" calls 2c.1's preference helper; banner suppressed on subsequent visits
+- New "Proximity Settings" menu item drilling into a settings page (toggle proximity, re-enable banner)
+- For n>1: auto-pick most-recent-last_seen_at TV (stub; full picker UI per DEFERRED "Multi-TV picker and selection persistence")
 - Update `handleTvRemoteTileTap` to read TV context from the unified home rather than `screen-tv-remote.dataset.tvDeviceId` (small adjustment to Part 2b's wiring)
-- Mode A (at home) renders the existing tile flow; Mode B (not at home) and Mode C (non-household user) tile state per the state model's tile state matrix
 - "Your TVs" menu item becomes informational/picker rather than a navigation drill-in
 - Tap behavior dispatches based on (user role, proximity, active sessions)
 
-**2c.2 — Active session relabeling + rejoin:**
+**2c.3 — Active session relabeling + rejoin:**
 - Query active sessions on home render: `SELECT id, app FROM sessions WHERE tv_device_id = <selected TV> AND ended_at IS NULL`
 - Relabel matching app tiles with "Active Session" / "Rejoin [App]" / "[App] (active)" — exact label per implementation-time UX call (state model uses "Active Session" as umbrella; user-facing copy may be more specific)
 - Tap behavior on active-session tile: `rpc_session_join` if needed (caller not yet a participant), then navigate. Role determined by user context: manager rejoin vs. at-home rejoin vs. not-home audience/player join.
-- Cross-app switch: if active session exists for app A and user taps app B's tile, confirm dialog → on confirm: `rpc_session_end` for A, `rpc_session_start` for B, navigate
+- Cross-app switch: if active session exists for app A and user taps app B's tile, confirm dialog → on confirm: `rpc_session_end` for A, `rpc_session_start` for B, navigate. Cross-app switch is gated by RPC-level authority (`rpc_session_end` is manager-only); non-manager attempts surface an error and don't navigate.
 - Subscribe to `session_started` / `session_ended` for live tile relabeling on the home
+- Audience.html, singer.html, player.html: update Back-to-Elsewhere visibility per state model — show for all household members (not just managers)
 
 **Locked decisions:**
 - Single post-login home screen — no separate `screen-tv-remote`
 - All tiles same size; mode-conditional rendering varies tile state, not layout
 - Proximity at TV-connect, not per app launch
 - Tap behavior dispatches by user context at runtime; same UI for manager-rejoin and not-home-audience-join
+- Banner is inline (not modal); default mode is A while banner visible
+- Back-to-Elsewhere visibility = household membership status (revised from manager-only)
 
 **Entry criteria:** 2b complete ✓ (commit `601d125`)
-**Exit criteria:** Single post-login home renders correctly across Modes A/B/C; active sessions relabel matching tiles; rejoin works for all three contexts; cross-app switch prompts and works; live updates via realtime subscriptions
-**Files touched:** `index.html` (substantial restructuring)
-**Rough commit count:** 2 (2c.1 + 2c.2 split is the expected case)
+**Exit criteria:** Single post-login home renders correctly across Modes A/B/C; proximity banner fires per the firing rule; "Don't show me again" persists; Proximity Settings menu item works; active sessions relabel matching tiles; rejoin works for all three contexts; cross-app switch prompts and works (and fails safely for non-managers); live updates via realtime subscriptions; Back-to-Elsewhere visible for household members on participant pages
+**Files touched:** `index.html`, `karaoke/singer.html`, `karaoke/audience.html`, `games/player.html`, new migration `db/012`, possibly `shell/preferences.js` (new helper module)
+**Rough commit count:** 3 (2c.1 + 2c.2 + 2c.3 split is the expected case)
 
 ### 2d — karaoke/stage.html full session integration [PENDING]
 
