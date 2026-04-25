@@ -1809,6 +1809,33 @@ async function handleBackToElsewhere() {
   location.href = '../index.html';
 }
 
+// 2c.3.2: Back-to-Elsewhere visibility gating. The button starts
+// hidden (display:none in markup) and is revealed when
+// window.elsewhere.isLikelyHouseholdMember() returns true. Wired
+// via onAuthChange so the visibility reacts to sign-in/sign-out
+// during the page session (e.g., user signs out mid-song — button
+// should hide since they're no longer a household member).
+function applyBackToElsewhereVisibility() {
+  const btn = document.getElementById('back-to-elsewhere-btn');
+  if (!btn) return;
+  const visible = window.elsewhere?.isLikelyHouseholdMember?.() || false;
+  btn.style.display = visible ? '' : 'none';
+}
+
+// Wire at module init. onAuthChange fires once immediately with
+// current state via queueMicrotask, then on every subsequent auth
+// change. Fallback for module-loading race: wait for the
+// elsewhere:sb-ready event before wiring (same pattern as
+// index.html's wireProximityCacheInvalidation from 2c.2 Section 2).
+function wireBackToElsewhereVisibility() {
+  if (!window.elsewhere?.onAuthChange) return false;
+  window.elsewhere.onAuthChange(() => applyBackToElsewhereVisibility());
+  return true;
+}
+if (!wireBackToElsewhereVisibility()) {
+  document.addEventListener('elsewhere:sb-ready', wireBackToElsewhereVisibility, { once: true });
+}
+
 </script>
 
 <!-- Debug log panel -->
@@ -1820,10 +1847,12 @@ async function handleBackToElsewhere() {
   <div id="singer-dbg" style="flex:1;overflow-y:auto;font-family:var(--font-mono);-webkit-overflow-scrolling:touch;padding:4px 10px;"></div>
 </div>
 
-<!-- Session 4.10.3: Back-to-Elsewhere button (top-right; singer.html only,
-     audience.html deferred). Publishes exit_app then navigates to
-     Elsewhere shell. -->
-<button type="button" class="back-to-elsewhere" onclick="handleBackToElsewhere()">← Elsewhere</button>
+<!-- Session 4.10.3 + 2c.3.2: Back-to-Elsewhere button (top-right).
+     Starts hidden; revealed by applyBackToElsewhereVisibility when
+     isLikelyHouseholdMember() returns true. Hides the button for
+     non-household deep-link users (Mode C audience invites).
+     Audience.html has its own equivalent button (also added in 2c.3.2). -->
+<button type="button" id="back-to-elsewhere-btn" class="back-to-elsewhere" onclick="handleBackToElsewhere()" style="display:none;">← Elsewhere</button>
 
 <!-- Log button — fixed top left -->
 <div onclick="toggleSingerLog()" style="position:fixed;top:max(14px,env(safe-area-inset-top));left:14px;z-index:8000;padding:4px 8px;background:var(--color-gold-ghost);border:1px solid var(--color-border);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,220,150,.5);cursor:pointer;font-family:var(--font-mono);">LOG</div>

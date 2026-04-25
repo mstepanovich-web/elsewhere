@@ -56,6 +56,25 @@ window.elsewhere = {
 
   getCurrentUser: () => currentUser,
 
+  // 2c.3.2: Household-membership heuristic. Returns true
+  // when the user is authenticated AND sessionStorage has
+  // an active_tv.device_key (set by various home flows in
+  // index.html: TV-claim post-route, handleTvRemoteTileTap,
+  // handleSameAppRejoin, etc. — anywhere the phone has
+  // bound to a TV).
+  //
+  // "Likely" flags this as a heuristic, not RPC-verified —
+  // future swap to a strict household_members check can
+  // replace this method body without changing call sites.
+  isLikelyHouseholdMember: () => {
+    if (!currentUser) return false;
+    try {
+      return !!sessionStorage.getItem('elsewhere.active_tv.device_key');
+    } catch (_) {
+      return false;
+    }
+  },
+
   signInWithEmail: (email) =>
     sb.auth.signInWithOtp({
       email,

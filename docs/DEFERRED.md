@@ -273,7 +273,7 @@ At the start of Session 5, as part of session_participants schema design. Should
 **Deferred on:** 2026-04-22
 **Priority:** Medium — not blocking; partial escape exists via karaoke in-app home button
 **Area:** Platform UX — session lifecycle, role-dependent
-**Status:** Deferred (pending role-semantics clarification in Session 5)
+**Status:** Completed in Session 5 Part 2c.3.2
 
 #### Context
 

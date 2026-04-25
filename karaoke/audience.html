@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Elsewhere · Live</title>
+<script type="module" src="../shell/auth.js"></script>
+<script type="module" src="../shell/realtime.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--color-white);font-family:'DM Mono',monospace;}
@@ -194,6 +196,27 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
 #unmute-banner p{font-size:13px;color:rgba(255,220,150,.85);margin-bottom:12px;line-height:1.6;}
 #unmute-btn{padding:10px 22px;background:var(--color-border-dim);border:1px solid var(--color-gold-soft);border-radius:6px;font-size:13px;color:rgba(255,220,150,.9);cursor:pointer;font-family:'DM Mono',monospace;}
 #unmute-btn:active{background:var(--color-border);}
+
+/* Session 5 Part 2c.3.2: back-to-Elsewhere pill (top-right).
+   Duplicates singer.html's .back-to-elsewhere rule per inline-duplication
+   decision — two sites of ~15 lines each, no shared shell stylesheet
+   exists yet. If a third site grows this pattern, factor out. */
+.back-to-elsewhere {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  right: 14px;
+  z-index: 8000;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--color-text-dim);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
 </style>
 </head>
 <body>
@@ -1035,6 +1058,55 @@ if (window.location.protocol === 'file:') {
   document.getElementById('join-err').textContent =
     'File opened locally — streaming requires HTTPS. See the notice below.';
 }
+
+// 2c.3.2: Back-to-Elsewhere navigation. Mirrors singer.html's handler
+// (4.10.3 pattern): publishes exit_app so the TV can process audience
+// leaving cleanly, clears the sessionStorage TV bridge, then navigates
+// to Elsewhere home. Navigate-only per state model — no rpc_session_leave
+// call (audience exit is implicit; Phase 1 tolerates left_at=null rows,
+// see DEFERRED "Participant cleanup mechanism").
+async function handleBackToElsewhere() {
+  let device_key = null;
+  try { device_key = sessionStorage.getItem('elsewhere.active_tv.device_key'); } catch (_) {}
+
+  if (device_key) {
+    try {
+      await publishExitApp(device_key);
+    } catch (e) {
+      console.error('[elsewhere] exit_app publish failed:', e);
+    }
+    try { sessionStorage.removeItem('elsewhere.active_tv.device_key'); } catch (_) {}
+  }
+
+  location.href = '../index.html';
+}
+
+// 2c.3.2: Back-to-Elsewhere visibility gating. Same pattern as
+// karaoke/singer.html and games/player.html — starts hidden, revealed
+// when isLikelyHouseholdMember() returns true. Wired via onAuthChange
+// so visibility reacts to mid-session sign-out.
+function applyBackToElsewhereVisibility() {
+  const btn = document.getElementById('back-to-elsewhere-btn');
+  if (!btn) return;
+  const visible = window.elsewhere?.isLikelyHouseholdMember?.() || false;
+  btn.style.display = visible ? '' : 'none';
+}
+
+function wireBackToElsewhereVisibility() {
+  if (!window.elsewhere?.onAuthChange) return false;
+  window.elsewhere.onAuthChange(() => applyBackToElsewhereVisibility());
+  return true;
+}
+if (!wireBackToElsewhereVisibility()) {
+  document.addEventListener('elsewhere:sb-ready', wireBackToElsewhereVisibility, { once: true });
+}
 </script>
+
+<!-- Session 5 Part 2c.3.2: Back-to-Elsewhere button (net-new on
+     audience.html — closes DEFERRED "Audience back-to-Elsewhere
+     navigation"). Starts hidden; revealed by
+     applyBackToElsewhereVisibility when isLikelyHouseholdMember()
+     returns true. Matches singer.html's pill style. -->
+<button type="button" id="back-to-elsewhere-btn" class="back-to-elsewhere" onclick="handleBackToElsewhere()" style="display:none;">← Elsewhere</button>
 </body>
 </html>

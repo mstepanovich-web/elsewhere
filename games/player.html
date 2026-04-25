@@ -419,7 +419,11 @@
           <div><div class="game-name">Speed Quiz</div><div class="game-desc">Coming soon</div></div>
         </div>
       </div>
-      <div class="home-link" onclick="handleBackToElsewhere()">⌂ Back to Home</div>
+      <!-- 2c.3.2: Back-to-Home link. Starts hidden; revealed by
+           applyBackToElsewhereVisibility when isLikelyHouseholdMember()
+           returns true. Hides for non-household deep-link users (Mode C
+           via games deep-link invite). -->
+      <div id="back-to-home-link" class="home-link" onclick="handleBackToElsewhere()" style="display:none;">⌂ Back to Home</div>
     </div>
 
     <!-- GAME INFO -->
@@ -3239,6 +3243,31 @@ async function handleBackToElsewhere() {
   }
 
   location.href = '../index.html';
+}
+
+// 2c.3.2: Back-to-Home link visibility gating. Same pattern as
+// karaoke/singer.html's back-to-elsewhere button — starts hidden,
+// revealed when isLikelyHouseholdMember() returns true. Wired via
+// onAuthChange so visibility reacts to mid-session sign-out.
+//
+// This is an independent subscriber to the same onAuthChange /
+// elsewhere:sb-ready infrastructure that wires applyAuthState at
+// lines 891-898. Two independent consumers of the same event;
+// no interaction.
+function applyBackToElsewhereVisibility() {
+  const el = document.getElementById('back-to-home-link');
+  if (!el) return;
+  const visible = window.elsewhere?.isLikelyHouseholdMember?.() || false;
+  el.style.display = visible ? '' : 'none';
+}
+
+function wireBackToElsewhereVisibility() {
+  if (!window.elsewhere?.onAuthChange) return false;
+  window.elsewhere.onAuthChange(() => applyBackToElsewhereVisibility());
+  return true;
+}
+if (!wireBackToElsewhereVisibility()) {
+  document.addEventListener('elsewhere:sb-ready', wireBackToElsewhereVisibility, { once: true });
 }
 
 </script>
