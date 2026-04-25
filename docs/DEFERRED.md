@@ -1385,6 +1385,116 @@ When real usage surfaces complaints about proximity persistence being "too stick
 
 ---
 
+## Karaoke control model (Session 5 Part 2d/2e/2f spec landing)
+
+Seven items surfaced during the Karaoke Control Model spec work (commit `b7d4e70`) that bound or defer features touched by the spec. They cluster around (1) audience.html freeze and migration, (2) NHHU conversion strategy, (3) manager intervention features, and (4) the Manager Override transport mechanism architectural decision.
+
+---
+
+### Deferred: Manager picks song/venue/costume on behalf of Active Singer (Q-2B helper feature)
+
+**Deferred in:** Session 5 Part 2 (Karaoke control model spec landing)
+**Deferred on:** 2026-04-26
+**Priority:** Low — workaround exists (manager takes stage themselves; nearby person uses elderly user's phone)
+**Area:** Karaoke — manager UI / accessibility
+**Status:** Deferred — post-Session-5
+
+#### Context
+
+When an Active Singer can't navigate their own phone (older relative, accessibility need, network issue), Session Manager could pick songs and configure venue/costume on their behalf. Adds non-trivial complexity to manager UI: needs a "current Active Singer" view with full session controls, permission system to apply manager's selection to Active Singer's slot, UI handoff. Documented in docs/KARAOKE-CONTROL-MODEL.md § 5.6.
+
+---
+
+### Deferred: Audience-to-NHHU conversion path
+
+**Deferred in:** Session 5 Part 2 (Karaoke control model spec landing)
+**Deferred on:** 2026-04-26
+**Priority:** Medium — supports user acquisition strategy (Audience-to-NHHU model)
+**Area:** Platform — onboarding / acquisition
+**Status:** Phase 1 placeholder may ship in Session 5; full conversion funnel deferred post-Session-5
+
+#### Context
+
+NHHU audience users tap Back-to-Elsewhere from audience.html and land on a placeholder Elsewhere home with options to return to audience or explore Elsewhere. Phase 1 ships minimal placeholder. Full conversion funnel (sign-up flow, app downloads, game launchers) lands post-Session-5. Documented in docs/KARAOKE-CONTROL-MODEL.md § 5.4.
+
+---
+
+### Deferred: Audience.html freeze (no new features in Session 5)
+
+**Deferred in:** Session 5 Part 2 (Karaoke control model spec landing)
+**Deferred on:** 2026-04-26
+**Priority:** N/A — constraint, not deliverable
+**Area:** Platform architecture — audience surface
+**Status:** Active constraint through Session 5; bug fixes only on audience.html
+
+#### Context
+
+Audience.html is frozen for Session 5. New audience-experience features (read-only queue, venue/costume browsing, NHHU sign-up) build into the unified HHU app post-Session-5, not into audience.html. Reason: avoid parallel UI codebases that compound complexity with each new feature. Documented in docs/KARAOKE-CONTROL-MODEL.md § 4.3 and § 5.5.
+
+---
+
+### Deferred: Migrate audience.html into unified app as parameterized NHHU view
+
+**Deferred in:** Session 5 Part 2 (Karaoke control model spec landing)
+**Deferred on:** 2026-04-26
+**Priority:** Medium — architectural foundation for NHHU feature work
+**Area:** Platform architecture — audience surface
+**Status:** Deferred — triggered when NHHU-as-first-class-user feature work begins (games venues, wellness, etc.)
+
+#### Context
+
+Future state is unified app with parameterized NHHU view based on user context. NHHU users see same UI fabric as HHU users; conditional rendering hides TV-required features. Single source of truth for new features, consistent UX, conversion path built into app fabric. Documented in docs/KARAOKE-CONTROL-MODEL.md § 5.5.
+
+---
+
+### Deferred: Audience browsing of venues/costumes for marketing
+
+**Deferred in:** Session 5 Part 2 (Karaoke control model spec landing)
+**Deferred on:** 2026-04-26
+**Priority:** Low — marketing enhancement
+**Area:** Karaoke — audience experience / user acquisition
+**Status:** Deferred to audience.html migration into unified app
+
+#### Context
+
+Audience users browsing venues and costumes (no apply, just visual preview) is high-value for marketing — shows what they're missing without their own TV device. Implementation requires audience.html UI changes. Audience.html is frozen for Session 5. Lands when audience surface migrates to unified app. Documented in docs/KARAOKE-CONTROL-MODEL.md § 3.1 footnote (rows 1.4 / 1.6).
+
+---
+
+### Deferred: Audience read-only queue display
+
+**Deferred in:** Session 5 Part 2 (Karaoke control model spec landing)
+**Deferred on:** 2026-04-26
+**Priority:** Low — nice-to-have for audience experience
+**Area:** Karaoke — audience experience
+**Status:** Deferred to audience.html migration into unified app
+
+#### Context
+
+Audience users seeing the queue (read-only, who's up next) is valuable for engagement. Implementation requires audience.html UI changes; audience.html is frozen for Session 5. Lands when audience surface migrates to unified app. Documented in docs/KARAOKE-CONTROL-MODEL.md § 3.5 footnote (row 5.1).
+
+---
+
+### Deferred: Manager Override mechanism design (architectural decision)
+
+**Deferred in:** Session 5 Part 2 (Karaoke control model spec landing)
+**Deferred on:** 2026-04-26
+**Priority:** High — blocking for 2e implementation of manager intervention features
+**Area:** Karaoke — realtime architecture
+**Status:** Deferred to 2e pre-implementation audit
+
+#### Context
+
+Session Manager mid-song commands (override Active Singer's mute/pause/restart/stop/view/zoom/pan/costume/comments) need a transport mechanism. Currently no implementation exists; all mid-song singer controls send via Agora data streams from Active Singer's phone only. Three options under consideration:
+
+- Option A: Session Manager phone sends Supabase realtime command → Active Singer's phone listens and re-broadcasts as Agora to stage
+- Option B: Session Manager phone gets direct stage-channel access; sends Agora commands directly
+- Option C: New RPC layer for session-state mutations that publishes events stage.html consumes
+
+Decision deferred to 2e implementation pass. Documented in docs/KARAOKE-CONTROL-MODEL.md § 2 (Manager Override mechanism) and § 5.7.
+
+---
+
 ## Migrated from PHASE1-NOTES.md
 
 The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captured here in summary form; the full original text lives in PHASE1-NOTES.md git history (commit `9296a50` or earlier). Future fill-outs should flesh these into the full entry format above when someone picks one up.
