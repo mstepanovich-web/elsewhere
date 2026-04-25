@@ -278,3 +278,289 @@ Processed by `handleAudienceMsg(msg)` at line 3294. Message-type set mirrors sin
 - **Admin distinction is only `profiles.is_platform_admin`.** There is no app-level manager/host concept yet. The admin gear gates the Set-View-Coordinates dialog, which is venue tuning — unrelated to session control.
 - **Existing 2b wiring on stage.html** (commit `601d125`) is read-only: it queries the sessions table to decide whether to stay or navigate on `exit_app`. No write operations to session tables.
 - **Pre-selection concepts (song, venue, costume) exist as singer-side ephemeral state.** The singer picks venue + costume + searches for a song in their own UI flow; results are pushed to stage via Agora messages. Nothing is persisted to a `pre_selections` JSONB column today — that schema field exists on `session_participants` (db/008) but is not yet read or written by either karaoke page.
+
+---
+
+## Active Singer Mid-Song Controls (Detailed)
+
+**Audit date:** 2026-04-25
+**Scope:** Every control visible/accessible to the singer while a song is actively playing — i.e., while `screen-performing` is the active screen, plus any overlay surfaces that can slide over it.
+
+**Role/auth gating overall:** Pre-Session-5 single-singer model. Whoever is on this device IS the singer. **No app-level role/auth gating on any mid-song control.** The only ambient gating is the Back-to-Elsewhere pill (Session 5 Part 2c.3.2 visibility heuristic on `isLikelyHouseholdMember`), which is page-wide, not specific to active-singer state.
+
+### Layout summary
+
+`screen-performing` markup is at lines 443-509 of singer.html. The screen is single-column, divided into top-down regions:
+
+1. Header / Now Playing display (read-only)
+2. Big Mute button (`#perf-mute-wrap`)
+3. Progress bar (`#perf-prog-wrap`, read-only)
+4. Lyrics preview + lyrics controls (`#perf-lyric-preview`, `#perf-lyrics-btn`, `#lyric-transport`)
+5. Action grid (`#perf-actions`)
+6. Bottom row: watchers (read-only) + comments toggle
+
+Plus three cross-screen surfaces that can appear over screen-performing:
+- Performance costume overlay (`#perf-costume-overlay`) — slides up via `showPerfCostumePicker()`
+- Back-to-Elsewhere pill (top-right, fixed)
+- Debug LOG button (top-left, fixed) → opens `#singer-dbg-panel` log overlay
+
+---
+
+### 1. Now Playing header (read-only)
+
+- **Label:** "Now Playing" + song name + green "Live" pill
+- **DOM:** `#perf-nav` containing `#perf-sname` (song name) + `.pill.ok` (Live indicator with `.pdot`)
+- **Handler:** none
+- **State effect:** none — text populated when song starts
+- **Visibility:** always during song
+- **Gating:** none
+
+### 2. Big Mute button — primary mic control
+
+- **Label:** "🎤 Tap to mute" / "🔇 Tap to unmute" (text in `#perf-mute-txt`)
+- **DOM:** `#perf-mute-btn` inside `#perf-mute-wrap`; icon `#perf-mute-icon`, text `#perf-mute-txt`
+- **Handler:** `toggleMutePerf()` (line 834) → calls `toggleMute()` → `muteMic()` / `unmuteMic()`
+- **State effect:**
+  - Local: sets `muted` flag, mutes the audioCtx gain node, calls `micAudioTrack.setVolume(0)` on Agora track
+  - Sends to TV: NO direct Agora message; the muted Agora track is the signal
+- **Visibility:** always during song
+- **Gating:** none
+
+### 3. Progress bar (read-only)
+
+- **DOM:** `#perf-prog-track` containing `#perf-prog-fill`
+- **Handler:** none
+- **State effect:** display-only — animated by song-progress events delivered from stage.html via Agora `progress` messages
+- **Visibility:** always during song
+- **Gating:** none
+
+### 4. Lyrics preview text (read-only)
+
+- **DOM:** `#perf-lyric-preview` (italic display-format paragraph)
+- **Handler:** content set by `showLyricPreview()` (line 1437)
+- **State effect:** display-only; shows next lyric line prefixed "↓ " before lyrics start, cleared after start
+- **Visibility:** always during song
+- **Gating:** none
+
+### 5. Start Lyrics button
+
+- **Label:** "▶ Start Lyrics" (green, ready) / "✓ Lyrics Running" (greyed-out post-tap) / "No Lyrics" (red, disabled — when `syncedLyrics` is empty)
+- **DOM:** `#perf-lyrics-btn`
+- **Handler:** `startLyrics()` (line 1405)
+- **State effect:**
+  - Local: clears preview text, reveals `#lyric-transport` row, disables this button
+  - Sends to TV via Agora: `{type:'lyrics-start'}`
+- **Visibility:** always during song; visually three modes (ready / running / no-lyrics)
+- **Gating:** none
+
+### 6. Lyrics transport: seek-back, pause/resume, restart, seek-forward
+
+- **Labels (left to right):** ← (seek -1 line) / ⏸-▶ (pause/resume) / ↺ (restart) / → (seek +1 line)
+- **DOM:** `#lyric-transport` (4 inline `<div>` cells); pause cell is `#lyric-pause-btn`
+- **Handlers:**
+  - Seek back: `lyricSeek(-1)` → Agora `{type:'lyrics-seek', dir:-1}`
+  - Pause/resume: `toggleLyricPause()` (line 1414) → Agora `{type:'lyrics-pause'}` or `{type:'lyrics-resume'}`
+  - Restart: `lyricRestart()` (line 1426) → Agora `{type:'lyrics-restart'}`
+  - Seek forward: `lyricSeek(1)` → Agora `{type:'lyrics-seek', dir:1}`
+- **State effect:** sends Agora message; pause-cell text toggles locally between ⏸ / ▶
+- **Visibility:** **conditional** — `#lyric-transport` is `display:none` until "Start Lyrics" is tapped; visible from then through end of song
+- **Gating:** none
+
+### 7. Pause / Resume song
+
+- **Label:** "⏸ Pause" / "▶ Resume" (toggles)
+- **DOM:** `#perf-pause` (`.perf-btn` in `#perf-actions` grid)
+- **Handler:** `perfPauseToggle()` (line 1514)
+- **State effect:**
+  - Local: toggles `perfPaused` flag; updates button label
+  - Sends to TV via Agora: `{type:'pause'}` or `{type:'resume'}`
+- **Visibility:** always during song
+- **Gating:** none
+
+### 8. Stop song
+
+- **Label:** "■ Stop" (in `.danger` style — red accent)
+- **DOM:** `.perf-btn.danger` in `#perf-actions`
+- **Handler:** `perfStop()` (line 1533)
+- **State effect:**
+  - Local: clears countdown interval, mutes mic, resets `zoomActive` / `perfCommentsOn` / `perfPaused` flags, navigates back to `screen-home`
+  - Sends to TV via Agora: `{type:'stop-song'}`
+- **Visibility:** always during song
+- **Gating:** none
+
+### 9. Restart song
+
+- **Label:** "↩ Restart"
+- **DOM:** `.perf-btn` in `#perf-actions`
+- **Handler:** `perfRestart()` (line 1521)
+- **State effect:**
+  - Local: clears `perfPaused`, resets pause-button text + lyrics-button state, hides `#lyric-transport`, calls `showLyricPreview()` to re-render preview
+  - Sends to TV via Agora: `{type:'restart-song'}`
+- **Visibility:** always during song
+- **Gating:** none
+
+### 10. Stage view toggle (Audience ⇄ Singer)
+
+- **Label:** "👥 Audience" / "🎤 Singer" (toggles)
+- **DOM:** `#perf-view-btn` (`.perf-btn` in `#perf-actions`)
+- **Handler:** `toggleStageView()` (line 1663)
+- **State effect:**
+  - Local: toggles `currentStageView` between `'audience'` and `'singer'`; updates button label
+  - Sends to TV via Agora: `{type:'set-view', view:<new>}`
+- **Visibility:** always during song
+- **Gating:** none
+
+### 11. Zoom toggle
+
+- **Label:** "🔍 Zoom Out" / "🔍 Zoom In" (toggles)
+- **DOM:** `#perf-zoom-btn` (`.perf-btn` in `#perf-actions`)
+- **Handler:** `toggleZoom()` (line 1498)
+- **State effect:**
+  - Local: toggles `zoomActive` flag; updates button label
+  - Sends to TV via Agora: `{type:'zoom-out'}` or `{type:'zoom-in'}`
+- **Visibility:** always during song
+- **Gating:** none
+
+### 12. Pan left / Pan right
+
+- **Labels:** ◀ / ▶
+- **DOM:** two `.perf-btn` cells in a flex pair occupying grid column 2
+- **Handlers:** `sendPanLeft()` (line 1672), `sendPanRight()` (line 1676)
+- **State effect:** sends to TV via Agora — `{type:'singer-pan', delta:±15}` if `currentStageView === 'singer'`, else `{type:'venue-pan', delta:±15}`
+- **Visibility:** always during song
+- **Gating:** none
+
+### 13. Costume button (opens overlay)
+
+- **Label:** "👑 Costume"
+- **DOM:** `.perf-btn` spanning the action-grid full width
+- **Handler:** `showPerfCostumePicker()` (line 1177)
+- **State effect:** local — slides up `#perf-costume-overlay` over the performance screen; calls `updatePerfCostumeGrid()`
+- **Visibility:** always during song
+- **Gating:** none
+
+### 14. Watcher count (read-only)
+
+- **Label:** "N watching" (text varies)
+- **DOM:** `#perf-w` (`.label`)
+- **Handler:** none — populated by audience-join Agora events handled via `addAudMember()` / `refreshAudList()`
+- **State effect:** display-only
+- **Visibility:** always during song
+- **Gating:** none
+
+### 15. Comments toggle
+
+- **Label:** "Comments On" / "Comments Off" (toggles)
+- **DOM:** `#perf-comments-btn`
+- **Handler:** `togglePerfComments()` (line 1508)
+- **State effect:**
+  - Local: toggles `perfCommentsOn` flag; updates button label
+  - Sends to TV via Agora: `{type:'toggle-comments'}`
+- **Visibility:** always during song
+- **Gating:** none
+
+---
+
+### Performance costume overlay (`#perf-costume-overlay`)
+
+Slides up over screen-performing when control 13 (Costume button) is tapped. Stays open until the user closes it. Markup at lines 533-546.
+
+#### 16. Close
+
+- **Label:** "✕ Close"
+- **DOM:** unstyled `<div>` at top-left of overlay
+- **Handler:** `hidePerfCostumePicker()` (line 1183)
+- **State effect:** local — hides the overlay
+- **Visibility:** while overlay is open
+- **Gating:** none
+
+#### 17. Clear All
+
+- **Label:** "Clear All"
+- **DOM:** unstyled `<div>` at top-right of overlay
+- **Handler:** inline composite — `sendClearAllAccessories(); clearAllDeepAREffects(); updatePerfCostumeGrid();`
+- **State effect:**
+  - Local: clears DeepAR effects on the singer's local effect-slot array (`clearAllDeepAREffects()`); refreshes overlay grid
+  - Sends to TV via Agora: `{type:'clear-accessories'}` (from `sendClearAllAccessories()`)
+- **Visibility:** while overlay is open
+- **Gating:** none
+
+#### 18. AR Filters grid (DeepAR effects)
+
+- **DOM:** `#perf-deepar-grid` populated by `buildDeepARGrid('perf-deepar-grid')`
+- **Handler per cell:** `toggleDeepAREffect(eff)` (line 1081)
+- **State effect:**
+  - Local: toggles effect in the per-slot DeepAR effect array
+  - Sends to TV via Agora: `{type:'set-deepar-effect', slot, url}` (or `url:null` to clear that slot)
+- **Visibility:** while overlay is open
+- **Gating:** none
+
+#### 19. Basic Overlays grid (accessories)
+
+- **DOM:** `#perf-costume-grid` populated by `buildCostumeGrid('perf-costume-grid', ...)`
+- **Handler per cell:** `singerToggleAccessory(id)` (line 1134)
+- **State effect:**
+  - Local: toggles ID in `singerActiveAccessories` Set
+  - Sends to TV via Agora: `{type:'toggle-accessory', id, active:<bool>}`
+- **Visibility:** while overlay is open
+- **Gating:** none
+
+---
+
+### Cross-screen surfaces visible during a song
+
+#### 20. Back-to-Elsewhere pill (top-right)
+
+- **Label:** "← Elsewhere"
+- **DOM:** `#back-to-elsewhere-btn.back-to-elsewhere` (line 1855)
+- **Handler:** `handleBackToElsewhere()` (line 1796)
+- **State effect:**
+  - Sends to TV via Supabase realtime: `publishExitApp(device_key)`
+  - Clears sessionStorage `elsewhere.active_tv.device_key`
+  - Navigates phone to `../index.html`
+- **Visibility:** **conditional** — starts hidden (`style="display:none"`); revealed when `window.elsewhere.isLikelyHouseholdMember()` returns true (Session 5 Part 2c.3.2). Hidden for non-household deep-link users.
+- **Gating:** household-membership heuristic (auth + `sessionStorage.elsewhere.active_tv.device_key` present). **Only ambient gating on any mid-song control.**
+
+#### 21. Debug LOG button (top-left)
+
+- **Label:** "LOG"
+- **DOM:** unstyled fixed-position `<div>` (line 1858)
+- **Handler:** `toggleSingerLog()` (line 1776)
+- **State effect:** local — toggles `#singer-dbg-panel` visibility
+- **Visibility:** always (across all screens)
+- **Gating:** none — debug affordance always available to all users
+
+---
+
+### NOT accessible during an active song
+
+The following controls exist in singer.html but are **not reachable from screen-performing** (no on-screen affordance to navigate there mid-song):
+
+| Control | Where it lives | Why locked out |
+|---|---|---|
+| Mic device picker (`#mic-select`) | screen-mic | Settings finalized pre-song |
+| FX toggles (Reverb / Echo / Boost / Deep) | screen-mic | Settings finalized pre-song |
+| Volume slider (`#vol-sl`) | screen-mic | Settings finalized pre-song |
+| Per-screen mute button (`#mute-btn`) | screen-mic | Pre-song; mid-song mute is `#perf-mute-btn` only |
+| Stage venue picker / venue tour | `#stage-overlay` (triggered from screen-home action card) | Venue locked at song start; cannot change mid-song |
+| Venue tab toggle (singer/audience preview) | inside stage overlay | Same |
+| Video chat with audience toggle (`#video-chat-btn`) | screen-home action area (line 285) | Pre-song activation only |
+| Invite (`doInvite()`) | screen-home action card | Pre-song |
+| "Stage Settings" entry point | screen-home action card | Pre-song |
+| "Costumes" home entry (full `screen-costume`) | screen-home action card | Pre-song; mid-song uses `#perf-costume-overlay` instead |
+| Search song / song-select flow | screen-search → screen-confirm | Song locked at song start |
+| Mic-gear shortcut to screen-mic | top-right of screen-home | Pre-song only |
+
+**Implication:** the singer's full set of mid-song levers is locally constrained to mic mute, lyric playback, song playback, stage view, zoom, pan, costume layer, comments toggle, and exit. **No mid-song venue/song/FX/invite/video-chat changes possible without song interruption** (Stop song → screen-home).
+
+---
+
+### Cross-cutting observations on mid-song controls
+
+- **All TV-affecting controls send via Agora data streams** (`sendToStage(obj)`), never via Supabase realtime. The Supabase channel reserved for cross-page coordination (`exit_app`, `session_started`, `session_ended`, etc.) doesn't carry mid-song messages today.
+- **No mid-song RPC calls.** No `rpc_session_*`, no `session_participants` reads/writes, no `pre_selections` touches. The mid-song flow is entirely Agora-mediated.
+- **Stop and Restart are different flow shapes.** Stop fully exits to screen-home (mute mic, clear flags, navigate). Restart sends `restart-song` to TV but stays on screen-performing locally.
+- **Zoom and stage view are TV-side visual controls only.** They don't affect singer's local UI or audio chain — they mutate stage.html's render state via Agora messages.
+- **The singer cannot mid-song hand off to another participant.** Single-singer model. Stop = end-of-singer; nothing in between transfers control.
+- **No queue panel exists** on singer.html in any screen, including during an active song. Pre-Session-5 model has no concept of next-up.
+- **No role-based control hiding mid-song.** Every control on screen-performing is visible to whoever loaded the page. Only Back-to-Elsewhere has visibility gating, and that's auth/sessionStorage-based, not role-based.
