@@ -3,6 +3,7 @@
 **Status:** Part 2a complete (commit `d1b4edd`). Parts 2b–2f pending.
 **Created:** 2026-04-23
 **Parent plan:** `docs/SESSION-5-PLAN.md` (commit `2b40313`)
+**Canonical state model:** [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md) (added 2026-04-24, commit `36353ca`). Parts 2c onward operate against the model defined there. Where this breakdown's older language conflicts with the state model, the state model wins.
 
 ## Context for the next session
 
@@ -45,23 +46,38 @@ Session 5 breaks into 5 parts. Part 1 (schema + RPCs + `shell/realtime.js` extra
 **Files touched:** `index.html`, `tv2.html`, `karaoke/stage.html`, `games/tv.html`. (No longer touches `karaoke/singer.html` or `games/player.html`.)
 **Rough commit count:** 1
 
-### 2c — Apps grid session-awareness [PENDING]
+### 2c — Apps grid session-awareness + post-login home unification [PENDING]
 
 **Scope:**
-- `index.html` `screen-tv-remote` on mount: query active session + caller's participant row
-- Relabel active-app tile: "Rejoin Karaoke" (caller is participant) / "Karaoke (active)" (caller not participant) / normal (no session)
-- Tap active-session tile with caller as participant: `rpc_session_join` if needed + navigate
-- Tap different-app tile with session active: confirm dialog "End current session to start [app]?" → on confirm: `rpc_session_end` + `publishSessionEnded` + `rpc_session_start` + navigate
-- Subscribe to `session_started` / `session_ended` for live relabeling
+
+Per [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md), the post-login home screen on the phone unifies into a single conditional-rendering element. Part 2c implements that unification along with active-session relabeling. Likely splits into 2c.1 (structural) and 2c.2 (relabeling + rejoin) — implementation-time call.
+
+**2c.1 — Structural unification of post-login home screen:**
+- Merge `screen-home` and `screen-tv-remote` into a single DOM section
+- Remove the back button from the unified post-login home (it was a symptom of the split design)
+- Add the proximity prompt firing automatically on home render for household users with TV access (n=1 fires immediately, n>1 fires after TV picker)
+- Update `handleTvRemoteTileTap` to read TV context from the unified home rather than `screen-tv-remote.dataset.tvDeviceId` (small adjustment to Part 2b's wiring)
+- Mode A (at home) renders the existing tile flow; Mode B (not at home) and Mode C (non-household user) tile state per the state model's tile state matrix
+- "Your TVs" menu item becomes informational/picker rather than a navigation drill-in
+- Tap behavior dispatches based on (user role, proximity, active sessions)
+
+**2c.2 — Active session relabeling + rejoin:**
+- Query active sessions on home render: `SELECT id, app FROM sessions WHERE tv_device_id = <selected TV> AND ended_at IS NULL`
+- Relabel matching app tiles with "Active Session" / "Rejoin [App]" / "[App] (active)" — exact label per implementation-time UX call (state model uses "Active Session" as umbrella; user-facing copy may be more specific)
+- Tap behavior on active-session tile: `rpc_session_join` if needed (caller not yet a participant), then navigate. Role determined by user context: manager rejoin vs. at-home rejoin vs. not-home audience/player join.
+- Cross-app switch: if active session exists for app A and user taps app B's tile, confirm dialog → on confirm: `rpc_session_end` for A, `rpc_session_start` for B, navigate
+- Subscribe to `session_started` / `session_ended` for live tile relabeling on the home
 
 **Locked decisions:**
-- Apps grid scoping is per currently-selected TV, not global across user's TVs
-- Minimum-viable visual polish (plain relabel + confirm dialog); badge styling / animations deferred
+- Single post-login home screen — no separate `screen-tv-remote`
+- All tiles same size; mode-conditional rendering varies tile state, not layout
+- Proximity at TV-connect, not per app launch
+- Tap behavior dispatches by user context at runtime; same UI for manager-rejoin and not-home-audience-join
 
-**Entry criteria:** 2b complete
-**Exit criteria:** Apps grid reflects session state; rejoin works; cross-app switching prompts confirmation; live updates
-**Files touched:** `index.html`
-**Rough commit count:** 1–2
+**Entry criteria:** 2b complete ✓ (commit `601d125`)
+**Exit criteria:** Single post-login home renders correctly across Modes A/B/C; active sessions relabel matching tiles; rejoin works for all three contexts; cross-app switch prompts and works; live updates via realtime subscriptions
+**Files touched:** `index.html` (substantial restructuring)
+**Rough commit count:** 2 (2c.1 + 2c.2 split is the expected case)
 
 ### 2d — karaoke/stage.html full session integration [PENDING]
 

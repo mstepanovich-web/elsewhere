@@ -186,6 +186,15 @@ Pre-selections load when a user transitions from `queued` to `active` (or from j
 - **Inactivity orphan** — `last_activity_at` older than 10 minutes → session orphaned. Any household member of the TV's household can call `rpc_session_reclaim_manager`. Threshold fixed at 10 min in Phase 1.
 - **Household admin force-reclaim** — separate RPC `rpc_session_admin_reclaim`. Requires `household_members.role='admin'` on the TV's household. Works regardless of inactivity. The "head of household yanks the remote" escape hatch.
 
+### 8. Proximity self-declaration ("Are you at home?")
+
+**SUPERSEDED 2026-04-24** — see [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md) for the canonical model.
+
+**Current model (summary):** Proximity is prompted automatically on post-login home render when the user is a household member with TV access (n=1 immediately, n>1 after TV picker). The single answer applies across all apps for the current TV-connection-session, with per-app interpretation: hard gate for karaoke (no = audience only), soft gate for games post-venues integration (no = full participant, just no venue insertion). Persistence rules and full state model in the linked doc.
+
+<details>
+<summary>Original Decision 8 (superseded — preserved for context)</summary>
+
 ### 8. Proximity self-declaration ("Are you at home?") — per-app setting
 
 Proximity requirement is a property of the app, not of individual roles. Each app declares a single flag in its role manifest:
@@ -211,6 +220,8 @@ Proximity requirement is a property of the app, not of individual roles. Each ap
 - Wifi-based proximity hints (SSID matching, public IP) — simplifies implementation; accepts re-prompt overhead
 - Role-level proximity requirements — per-app flag covers all cases cleanly
 - Auto-detection of actual proximity — trust-based, not enforced
+
+</details>
 
 ### 9. Realtime events — single channel, no forking
 
@@ -337,20 +348,20 @@ Each Part is a review pause-point with clear entry/exit criteria. Rough commit c
 
 **Files touched:** `games/tv.html`, `games/player.html`, `games/engine/*.js`
 
-### Part 4 — Proximity self-declaration UX (1–2 commits)
+### Part 4 — Proximity self-declaration UX [SUBSTANTIALLY ABSORBED INTO 2c]
 
-**Entry:** Part 3 complete.
+The original Part 4 proposed a dedicated proximity prompt screen fired on first app interaction per the per-app `ask_proximity` flag. Under the new canonical state model ([docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md)), proximity is prompted at TV-connect on post-login home render — making the prompt part of 2c.1's structural unification.
 
-**Work:**
-- New shell screen `screen-proximity` (or inline modal) that poses "Are you at home?"
-- First-interaction detection per session: if the target app's manifest has `ask_proximity: true` and user hasn't answered yet this session, prompt before proceeding with any session interaction
-- **Yes** path: proceed to the intended role (whatever the user requested — manager/host/active/audience)
-- **No** path: confirm dialog ("Confirming you're not home. You'll join as audience. Continue?") → route to `audience` on confirm; return to prompt on cancel
-- Recovery path: user re-enters session after logout to get the prompt again (no dedicated "change proximity" UI per Decision 8)
+**What remains for "Part 4" as a separate pickup:**
+- Polish UX of the prompt itself (animation, copy, accessibility)
+- Edge cases (recovery from incorrect answer, multi-TV proximity reset)
+- (Future) Explicit "change proximity" UI
 
-**Exit:** Proximity prompt fires correctly when and only when the target app's `ask_proximity=true`. Yes/No routing works. Apps with `ask_proximity=false` never show the prompt.
+These are polish items deferred until 2c lands and real usage surfaces specific needs. Part 4 may collapse entirely into 2c, or become a small follow-up session.
 
-**Files touched:** `index.html` (new screen + JS)
+**Entry criteria:** 2c complete
+**Files touched:** TBD (likely `index.html` polish)
+**Rough commit count:** 0–1 (collapses if no real polish needed)
 
 ### Part 5 — Verification (1 commit)
 
@@ -413,6 +424,7 @@ Genuinely code-level — can't be resolved in planning. Kept minimal.
 
 ## Related existing architecture
 
+- **Phone and TV state model** — canonical state design at [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md). Supersedes Decision 8 above and Session 4.10.2's screen-home / screen-tv-remote split. Future sessions should reference that doc rather than re-deriving state behavior.
 - **Two-device model for TV** — unchanged. TV is the display; phone is the remote. Session 5 adds a formal session identity on top; the device model below is untouched.
 - **Session handoff via realtime channel** — single `tv_device:<device_key>` channel pattern established in Session 4.10 Part C. Session 5 adds five new events to the same channel. No channel forking.
 - **Phone-as-remote model** — Session 4.10.2's core UX (n=1 skip, display-only TV grid, phone navigates into participant app). Session 5 layers session state on top without changing the forward-flow UX.
