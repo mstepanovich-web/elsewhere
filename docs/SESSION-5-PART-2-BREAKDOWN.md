@@ -1,6 +1,6 @@
 # Session 5 Part 2 Breakdown
 
-**Status:** Parts 2a, 2b, 2c.1, 2c.2 complete. Part 2c.3 next, then 2d–2f pending.
+**Status:** Parts 2a, 2b, 2c.1, 2c.2, 2c.3.1 complete. Part 2c.3.2 next, then 2d–2f pending.
 **Created:** 2026-04-23
 **Parent plan:** `docs/SESSION-5-PLAN.md` (commit `2b40313`)
 **Canonical state model:** [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md) (added 2026-04-24, commit `36353ca`). Parts 2c onward operate against the model defined there. Where this breakdown's older language conflicts with the state model, the state model wins.
@@ -97,13 +97,48 @@ Per [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md), the post-
 **Known acceptable carryover (not a 2c.x item):**
 - `.tv-remote-header`, `.tv-remote-household` CSS class names are reused on the unified home. Names are slightly anachronistic post-unification but pure aesthetic — no functional payoff to renaming. Leave as-is.
 
-**2c.3 — Active session relabeling + rejoin:** [PENDING — NEXT]
-- Query active sessions on home render: `SELECT id, app FROM sessions WHERE tv_device_id = <selected TV> AND ended_at IS NULL`
-- Relabel matching app tiles with "Active Session" / "Rejoin [App]" / "[App] (active)" — exact label per implementation-time UX call (state model uses "Active Session" as umbrella; user-facing copy may be more specific)
-- Tap behavior on active-session tile: `rpc_session_join` if needed (caller not yet a participant), then navigate. Role determined by user context: manager rejoin vs. at-home rejoin vs. not-home audience/player join.
-- Cross-app switch: if active session exists for app A and user taps app B's tile, confirm dialog → on confirm: `rpc_session_end` for A, `rpc_session_start` for B, navigate. Cross-app switch is gated by RPC-level authority (`rpc_session_end` is manager-only); non-manager attempts surface an error and don't navigate.
-- Subscribe to `session_started` / `session_ended` for live tile relabeling on the home
-- Audience.html, singer.html, player.html: update Back-to-Elsewhere visibility per state model — show for all household members (not just managers)
+**2c.3 — Active session relabeling + rejoin:** [IN PROGRESS]
+
+Sub-split into 2c.3.1 and 2c.3.2 per pre-implementation audit.
+
+**2c.3.1 — Phone home active-session rendering + tap dispatch + realtime subscription:** ✓ SHIPPED (commit `e4a348e`)
+- Query active sessions on home render: `SELECT id, app, room_code, manager_user_id FROM sessions WHERE tv_device_id = <selected TV> AND ended_at IS NULL`
+- Relabel matching app tiles with "Active Session" primary label + app name as sub (DECISION-1; state model uses "Active Session" as umbrella)
+- Tap behavior on active-session tile: `rpc_session_join('audience')` with 23505 "already participant" swallow + 02000 "session ended" race catch, then navigate. Manager/existing-participant role preserved (23505 path).
+- Cross-app switch: confirm dialog → `rpc_session_end` + `publishSessionEnded` → delegate to `handleTvRemoteTileTap` for start. Non-manager pre-check surfaces locked alert without confirm.
+- Subscribe to `session_started` / `session_ended` on `tv_device:<device_key>`; both trigger `refreshActiveSession` (re-query per DECISION-6)
+
+**Delivered in 2c.3.1 (stats: +455 / −33 on index.html, 6 sections applied via section-by-section review):**
+- Active-session module state + `getActiveSession` accessor + `refreshActiveSession` query
+- `renderHomeTiles` extended with `TILE_DEFAULT_COPY` + `applyHomeTileState` helper (Mode B / active-session precedence per FLAG-3)
+- `handleHomeTileTap` dispatch extended for active-session: same-app rejoin + cross-app switch
+- `handleSameAppRejoin` (`rpc_session_join` + 23505/02000 handling, FLAG-A games `&mgr=1` dropped)
+- `handleCrossAppSwitch` (manager pre-check + native confirm + `rpc_session_end` + delegate to `handleTvRemoteTileTap`)
+- Realtime subscription on home: `tv_device:<key>` channel, idempotent restart, silent failure
+- 2c.2 R4 path FLAG-A fix: dropped `&mgr=1` from games rejoin URL (consistency with primary path)
+- CSS: `.tile.active-session` (gold-ghost + gold-faint) + `.tile.greyed.active-session` defensive precedence rule
+
+**Decisions baked in:**
+- DECISION-1: tile copy = "Active Session" primary label + app name as sub. Single umbrella label; dispatch handles role-aware behavior. Role-specific copy deferred to 2c.x if friction.
+- DECISION-2: cross-app confirm = native `confirm()` with "End current [App] session to start [App]?" [OK]/[Cancel]. Consistent with 2c.2's "No" confirm.
+- DECISION-3: non-manager cross-app = locked alert "Only the current manager can switch apps. Ask them to end the [App] session first." Pre-check avoids confirm-then-alert UX.
+- DECISION-6: session_ended payload re-query (option i). Stable payload contract; handlers call `refreshActiveSession` instead of parsing event.
+- FLAG-A: games rejoin URL drops `&mgr=1` (both primary path and R4 fallback). Broader games-manager-detection remains under DEFERRED "Games deep-link auto-manager bug".
+- FLAG-3: `.active-session` takes precedence over `.greyed` in `applyHomeTileState` (JS-driven); `.tile.greyed.active-session` CSS rule provides defensive backup.
+
+**On-device watch items (non-blocking; fix in 2c.x if real friction):**
+- Active-session state flash on `enterHomeForTv` (~200-500ms while `refreshActiveSession` resolves). R4 catches race-clicks during the flash. If visually disruptive, add sessionStorage hydration of last-known active-session state in 2c.x.
+- Cross-app switch native `confirm()` shows [OK]/[Cancel] vs. locked [Continue]/[Cancel] — same papercut as 2c.2's "No" confirm. Custom modal still deferred to 2c.x.
+
+**2c.3.2 — Back-to-Elsewhere visibility across play-pages:** [PENDING — NEXT]
+- Implement `isLikelyHouseholdMember()` heuristic: authenticated + `sessionStorage.elsewhere.active_tv.device_key` present (DECISION-4 from 2c.3 planning audit). Helper name flags it as a heuristic, not RPC-verified, so future swap stays surgical.
+- `karaoke/singer.html`: gate the existing `.back-to-elsewhere` button visibility on `isLikelyHouseholdMember()`.
+- `games/player.html`: gate the existing `.home-link` button visibility on `isLikelyHouseholdMember()`.
+- `karaoke/audience.html`: add new Back-to-Elsewhere button (markup + style + `handleBackToElsewhere` handler), styled to match singer.html's `.back-to-elsewhere` pill style (DECISION-5 from 2c.3 planning audit). Visibility gated on `isLikelyHouseholdMember()`. Closes DEFERRED "Audience back-to-Elsewhere navigation".
+- State model basis: household members (Mode A/B) see the button; non-household (Mode C, deep-link only) do not.
+
+**Files touched:** `karaoke/singer.html`, `games/player.html`, `karaoke/audience.html`. Possible new helper in `shell/` module if `isLikelyHouseholdMember` is shared (decision at Section 1 of 2c.3.2 implementation).
+**Rough commit count:** 1
 
 **Locked decisions:**
 - Single post-login home screen — no separate `screen-tv-remote`
