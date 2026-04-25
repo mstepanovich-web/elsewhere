@@ -2,7 +2,7 @@
 
 **Created:** 2026-04-24
 **Supersedes:** SESSION-5-PLAN.md Decision 8 (per-app `ask_proximity` flag), Session 4.10.2's split between `screen-home` and `screen-tv-remote`
-**Referenced by:** SESSION-5-PART-2-BREAKDOWN.md Part 2c onward
+**Referenced by:** SESSION-5-PART-2-BREAKDOWN.md Part 2c onward; docs/KARAOKE-CONTROL-MODEL.md
 
 This is the canonical reference for how the phone and TV behave across user contexts in Elsewhere. Future sessions point back to this document rather than re-deriving the model. When a code or plan decision contradicts this doc, this doc wins (or the doc gets updated explicitly with a supersession note).
 
@@ -27,7 +27,7 @@ This document captures the unified model that resolves these contradictions.
 2. **Three explicit states for `tv2.html`.** Transitions between them are documented with triggers.
 3. **Proximity is asked at TV-connect, not per-app.** Per-app interpretation handles hard-gate vs. soft-gate semantics.
 4. **TV device is a rendering capability, not a visibility gate.** Every TV viewer sees every participant, regardless of TV device availability.
-5. **Active sessions persist through navigation.** Manager Back-to-Elsewhere doesn't end the session; the same UI surfaces apply for rejoin and not-home participation.
+5. **Active sessions persist through navigation.** Back-to-Elsewhere doesn't end the session regardless of who taps it; the same UI surfaces apply for rejoin and not-home participation.
 6. **Phase 1 tolerates manual-recovery seams.** Inactivity timeouts and explicit user actions handle state cleanup; no heartbeat or automatic detection layers.
 
 ---
@@ -136,13 +136,15 @@ The home screen renders differently based on user context, but the differences a
 - Non-TV-device apps (games today): tile active, can launch normally
 - App-tile tap → varies by tile state above
 
-#### Mode C — Non-household user
+#### Mode C — Non-household user (NHHU)
+
+NHHU users are first-class users of Elsewhere with one specific limitation: they cannot access TV-device-required features. They have full access to non-TV-device apps (e.g., games today) — same UI fabric, same tap behavior, same session lifecycle as household users for those apps. The distinction is "TV-device-required features only," not "audience-only across all of Elsewhere."
 
 - Not a member of any household
 - No TV header (no TV available)
-- TV-device-required apps: tile inactive/greyed
-- Non-TV-device apps: tile active, can launch normally
-- App-tile tap → launches without any TV-side launch broadcast
+- TV-device-required apps (karaoke, wellness): tile inactive/greyed (cannot start a session without TV device); audience-join via app-specific deep links (e.g., audience.html) remains available where the app supports it
+- Non-TV-device apps (games today): tile active, can launch normally — same behavior as Mode A/B for these apps
+- App-tile tap (non-TV-required apps) → launches without any TV-side launch broadcast
 
 ### Active session relabeling
 
@@ -172,8 +174,12 @@ If a session is active and the user taps a *different* app's tile, a confirm dia
 | Household + not at home | Yes | Yes (this app) | Active, "Active Session" | Join as audience |
 | Household + not at home | No | No | Active | Start new session |
 | Household + not at home | No | Yes (this app) | Active, "Active Session" | Join as player |
-| Non-household user | Yes | (any) | Inactive (greyed) | No-op or tooltip |
-| Non-household user | No | (any) | Active | Start new session |
+| Non-household user (NHHU) | Yes | No | Inactive (greyed) | No-op or tooltip |
+| Non-household user (NHHU) | Yes | Yes (this app) | Inactive (greyed)¹ | No-op (audience-join routed via app-specific deep link, e.g., audience.html) |
+| Non-household user (NHHU) | No | No | Active | Start new session |
+| Non-household user (NHHU) | No | Yes (this app) | Active, "Active Session" | Join as player |
+
+¹ NHHU audience access for TV-required apps is via app-specific deep link (e.g., audience.html) today. Tile-based audience-join from the post-login home lands when audience.html migrates into the unified app — see "Architectural direction" section below.
 
 ---
 
@@ -264,7 +270,7 @@ If the user answered incorrectly (said "no" but actually is at home, or vice ver
 
 - **Post-login home (single screen):** Conditional rendering per Mode A/B/C above. No back button.
 - **Badge menu drill-ins (Contacts, Groups, Manage Household, Your TVs):** Back button → post-login home. The home re-renders in whatever mode matches current state.
-- **In-app pages (singer.html, player.html, audience.html):** Back-to-Elsewhere visible for household members → post-login home. Non-household users (deep-link only) are app-scoped (no Back). See "Back-to-Elsewhere navigation" section for details.
+- **In-app pages (singer.html, player.html, audience.html):** Back-to-Elsewhere visible for all audience users. Destination differs by user type — household members land on the post-login home; NHHU lands on a placeholder Elsewhere home (audience-to-NHHU conversion path). See "Back-to-Elsewhere navigation" section for details.
 
 ### "Your TVs" menu item
 
@@ -279,16 +285,20 @@ The current code's `screen-tv-remote` (small-tile screen with back button) is **
 
 ## Back-to-Elsewhere navigation
 
-Per Session 5 Part 2 design: **Back-to-Elsewhere is navigate-only**. Tapping the button navigates the user from a participant page (singer.html, player.html, audience.html) to the post-login home. The session continues running on the TV regardless of who navigates back; the button does not end the session.
+Per Session 5 Part 2 design: **Back-to-Elsewhere is navigate-only**. Tapping the button navigates the user from a participant page (singer.html, player.html, audience.html) to an Elsewhere home. The session continues running on the TV regardless of who navigates back; the button does not end the session.
 
 ### Visibility rule
 
-**Back-to-Elsewhere visibility = household membership status.**
+**All audience users see Back-to-Elsewhere.** What changes by user type is the destination:
 
-- **Household member with TV access (Modes A/B):** sees the button on `karaoke/singer.html`, `games/player.html`, and `karaoke/audience.html`. They can navigate to the post-login home anytime.
-- **Non-household user (Mode C, deep-link only):** does not see the button. They are app-scoped to the link target.
+- **Household member with TV access (Modes A/B):** lands on their normal post-login home (Mode A or B). Active session is reflected via "Active Session" tile relabeling per the home unification section.
+- **Non-household user (Mode C, NHHU):** lands on a placeholder Elsewhere home offering "go back to where you were" + "explore Elsewhere" options. This is the audience-to-NHHU conversion path.
 
-This revises an earlier draft of the state model that restricted Back-to-Elsewhere to managers only. The earlier framing assumed Back-to-Elsewhere was a manager-authority concept ("I'm running this, I can step away"). In practice, cross-app switching is gated by RPC-level authority (`rpc_session_end` is manager-only), so a non-manager household member who navigates back to the home and accidentally taps a different app's tile will see the cross-app-switch RPC fail safely. UI-level navigation restriction was protecting against a non-issue.
+See `docs/KARAOKE-CONTROL-MODEL.md` § 4.4 for the full Back-to-Elsewhere visibility evolution and per-user-type behavior on tap.
+
+This revises an earlier draft of the state model that scoped Back-to-Elsewhere to household members only ("Mode C does not see the button; they are app-scoped to the link target"). The earlier framing prevented NHHU audience users from ever returning to an Elsewhere context, which closed off the audience-to-NHHU conversion path. The new rule decouples visibility (universal) from destination (per-user-type).
+
+An even earlier draft restricted Back-to-Elsewhere to managers only — the assumption being it was a manager-authority concept ("I'm running this, I can step away"). In practice, cross-app switching is gated by RPC-level authority (`rpc_session_end` is manager-only), so a non-manager who navigates back and accidentally taps a different app's tile will see the cross-app-switch RPC fail safely. UI-level navigation restriction was protecting against a non-issue.
 
 ### Behavior when a household member navigates back
 
@@ -300,9 +310,16 @@ This revises an earlier draft of the state model that restricted Back-to-Elsewhe
    - If user is not the manager: `rpc_session_end` fails (RPC-level rejection). User sees an error; session continues; user remains on the home
 5. The TV is unaffected by the navigation. It stays on stage.html (or games/tv.html) because the session is still active. The TV's `exit_app` handler (Part 2b) checks session state and stays put when the session is live.
 
+### Behavior when an NHHU navigates back
+
+1. Phone navigates from the participant page (typically `audience.html` today) to the placeholder Elsewhere home
+2. Placeholder offers "go back to where you were" (returns to the participant page) and "explore Elsewhere" / sign-up options
+3. The TV is unaffected by the navigation; the session continues
+4. Full conversion-funnel UX (sign-up flow, app downloads, game launchers) is post-Session-5 — see DEFERRED "Audience-to-NHHU conversion path"
+
 ### Notes on hosts
 
-In edge cases, a manager may promote a non-household-member (deep-link audience user) to the host role. Such a host does NOT gain Back-to-Elsewhere visibility under this rule, because their household-membership status is unchanged by the role promotion. They remain app-scoped. This is a deliberate safety guarantee — promoted hosts can't navigate to a household home they're not part of.
+In edge cases, a manager may promote a non-household-member (deep-link audience user) to the host role. Such a host sees Back-to-Elsewhere like any other audience user under the new visibility rule, but tapping it routes them to the placeholder Elsewhere home, not the household home. The household-home boundary is preserved by destination routing, not by hiding the button.
 
 ---
 
@@ -396,6 +413,14 @@ For users with more than one claimed TV (n>1):
 - User can switch TVs via the badge menu's "Your TVs" → returns to picker → selecting a new TV resets proximity (the question is "are you at home with *this* TV")
 
 Persistence note: TV selection persists across app launches as long as the user remains signed in. Re-selecting only happens when the user explicitly changes TVs.
+
+---
+
+## Architectural direction: unified app with parameterized NHHU view
+
+Future state is a unified Elsewhere app with a parameterized NHHU view based on user context. NHHU users see the same UI fabric as HHU users; conditional rendering hides TV-required features and routes appropriately. Audience.html is frozen for Session 5 (bug fixes only). Audience-experience features build into the unified app post-Session-5. Triggered when NHHU-as-first-class-user feature work begins (games venues, wellness, etc.).
+
+See `docs/KARAOKE-CONTROL-MODEL.md` § 5.5 and the "Karaoke control model" cluster of DEFERRED entries (audience.html freeze, audience.html migration into unified app, audience-to-NHHU conversion path, audience read-only queue, audience venue/costume browsing).
 
 ---
 
