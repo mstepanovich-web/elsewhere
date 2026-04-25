@@ -983,6 +983,25 @@
       cursor: default;
     }
 
+    /* ── 2c.3.1: Tile state — active-session (relabeled) ─────────── */
+    /* Applied by applyHomeTileState when the bound TV has an active
+       session matching this tile's app. Subtle gold tint on background
+       + border signals "session available to rejoin/join." Label/sub
+       text changes are handled in JS; this CSS adds the visual accent. */
+    .tile.active-session {
+      background: var(--color-gold-ghost);
+      border-color: var(--color-gold-faint);
+    }
+
+    /* FLAG-3 defensive precedence: active-session overrides .greyed.
+       applyHomeTileState removes .greyed when active-session applies
+       (Section 2 of 2c.3.1), so this combination shouldn't appear in
+       practice. Defense against future regression. */
+    .tile.greyed.active-session {
+      opacity: 1;
+      cursor: pointer;
+    }
+
     /* ── 2c.2: Proximity banner ──────────────────────────────────── */
     .proximity-banner {
       width: 100%;
@@ -1146,6 +1165,8 @@
         </div>
       </div>
 
+      <!-- Default tile copy mirrored in TILE_DEFAULT_COPY
+           (2c.3.1, see renderHomeTiles). If updating, sync both. -->
       <div class="tile-grid">
         <div class="tile" id="home-tile-karaoke" onclick="handleHomeTileTap('karaoke')">
           <div class="tile-emoji">🎤</div>
@@ -2193,34 +2214,87 @@
       renderHome();
     }
 
-    // ── 2c.2: Tile rendering + renderHome orchestrator ──────────────
+    // ── 2c.2 / 2c.3.1: Tile rendering + renderHome orchestrator ─────
     //
-    // Tile state matrix (per state model § Phone post-login home):
-    //   Mode A — karaoke + games active; wellness disabled (Coming soon)
+    // Tile state matrix (per state model § Phone post-login home +
+    // § Active session relabeling):
+    //   Mode A — karaoke + games active; wellness disabled
     //   Mode B — karaoke greyed (TV required); games active; wellness disabled
     //   Mode C — karaoke + games active (legacy direct-nav flow per
     //            handleHomeTileTap dispatch); wellness disabled
     //
-    // The `.greyed` class is applied to the karaoke tile in Mode B only.
-    // Mode A/C remove it. Tap behavior (active vs no-op vs cross-app
-    // confirm) is dispatched at runtime by handleHomeTileTap (Section 5)
-    // — the visual class is the only thing this function controls.
+    // Active-session relabeling (2c.3.1): when getActiveSession() returns
+    // a session on one of the apps, that tile gets .active-session class
+    // + "Active Session" label + app name as sub (per DECISION-1).
+    // Active-session state takes precedence over Mode B's .greyed —
+    // see applyHomeTileState for the precedence rule.
+    //
+    // Wellness is untouched in 2c.3.1 — state model locks "Coming soon"
+    // regardless of session state. Not considered for active-session
+    // relabeling since wellness sessions don't exist yet.
+    //
+    // Tap behavior (active vs no-op vs cross-app confirm vs rejoin) is
+    // dispatched at runtime by handleHomeTileTap (updated in Sections 3+4).
+
+    // Default tile copy. Restored when the tile is not in an active-
+    // session state. Kept as module constants so the renderer has a
+    // single source of truth for labels/subs.
+    //
+    // Mirrors the default tile copy in index.html's screen-home
+    // tile-grid markup (~line 1054-1062). If defaults change, update
+    // both. The constant wins at runtime — every render resets to these
+    // values when no active session is present.
+    //
+    // Consumers: renderHomeTiles (default-state copy),
+    // handleCrossAppSwitch (confirm + non-manager alert copy).
+    const TILE_DEFAULT_COPY = {
+      karaoke: { label: 'Karaoke', sub: 'Sing together' },
+      games:   { label: 'Games',   sub: 'Last Card · Trivia · Euchre' },
+    };
+
     function renderHomeTiles() {
       const mode = getHomeMode();
+      const active = getActiveSession();
       const karaoke = document.getElementById('home-tile-karaoke');
       const games   = document.getElementById('home-tile-games');
-      // Wellness tile stays as-is (always disabled in 2c.2).
+      // Wellness tile stays as-is (always disabled).
 
       if (!karaoke || !games) return;
 
-      // Mode B is the only mode that greys karaoke. Mode A and Mode C
-      // both render karaoke as active.
-      karaoke.classList.toggle('greyed', mode === 'B');
+      applyHomeTileState(karaoke, 'karaoke', mode, active);
+      applyHomeTileState(games,   'games',   mode, active);
+    }
 
-      // Games is always active in 2c.2 (proximity doesn't affect games
-      // today — see DEFERRED "Games ask_proximity revision (post-venues
-      // integration)").
-      games.classList.remove('greyed');
+    // Per-tile state application — updates label/sub copy + class state.
+    //
+    // Precedence rule (FLAG-3): when a tile has an active session,
+    // .active-session is applied AND .greyed is removed — even for
+    // Mode B karaoke. Rationale: an active-session tile is always
+    // tappable (rejoin / join-as-audience), regardless of Mode B's
+    // "not at home" proximity state. The tap behavior routes differently
+    // for Mode B (join as audience) vs. Mode A (rejoin) — dispatch
+    // happens in Sections 3+4, not here.
+    function applyHomeTileState(tile, app, mode, active) {
+      const label = tile.querySelector('.tile-label');
+      const sub = tile.querySelector('.tile-sub');
+      if (!label || !sub) return; // defensive: tile structure mismatch
+      const hasActiveSession = active?.app === app;
+
+      if (hasActiveSession) {
+        // Per DECISION-1: "Active Session" primary label + app name as sub.
+        label.textContent = 'Active Session';
+        sub.textContent = TILE_DEFAULT_COPY[app].label;
+        tile.classList.add('active-session');
+        tile.classList.remove('greyed'); // active-session precedence over Mode B
+      } else {
+        // Default copy.
+        label.textContent = TILE_DEFAULT_COPY[app].label;
+        sub.textContent = TILE_DEFAULT_COPY[app].sub;
+        tile.classList.remove('active-session');
+        // Only karaoke greys in Mode B (games never greys in 2c.2).
+        const shouldGrey = app === 'karaoke' && mode === 'B';
+        tile.classList.toggle('greyed', shouldGrey);
+      }
     }
 
     // Tracks (user_id, tv_device_id) pairs for which
@@ -2279,12 +2353,196 @@
     // the signed-out home (which should render as Mode C tile state).
     // Idempotent.
     function clearHomeTvBinding() {
+      // 2c.3.1: tear down realtime sub before clearing state. Fire-and-
+      // forget; teardown races with a just-arrived event hit the
+      // early-return path in refreshActiveSession (getHomeTvContext
+      // returns null after dataset clear below), so state ends up null
+      // either way.
+      stopHomeRealtimeSub();
       const screen = document.getElementById('screen-home');
       screen.dataset.deviceKey  = '';
       screen.dataset.tvDeviceId = '';
       document.getElementById('home-tv-header').classList.add('hidden');
       document.getElementById('home-tv-switch').classList.add('hidden');
+      _activeSessionForBoundTv = null; // 2c.3.1: clear active-session state on sign-out
       renderHome(); // Mode C → tiles render as active legacy
+    }
+
+    // ── 2c.3.1: Active session tracking ────────────────────────────
+    //
+    // Tracks the active session (if any) for the currently-bound TV.
+    // Used by Section 2's renderHomeTiles to apply "Active Session" tile
+    // state and by Section 3+4's handleHomeTileTap dispatch to route
+    // rejoin vs. cross-app switch flows.
+    //
+    // Only ONE TV is bound at a time per the state model ("apps grid
+    // scoping is per currently-selected TV, not global"), so a single
+    // module variable suffices. If a future multi-TV picker lands, this
+    // may need to become a Map keyed by tv_device_id — callers should
+    // go through getActiveSession() (below) rather than reading the
+    // variable directly, so the swap stays surgical.
+
+    // CONTRACT: do NOT read this variable directly. Use getActiveSession().
+    // The accessor lets us swap storage shape later (e.g., variable → Map)
+    // without rewriting every consumer.
+    let _activeSessionForBoundTv = null; // { id, app, room_code, manager_user_id } | null
+
+    // Returns the active session for the currently-bound TV, or null if
+    // none. Callers must not cache the return value across await points
+    // — refreshActiveSession may update the module state during any
+    // realtime event callback.
+    function getActiveSession() {
+      return _activeSessionForBoundTv;
+    }
+
+    // Queries sessions table for the bound TV's active session (if any),
+    // updates module state, and re-renders tiles. Idempotent; silent on
+    // errors (leaves state as-is and logs — next event or manual refresh
+    // retries). Called from:
+    //   - enterHomeForTv (initial load after renderHome)
+    //   - Section 5's session_started / session_ended realtime handlers
+    //   - clearHomeTvBinding via its renderHome chain (state cleared to null)
+    //
+    // Note: deliberately narrower than renderHome. renderHome re-evaluates
+    // banner visibility + menu visibility + optionally fetches preferences;
+    // refreshActiveSession only touches session state + tiles. Session
+    // events shouldn't churn the banner/menu/preferences layer.
+    async function refreshActiveSession() {
+      const ctx = getHomeTvContext();
+      if (!ctx) {
+        // No TV bound — clear state and re-render. This path
+        // fires only for external callers (Section 5 realtime
+        // events that arrive during a transient unbind state).
+        // clearHomeTvBinding handles its own state clear +
+        // render directly via the renderHome chain.
+        _activeSessionForBoundTv = null;
+        renderHomeTiles();
+        return;
+      }
+
+      try {
+        const { data, error } = await window.sb
+          .from('sessions')
+          .select('id, app, room_code, manager_user_id')
+          .eq('tv_device_id', ctx.tv_device_id)
+          .is('ended_at', null)
+          .maybeSingle();
+
+        if (error) {
+          console.error('[elsewhere] refreshActiveSession query failed:', error);
+          // Leave existing state in place — next refresh (realtime event
+          // or explicit call) retries. Stale state is a Phase 1 seam;
+          // banner/tile dispatch still functions, just with stale data.
+          return;
+        }
+
+        _activeSessionForBoundTv = data || null;
+        renderHomeTiles();
+      } catch (e) {
+        console.error('[elsewhere] refreshActiveSession exception:', e);
+      }
+    }
+
+    // ── 2c.3.1: Home realtime subscription ─────────────────────────
+    //
+    // Subscribes to the bound TV's tv_device:<device_key> channel to
+    // catch session_started / session_ended events from other devices.
+    // Both events trigger refreshActiveSession (DECISION-6 option i —
+    // re-query rather than parse payload). Stable payload contract;
+    // consumer handles correctness.
+    //
+    // Same channel topic tv2.html uses (subscribeToHandoffChannel at
+    // tv2.html:405). Phone and TV coexist on the same tv_device:<key>
+    // channel; Supabase multiplexes subscribers.
+    //
+    // Failure is silent: subscribe error → log + leave channel null.
+    // Home still works via refreshActiveSession on enterHomeForTv;
+    // user won't see live updates from other devices until next home
+    // re-entry. Phase 1 tolerance.
+
+    // Module-level channel state. Tracks the currently-subscribed
+    // channel + its device_key so idempotent restart works cleanly
+    // (future multi-TV picker can switch between TVs).
+    let _homeRealtimeChannel = null;
+    let _homeRealtimeChannelDeviceKey = null;
+
+    // Starts (or restarts) the home realtime subscription for a TV.
+    // Idempotent: if already subscribed to the same device_key, no-op.
+    // If subscribed to a different device_key, tears down the old
+    // channel before creating a new one. Silent on failure.
+    //
+    // Called from enterHomeForTv after refreshActiveSession. Not called
+    // on every home render — the subscription stays live across drill-
+    // in screens (Contacts, Proximity Settings, etc.) and updates module
+    // state in background. renderHome on return-to-home picks up latest.
+    //
+    // Concurrency note: this function is not safe against
+    // concurrent calls (two enterHomeForTv calls fired in quick
+    // succession before the first's subscribe resolves). Phase 1
+    // has only one entry path (enterHomeForTv via single-TV
+    // flow); concurrent calls aren't possible. When the multi-TV
+    // picker lands, add a request-ID check or in-flight Promise
+    // tracking. Tracked under DEFERRED "Multi-TV picker and
+    // selection persistence".
+    async function startHomeRealtimeSub(device_key) {
+      if (!device_key) return;
+      if (!window.sb) return;
+
+      // Already subscribed to this TV? No-op.
+      if (_homeRealtimeChannel && _homeRealtimeChannelDeviceKey === device_key) {
+        return;
+      }
+
+      // Subscribed to a different TV (multi-TV switch)? Tear down first.
+      if (_homeRealtimeChannel) {
+        await stopHomeRealtimeSub();
+      }
+
+      let channel = null;
+      try {
+        channel = window.sb.channel('tv_device:' + device_key);
+        channel.on('broadcast', { event: 'session_started' }, () => refreshActiveSession());
+        channel.on('broadcast', { event: 'session_ended' },   () => refreshActiveSession());
+
+        await new Promise((resolve, reject) => {
+          let settled = false;
+          const timer = setTimeout(() => {
+            if (!settled) { settled = true; reject(new Error('realtime subscribe timed out')); }
+          }, 5000);
+          channel.subscribe(status => {
+            if (settled) return;
+            if (status === 'SUBSCRIBED') {
+              settled = true; clearTimeout(timer); resolve();
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+              settled = true; clearTimeout(timer); reject(new Error('realtime ' + status));
+            }
+          });
+        });
+
+        _homeRealtimeChannel = channel;
+        _homeRealtimeChannelDeviceKey = device_key;
+      } catch (e) {
+        console.error('[elsewhere] startHomeRealtimeSub failed:', e);
+        // Clean up the orphaned channel if creation got that far.
+        // Prevents memory growth on flaky networks where subscribe
+        // rejects after channel creation.
+        if (channel) {
+          try { window.sb.removeChannel(channel); } catch (_) {}
+        }
+        // Silent degradation — home still works via refreshActiveSession
+        // on enterHomeForTv. Live updates from other devices unavailable
+        // until next home re-entry.
+      }
+    }
+
+    // Tears down the current home realtime subscription. Idempotent;
+    // safe to call when no subscription is active.
+    async function stopHomeRealtimeSub() {
+      if (!_homeRealtimeChannel) return;
+      try { await _homeRealtimeChannel.unsubscribe(); } catch (_) {}
+      try { window.sb.removeChannel(_homeRealtimeChannel); } catch (_) {}
+      _homeRealtimeChannel = null;
+      _homeRealtimeChannelDeviceKey = null;
     }
 
     // ── 2c.2: Proximity Settings drill-in handlers ──────────────────
@@ -2573,32 +2831,190 @@
 
       goTo('screen-home');
       renderHome();
+      // 2c.3.1: fire-and-forget query for active session state.
+      // First render of tiles uses stale/null state; tiles update
+      // when the query resolves (~200-500ms typical). If the user
+      // taps a tile during the flash window and an active session
+      // exists, R4's 23505 catch (in handleTvRemoteTileTap) routes
+      // them to the rejoin path. Document watch item: if the flash
+      // is visually disruptive, consider sessionStorage hydration
+      // of last-known active-session state in 2c.x.
+      refreshActiveSession();
+      // 2c.3.1: start realtime subscription for live updates from other
+      // devices. Idempotent — same device_key is a no-op; different
+      // device_key tears down old and restarts. Fire-and-forget; failure
+      // degrades silently to the cold-path (refreshActiveSession only).
+      startHomeRealtimeSub(device_key);
     }
 
-    // ── 2c.2: home tile tap dispatcher ──────────────────────────────
+    // ── 2c.2 / 2c.3.1: home tile tap dispatcher ────────────────────
     //
-    // Dispatches based on current mode (per state model § Tile state matrix
-    // and per breakdown § 2c.3 / DECISION-B in 2c.2 scoping):
-    //   Mode A — household member at home → session-start flow (2b)
-    //   Mode B — household member not at home:
-    //              karaoke → silent no-op (greyed; banner already explained)
-    //              games   → legacy direct-nav (no session in 2c.2; games
-    //                        is session-aware in Part 3)
-    //   Mode C — non-household user → legacy direct-nav handlers
+    // Dispatches based on current mode + active session (2c.3.1 extension):
+    //   Active session, same app → handleSameAppRejoin (rejoin existing)
+    //   Active session, different app → handleCrossAppSwitch (manager-only;
+    //                                   non-managers see locked alert
+    //                                   immediately, no confirm prompt)
+    //   No active session, mode-based:
+    //     Mode A — household member at home → session-start flow (2b)
+    //     Mode B — household member not at home:
+    //                karaoke → silent no-op (greyed; banner explained)
+    //                games   → legacy direct-nav (no session in 2c.2; games
+    //                          is session-aware in Part 3)
+    //     Mode C — non-household user → legacy direct-nav handlers
     //
     // Wellness is never dispatched here — its tile is non-interactive
     // (class="disabled", no onclick).
     function handleHomeTileTap(app) {
       const mode = getHomeMode();
-      if (mode === 'A') return handleTvRemoteTileTap(app);
-      if (mode === 'B') {
-        if (app === 'karaoke') return; // silent no-op
-        if (app === 'games')   return handleGamesTap();
+      const active = getActiveSession();
+
+      if (mode === 'A' || mode === 'B') {
+        // 2c.3.1: active-session takes precedence over plain start flow.
+        if (active && active.app === app) {
+          return handleSameAppRejoin(active, app);
+        }
+        if (active && active.app !== app) {
+          // Cross-app switch: end current session, start new one.
+          // Non-manager users see the locked non-manager alert without
+          // a confirm prompt. See handleCrossAppSwitch for the full
+          // flow. This applies to Mode A AND Mode B: even though Mode
+          // B's no-active games tap normally does legacy direct-nav,
+          // the active-session presence makes cross-app switch (with
+          // manager authority) the semantically correct path.
+          return handleCrossAppSwitch(active, app);
+        }
+        // No active session.
+        if (mode === 'A') return handleTvRemoteTileTap(app);
+        if (mode === 'B') {
+          if (app === 'karaoke') return; // silent no-op
+          if (app === 'games')   return handleGamesTap();
+        }
       }
+
       if (mode === 'C') {
+        // Mode C: no TV bound. Active-session state (if any in
+        // module) is ignored — Mode C users land on play pages
+        // disconnected from sessions. Legacy direct-nav.
         if (app === 'karaoke') return handleKaraokeTap();
         if (app === 'games')   return handleGamesTap();
       }
+    }
+
+    // 2c.3.1: Same-app rejoin flow. Tries rpc_session_join('audience'),
+    // swallows 23505 (caller already a participant), surfaces other errors,
+    // then navigates. Manager/existing-participant control_role is
+    // preserved — rpc_session_join raises 23505 without modifying the
+    // existing row, so the caller's prior role stays intact (db/009:174-182).
+    //
+    // URL parameters per FLAG-A: karaoke uses ?code=<room>; games uses
+    // ?room=<room> WITHOUT &mgr=1. Rejoiners are not auto-managers. The
+    // DEFERRED "Games deep-link auto-manager bug" entry tracks the broader
+    // games-manager-detection problem.
+    //
+    // On unrecoverable error (not 23505 or 02000), surface
+    // message and leave home tile state as-is. Stale tile
+    // state corrects on next realtime event or
+    // enterHomeForTv refresh. Phase 1 tolerance.
+    async function handleSameAppRejoin(session, app) {
+      const { error: joinErr } = await window.sb.rpc('rpc_session_join', {
+        p_session_id: session.id,
+        p_participation_role: 'audience',
+      });
+
+      if (joinErr && joinErr.code !== '23505') {
+        // Not the "already participant" error. Possible 02000 race (Race 2
+        // from 2c.3.1 audit): session ended between render and tap. Surface
+        // the locked message and refresh state.
+        if (joinErr.code === '02000') {
+          alert('That session just ended. The home will refresh.');
+          await refreshActiveSession();
+          return;
+        }
+        alert("Couldn't join session: " + (joinErr.message || 'unknown error'));
+        return;
+      }
+
+      // Stash device_key for in-app pages' back-nav (2c.2 pattern).
+      const ctx = getHomeTvContext();
+      if (ctx) {
+        try { sessionStorage.setItem('elsewhere.active_tv.device_key', ctx.device_key); } catch (_) {}
+      }
+
+      // Navigate. Per FLAG-A: no &mgr=1 for games rejoin.
+      if (app === 'karaoke') {
+        location.href = 'karaoke/singer.html?code=' + encodeURIComponent(session.room_code);
+      } else if (app === 'games') {
+        location.href = 'games/player.html?room=' + encodeURIComponent(session.room_code);
+      }
+    }
+
+    // 2c.3.1: Cross-app switch flow. Manager ends current session, new
+    // session starts in the target app. Non-managers see the locked
+    // DECISION-3 alert immediately (no confirm prompt — two-modal UX
+    // for a non-actionable path is annoying).
+    //
+    // Reuses handleTvRemoteTileTap for the start half: rpc_session_start
+    // + publishSessionStarted + publishLaunchApp + navigate, plus R4
+    // catch for the extreme race where another device lands a session
+    // in the gap between our end and our start.
+    async function handleCrossAppSwitch(active, newApp) {
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) return; // shouldn't happen — Mode A/B require auth
+
+      const currentAppLabel = TILE_DEFAULT_COPY[active.app]?.label || active.app;
+      const newAppLabel     = TILE_DEFAULT_COPY[newApp]?.label     || newApp;
+
+      // Non-manager pre-check: surface the locked alert immediately.
+      if (active.manager_user_id !== user.id) {
+        alert(`Only the current manager can switch apps. Ask them to end the ${currentAppLabel} session first.`);
+        return;
+      }
+
+      // Manager confirm (DECISION-2: native confirm with locked copy).
+      const ok = confirm(`End current ${currentAppLabel} session to start ${newAppLabel}?`);
+      if (!ok) return;
+
+      // End the current session. Defensive error handling in case the
+      // pre-check went stale (admin reclaim between pre-check and RPC)
+      // or the session was ended by another mechanism.
+      const { error: endErr } = await window.sb.rpc('rpc_session_end', {
+        p_session_id: active.id,
+      });
+      if (endErr) {
+        if (endErr.code === '42501') {
+          alert(`Only the current manager can switch apps. Ask them to end the ${currentAppLabel} session first.`);
+        } else if (endErr.code === '02000') {
+          // Session ended between pre-check (or confirm) and RPC.
+          // Refresh state and let the user re-decide. We deliberately
+          // don't auto-trigger the new-app session-start here — the
+          // user's original intent (cross-app switch) no longer
+          // applies; they may now want to just start the new app
+          // fresh, or do something else entirely.
+          alert('That session just ended. The home will refresh.');
+        } else {
+          alert("Couldn't end session: " + (endErr.message || 'unknown error'));
+        }
+        await refreshActiveSession();
+        return;
+      }
+
+      // Publish session_ended per emission matrix.
+      const ctx = getHomeTvContext();
+      if (ctx) {
+        try {
+          await publishSessionEnded(ctx.device_key, {
+            session_id: active.id,
+            reason: 'user_ended',
+          });
+        } catch (e) {
+          console.error('[elsewhere] session_ended publish failed:', e);
+        }
+      }
+
+      // Delegate start + broadcast + navigate to handleTvRemoteTileTap.
+      // Its R4 catch handles the 23505 race where someone else's session
+      // landed in the gap between our end and our start.
+      return handleTvRemoteTileTap(newApp);
     }
 
     // Per-app session manifest values passed to rpc_session_start. App-level
@@ -2656,8 +3072,14 @@
             .maybeSingle();
 
           if (existing && existing.app === app) {
-            // Same-app rejoin. Best-effort join (idempotent — 23505 if
-            // already a participant; swallow either way).
+            // Same-app rejoin via this R4 path is now a fallback; primary
+            // path is 2c.3.1's handleHomeTileTap dispatch
+            // (handleSameAppRejoin). Both paths drop &mgr=1 — rejoin
+            // participants are not auto-managers. (DEFERRED "Games
+            // deep-link auto-manager bug" covers the broader
+            // games-manager-detection problem; this is one specific instance.)
+            // Best-effort join (idempotent — 23505 if already a participant;
+            // swallow either way).
             await window.sb.rpc('rpc_session_join', {
               p_session_id: existing.id,
               p_participation_role: 'audience',
@@ -2668,7 +3090,7 @@
             if (app === 'karaoke') {
               location.href = 'karaoke/singer.html?code=' + encodeURIComponent(existing.room_code);
             } else if (app === 'games') {
-              location.href = 'games/player.html?room=' + encodeURIComponent(existing.room_code) + '&mgr=1';
+              location.href = 'games/player.html?room=' + encodeURIComponent(existing.room_code);
             }
             return;
           }
