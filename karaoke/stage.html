@@ -163,7 +163,23 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
 #qp-header{padding:10px 14px;font-size:10px;letter-spacing:.15em;color:var(--color-gold);border-bottom:1px solid var(--color-border-dim);font-family:var(--font-mono);}
 #qp-list{flex:1;overflow-y:auto;padding:8px 0;}
 .qp-empty{padding:14px;color:var(--color-text-dim);font-size:11px;text-align:center;font-family:var(--font-mono);}
-/* Row styles fleshed out in section 1.5 */
+.qp-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--color-border-dim);}
+.qp-row.active{background:rgba(255,180,80,.06);border-left:2px solid var(--color-gold);padding-left:12px;}
+.qp-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;font-family:var(--font-mono);color:#fff;flex-shrink:0;}
+.qp-row.active .qp-avatar{box-shadow:0 0 0 2px var(--color-gold);}
+.qp-info{flex:1;min-width:0;}
+.qp-name{font-size:12px;color:rgba(255,220,150,.9);font-family:var(--font-mono);letter-spacing:.04em;}
+.qp-row.active .qp-name{color:var(--color-gold);}
+.qp-active-label{font-size:9px;color:var(--color-gold);letter-spacing:.15em;margin-left:6px;}
+.qp-meta{font-size:10px;color:rgba(255,200,120,.5);margin-top:2px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);}
+.qp-position{font-size:10px;color:rgba(255,200,120,.4);margin-right:6px;letter-spacing:.05em;}
+.qp-avatar.avatar-1{background:var(--color-avatar-1);}
+.qp-avatar.avatar-2{background:var(--color-avatar-2);}
+.qp-avatar.avatar-3{background:var(--color-avatar-3);}
+.qp-avatar.avatar-4{background:var(--color-avatar-4);}
+.qp-avatar.avatar-5{background:var(--color-avatar-5);}
+.qp-avatar.avatar-6{background:var(--color-avatar-6);}
+.qp-avatar.avatar-7{background:var(--color-avatar-7);}
 
 /* ── VIDEO CHAT OVERLAYS ── */
 #videochat-wrap{
@@ -5342,10 +5358,75 @@ async function refreshSessionState() {
   renderSessionUI();
 }
 
+// Session 5 Part 2d.1 — render helpers
+// Avatar functions ported from index.html lines 3433-3445 (DECISION-AUDIT-7 B3).
+// Used by renderSessionUI to draw initials + color-hashed circles.
+function avatarClassForName(name) {
+  const s = (name || '').trim() || '?';
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h + s.charCodeAt(i)) >>> 0;
+  return 'avatar-' + ((h % 7) + 1);
+}
+function avatarInitialsForName(name) {
+  const s = (name || '').trim();
+  if (!s) return '?';
+  const parts = s.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 function renderSessionUI() {
-  // Section 1.5 will fill this in with queue list rendering.
-  // For section 1.1, this is just a stub.
-  log('renderSessionUI: stub called', 'info');
+  const list = document.getElementById('qp-list');
+  if (!list) return;
+
+  // Solo mode (no session) — empty placeholder.
+  if (!currentSession) {
+    list.innerHTML = '<div class="qp-empty">No active session.</div>';
+    return;
+  }
+
+  // Filter to performers only (active + queued); audience users not rendered.
+  const renderable = currentParticipants.filter(p =>
+    p.participation_role === 'active' || p.participation_role === 'queued'
+  );
+
+  if (renderable.length === 0) {
+    list.innerHTML = '<div class="qp-empty">No singers in queue.</div>';
+    return;
+  }
+
+  // Sort: active first, then queued by queue_position ascending.
+  const sorted = renderable.slice().sort((a, b) => {
+    if (a.participation_role !== b.participation_role) {
+      return a.participation_role === 'active' ? -1 : 1;
+    }
+    return (a.queue_position ?? 999999) - (b.queue_position ?? 999999);
+  });
+
+  list.innerHTML = sorted.map(p => {
+    const isActive   = p.participation_role === 'active';
+    const name       = p.display_name || 'Unknown singer';
+    const initials   = avatarInitialsForName(name);
+    const colorClass = avatarClassForName(name);
+    const position   = isActive ? 'NOW' : '#' + (p.queue_position ?? '?');
+    const songTitle  = p.pre_selections?.song?.title  || '(no song selected)';
+    const songArtist = p.pre_selections?.song?.artist || '';
+    const venueName  = p.pre_selections?.venue?.name  || '';
+    const songLine   = songArtist ? songTitle + ' · ' + songArtist : songTitle;
+    const meta       = venueName  ? songLine + ' · ' + venueName    : songLine;
+
+    return `
+      <div class="qp-row${isActive ? ' active' : ''}">
+        <div class="qp-avatar ${colorClass}">${initials}</div>
+        <div class="qp-info">
+          <div class="qp-name">
+            <span class="qp-position">${position}</span>${escTv(name)}${isActive ? '<span class="qp-active-label">SINGING</span>' : ''}
+          </div>
+          <div class="qp-meta">${escTv(meta)}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function wireSessionLoad() {
