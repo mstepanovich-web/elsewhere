@@ -1495,6 +1495,62 @@ Decision deferred to 2e implementation pass. Documented in docs/KARAOKE-CONTROL-
 
 ---
 
+### Deferred: Remove Way 1 (pre-Session-5 stage.html entry path)
+
+**Deferred in:** Session 5 Part 2d audit (2026-04-26)
+**Deferred on:** 2026-04-26
+**Priority:** Low — not blocking; legacy code preserved for testing/dev fallback
+**Area:** Karaoke / stage.html / shell — code cleanup
+**Status:** Deferred
+
+#### Context
+
+Stage.html supports two entry paths today:
+
+- **Way 1 (pre-Session-5):** Direct navigation to `karaoke/stage.html?room=ABCD`. Stage shows QR with room code; singer's phone scans the QR and connects via Agora. No database session row involved.
+- **Way 2 (Session 5):** User taps Karaoke from the Elsewhere home screen. Phone calls `rpc_session_start`, session row created, broadcast triggers TV navigation, stage.html loads and queries session by `tv_device_id`. Database session is canonical.
+
+Way 1 is no longer used in real product flows. Users always go through home → TV → tap Karaoke. Way 1 exists in the code as legacy from before Session 5 and remains accessible for direct-URL testing/dev workflows.
+
+In 2d.1's solo mode (no active session in DB), stage.html falls back to Way 1 behavior: `idle-panel` with QR shows, URL `?room=` is the room identifier, Agora handles all coordination. This preserves dev/test workflows.
+
+#### What's deferred
+
+Removal of Way 1 plumbing:
+
+- URL `?room=` parsing on stage.html (lines 583-587 area)
+- `idle-panel` showing the QR code with room-code-only identification (lines 339-350 area)
+- Room-code generation fallback (`(()=>{ const c='ABCD…'; ... })()` at line 587)
+- Agora room name derivation from `ROOM_CODE` (line 587)
+- Singer.html's `screen-join` (entire screen for entering a room code)
+- Singer.html's `doJoin()` function and the room-code input flow
+- Any audience.html plumbing that depends on room-code-only identification
+
+Plus an audit pass to verify nothing else depends on these references.
+
+#### Options when picking up
+
+Bundle with Session 5 wrap-up cleanup OR a dedicated post-Session-5 cleanup session. Each removal site needs review:
+
+- Trace every reference to `ROOM_CODE`, `?room=` URL handling, `screen-join`, `doJoin`
+- Verify no testing/dev workflow depends on direct-URL access
+- Verify session-loading is the only path stage.html supports post-cleanup
+
+Estimated scope: ~half-day of careful removal work.
+
+#### When to pick this up
+
+After Session 5 ships completely (2e and 2f shipped, multi-user flows verified end-to-end on hardware). At that point, confidence that nothing real depends on Way 1 is high.
+
+Don't bundle with 2d.1 implementation — keeping legacy code in place during 2d.1 reduces blast radius.
+
+#### Related
+
+- `docs/SESSION-5-PART-2D-AUDIT.md` DECISION-AUDIT-5 — solo mode preserves Way 1 verbatim
+- `docs/KARAOKE-FUNCTION-AUDIT.md` — full inventory of stage.html and singer.html that documents Way 1's surface
+
+---
+
 ## Migrated from PHASE1-NOTES.md
 
 The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captured here in summary form; the full original text lives in PHASE1-NOTES.md git history (commit `9296a50` or earlier). Future fill-outs should flesh these into the full entry format above when someone picks one up.

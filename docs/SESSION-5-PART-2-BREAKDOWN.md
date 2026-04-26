@@ -171,41 +171,68 @@ Sub-split into 2c.3.1 and 2c.3.2 per pre-implementation audit.
 **Files touched:** `index.html`, `karaoke/singer.html`, `karaoke/audience.html`, `games/player.html`, new migration `db/012`, possibly `shell/preferences.js` (new helper module)
 **Rough commit count:** 3 (2c.1 + 2c.2 + 2c.3 split is the expected case)
 
-### 2d — karaoke/stage.html session integration [PENDING — re-scoped per Karaoke Control Model § 5.1]
+### 2d.0 — Karaoke session helper RPCs (db/013) [PENDING — prerequisite for 2d.1]
 
-Sub-split into 2d.1 (read/display) + 2d.2 (write/interact, may collapse). Original single-sub-part scope included manager override UI on stage.html (change venue mid-song, change costume mid-song, end song button); per the Karaoke Control Model, those overrides moved entirely to the phone (singer.html, owned by Session Manager — see Karaoke Control Model § 4.2). Stage.html in 2d has minimal interactive surface.
+**Scope:** New SECURITY DEFINER RPCs that unblock 2d.1 against existing RLS gates. Single migration commit + SQL editor verification.
 
-**2d.1 — Read/display (session-aware stage) [PENDING]:**
+- `rpc_karaoke_song_ended(p_session_id uuid)` — atomic dual transition (current active singer → audience, queue head → active). Idempotent: handles missing-active or missing-queue-head gracefully. Returns updated session row.
+- `rpc_session_get_participants(p_session_id uuid)` — returns participant rows joined with `profiles.full_name` as `display_name`. Bypasses owner-only profiles RLS via SECURITY DEFINER.
 
-- Session load on stage.html mount (per DECISION-1 from 2d audit: query by tv_device_id, URL fallback)
-- Graceful fallback to pre-Session-5 solo mode if no session (silent + log warning; dev/legacy only — production always has session via 2b)
-- Render queue panel (new bottom-right button + slide-out matching Comments panel pattern)
-- Subscribe to realtime events: `participant_role_changed`, `queue_updated`, `session_ended`
-- Active-singer highlight in queue (avatar ring + label per DECISION-4)
-- "Up Next" card display between songs (avatar + name + song + venue per DECISION-3)
-- Idle-state 360° venue tour with "Select and start a song" overlay
-- Read-only consumption of session state — no user inputs on stage.html mutate state
+**Auth gate (both RPCs):** `is_session_participant(session_id) OR is_tv_household_member(tv_device_id)`. Broad enough to include stage.html's TV-claimer auth context.
 
-Estimate: ~5 sections, ~2-2.5 hours.
+**Why these RPCs are needed:**
 
-**2d.2 — Write/interact [PENDING — may collapse into 2d.1]:**
+- `rpc_session_update_participant` (db/011) requires the caller to be both an active participant AND have manager/host control_role to mutate cross-user. Stage.html's TV-claimer auth context generally satisfies neither condition — auth gate too narrow for the song-end RPC trigger.
+- `profiles` RLS (db/001) is owner-only; nested-select for `display_name` returns NULL for other users — blocks queue panel rendering.
 
-- Pre-selections loading on promotion (when `participant_role_changed` indicates a queue→active transition, load that user's pre-selections as initial stage state)
-- End Session navigation (when `session_ended` fires, navigate stage.html back to tv2.html)
-- Reaction logic for skip/take-over events (manager-driven from phone; stage.html responds to resulting events)
+Both addressed by the new SECURITY DEFINER wrappers with broader auth.
 
-2d.2 may collapse into 2d.1 since stage.html has no direct user-input override controls under the new model. Decision deferred to 2d.1's pre-implementation audit.
+**Locked decisions:**
+- RPC publishing is caller-side per existing pattern (RPCs do NOT publish realtime events; stage.html publishes after RPC success per `docs/SESSION-5-PART-2D-AUDIT.md` DECISION-AUDIT-7 B5)
+- Idempotency in `rpc_karaoke_song_ended` protects multi-tab and reload race scenarios
+
+**Entry criteria:** None (Part 1 schema already in place)
+**Exit criteria:** Migration applied to Supabase; both RPCs callable from SQL editor with correct auth-gate enforcement; `rpc_karaoke_song_ended` correctly handles all four edge cases (no active, no queue, both, both empty)
+**Files touched:** `db/013_karaoke_session_helpers.sql` (new)
+**Rough commit count:** 1
+**Spec source:** `docs/SESSION-5-PART-2D-AUDIT.md` DECISION-AUDIT-6 + DECISION-AUDIT-13
+
+### 2d — karaoke/stage.html session integration [PENDING — split into 2d.0 + 2d.1; 2d.2 collapsed]
+
+Per `docs/SESSION-5-PART-2D-AUDIT.md` DECISION-AUDIT-2, 2d.2 collapsed into 2d.1. Manager override UI moved off stage.html per Karaoke Control Model § 4.2; remaining 2d.2 scope (pre_selections loading on promotion, session_ended navigation) absorbed into 2d.1's event-driven scope.
+
+2d.0 (above) ships first as a prerequisite migration. Then 2d.1.
+
+**2d.1 — Session-aware stage (~6-8 sections, ~3-4 hours) [PENDING — entry criteria: 2d.0 complete]:**
+
+"Read-only" in 2d.1 means **no user-input mutators** (no buttons that change session state). Event-driven mutations responding to internal events (YouTube video ended) and received realtime events ARE in scope.
+
+Scope:
+- Session load on stage.html mount (query by tv_device_id, URL fallback)
+- Graceful fallback to pre-Session-5 solo mode if no session (silent + log; dev/legacy only)
+- Queue panel (new bottom-right button + slide-out matching Comments pattern; content per Karaoke Control Model § 4.2)
+- Realtime subscription to `participant_role_changed`, `queue_updated`, `session_ended` (independent channel instance, mirrors `index.html`'s 2c.3.1 pattern)
+- Active-singer highlight + "Up Next" card during inter-song transitions
+- Idle-state behavior: 60s social window → 360° venue tour with "Select and start a song" overlay
+- Pre_selections loading on queue→active transition (new active singer's selections become initial stage state)
+- Song-end RPC trigger via `rpc_karaoke_song_ended` from db/013, with `_currentSongInstanceId` double-fire guard
+- `session_ended` graceful teardown: `doEnd()` → `stopStageRealtimeSub()` → navigate to tv2.html
+- Migration-window grace: Agora `session-ended` message to singer.html before teardown (the only 2d.1 change to singer.html; ~10 LOC)
+- Room code override from `sessions.room_code` when session loaded; URL fallback in solo mode
 
 **Locked decisions:**
 - Manager override UI (venue/costume mid-song, end song) lives on phone, NOT stage.html (per Karaoke Control Model § 4.2)
-- End song button (manager-initiated, on phone) sends active singer to audience, not queued
-- Stage.html is read-only for user inputs
+- Stage.html is read-only for **user inputs**; event-driven mutations (RPC calls in response to internal events) ARE in scope
+- "Up Next" card auto-shows on song-end (transient surface, distinct from user-toggled queue panel)
+- Queue panel stays user-driven (no auto-show, no auto-hide)
+- Idle states coexist: existing `idle-panel` (QR + room code) for no-session; new 60s + 360° tour for in-session no-active-singer
+- Way 1 (legacy QR + room code path) preserved verbatim in solo mode; removal deferred post-Session-5
 
-**Entry criteria:** 2b complete (2c optional — they're independent)
-**Exit criteria:** Stage renders session state and queue; pre-selections load on promotion; session events cause UI updates; idle state shows venue tour with overlay
-**Files touched:** `karaoke/stage.html`
-**Rough commit count:** 1-2 (one if 2d.2 collapses)
-**Spec source:** docs/KARAOKE-CONTROL-MODEL.md § 4.2 (stage.html UI surfaces) + § 5.1 (sub-split rationale)
+**Entry criteria:** 2d.0 complete (db/013 applied)
+**Exit criteria:** Stage renders session state and queue per spec; song-end triggers role transitions via RPC; pre_selections load on promotion; session_ended causes graceful teardown + navigate; idle state behaviors fire correctly
+**Files touched:** `karaoke/stage.html` (primary); `karaoke/singer.html` (~10 LOC for migration-window grace)
+**Rough commit count:** 6-8 sections, each as separate commit
+**Spec source:** `docs/SESSION-5-PART-2D-AUDIT.md` (full implementation contract); `docs/KARAOKE-CONTROL-MODEL.md` § 4.2 + § 5.1
 
 ### 2e — karaoke/singer.html role-aware [PENDING — re-scoped per Karaoke Control Model § 5.2]
 
@@ -360,10 +387,11 @@ These decisions are locked. Don't revisit unless a concrete problem surfaces in 
 
 ## Applied migrations
 
-All 4 migrations in `db/` are applied in Supabase:
+All Part 1 migrations in `db/` are applied in Supabase:
 - `db/008_sessions_and_participants.sql`
 - `db/009_session_lifecycle_rpcs.sql`
 - `db/010_manager_mechanics_rpcs.sql`
 - `db/011_role_and_queue_mutation_rpcs.sql`
+- `db/012_user_preferences.sql` (Part 2c.1)
 
-No pending migrations to apply on session resume.
+**Pending:** `db/013_karaoke_session_helpers.sql` ships in 2d.0 before 2d.1 implementation begins.

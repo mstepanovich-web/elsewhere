@@ -29,6 +29,27 @@ A karaoke session has these roles:
 | **Available Singer** | An HHU with at-home proximity who is in the session and is not the Active Singer. Can be queued (has a queue entry) or not queued (no entry). Queue membership is a state, not a separate role. |
 | **Audience** | Anyone in audience mode for this session: HHU not at home, HHU who deep-linked to audience by accident, or NHHU via deep link. Audience users are on audience.html. |
 
+### Two layers of vocabulary
+
+Karaoke uses two layers of role vocabulary that map cleanly to each other but live in different parts of the system:
+
+**Platform layer — `participation_role` (database schema).** A three-value enum stored in `session_participants.participation_role`: `active`, `queued`, `audience`. This is universal across all apps (karaoke, games, future wellness). The platform doesn't know what "singing" means; it just tracks who's in the active slot, who's waiting, and who's watching.
+
+**Karaoke UI layer — role labels.** The four labels above (Session Manager, Active Singer, Available Singer, Audience) are karaoke-specific UI mappings, computed in client code from `(participation_role, control_role, household_membership, proximity, has_tv_device)`. Each app does its own mapping; the platform doesn't need to know.
+
+The mapping for karaoke:
+
+| Karaoke UI label | `participation_role` | Additional client-side conditions |
+|---|---|---|
+| Active Singer | `active` | (none) |
+| Queued (sub-state of Available Singer) | `queued` | HHU + at-home + has TV device |
+| Available Singer (not queued) | `audience` | HHU + at-home + has TV device |
+| Audience | `audience` | NHHU, OR HHU not at home, OR no TV device |
+
+Eligibility (the "Available Singer" vs "Audience" distinction) is **a client-side, self-only derivation**. Each user computes their own eligibility for their own UI. No cross-user eligibility check is ever required because Session Manager only promotes from queue, and queue entry is self-gated by eligibility at the moment a user taps "Add to Queue."
+
+Session Manager is orthogonal to `participation_role`. It's tracked via `control_role` (separate schema column with values `manager`/`host`/`none`). A Session Manager can simultaneously be an Active Singer, Available Singer, or Audience.
+
 ### Session Manager hierarchy
 
 Authority flows in this order:
@@ -125,16 +146,17 @@ The toast appears proactively after some delay (specifics TBD in 2e implementati
 4. The promotion flow begins for the next-in-queue user (see above)
 5. The just-finished singer transitions to Available Singer (no queue entry — they can re-queue if they want another turn)
 
-**Active Singer remains active (queue empty, song ends):**
+**Just-finished singer transitions out, queue empty (Idle state begins):**
 
-If the queue is empty when a song ends, the just-finished singer stays as Active Singer. They can:
+When a song ends, the just-finished singer transitions out of the Active Singer slot regardless of queue state. Their `participation_role` flips from `active` to `audience`. The karaoke UI label they get on their phone re-derives to "Available Singer" (because they're an HHU at home with a TV device).
 
-- Start a new song (search → select → start)
-- Restart their last song
-- Take a break, talk to the room, then start a new song
-- Sit indefinitely without action
+If the queue is empty at that moment, the Active Singer slot is now empty → **Idle state begins**. The TV enters a 60-second social window where the room can applaud, comment, or just talk. During this window, any Available Singer (including the just-finished one) can start a new song to become the new Active Singer immediately.
 
-There is no automatic timeout pushing them out. The Session Manager has the "Skip current Active Singer" power to force-end their turn if they need to be moved along.
+After 60 seconds with no action, the TV begins the 360° venue tour with the "Select and start a song to sing next!" overlay. Any Available Singer can still start a song any time during the tour, transitioning back into Active Singer.
+
+The just-finished singer's phone UI does not change visibly during this transition — they were already on screen-performing → screen-home (handled by the existing Agora `song-ended` message), and their action hub remains available. The role transition is a backend correctness concern, not a user-facing UI change.
+
+The Session Manager retains "Skip current Active Singer" authority for the case where someone is mid-song; once Idle, there's no Active Singer to skip.
 
 **Idle state (no song, no queue):**
 
@@ -432,11 +454,14 @@ Stage.html is the TV-side display surface. Per the platform model, the phone is 
 
 - Added to existing bottom-right button cluster on stage.html (alongside Comments button)
 - Tap toggles a right-side slide-out panel matching Comments panel's existing pattern
-- Panel content: avatar + name + queue position, Active Singer highlighted (avatar ring + label)
-- Subscribes to `participant_role_changed` + `queue_updated` while panel is open
+- Panel content per row: **avatar + name + queue position + song + venue**. Active Singer highlighted with avatar ring + label
+- Avatar uses initials + color hash (no `profiles.avatar_url` column in Phase 1)
+- Reads `pre_selections.song.title`, `pre_selections.song.artist`, `pre_selections.venue.name` for each participant
+- Subscribes to `participant_role_changed` + `queue_updated` while session is loaded (NOT panel-scoped — subscription persists across panel open/close)
 - Tappable any time, including during active songs (testing utility)
 - No auto-show, no auto-hide
 - Visible to everyone with stage.html access (not gated by role)
+- The same queue list rendering component is reused on Session Manager's phone UI in 2e (with action affordances overlaid for reorder/remove/promote)
 
 **Existing testing/admin affordances (kept as-is for Session 5):**
 
@@ -498,30 +523,41 @@ This section maps the spec's contents to specific implementation work in Session
 
 ### 5.1 Session 5 — Part 2d (karaoke/stage.html session integration)
 
-**Sub-split:** 2d.1 (read/display, ~5 sections, ~2-2.5 hours) + 2d.2 (write/interact, depending on what the new model retains)
+**Sub-split:** 2d.0 (prerequisite migration, ~1-1.5 hours) + 2d.1 (read/display + event-driven mutations, ~6-8 sections, ~3-4 hours). 2d.2 collapsed into 2d.1 per audit (`docs/SESSION-5-PART-2D-AUDIT.md` DECISION-AUDIT-2).
 
-**2d.1 scope (read/display):**
+**2d.0 — prerequisite migration (db/013):**
 
-- Session load on stage.html mount (per DECISION-1: query by tv_device_id, URL fallback)
-- Graceful fallback to pre-Session-5 solo mode if no session (silent + log warning)
-- Render queue panel (new bottom-right button + slide-out matching Comments pattern)
+Two new SECURITY DEFINER RPCs that unblock 2d.1 against existing RLS gates:
+
+- `rpc_karaoke_song_ended(p_session_id)` — atomic dual transition (active→audience, queue head→active). Idempotent. Stage.html calls this on YouTube video end.
+- `rpc_session_get_participants(p_session_id)` — returns participant rows with `display_name` joined from profiles (bypasses owner-only profiles RLS).
+
+Auth gate on both: `is_session_participant(session_id) OR is_tv_household_member(tv_device_id)`. See `docs/SESSION-5-PART-2D-AUDIT.md` DECISION-AUDIT-6.
+
+**2d.1 scope (session-aware stage):**
+
+"Read-only" in 2d.1 means **no user-input mutators** (no buttons that change session state). Event-driven mutations are part of the scope — stage.html responds to its own internal events (YouTube video ended) and to received realtime events.
+
+- Session load on stage.html mount (query by tv_device_id, with URL fallback)
+- Graceful fallback to pre-Session-5 solo mode if no session (silent + log warning; dev/legacy only — production always has session via 2b)
+- Render queue panel (new bottom-right button + slide-out matching Comments pattern, content per § 4.2)
 - Subscribe to realtime events: `participant_role_changed`, `queue_updated`, `session_ended`
-- Active-singer highlight in queue (avatar ring + label per DECISION-4)
-- "Up Next" card display between songs (avatar + name + song + venue per DECISION-3)
-- Idle-state 360° venue tour with "Select and start a song" overlay
-- Read-only consumption of session state — no user inputs on stage.html mutate state
+- Active-singer highlight in queue (avatar ring + label)
+- "Up Next" card display during inter-song transitions (avatar + name + song + venue from queue head's pre_selections)
+- Idle-state behavior: 60-second social window after song ends with empty queue, then 360° venue tour with "Select and start a song to sing next!" overlay
+- Pre_selections loading on promotion (when `participant_role_changed` indicates a queue→active transition, the new active singer's pre_selections become the initial stage state)
+- Song-end RPC trigger: stage.html calls `rpc_karaoke_song_ended` when YouTube video ends, with `_currentSongInstanceId` double-fire guard
+- `session_ended` graceful teardown: `doEnd()` → `stopStageRealtimeSub()` → navigate to tv2.html
+- Migration-window grace: stage.html sends `sendMsg({type:'session-ended'})` Agora message before teardown so singer.html can respond before its own session_ended subscription lands in 2e
 
-**2d.2 scope (write/interact) — re-evaluated under new model:**
+**Key implementation notes:**
 
-The original 2d.2 plan included manager override UI on stage.html (change venue mid-song, change costume mid-song, end song button). Per the new control model, these overrides live on the phone, not the TV. Stage.html in 2d.2 has minimal interactive surface.
+- Solo mode (no session in DB) preserves Way 1 (legacy QR + room code path) verbatim. Way 1 removal deferred post-Session-5.
+- Realtime subscription is bound to the loaded session, not to queue panel open/close (idiomatic per `index.html`'s 2c.3.1 pattern).
+- `wireExitAppListener` (2b) is unchanged; the new realtime subscription is an independent channel instance on the same `tv_device:<device_key>` topic.
+- Room code displayed in idle-panel and singer-link QR is overridden from `sessions.room_code` when a session is loaded; falls back to URL `ROOM_CODE` in solo mode.
 
-What remains for 2d.2:
-
-- Pre_selections loading on promotion (when `participant_role_changed` indicates a queue→active transition, load that user's pre-selections as initial stage state)
-- End Session navigation (when `session_ended` fires, navigate stage.html back to tv2.html)
-- Reaction logic for skip/take-over events (manager-driven from phone; stage.html responds to resulting events)
-
-2d.2 may collapse into 2d.1 since stage.html has no direct user-input override controls. Decision deferred to 2d.1's pre-implementation audit.
+Full implementation contract in `docs/SESSION-5-PART-2D-AUDIT.md`.
 
 ### 5.2 Session 5 — Part 2e (karaoke/singer.html mode-aware)
 
