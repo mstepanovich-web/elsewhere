@@ -627,6 +627,83 @@ Skip this phase if Decision 4 = Path B (defer).
 
 ---
 
+## Locked Decisions (locked 2026-04-26 end of session)
+
+The 6 decisions framed in this audit have been resolved. Implementation
+in next session proceeds against these locks:
+
+1. **Take Stage prompt UX:** Option A — Full-screen modal, tap-to-confirm,
+   audio cue + vibration burst on appear. No auto-advance. On
+   visibilitychange → visible after backgrounded promotion, re-fire audio +
+   vibration.
+
+2. **Queue position display:** Option A — Always visible at top of
+   screen-home for queued users. Number-only ("#3 of 5"), no avatar list.
+
+3. **Singer-side realtime channel scope:** Option A — Same
+   `tv_device:<device_key>` topic as stage.html. Way 1 paths fall back to
+   no-realtime + cold-path-only refresh.
+
+4. **Push notification scope:** Option A — Ship as 2e.0 prerequisite phase.
+   Capacitor `@capacitor/push-notifications` + iOS entitlements + AppDelegate
+   + DB push_subscriptions table + Supabase Edge Function for APNs sender.
+   iOS users get push via APNs; Android web users get foreground fallback.
+
+5. **Manager override location:** Option B — Singer.html manager-only view.
+   Stage.html queue panel stays read-only.
+
+6. **Backgrounded phone handling:** Option A — Page Visibility API +
+   sessionStorage missed-promotion flag. Re-query on foreground; render
+   based on current truth.
+
+## Hard Blocker Resolutions
+
+- **B1:** Resolved in 2e.1 via `rpc_session_join` in `doJoin()` with
+  defensive fallback to legacy single-singer behavior.
+- **B2:** Resolved via Decision 4 = Path A. Push ships as 2e.0.
+- **B3:** Resolved as Manager Override Option B — Manager phone joins
+  Agora as host with mic-mute discipline.
+
+## Phase Plan
+
+```
+2e.0 — Push notification infrastructure  (~6-8 hr)
+2e.1 — Read-only role-aware UI            (~3-4 hr, 5-6 sections)
+2e.2 — Self write actions                 (~2-3 hr, 4-5 sections)
+2e.3 — Manager queue management + Override (~3-4 hr, 5-6 sections)
+
+Total: 14-19 hours across 3-5 sessions
+```
+
+## Apple Developer Account Confirmed
+
+- Apple Developer Program: **active** (renews April 9, 2027)
+- Enrollment: Individual
+- **Team ID: ZK6356AG69**
+- APNs Auth Key (.p8): **generated and downloaded by user** (locally stored,
+  not in repo). Key ID will be supplied by user at start of 2e.0.
+- App Bundle ID: `my.elsewhere`
+- iOS shell location: `~/Projects/elsewhere-app/`
+
+## 2e.0 Tomorrow — Pre-Flight Checklist
+
+Before code work starts, the implementing session should confirm:
+- [ ] User has the .p8 file accessible
+- [ ] User has the Key ID (10-char alphanumeric from key generation page)
+- [ ] User has the Team ID (`ZK6356AG69`)
+- [ ] User can open `~/Projects/elsewhere-app` in Xcode
+- [ ] User has `npm` available in elsewhere-app project
+
+Once confirmed, 2e.0 starts with:
+1. `npm install @capacitor/push-notifications` in elsewhere-app
+2. Xcode capabilities: enable Push + Remote Notifications background mode
+3. AppDelegate.swift: register, handle deviceToken, forward via Capacitor bridge
+4. DB migration db/014_push_subscriptions.sql
+5. Supabase Edge Function send-push-notification (APNs HTTP/2)
+6. Singer.html token registration + push handler
+
+---
+
 ## Footer
 
 Audit conducted via Claude Code investigation across 5 areas: singer.html screen state machine, Agora message handlers, singer auth + session context, push notification feasibility, manager override mechanism. 6 decisions framed for session-start lock-in. 3 hard blockers, 6 caveats identified.
