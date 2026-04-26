@@ -687,6 +687,7 @@ async function sendToStage(obj){
 }
 function handleStageMsg(msg){
   if(msg.type==='song-ended'){ muteMic(); showScreen('screen-home'); }
+  if(msg.type==='session-ended'){ muteMic(); showScreen('screen-home'); }
   if(msg.type==='progress'){ document.getElementById('perf-prog-fill').style.width=(msg.pct||0)+'%'; }
 }
 
