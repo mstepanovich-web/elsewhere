@@ -5348,6 +5348,7 @@ async function resetSessionStateToSolo() {
   currentQueueHead = null;
   await stopStageRealtimeSub();
   renderSessionUI();
+  evaluateIdleUI();
 }
 
 async function refreshSessionState() {
@@ -5437,6 +5438,7 @@ async function refreshSessionState() {
   await startStageRealtimeSub(device_key);
 
   renderSessionUI();
+  evaluateIdleUI();
 }
 
 // Session 5 Part 2d.1 — render helpers
@@ -5508,8 +5510,6 @@ function renderSessionUI() {
       </div>
     `;
   }).join('');
-
-  evaluateIdleUI();
 }
 
 // Session 5 Part 2d.1 — idle UI driver (DECISION-AUDIT-3 + 4)
