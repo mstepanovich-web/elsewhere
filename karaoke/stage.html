@@ -5239,10 +5239,87 @@ async function refreshSessionState() {
     return;
   }
 
-  // Section 1.2 will fill this in with the real queries (sessions + participants).
-  // For section 1.1, this is just a wiring scaffold — confirms refreshSessionState
-  // fires on mount + auth change. State stays empty.
-  log('refreshSessionState: stub fired (queries land in section 1.2)', 'info');
+  // Resolve tv_devices.id from device_key (same lookup pattern as onExit).
+  let tv = null;
+  try {
+    const { data, error } = await window.sb
+      .from('tv_devices').select('id').eq('device_key', device_key).maybeSingle();
+    if (error) throw error;
+    tv = data;
+  } catch (e) {
+    log('refreshSessionState: tv_devices lookup failed (' + (e?.message || e) + ') — solo mode', 'warn');
+    currentSession = null;
+    currentParticipants = [];
+    currentActiveSinger = null;
+    currentQueueHead = null;
+    renderSessionUI();
+    return;
+  }
+
+  if (!tv?.id) {
+    log('refreshSessionState: tv_devices row not found — solo mode', 'info');
+    currentSession = null;
+    currentParticipants = [];
+    currentActiveSinger = null;
+    currentQueueHead = null;
+    renderSessionUI();
+    return;
+  }
+
+  // Active session for this TV.
+  let session = null;
+  try {
+    const { data, error } = await window.sb
+      .from('sessions')
+      .select('id, app, manager_user_id, admission_mode, capacity, room_code, started_at, current_state')
+      .eq('tv_device_id', tv.id)
+      .is('ended_at', null)
+      .maybeSingle();
+    if (error) throw error;
+    session = data;
+  } catch (e) {
+    log('refreshSessionState: sessions query failed (' + (e?.message || e) + ') — solo mode', 'warn');
+    currentSession = null;
+    currentParticipants = [];
+    currentActiveSinger = null;
+    currentQueueHead = null;
+    renderSessionUI();
+    return;
+  }
+
+  if (!session) {
+    // No active session — solo mode (legitimate state for direct-nav dev).
+    log('refreshSessionState: no active session for this TV — solo mode', 'info');
+    currentSession = null;
+    currentParticipants = [];
+    currentActiveSinger = null;
+    currentQueueHead = null;
+    renderSessionUI();
+    return;
+  }
+
+  // Participants via the new RPC (db/013).
+  let participants = [];
+  try {
+    const { data, error } = await window.sb
+      .rpc('rpc_session_get_participants', { p_session_id: session.id });
+    if (error) throw error;
+    participants = data || [];
+  } catch (e) {
+    log('refreshSessionState: rpc_session_get_participants failed (' + (e?.message || e) + ') — partial state', 'warn');
+    // Keep session, but show empty queue. Better than dropping back to solo mode.
+    participants = [];
+  }
+
+  // Populate state.
+  currentSession = session;
+  currentParticipants = participants;
+  currentActiveSinger = participants.find(p => p.participation_role === 'active') || null;
+  currentQueueHead = participants
+    .filter(p => p.participation_role === 'queued')
+    .sort((a, b) => (a.queue_position ?? 999999) - (b.queue_position ?? 999999))[0] || null;
+
+  log('refreshSessionState: session ' + session.id + ' loaded with ' + participants.length + ' participants', 'info');
   renderSessionUI();
 }
 
