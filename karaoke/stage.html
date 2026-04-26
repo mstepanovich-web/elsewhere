@@ -181,6 +181,20 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
 .qp-avatar.avatar-6{background:var(--color-avatar-6);}
 .qp-avatar.avatar-7{background:var(--color-avatar-7);}
 
+/* ── UP NEXT CARD (2d.1) ── */
+#up-next-card{position:fixed;left:50%;bottom:80px;transform:translateX(-50%) translateY(20px);z-index:201;background:rgba(4,2,6,.92);backdrop-filter:blur(8px);border:1px solid var(--color-gold-soft);border-radius:8px;padding:14px 20px;display:none;opacity:0;transition:opacity .4s ease-out, transform .4s ease-out;min-width:280px;max-width:380px;}
+#up-next-card.show{transform:translateX(-50%) translateY(0);opacity:1;}
+#un-header{font-size:9px;letter-spacing:.2em;color:var(--color-gold);font-family:var(--font-mono);margin-bottom:8px;text-align:center;}
+#un-body{display:flex;align-items:center;gap:12px;}
+#un-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;font-family:var(--font-mono);color:#fff;flex-shrink:0;}
+#un-info{flex:1;min-width:0;}
+#un-name{font-size:14px;color:var(--color-gold);font-family:var(--font-mono);letter-spacing:.04em;margin-bottom:3px;}
+#un-meta{font-size:11px;color:rgba(255,200,120,.6);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* ── TOUR OVERLAY (2d.1) ── */
+#tour-overlay{position:fixed;top:24%;left:50%;transform:translateX(-50%);z-index:201;font-family:var(--font-mono);font-size:18px;letter-spacing:.08em;color:var(--color-gold);text-align:center;padding:12px 24px;background:rgba(4,2,6,.6);backdrop-filter:blur(4px);border-radius:6px;display:none;opacity:0;transition:opacity .5s ease;pointer-events:none;}
+#tour-overlay.show{opacity:1;}
+
 /* ── VIDEO CHAT OVERLAYS ── */
 #videochat-wrap{
   position:fixed;top:54px;right:14px;z-index:200;
@@ -406,6 +420,21 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
     <div class="qp-empty">No singers in queue.</div>
   </div>
 </div>
+
+<!-- Session 5 Part 2d.1 — Up Next card (transient inter-song surface) -->
+<div id="up-next-card">
+  <div id="un-header">UP NEXT</div>
+  <div id="un-body">
+    <div id="un-avatar"></div>
+    <div id="un-info">
+      <div id="un-name"></div>
+      <div id="un-meta"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Session 5 Part 2d.1 — 360° tour idle overlay (auto-triggered after 60s) -->
+<div id="tour-overlay">Select and start a song to sing next!</div>
 
 <!-- VIDEO CHAT TILES -->
 <div id="videochat-wrap"></div>
@@ -4978,6 +5007,8 @@ let currentQueueHead       = null;   // derived: row with participation_role='qu
 let _currentSongInstanceId = null;   // double-fire guard for doEnd() RPC trigger (set in ytPlaySong)
 let _stageRealtimeChannel  = null;   // Supabase realtime channel instance
 let _stageRealtimeChannelDeviceKey = null;
+let _idleTourTimer     = null;   // 60s timer handle for auto-tour
+let _idleTourTriggered = false;  // distinguishes auto-tour (with overlay) from manual tap
 
 let coordsDialogContext = null;
 
@@ -5427,6 +5458,102 @@ function renderSessionUI() {
       </div>
     `;
   }).join('');
+
+  evaluateIdleUI();
+}
+
+// Session 5 Part 2d.1 — idle UI driver (DECISION-AUDIT-3 + 4)
+// Single source of truth for Up Next card + 360° tour overlay state.
+// Called at the tail of renderSessionUI. Never directly invoked elsewhere.
+function evaluateIdleUI() {
+  const inSession = currentSession !== null;
+  const hasActive = currentActiveSinger !== null;
+  const hasQueue  = currentQueueHead !== null;
+
+  if (!inSession || hasActive) {
+    // Active singer present, or solo mode — clear all idle UI.
+    hideUpNextCard();
+    cancelIdleTourTimer();
+    hideTourOverlay();
+    return;
+  }
+
+  // No active singer.
+  if (hasQueue) {
+    // Queue head exists — show Up Next card, cancel idle timer.
+    showUpNextCard(currentQueueHead);
+    cancelIdleTourTimer();
+    hideTourOverlay();
+  } else {
+    // Empty queue — start 60s idle timer (idempotent).
+    hideUpNextCard();
+    startIdleTourTimer();
+  }
+}
+
+function showUpNextCard(participant) {
+  const card = document.getElementById('up-next-card');
+  if (!card) return;
+  const name       = participant.display_name || 'Unknown singer';
+  const songTitle  = participant.pre_selections?.song?.title  || '(no song selected)';
+  const songArtist = participant.pre_selections?.song?.artist || '';
+  const venueName  = participant.pre_selections?.venue?.name  || '';
+  const songLine   = songArtist ? songTitle + ' · ' + songArtist : songTitle;
+  const meta       = venueName  ? songLine + ' · ' + venueName    : songLine;
+
+  const avatar = document.getElementById('un-avatar');
+  avatar.className = avatarClassForName(name);
+  avatar.textContent = avatarInitialsForName(name);
+
+  document.getElementById('un-name').textContent = name;
+  document.getElementById('un-meta').textContent = meta;
+
+  card.style.display = 'flex';
+  card.style.flexDirection = 'column';
+  setTimeout(() => card.classList.add('show'), 10);
+}
+
+function hideUpNextCard() {
+  const card = document.getElementById('up-next-card');
+  if (!card) return;
+  card.classList.remove('show');
+  setTimeout(() => { card.style.display = 'none'; }, 400);
+}
+
+function startIdleTourTimer() {
+  if (_idleTourTimer !== null) return;  // idempotent
+  log('startIdleTourTimer: 60s tour timer started', 'info');
+  _idleTourTimer = setTimeout(() => {
+    _idleTourTimer = null;
+    _idleTourTriggered = true;
+    log('idle tour timer fired — starting venue tour', 'info');
+    showTourOverlay();
+    try { startVenueTour(); } catch (e) {
+      log('startVenueTour threw: ' + (e?.message || e), 'warn');
+    }
+  }, 60000);
+}
+
+function cancelIdleTourTimer() {
+  if (_idleTourTimer !== null) {
+    clearTimeout(_idleTourTimer);
+    _idleTourTimer = null;
+  }
+  _idleTourTriggered = false;
+}
+
+function showTourOverlay() {
+  const overlay = document.getElementById('tour-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'block';
+  setTimeout(() => overlay.classList.add('show'), 10);
+}
+
+function hideTourOverlay() {
+  const overlay = document.getElementById('tour-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('show');
+  setTimeout(() => { overlay.style.display = 'none'; }, 500);
 }
 
 function wireSessionLoad() {
