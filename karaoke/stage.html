@@ -4925,6 +4925,18 @@ drawStage();
 // RLS on venue_defaults + karaoke_venue_settings enforces the same admin
 // check server-side, so the UI gate is convenience, not security.
 let currentUserIsAdmin  = false;
+
+// Session 5 Part 2d.1 — session-aware state
+// Populated by refreshSessionState(); consumed by renderSessionUI() and event handlers.
+// In solo mode (no active session for this TV), all values stay at their defaults.
+let currentSession         = null;   // sessions row, or null
+let currentParticipants    = [];     // array of session_participants rows + display_name
+let currentActiveSinger    = null;   // derived: row with participation_role='active', or null
+let currentQueueHead       = null;   // derived: row with participation_role='queued' + lowest queue_position, or null
+let _currentSongInstanceId = null;   // double-fire guard for doEnd() RPC trigger (set in ytPlaySong)
+let _stageRealtimeChannel  = null;   // Supabase realtime channel instance
+let _stageRealtimeChannelDeviceKey = null;
+
 let coordsDialogContext = null;
 
 async function refreshAdminState() {
@@ -5192,6 +5204,61 @@ function wireAdminAuth() {
 }
 if (!wireAdminAuth()) {
   document.addEventListener('elsewhere:sb-ready', wireAdminAuth, { once: true });
+}
+
+// Session 5 Part 2d.1 — session-load wiring
+// Mirrors the existing wireAdminAuth pattern: auth-bound init, idempotent
+// re-run on auth changes, defensive try/catch with solo-mode fallback.
+//
+// In solo mode (no active session for this TV in DB), this function quietly
+// resets state and logs a console warning. Pre-Session-5 behavior preserved
+// verbatim per docs/SESSION-5-PART-2D-AUDIT.md DECISION-AUDIT-5.
+
+async function refreshSessionState() {
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!user) {
+    // Not signed in — solo mode (defensive; auth-bound init shouldn't reach here).
+    currentSession = null;
+    currentParticipants = [];
+    currentActiveSinger = null;
+    currentQueueHead = null;
+    renderSessionUI();
+    return;
+  }
+
+  let device_key = null;
+  try { device_key = localStorage.getItem('elsewhere.tv.device_key'); } catch (_) {}
+
+  if (!device_key) {
+    log('refreshSessionState: no device_key — solo mode', 'info');
+    currentSession = null;
+    currentParticipants = [];
+    currentActiveSinger = null;
+    currentQueueHead = null;
+    renderSessionUI();
+    return;
+  }
+
+  // Section 1.2 will fill this in with the real queries (sessions + participants).
+  // For section 1.1, this is just a wiring scaffold — confirms refreshSessionState
+  // fires on mount + auth change. State stays empty.
+  log('refreshSessionState: stub fired (queries land in section 1.2)', 'info');
+  renderSessionUI();
+}
+
+function renderSessionUI() {
+  // Section 1.5 will fill this in with queue list rendering.
+  // For section 1.1, this is just a stub.
+  log('renderSessionUI: stub called', 'info');
+}
+
+function wireSessionLoad() {
+  if (!window.elsewhere) return false;
+  window.elsewhere.onAuthChange(() => refreshSessionState());
+  return true;
+}
+if (!wireSessionLoad()) {
+  document.addEventListener('elsewhere:sb-ready', wireSessionLoad, { once: true });
 }
 
 // Session 4.10.3 / Session 5 Part 1c — wire exit_app listener. Helper in
