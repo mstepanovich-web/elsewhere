@@ -3710,6 +3710,7 @@ function ytPlaySong(videoId){
   }
 
   ytSongStartTime = Date.now();
+  _currentSongInstanceId = videoId + ':' + ytSongStartTime;
   log('ytPlaySong: start time recorded');
 
   // loadVideoById auto-plays — more reliable than cueVideoById+playVideo
@@ -3919,6 +3920,16 @@ function updL(le){
 }
 function updP(){const pct=Math.min(100,(elapsed/600)*100);document.getElementById('pf').style.width=pct+'%';sendMsg({type:'progress',pct,elapsed});}
 function doEnd(){
+  // Session 5 Part 2d.1 — double-fire guard (DECISION-AUDIT-7 B6)
+  // Claim the current song instance ID; return early if already claimed
+  // by a prior doEnd invocation for this same song.
+  const guardId = _currentSongInstanceId;
+  if (!guardId) {
+    log('doEnd: no song instance to claim — already handled', 'info');
+    return;
+  }
+  _currentSongInstanceId = null;
+
   document.getElementById('videochat-wrap').style.display='flex';
   const stack = new Error().stack.split('\n').slice(1,4).join(' | ');
   log('doEnd() called — elapsed:'+Math.round(elapsed)+'s | '+stack, 'warn');
@@ -3934,6 +3945,42 @@ function doEnd(){
   document.getElementById('ln').textContent='';
   resetPlay();
   setAmbientVolume(ambientVolume, 2); // restore ambient after song ends
+
+  // Session 5 Part 2d.1 — song-end RPC trigger (DECISION-AUDIT-1)
+  // Fire-and-forget; doesn't block the synchronous teardown above.
+  triggerSongEndRpc();
+}
+
+// Session 5 Part 2d.1 — song-end RPC trigger (DECISION-AUDIT-1 + 7 B5)
+// Async fire-and-forget helper called from doEnd. Doesn't block doEnd's
+// synchronous teardown. RPC handles atomic dual transition (active->audience,
+// queue head->active); publishers notify other listeners on the channel.
+async function triggerSongEndRpc() {
+  if (!currentSession) return;  // Solo mode — skip RPC.
+
+  let device_key = null;
+  try { device_key = localStorage.getItem('elsewhere.tv.device_key'); } catch (_) {}
+
+  try {
+    await window.sb.rpc('rpc_karaoke_song_ended', { p_session_id: currentSession.id });
+    log('triggerSongEndRpc: rpc_karaoke_song_ended succeeded for session ' + currentSession.id, 'info');
+
+    // Publish realtime events per DECISION-AUDIT-7 B5 (caller-side publishing).
+    if (device_key) {
+      try {
+        await window.publishParticipantRoleChanged(device_key, { session_id: currentSession.id });
+      } catch (e) {
+        log('triggerSongEndRpc: publishParticipantRoleChanged failed: ' + (e?.message || e), 'warn');
+      }
+      try {
+        await window.publishQueueUpdated(device_key, { session_id: currentSession.id });
+      } catch (e) {
+        log('triggerSongEndRpc: publishQueueUpdated failed: ' + (e?.message || e), 'warn');
+      }
+    }
+  } catch (e) {
+    log('triggerSongEndRpc: RPC failed: ' + (e?.message || e), 'warn');
+  }
 }
 
 // ═══════════════════════════════════════
@@ -4091,8 +4138,11 @@ const SINGER_URL = 'https://mstepanovich-web.github.io/elsewhere/karaoke/singer.
 
 function showWaitingScreen(){
   if (ARRIVED_VIA_QR) return; // phone already scanned QR from tv2.html
-  const singerLink = `${SINGER_URL}?code=${ROOM_CODE}`;
-  document.getElementById('idle-room-code').textContent = ROOM_CODE;
+  // Session 5 Part 2d.1 — room code override (DECISION-AUDIT-11)
+  // Use sessions.room_code when a session is loaded; URL fallback in solo mode.
+  const displayRoom = currentSession?.room_code || ROOM_CODE;
+  const singerLink = `${SINGER_URL}?code=${displayRoom}`;
+  document.getElementById('idle-room-code').textContent = displayRoom;
   document.getElementById('idle-panel').style.display = 'flex';
   drawQRToCanvas(document.getElementById('idle-qr-canvas'), singerLink);
 }
