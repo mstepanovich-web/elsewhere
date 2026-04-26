@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Elsewhere</title>
+<script type="module" src="shell/auth.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{min-height:100%;background:var(--color-bg);color:var(--color-text);font-family:var(--font-mono);}
+body{
+  display:flex;flex-direction:column;align-items:center;
+  padding:max(40px,env(safe-area-inset-top)) 20px max(40px,env(safe-area-inset-bottom));
+  visibility:hidden;
+}
+body.ready{visibility:visible;}
+
+.wordmark{
+  font-family:var(--font-mono);
+  font-size:var(--text-lg);
+  font-weight:300;
+  letter-spacing:var(--tracking-widest);
+  color:var(--color-gold);
+  text-transform:uppercase;
+  margin-top:24px;
+  margin-bottom:56px;
+}
+
+.content{
+  width:100%;
+  max-width:420px;
+  text-align:center;
+  flex:1;
+  display:flex;
+  flex-direction:column;
+}
+
+h1{
+  font-family:var(--font-display);
+  font-size:var(--text-2xl);
+  font-weight:400;
+  color:var(--color-text);
+  margin-bottom:16px;
+}
+
+.value-prop{
+  color:var(--color-text-dim);
+  font-size:var(--text-base);
+  line-height:1.5;
+  margin-bottom:48px;
+}
+
+.btn{
+  display:block;
+  width:100%;
+  padding:14px 20px;
+  margin-top:12px;
+  border-radius:var(--radius-md);
+  font-family:var(--font-mono);
+  font-size:var(--text-base);
+  font-weight:500;
+  text-align:center;
+  text-decoration:none;
+  cursor:pointer;
+  border:1px solid var(--color-border);
+  background:transparent;
+  color:var(--color-gold);
+  transition:background 0.15s,color 0.15s;
+}
+.btn-primary{
+  background:var(--color-gold);
+  color:var(--color-bg);
+  border-color:var(--color-gold);
+}
+.btn-primary:active{background:var(--color-gold-bright);}
+.btn:active{background:var(--color-gold-faint);}
+.btn.hidden{display:none;}
+
+.version{
+  font-family:var(--font-mono);
+  font-size:var(--text-xs);
+  letter-spacing:var(--tracking-wider);
+  color:var(--color-gold-dim);
+  margin-top:auto;
+  padding-top:40px;
+  align-self:center;
+}
+</style>
+</head>
+<body>
+<div class="wordmark">Elsewhere</div>
+
+<div class="content">
+  <h1>Welcome to Elsewhere</h1>
+  <p class="value-prop">Karaoke and games for your TV and phone.</p>
+
+  <button id="btn-back" class="btn btn-primary hidden" type="button">Go back to where you were</button>
+  <a id="btn-signup" class="btn" href="index.html?action=signup">Sign up for Elsewhere</a>
+</div>
+
+<div class="version">v2.100</div>
+
+<script>
+// Phase 1 NHHU placeholder home (per docs/KARAOKE-CONTROL-MODEL.md § 5.4).
+// Boot logic: wait for shell/auth.js, then either redirect HHU users to
+// index.html or reveal the placeholder for NHHU/anon users.
+
+function determineReturnUrl() {
+  let url = null;
+  try { url = sessionStorage.getItem('elsewhere.audience_return_url'); } catch (_) {}
+  if (!url && document.referrer) {
+    // Same-origin guard — never trust an off-site referrer as a return target.
+    try {
+      const ref = new URL(document.referrer);
+      if (ref.origin === location.origin) url = document.referrer;
+    } catch (_) {}
+  }
+  return url;
+}
+
+function wireBackButton() {
+  const btn = document.getElementById('btn-back');
+  const url = determineReturnUrl();
+  if (!url) return;
+  btn.classList.remove('hidden');
+  btn.addEventListener('click', () => {
+    try { sessionStorage.removeItem('elsewhere.audience_return_url'); } catch (_) {}
+    location.href = url;
+  });
+}
+
+function reveal() {
+  document.body.classList.add('ready');
+  wireBackButton();
+}
+
+function checkHHU() {
+  if (window.elsewhere?.isLikelyHouseholdMember?.()) {
+    location.replace('index.html');
+    return;
+  }
+  reveal();
+}
+
+function start() {
+  if (!window.elsewhere?.ready) { reveal(); return; }
+  window.elsewhere.ready.then(checkHHU).catch(() => reveal());
+}
+
+if (window.elsewhere?.ready) {
+  start();
+} else {
+  document.addEventListener('elsewhere:sb-ready', start, { once: true });
+}
+
+// Safety: if shell/auth.js fails to load entirely, reveal after 2s
+// so the user isn't stuck on a blank screen.
+setTimeout(() => {
+  if (!document.body.classList.contains('ready')) {
+    console.warn('[nhhu-home] auth init timeout; revealing placeholder');
+    reveal();
+  }
+}, 2000);
+</script>
+</body>
+</html>

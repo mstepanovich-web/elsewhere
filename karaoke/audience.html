@@ -239,7 +239,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <div id="song-title">Elsewhere</div>
   <div id="room-indicator" onclick="changeRoom()" style="display:none;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.4);cursor:pointer;padding:2px 6px;border:1px solid var(--color-border-dim);border-radius:4px;font-family:'DM Mono',monospace;" title="Tap to change room">Room: <span id="room-display">––––––</span></div>
   <div class="bi" id="wcount"></div>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);white-space:nowrap;">v2.99</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);white-space:nowrap;">v2.100</div>
 </div>
 <div id="prog"><div id="pf"></div></div>
 
@@ -307,7 +307,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     Works from anywhere in the world<br>
     The code is 6 characters · letters and numbers
   </div>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.99</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.100</div>
   <div id="https-notice" style="display:none;font-size:11px;color:rgba(255,120,80,.8);text-align:center;max-width:280px;line-height:1.8;border:1px solid rgba(255,120,80,.25);border-radius:6px;padding:10px 14px;">
     ⚠️ This app requires HTTPS to work on mobile.<br>
     Upload it to <strong>netlify.com/drop</strong> and open that link instead.
@@ -1059,37 +1059,50 @@ if (window.location.protocol === 'file:') {
     'File opened locally — streaming requires HTTPS. See the notice below.';
 }
 
-// 2c.3.2: Back-to-Elsewhere navigation. Mirrors singer.html's handler
-// (4.10.3 pattern): publishes exit_app so the TV can process audience
-// leaving cleanly, clears the sessionStorage TV bridge, then navigates
-// to Elsewhere home. Navigate-only per state model — no rpc_session_leave
-// call (audience exit is implicit; Phase 1 tolerates left_at=null rows,
-// see DEFERRED "Participant cleanup mechanism").
+// Back-to-Elsewhere navigation. Branches on user type per Karaoke
+// Control Model § 4.4: HHU users land on index.html (existing flow);
+// NHHU/anon users land on nhhu-home.html (placeholder Elsewhere home,
+// audience-to-NHHU conversion path — Phase 1 placeholder per § 5.4).
+//
+// HHU path mirrors singer.html's 4.10.3 pattern: publish exit_app so
+// the TV can process audience leaving cleanly, clear the sessionStorage
+// TV bridge, then navigate. Navigate-only per state model — no
+// rpc_session_leave call (audience exit is implicit; Phase 1 tolerates
+// left_at=null rows, see DEFERRED "Participant cleanup mechanism").
 async function handleBackToElsewhere() {
-  let device_key = null;
-  try { device_key = sessionStorage.getItem('elsewhere.active_tv.device_key'); } catch (_) {}
+  const isHHU = window.elsewhere?.isLikelyHouseholdMember?.() || false;
 
-  if (device_key) {
-    try {
-      await publishExitApp(device_key);
-    } catch (e) {
-      console.error('[elsewhere] exit_app publish failed:', e);
+  if (isHHU) {
+    let device_key = null;
+    try { device_key = sessionStorage.getItem('elsewhere.active_tv.device_key'); } catch (_) {}
+
+    if (device_key) {
+      try {
+        await publishExitApp(device_key);
+      } catch (e) {
+        console.error('[elsewhere] exit_app publish failed:', e);
+      }
+      try { sessionStorage.removeItem('elsewhere.active_tv.device_key'); } catch (_) {}
     }
-    try { sessionStorage.removeItem('elsewhere.active_tv.device_key'); } catch (_) {}
+
+    location.href = '../index.html';
+    return;
   }
 
-  location.href = '../index.html';
+  // NHHU/anon — store return URL + navigate to placeholder Elsewhere home
+  try { sessionStorage.setItem('elsewhere.audience_return_url', location.href); } catch (_) {}
+  location.href = '../nhhu-home.html';
 }
 
-// 2c.3.2: Back-to-Elsewhere visibility gating. Same pattern as
-// karaoke/singer.html and games/player.html — starts hidden, revealed
-// when isLikelyHouseholdMember() returns true. Wired via onAuthChange
-// so visibility reacts to mid-session sign-out.
+// Back-to-Elsewhere visibility. Per Karaoke Control Model § 4.4, all
+// audience users see the button (universal visibility); destination
+// differs by user type and is handled in handleBackToElsewhere. Helper
+// keeps the JS-driven reveal pattern from singer.html / games/player.html
+// for cross-file parity, but unconditionally reveals.
 function applyBackToElsewhereVisibility() {
   const btn = document.getElementById('back-to-elsewhere-btn');
   if (!btn) return;
-  const visible = window.elsewhere?.isLikelyHouseholdMember?.() || false;
-  btn.style.display = visible ? '' : 'none';
+  btn.style.display = '';
 }
 
 function wireBackToElsewhereVisibility() {
