@@ -5338,6 +5338,97 @@ if (!wireSessionLoad()) {
   document.addEventListener('elsewhere:sb-ready', wireSessionLoad, { once: true });
 }
 
+// Session 5 Part 2d.1 — realtime subscription wiring (DECISION-AUDIT-8)
+// Mirrors index.html's startHomeRealtimeSub/stopHomeRealtimeSub pattern
+// (lines 2487-2546). Idempotent start, explicit stop, three event handlers
+// on a single tv_device:<device_key> channel. All handlers re-query (no
+// payload parsing).
+//
+// Coexists with the existing wireExitAppListener channel — they're
+// independent sb.channel() instances on the same topic; server-side
+// multiplexing handles routing per DECISION-AUDIT-9.
+
+async function startStageRealtimeSub(device_key) {
+  if (!device_key) return;
+  if (!window.sb) return;
+
+  // Idempotent: same device_key → no-op.
+  if (_stageRealtimeChannel && _stageRealtimeChannelDeviceKey === device_key) return;
+
+  // Different device_key (multi-TV switch) → tear down first.
+  if (_stageRealtimeChannel) await stopStageRealtimeSub();
+
+  let channel = null;
+  try {
+    channel = window.sb.channel('tv_device:' + device_key);
+    channel.on('broadcast', { event: 'participant_role_changed' }, () => refreshSessionState());
+    channel.on('broadcast', { event: 'queue_updated' },            () => refreshSessionState());
+    channel.on('broadcast', { event: 'session_ended' },            () => handleSessionEnded());
+
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (!settled) { settled = true; reject(new Error('realtime subscribe timed out')); }
+      }, 5000);
+      channel.subscribe(status => {
+        if (settled) return;
+        if (status === 'SUBSCRIBED') {
+          settled = true; clearTimeout(timer); resolve();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          settled = true; clearTimeout(timer); reject(new Error('realtime ' + status));
+        }
+      });
+    });
+
+    _stageRealtimeChannel = channel;
+    _stageRealtimeChannelDeviceKey = device_key;
+    log('startStageRealtimeSub: subscribed to tv_device:' + device_key, 'info');
+  } catch (e) {
+    log('startStageRealtimeSub failed: ' + (e?.message || e) + ' — continuing without realtime', 'warn');
+    if (channel) {
+      try { window.sb.removeChannel(channel); } catch (_) {}
+    }
+    // Silent degradation — stage still works via cold path on next refreshSessionState.
+  }
+}
+
+async function stopStageRealtimeSub() {
+  if (!_stageRealtimeChannel) return;
+  try { await _stageRealtimeChannel.unsubscribe(); } catch (_) {}
+  try { window.sb.removeChannel(_stageRealtimeChannel); } catch (_) {}
+  _stageRealtimeChannel = null;
+  _stageRealtimeChannelDeviceKey = null;
+}
+
+// Session 5 Part 2d.1 — session_ended graceful teardown
+// (DECISION-AUDIT-10 Option B + DECISION-AUDIT-12)
+// On session_ended received via realtime:
+//   1. Send Agora 'session-ended' message so singer.html can react before its
+//      own session_ended subscription lands in 2e (DECISION-AUDIT-12).
+//   2. Call doEnd() to wind down any active song (DECISION-AUDIT-10 Option B).
+//   3. Tear down the realtime subscription explicitly.
+//   4. Navigate to tv2.html.
+
+async function handleSessionEnded() {
+  log('handleSessionEnded: session ended — tearing down stage', 'info');
+
+  // Migration-window grace for singer.html (singer.html patch lands in 1.8).
+  try { sendMsg({type:'session-ended'}); } catch (e) {
+    log('handleSessionEnded: Agora sendMsg failed (' + (e?.message || e) + ')', 'warn');
+  }
+
+  // Wind down any active song (no-op if no song is playing).
+  try { doEnd(); } catch (e) {
+    log('handleSessionEnded: doEnd() threw (' + (e?.message || e) + ')', 'warn');
+  }
+
+  // Clean up realtime subscription before navigating.
+  await stopStageRealtimeSub();
+
+  // Navigate back to apps grid.
+  location.href = '../tv2.html';
+}
+
 // Session 4.10.3 / Session 5 Part 1c — wire exit_app listener. Helper in
 // shell/realtime.js reads device_key from localStorage and waits for
 // window.elsewhere.ready internally. Called with our navigation target as
