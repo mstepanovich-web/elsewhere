@@ -5214,15 +5214,24 @@ if (!wireAdminAuth()) {
 // resets state and logs a console warning. Pre-Session-5 behavior preserved
 // verbatim per docs/SESSION-5-PART-2D-AUDIT.md DECISION-AUDIT-5.
 
+// Session 5 Part 2d.1 — solo-mode state reset (DECISION-AUDIT-8)
+// Centralizes the "back to no-session state" behavior, including realtime
+// teardown. Called from refreshSessionState's failure paths and from the
+// no-session legitimate path.
+async function resetSessionStateToSolo() {
+  currentSession = null;
+  currentParticipants = [];
+  currentActiveSinger = null;
+  currentQueueHead = null;
+  await stopStageRealtimeSub();
+  renderSessionUI();
+}
+
 async function refreshSessionState() {
   const user = window.elsewhere?.getCurrentUser?.();
   if (!user) {
     // Not signed in — solo mode (defensive; auth-bound init shouldn't reach here).
-    currentSession = null;
-    currentParticipants = [];
-    currentActiveSinger = null;
-    currentQueueHead = null;
-    renderSessionUI();
+    await resetSessionStateToSolo();
     return;
   }
 
@@ -5231,11 +5240,7 @@ async function refreshSessionState() {
 
   if (!device_key) {
     log('refreshSessionState: no device_key — solo mode', 'info');
-    currentSession = null;
-    currentParticipants = [];
-    currentActiveSinger = null;
-    currentQueueHead = null;
-    renderSessionUI();
+    await resetSessionStateToSolo();
     return;
   }
 
@@ -5248,21 +5253,13 @@ async function refreshSessionState() {
     tv = data;
   } catch (e) {
     log('refreshSessionState: tv_devices lookup failed (' + (e?.message || e) + ') — solo mode', 'warn');
-    currentSession = null;
-    currentParticipants = [];
-    currentActiveSinger = null;
-    currentQueueHead = null;
-    renderSessionUI();
+    await resetSessionStateToSolo();
     return;
   }
 
   if (!tv?.id) {
     log('refreshSessionState: tv_devices row not found — solo mode', 'info');
-    currentSession = null;
-    currentParticipants = [];
-    currentActiveSinger = null;
-    currentQueueHead = null;
-    renderSessionUI();
+    await resetSessionStateToSolo();
     return;
   }
 
@@ -5279,22 +5276,14 @@ async function refreshSessionState() {
     session = data;
   } catch (e) {
     log('refreshSessionState: sessions query failed (' + (e?.message || e) + ') — solo mode', 'warn');
-    currentSession = null;
-    currentParticipants = [];
-    currentActiveSinger = null;
-    currentQueueHead = null;
-    renderSessionUI();
+    await resetSessionStateToSolo();
     return;
   }
 
   if (!session) {
     // No active session — solo mode (legitimate state for direct-nav dev).
     log('refreshSessionState: no active session for this TV — solo mode', 'info');
-    currentSession = null;
-    currentParticipants = [];
-    currentActiveSinger = null;
-    currentQueueHead = null;
-    renderSessionUI();
+    await resetSessionStateToSolo();
     return;
   }
 
@@ -5320,6 +5309,10 @@ async function refreshSessionState() {
     .sort((a, b) => (a.queue_position ?? 999999) - (b.queue_position ?? 999999))[0] || null;
 
   log('refreshSessionState: session ' + session.id + ' loaded with ' + participants.length + ' participants', 'info');
+
+  // Subscribe to realtime events. Idempotent — no-op if already subscribed.
+  await startStageRealtimeSub(device_key);
+
   renderSessionUI();
 }
 
