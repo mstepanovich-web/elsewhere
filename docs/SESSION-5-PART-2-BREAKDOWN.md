@@ -4,6 +4,7 @@
 **Created:** 2026-04-23
 **Parent plan:** `docs/SESSION-5-PLAN.md` (commit `2b40313`)
 **Canonical state model:** [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md) (added 2026-04-24, commit `36353ca`). Parts 2c onward operate against the model defined there. Where this breakdown's older language conflicts with the state model, the state model wins.
+**Spec source for 2d/2e/2f:** [docs/KARAOKE-CONTROL-MODEL.md](./KARAOKE-CONTROL-MODEL.md) (added 2026-04-26, commit `b7d4e70`). 2d, 2e, and 2f scope is canonical against this doc.
 
 ## Context for the next session
 
@@ -35,7 +36,7 @@ Session 5 breaks into 5 parts. Part 1 (schema + RPCs + `shell/realtime.js` extra
 **Locked decisions:**
 
 - Back-to-Elsewhere = navigate only. Supersedes earlier breakdown language about `rpc_session_leave` + SELECT follow-up on Back tap. That design was rejected in favor of "navigate but stay in session" — matches the plan doc's "Back to Elsewhere behavior" cross-cutting decision.
-- Only managers see the Back-to-Elsewhere button. Hosts and participants are app-scoped and cannot navigate to Elsewhere home from inside an app.
+- Back-to-Elsewhere visibility is universal on participant pages — all audience users see the button (per Karaoke Control Model § 4.4). Destination differs by user type: HHU → post-login home; NHHU → placeholder Elsewhere home. (2b shipped with manager-only visibility; 2c.3.2 expanded to household members; control model expanded to all audience users.)
 - "Potential participant" is a derived UI state from `(control_role, participation_role, has_tv_device, proximity)`, NOT a new schema value.
 - Sessions always created on app-tile tap in Session 5; "no session" fallback in stage/tv.html is for dev/direct-nav only.
 - Object-payload signatures for Session 5 publishers (Part 2a convention).
@@ -97,7 +98,7 @@ Per [docs/PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md), the post-
 **Known acceptable carryover (not a 2c.x item):**
 - `.tv-remote-header`, `.tv-remote-household` CSS class names are reused on the unified home. Names are slightly anachronistic post-unification but pure aesthetic — no functional payoff to renaming. Leave as-is.
 
-**2c.3 — Active session relabeling + rejoin:** [IN PROGRESS]
+**2c.3 — Active session relabeling + rejoin:** ✓ SHIPPED
 
 Sub-split into 2c.3.1 and 2c.3.2 per pre-implementation audit.
 
@@ -163,71 +164,108 @@ Sub-split into 2c.3.1 and 2c.3.2 per pre-implementation audit.
 - Proximity at TV-connect, not per app launch
 - Tap behavior dispatches by user context at runtime; same UI for manager-rejoin and not-home-audience-join
 - Banner is inline (not modal); default mode is A while banner visible
-- Back-to-Elsewhere visibility = household membership status (revised from manager-only)
+- Back-to-Elsewhere visibility is universal (all audience users see the button); destination differs by user type per Karaoke Control Model § 4.4 (revised from 2c.3.2's household-member rule, which itself revised from 2b's manager-only)
 
 **Entry criteria:** 2b complete ✓ (commit `601d125`)
 **Exit criteria:** Single post-login home renders correctly across Modes A/B/C; proximity banner fires per the firing rule; "Don't show me again" persists; Proximity Settings menu item works; active sessions relabel matching tiles; rejoin works for all three contexts; cross-app switch prompts and works (and fails safely for non-managers); live updates via realtime subscriptions; Back-to-Elsewhere visible for household members on participant pages
 **Files touched:** `index.html`, `karaoke/singer.html`, `karaoke/audience.html`, `games/player.html`, new migration `db/012`, possibly `shell/preferences.js` (new helper module)
 **Rough commit count:** 3 (2c.1 + 2c.2 + 2c.3 split is the expected case)
 
-### 2d — karaoke/stage.html full session integration [PENDING]
+### 2d — karaoke/stage.html session integration [PENDING — re-scoped per Karaoke Control Model § 5.1]
 
-**Scope:**
-- Read active session on load via `sessions` query filtered by `tv_device_id`
-- Graceful fallback to pre-Session-5 solo mode if no session (dev/legacy only — production always has session via 2b)
-- Query + render participant list with queue positions, active singer highlighted
-- Subscribe to `participant_role_changed`, `queue_updated`, `session_ended`
-- On singer promotion (queued → active): load newly-promoted user's `pre_selections` (song, venue, costume) as initial stage state
-- Manager/host override UI: change venue mid-song, change costume mid-song, end song button (active singer → audience via `rpc_session_update_participant`)
+Sub-split into 2d.1 (read/display) + 2d.2 (write/interact, may collapse). Original single-sub-part scope included manager override UI on stage.html (change venue mid-song, change costume mid-song, end song button); per the Karaoke Control Model, those overrides moved entirely to the phone (singer.html, owned by Session Manager — see Karaoke Control Model § 4.2). Stage.html in 2d has minimal interactive surface.
+
+**2d.1 — Read/display (session-aware stage) [PENDING]:**
+
+- Session load on stage.html mount (per DECISION-1 from 2d audit: query by tv_device_id, URL fallback)
+- Graceful fallback to pre-Session-5 solo mode if no session (silent + log warning; dev/legacy only — production always has session via 2b)
+- Render queue panel (new bottom-right button + slide-out matching Comments panel pattern)
+- Subscribe to realtime events: `participant_role_changed`, `queue_updated`, `session_ended`
+- Active-singer highlight in queue (avatar ring + label per DECISION-4)
+- "Up Next" card display between songs (avatar + name + song + venue per DECISION-3)
+- Idle-state 360° venue tour with "Select and start a song" overlay
+- Read-only consumption of session state — no user inputs on stage.html mutate state
+
+Estimate: ~5 sections, ~2-2.5 hours.
+
+**2d.2 — Write/interact [PENDING — may collapse into 2d.1]:**
+
+- Pre-selections loading on promotion (when `participant_role_changed` indicates a queue→active transition, load that user's pre-selections as initial stage state)
+- End Session navigation (when `session_ended` fires, navigate stage.html back to tv2.html)
+- Reaction logic for skip/take-over events (manager-driven from phone; stage.html responds to resulting events)
+
+2d.2 may collapse into 2d.1 since stage.html has no direct user-input override controls under the new model. Decision deferred to 2d.1's pre-implementation audit.
 
 **Locked decisions:**
-- Venue/costume overrides mid-song update TV state, NOT the active singer's `pre_selections` (those are the starting state; once active, TV is the source of truth)
-- End song button sends active singer to audience, not queued
+- Manager override UI (venue/costume mid-song, end song) lives on phone, NOT stage.html (per Karaoke Control Model § 4.2)
+- End song button (manager-initiated, on phone) sends active singer to audience, not queued
+- Stage.html is read-only for user inputs
 
 **Entry criteria:** 2b complete (2c optional — they're independent)
-**Exit criteria:** Stage renders session state and queue; manager override works; pre-selections load on promotion; session events cause UI updates
+**Exit criteria:** Stage renders session state and queue; pre-selections load on promotion; session events cause UI updates; idle state shows venue tour with overlay
 **Files touched:** `karaoke/stage.html`
-**Rough commit count:** 1–2
+**Rough commit count:** 1-2 (one if 2d.2 collapses)
+**Spec source:** docs/KARAOKE-CONTROL-MODEL.md § 4.2 (stage.html UI surfaces) + § 5.1 (sub-split rationale)
 
-### 2e — karaoke/singer.html mode-aware [PENDING]
+### 2e — karaoke/singer.html role-aware [PENDING — re-scoped per Karaoke Control Model § 5.2]
+
+The largest remaining sub-part. Singer.html becomes role-aware per Karaoke Control Model § 4.1: tile rendering, controls visibility, and authority all branch on the user's session role (Active Singer / Available Singer queued / Available Singer not queued / Session Manager + role overlay).
 
 **Scope:**
-- On load, query own participant row; branch on `participation_role`:
-  - `active`: current behavior (live push to TV, same as pre-Session-5)
-  - `queued`: pre-selections save via `rpc_session_update_participant` (not live-pushed to TV); show queue position
-  - `audience`: redirect to `audience.html`
-- On promotion (queued → active via `participant_role_changed` event): switch modes, adopt current TV state
-- Manager/host external state changes: subscribe to `participant_role_changed`, reflect changes
-- Queue UI for managers: list of queued singers with pre_selections visible, promote-next button (calls `rpc_session_update_participant`)
-- Queued-singer self-drop: queued singers can flip themselves back to `participation_role='audience'` via `rpc_session_update_participant`. This is a role change, NOT `rpc_session_leave` — the user stays in the session. Matches the active-singer-finishes-song pattern.
+- Role detection on mount: query session state, determine current role across both axes (control + participation)
+- Conditional rendering of screen-home tiles based on role and queue membership state
+- "Take Stage" prompt when promoted to Active Singer (tap-to-confirm, removable, no countdown — per § 2)
+- Push notification ("You are up — click here to take the stage") when phone backgrounded during promotion
+- Available Singer queue position display
+- "Add to Queue" / "Update My Song" UX based on queue membership
+- Queue editing: Inactive Singer edits own entry (song / venue / costume / comments-toggle / remove)
+- Phone-side venue preview for non-active singers (currently TV-only)
+- Phone-side costume preview images for non-active singers
+- Session Manager queue management UI (reorder, remove, force-promote, skip current/next, take over)
+- Remove redundant "Leave" button from screen-home (Back-to-Elsewhere replaces it)
+- Restart, Pause, Stop, End-Song semantics per § 2 (Stop ≠ End Turn)
+- Manager override mechanism implementation — choose Option A/B/C in pre-implementation audit (see DEFERRED "Manager Override mechanism design")
+
+**Deferred from 2e (per Q-2B):**
+- Manager picks song/venue/costume/mic on behalf of Active Singer (helper-for-elderly-relative scenario) — captured in DEFERRED.
 
 **Locked decisions:**
 - Audience-role users on singer.html redirect to audience.html (not inline read-only state)
 - Pre-selections UI (song + venue + costume) all ship in Part 2 (existing UIs adapt; not net-new)
-- Queue UI is minimal functional (list + promote button); polished UX deferred
+- Active Singer is state-derived from `participation_role='active'` per § 2
+- Stop ≠ End Turn (Stop pauses; End Turn transitions to audience)
 
 **Entry criteria:** 2b + 2d complete (singer needs session-aware stage)
-**Exit criteria:** All 3 modes work; queued users pre-select without live push; manager can promote next; external state changes reflect
-**Files touched:** `karaoke/singer.html`
-**Rough commit count:** 1–2
+**Exit criteria:** All four roles render correctly on screen-home; "Take Stage" prompt fires on promotion; push notification works when backgrounded; manager queue management UI works; mid-song manager override works (transport mechanism per audit decision)
+**Files touched:** `karaoke/singer.html` (primary); possibly new push-notification helper module
+**Rough commit count:** 3-5 (large sub-part, multiple section commits expected)
+**Spec source:** docs/KARAOKE-CONTROL-MODEL.md § 4.1 (singer.html UI surfaces) + § 5.2 (work item list)
 
-### 2f — karaoke/audience.html session integration [PENDING]
+### 2f — karaoke/audience.html session integration [PENDING — significantly reduced per Karaoke Control Model § 5.3]
+
+**Scope reduced under audience.html freeze decision** (Karaoke Control Model § 4.3 + § 5.5). Audience.html receives no new features in Session 5; new audience-experience features build into the unified app post-Session-5. Original 2f scope (read-only spectator with `rpc_session_join('audience')`, queue display) was largely landed in 2c.3.2's audience.html Back-to-Elsewhere wiring. What remains:
 
 **Scope:**
-- On load: `rpc_session_join(session_id, 'audience')`
-- Hide picker UIs entirely (not greyed — hidden)
-- Subscribe to `participant_role_changed`, `queue_updated`, `session_ended`
-- Read-only spectator display of current stage state
-- Audience exit is implicit. Closing the phone app or navigating away does NOT fire any RPC. Audience rows remain with `left_at = null` until a future cleanup mechanism runs. Ghost audience count is an accepted Phase 1 trade-off — see DEFERRED "Participant cleanup mechanism" for the eventual solution.
+- Verify audience.html still functions correctly with new session lifecycle (regression test: arrival via deep link, session_ended navigation, realtime resilience)
+- Update Back-to-Elsewhere visibility rule from "HHU only" to "all audience users" (small change to `isLikelyHouseholdMember()` gating in audience.html — removes the household-membership filter on the existing pill, lands the universal-visibility rule from Karaoke Control Model § 4.4)
+- Bug fixes only beyond this
+
+2f may not need a dedicated implementation pass. Could land as part of 2e's verification work or as a small standalone commit.
+
+**Deferred from 2f (per audience.html freeze):**
+- Audience read-only queue display (waits for unified-app migration — DEFERRED)
+- Audience venue/costume browsing for marketing (waits for unified-app migration — DEFERRED)
+- Audience-to-NHHU conversion path full funnel (Phase 1 placeholder may ship; full conversion post-Session-5 — DEFERRED)
 
 **Locked decisions:**
-- Audience is fully read-only: NO song/venue/costume picker (hidden, not greyed)
-- Audience back-to-Elsewhere button deferred (separate DEFERRED entry)
+- Audience.html is frozen for Session 5 (bug fixes only; no new features)
+- Back-to-Elsewhere now visible for all audience users (decoupled visibility from destination — household lands on home, NHHU lands on placeholder)
 
 **Entry criteria:** 2b complete (independent of 2d/2e)
-**Exit criteria:** `audience.html` joins as audience; stays in sync; read-only
+**Exit criteria:** audience.html regression-clean; Back-to-Elsewhere visibility rule update lands without breaking the existing pill behavior
 **Files touched:** `karaoke/audience.html`
-**Rough commit count:** 1
+**Rough commit count:** 0-1 (may collapse into 2e verification)
+**Spec source:** docs/KARAOKE-CONTROL-MODEL.md § 4.3 (audience.html freeze) + § 4.4 (Back-to-Elsewhere visibility) + § 5.3 (sub-part scope)
 
 ## Dependency graph
 
@@ -277,9 +315,7 @@ No user-facing "Leave session" button. Exits happen via:
 
 ### Back-to-Elsewhere button visibility
 
-Only managers see the Back-to-Elsewhere navigation button in `karaoke/singer.html` and `games/player.html`. Hosts and regular participants do not — they are app-scoped, meaning they can navigate within the app (songs, games) but cannot leave to Elsewhere home without going through a manager-initiated flow (end session, inactivity, admin reclaim).
-
-This informs 2e (singer.html) and the Part 2 audience flow (2f): the Back button's DOM presence is conditional on `control_role === 'manager'`.
+All audience users see the Back-to-Elsewhere button on participant pages. Destination differs by user type — household members land on the post-login home; NHHU lands on a placeholder Elsewhere home (audience-to-NHHU conversion path). Canonical treatment lives in `docs/PHONE-AND-TV-STATE-MODEL.md` § "Back-to-Elsewhere navigation" and `docs/KARAOKE-CONTROL-MODEL.md` § 4.4.
 
 ### Non-manager exit semantics
 
@@ -318,7 +354,7 @@ These decisions are locked. Don't revisit unless a concrete problem surfaces in 
 - 10-min orphan threshold flat across apps (not per-app tunable in Phase 1)
 - Object-payload signatures for Session 5 publishers
 - Back-to-Elsewhere is navigate-only, no `rpc_session_leave` call (supersedes earlier "SELECT follow-up on Back tap" design)
-- Only managers see the Back-to-Elsewhere button
+- Back-to-Elsewhere visibility is universal (all audience users see the button); destination differs by user type — settled per Karaoke Control Model § 4.4
 - "Potential participant" is derived UI state, not a schema value
 - Non-manager exits use role transitions or implicit accumulation, never `rpc_session_leave` in Session 5 Part 2
 
