@@ -205,7 +205,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.99</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.100</div>
 </div>
 
 <!-- HOME -->
@@ -215,7 +215,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.99</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.100</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -638,6 +638,7 @@ async function doJoin(){
     await publishMic();
     sendToStage({type:'mic-connected',roomCode});
     log('mic-connected sent to stage', 'ok');
+    setupPushNotifications().catch(e => log('Push setup error: ' + e.message, 'warn'));
     showScreen('screen-home');
     showToast('Connected to stage ✓');
   }catch(e){
@@ -1787,6 +1788,66 @@ function toggleSingerLog(){
 }
 
 document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#home-body,#aud-list,#singer-venue-grid,#singer-dbg,#stage-venue-grid,#screen-costume,#singer-costume-grid,#singer-deepar-grid,#perf-costume-grid,#perf-deepar-grid,#perf-costume-overlay')) e.preventDefault();},{passive:false});
+
+// ── Push notifications (2e.0) ──
+// Wired only when running inside the iOS Capacitor shell. In a regular
+// browser, isNativePlatform() returns false and we skip silently.
+// Called from doJoin() after a successful Agora connect, so the iOS
+// permission prompt only appears for users who have committed to a
+// session — not for casual visitors to the page.
+async function setupPushNotifications() {
+  if (!window.Capacitor?.isNativePlatform?.()) {
+    log('Push: not native — skipping', 'info');
+    return;
+  }
+  let PushNotifications;
+  try {
+    ({ PushNotifications } = await import('@capacitor/push-notifications'));
+  } catch (e) {
+    log('Push: plugin import failed: ' + e.message, 'warn');
+    return;
+  }
+
+  // Wire listeners FIRST so we don't miss the registration event.
+  PushNotifications.addListener('registration', async (token) => {
+    log('Push: token received', 'ok');
+    try {
+      const { error } = await window.sb.rpc('rpc_register_push_token', {
+        p_device_token: token.value,
+        p_platform: 'ios',
+        p_apns_environment: 'sandbox'
+      });
+      if (error) log('Push: rpc_register_push_token failed: ' + error.message, 'err');
+      else log('Push: token registered with Supabase', 'ok');
+    } catch (e) {
+      log('Push: rpc_register_push_token threw: ' + e.message, 'err');
+    }
+  });
+  PushNotifications.addListener('registrationError', (err) => {
+    log('Push: registration error: ' + JSON.stringify(err), 'err');
+  });
+  PushNotifications.addListener('pushNotificationReceived', (notif) => {
+    log('Push received (foreground): ' + (notif?.title || '') + ' — ' + (notif?.body || ''), 'info');
+    // TODO 2e.1+: react to foreground notifications (e.g., promotion to Active Singer)
+  });
+  PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+    log('Push tapped: ' + (action?.notification?.title || '') + ' — ' + (action?.notification?.body || ''), 'info');
+    // TODO 2e.1+: route taps to the appropriate screen (e.g., screen-performing)
+  });
+
+  // Now ask permission. Triggers iOS prompt the first time only.
+  try {
+    const permResult = await PushNotifications.requestPermissions();
+    if (permResult.receive === 'granted') {
+      await PushNotifications.register();
+      log('Push: register() called — waiting for token from APNs', 'ok');
+    } else {
+      log('Push: permission ' + permResult.receive, 'warn');
+    }
+  } catch (e) {
+    log('Push: requestPermissions/register threw: ' + e.message, 'err');
+  }
+}
 
 // ── Session 4.10.3: Back-to-Elsewhere ──
 // Tapped from the top-right pill button. Publishes exit_app on the
