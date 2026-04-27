@@ -205,7 +205,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.100</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.101</div>
 </div>
 
 <!-- HOME -->
@@ -215,7 +215,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.100</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.101</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -1800,14 +1800,14 @@ async function setupPushNotifications() {
     log('Push: not native — skipping', 'info');
     return;
   }
-  let PushNotifications;
-  try {
-    ({ PushNotifications } = await import('@capacitor/push-notifications'));
-  } catch (e) {
-    log('Push: plugin import failed: ' + e.message, 'warn');
+  // Capacitor exposes plugins on the global window.Capacitor.Plugins object.
+  // Reading directly avoids ESM bare-specifier resolution, which doesn't work
+  // for runtime imports in WKWebView without a bundler.
+  const PushNotifications = window.Capacitor?.Plugins?.PushNotifications;
+  if (!PushNotifications) {
+    log('Push: PushNotifications plugin not registered on Capacitor.Plugins', 'warn');
     return;
   }
-
   // Wire listeners FIRST so we don't miss the registration event.
   PushNotifications.addListener('registration', async (token) => {
     log('Push: token received', 'ok');
