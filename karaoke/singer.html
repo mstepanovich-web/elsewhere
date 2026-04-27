@@ -205,7 +205,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.101</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.102</div>
 </div>
 
 <!-- HOME -->
@@ -215,7 +215,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.101</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.102</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -577,6 +577,18 @@ let cdInterval=null, cdCount=3, cdPaused=false;
 let perfPaused=false;
 let recognition=null, voiceActive=false;
 
+// Session 5 Part 2e.1 — session-aware state (mirrors stage.html pattern)
+// Populated by refreshSessionState(); consumed by renderSessionUI() and event handlers.
+// In legacy mode (no auth or no session row), all values stay at their defaults.
+let currentSession        = null;   // sessions row, or null
+let currentParticipants   = [];     // array of session_participants rows + display_name
+let currentMyRow          = null;   // derived: my own participants row, or null
+let currentActiveSinger   = null;   // derived: row with participation_role='active', or null
+let currentQueueHead      = null;   // derived: row with participation_role='queued' + lowest queue_position
+let _singerRealtimeChannel = null;  // Supabase realtime channel instance
+let _singerRealtimeChannelDeviceKey = null;
+let _authChangeWired = false;       // G3: onAuthChange listener wired once per page load
+
 // ── SCREENS ──
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -639,6 +651,60 @@ async function doJoin(){
     sendToStage({type:'mic-connected',roomCode});
     log('mic-connected sent to stage', 'ok');
     setupPushNotifications().catch(e => log('Push setup error: ' + e.message, 'warn'));
+
+    // Session 5 Part 2e.1 — session join (resolves Hard Blocker B1)
+    // Look up the session by room_code, call rpc_session_join, populate state.
+    // On any failure: legacy single-singer mode (no role-aware UI). Mirrors
+    // stage.html's solo-mode fallback per DECISION-AUDIT-5/8.
+    try {
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) {
+        log('Session: not signed in — legacy mode', 'info');
+      } else if (!window.sb) {
+        log('Session: supabase client unavailable — legacy mode', 'warn');
+      } else {
+        const { data: sessRow, error: sessErr } = await window.sb
+          .from('sessions')
+          .select('id')
+          .eq('room_code', raw)
+          .is('ended_at', null)
+          .maybeSingle();
+        if (sessErr) throw sessErr;
+        if (!sessRow?.id) {
+          log('Session: no active session found for room_code ' + raw + ' — legacy mode', 'info');
+        } else {
+          const { error: joinErr } = await window.sb.rpc('rpc_session_join', {
+            p_session_id: sessRow.id,
+            p_participation_role: 'audience'
+          });
+          if (joinErr) throw joinErr;
+          log('Session: joined session ' + sessRow.id + ' as audience', 'ok');
+          await refreshSessionState();
+        }
+      }
+    } catch (e) {
+      // 23505 = already a participant (unique-violation on session_participants_one_active_per_user).
+      // Common on page refresh: re-running doJoin re-attempts rpc_session_join when the row already
+      // exists. Mirror index.html:3083-3086 — treat as success and refresh state from the existing row.
+      if (e && e.code === '23505') {
+        log('Session: already a participant (page refresh) — refreshing state', 'info');
+        try { await refreshSessionState(); }
+        catch (e2) { log('Session: refreshSessionState after 23505 failed (' + (e2?.message || e2) + ') — legacy mode', 'warn'); }
+      } else {
+        log('Session: rpc_session_join failed (' + (e?.message || e) + ') — legacy mode', 'warn');
+      }
+    }
+
+    // Session 5 Part 2e.1 — G3: retry refreshSessionState on auth changes.
+    // Handles the cold-start race where currentUser isn't populated yet when
+    // doJoin runs (e.g. slow IndexedDB on iOS). onAuthChange fires once
+    // immediately with the current state, then on every sign-in/out. Wired
+    // once per page load; refreshSessionState is idempotent.
+    if (!_authChangeWired && window.elsewhere?.onAuthChange) {
+      window.elsewhere.onAuthChange(() => refreshSessionState());
+      _authChangeWired = true;
+    }
+
     showScreen('screen-home');
     showToast('Connected to stage ✓');
   }catch(e){
@@ -686,9 +752,9 @@ async function sendToStage(obj){
     log('sendToStage ERROR: '+e.message+' type='+obj.type, 'err');
   }
 }
-function handleStageMsg(msg){
+async function handleStageMsg(msg){
   if(msg.type==='song-ended'){ muteMic(); showScreen('screen-home'); }
-  if(msg.type==='session-ended'){ muteMic(); showScreen('screen-home'); }
+  if(msg.type==='session-ended'){ muteMic(); showScreen('screen-home'); await resetSessionStateToLegacy(); }
   if(msg.type==='progress'){ document.getElementById('perf-prog-fill').style.width=(msg.pct||0)+'%'; }
 }
 
@@ -1789,6 +1855,54 @@ function toggleSingerLog(){
 
 document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#home-body,#aud-list,#singer-venue-grid,#singer-dbg,#stage-venue-grid,#screen-costume,#singer-costume-grid,#singer-deepar-grid,#perf-costume-grid,#perf-deepar-grid,#perf-costume-overlay')) e.preventDefault();},{passive:false});
 
+// Session 5 Part 2e.1 — role-aware UI rendering.
+// Mounts/updates a #role-banner div as the first child of #home-body. Banner is
+// hidden in legacy mode and for active singers (their UX is the song-card flow);
+// visible for queued + audience. DOM creation is lazy + idempotent — subsequent
+// calls just update text content and visibility on the existing node.
+function renderQueuePositionText() {
+  // Compute position from sorted queued sub-array. Queue is ordered by
+  // queue_position ascending (matches stage.html and the FIFO assignment in
+  // db/009 rpc_session_join). Defensive fallbacks return the placeholder
+  // string for the (unexpected) cases where currentMyRow is missing or not
+  // queued — caller (renderSessionUI) only invokes this when role==='queued',
+  // so the happy path always returns the formatted "#N of M".
+  if (!currentMyRow || currentMyRow.participation_role !== 'queued') {
+    return 'You are queued — waiting for your turn';
+  }
+  const queued = currentParticipants
+    .filter(p => p.participation_role === 'queued')
+    .sort((a, b) => (a.queue_position ?? 999999) - (b.queue_position ?? 999999));
+  const idx = queued.indexOf(currentMyRow);
+  if (idx < 0) return 'You are queued — waiting for your turn';
+  return "You're #" + (idx + 1) + ' of ' + queued.length + ' in line';
+}
+
+function renderSessionUI() {
+  const homeBody = document.getElementById('home-body');
+  if (!homeBody) return;
+
+  let banner = document.getElementById('role-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'role-banner';
+    banner.style.cssText = 'padding:10px 12px;margin-bottom:10px;border-radius:8px;border:1px solid var(--color-border);background:var(--color-bg-soft,rgba(255,200,120,.04));font-family:var(--font-mono);font-size:12px;letter-spacing:.04em;color:var(--color-gold-dim);';
+    homeBody.insertBefore(banner, homeBody.firstChild);
+  }
+
+  const role = currentMyRow?.participation_role;
+  if (role === 'queued') {
+    banner.textContent = renderQueuePositionText();
+    banner.style.display = '';
+  } else if (role === 'audience') {
+    banner.textContent = '👁  Watching from the audience';
+    banner.style.display = '';
+  } else {
+    // null (legacy), 'active' (uses song-card UX), or unknown role — hidden.
+    banner.style.display = 'none';
+  }
+}
+
 // ── Push notifications (2e.0) ──
 // Wired only when running inside the iOS Capacitor shell. In a regular
 // browser, isNativePlatform() returns false and we skip silently.
@@ -1847,6 +1961,174 @@ async function setupPushNotifications() {
   } catch (e) {
     log('Push: requestPermissions/register threw: ' + e.message, 'err');
   }
+}
+
+// Session 5 Part 2e.1 — Supabase realtime subscription (mirrors stage.html pattern)
+// Singer subscribes to the same tv_device:<device_key> channel that stage.html publishes
+// to. All event handlers re-query via refreshSessionState (no payload parsing).
+// Coexists with stage.html's subscription on the same topic; server-side multiplexing
+// handles routing per DECISION-AUDIT-9.
+async function startSingerRealtimeSub(device_key) {
+  if (!device_key) return;
+  if (!window.sb) return;
+
+  // Idempotent: same device_key → no-op.
+  if (_singerRealtimeChannel && _singerRealtimeChannelDeviceKey === device_key) return;
+
+  // Different device_key (rare for singer; would require room-code change) → tear down first.
+  if (_singerRealtimeChannel) await stopSingerRealtimeSub();
+
+  let channel = null;
+  try {
+    channel = window.sb.channel('tv_device:' + device_key);
+    channel.on('broadcast', { event: 'participant_role_changed' }, () => refreshSessionState());
+    channel.on('broadcast', { event: 'queue_updated' },            () => refreshSessionState());
+    channel.on('broadcast', { event: 'session_ended' },            () => {
+      // 2d.1 already wires session_ended via Agora handleStageMsg. This realtime path
+      // is a backup for the case where Agora is up but the singer missed the message
+      // (e.g. backgrounded). Cold-path refresh will detect ended_at IS NOT NULL and
+      // route to legacy mode.
+      refreshSessionState();
+    });
+
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (!settled) { settled = true; reject(new Error('realtime subscribe timed out')); }
+      }, 5000);
+      channel.subscribe(status => {
+        if (settled) return;
+        if (status === 'SUBSCRIBED') {
+          settled = true; clearTimeout(timer); resolve();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          settled = true; clearTimeout(timer); reject(new Error('realtime ' + status));
+        }
+      });
+    });
+
+    _singerRealtimeChannel = channel;
+    _singerRealtimeChannelDeviceKey = device_key;
+    log('startSingerRealtimeSub: subscribed to tv_device:' + device_key, 'info');
+  } catch (e) {
+    log('startSingerRealtimeSub failed: ' + (e?.message || e) + ' — continuing without realtime', 'warn');
+    if (channel) {
+      try { window.sb.removeChannel(channel); } catch (_) {}
+    }
+    // Silent degradation — singer still works via cold path on next refreshSessionState.
+  }
+}
+
+async function stopSingerRealtimeSub() {
+  if (!_singerRealtimeChannel) return;
+  try { await _singerRealtimeChannel.unsubscribe(); } catch (_) {}
+  try { window.sb.removeChannel(_singerRealtimeChannel); } catch (_) {}
+  _singerRealtimeChannel = null;
+  _singerRealtimeChannelDeviceKey = null;
+}
+
+// Session 5 Part 2e.1 — legacy-mode state reset (mirrors stage.html resetSessionStateToSolo)
+// Centralizes the "back to no-session state" behavior. Called from refreshSessionState's
+// failure paths and from the no-session legitimate path.
+async function resetSessionStateToLegacy() {
+  currentSession = null;
+  currentParticipants = [];
+  currentMyRow = null;
+  currentActiveSinger = null;
+  currentQueueHead = null;
+  await stopSingerRealtimeSub();
+  renderSessionUI();
+}
+
+// Session 5 Part 2e.1 — session state cold-path refresh
+// Queries DB for the latest session truth and populates module state. Differs from
+// stage.html's refreshSessionState because singer looks up the session by room_code
+// (the Agora channel ID, already in module-scope `roomCode`), not by device_key.
+async function refreshSessionState() {
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!user) {
+    log('refreshSessionState: not signed in — legacy mode', 'info');
+    await resetSessionStateToLegacy();
+    return;
+  }
+  if (!window.sb) {
+    log('refreshSessionState: supabase client unavailable — legacy mode', 'warn');
+    await resetSessionStateToLegacy();
+    return;
+  }
+  if (!roomCode) {
+    log('refreshSessionState: no roomCode yet — legacy mode', 'info');
+    await resetSessionStateToLegacy();
+    return;
+  }
+
+  // Look up the session by room_code (must be still active).
+  let session = null;
+  try {
+    const { data, error } = await window.sb
+      .from('sessions')
+      .select('id, app, manager_user_id, admission_mode, capacity, room_code, started_at, current_state, tv_device_id')
+      .eq('room_code', roomCode)
+      .is('ended_at', null)
+      .maybeSingle();
+    if (error) throw error;
+    session = data;
+  } catch (e) {
+    log('refreshSessionState: sessions query failed (' + (e?.message || e) + ') — legacy mode', 'warn');
+    await resetSessionStateToLegacy();
+    return;
+  }
+
+  if (!session) {
+    log('refreshSessionState: no active session for room_code ' + roomCode + ' — legacy mode', 'info');
+    await resetSessionStateToLegacy();
+    return;
+  }
+
+  // Look up tv_devices.device_key for realtime subscription. Singer needs the same
+  // tv_device:<device_key> topic that stage.html publishes to.
+  let device_key = null;
+  try {
+    const { data, error } = await window.sb
+      .from('tv_devices')
+      .select('device_key')
+      .eq('id', session.tv_device_id)
+      .maybeSingle();
+    if (error) throw error;
+    device_key = data?.device_key || null;
+  } catch (e) {
+    log('refreshSessionState: tv_devices lookup failed (' + (e?.message || e) + ') — partial state', 'warn');
+    // Continue without realtime; cold-path-only refresh.
+  }
+
+  // Participants via the existing RPC (db/013).
+  let participants = [];
+  try {
+    const { data, error } = await window.sb
+      .rpc('rpc_session_get_participants', { p_session_id: session.id });
+    if (error) throw error;
+    participants = data || [];
+  } catch (e) {
+    log('refreshSessionState: rpc_session_get_participants failed (' + (e?.message || e) + ') — partial state', 'warn');
+    participants = [];
+  }
+
+  // Populate state.
+  currentSession = session;
+  currentParticipants = participants;
+  currentMyRow = participants.find(p => p.user_id === user.id) || null;
+  currentActiveSinger = participants.find(p => p.participation_role === 'active') || null;
+  currentQueueHead = participants
+    .filter(p => p.participation_role === 'queued')
+    .sort((a, b) => (a.queue_position ?? 999999) - (b.queue_position ?? 999999))[0] || null;
+
+  log('refreshSessionState: session ' + session.id + ' loaded with ' + participants.length + ' participants; my role=' + (currentMyRow?.participation_role || 'none'), 'info');
+
+  // Subscribe to realtime events. Idempotent — no-op if already subscribed.
+  if (device_key) {
+    await startSingerRealtimeSub(device_key);
+  }
+
+  renderSessionUI();
 }
 
 // ── Session 4.10.3: Back-to-Elsewhere ──
