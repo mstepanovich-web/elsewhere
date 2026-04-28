@@ -205,7 +205,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.107</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.108</div>
 </div>
 
 <!-- HOME -->
@@ -215,7 +215,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.107</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.108</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -644,7 +644,7 @@ async function doJoin(){
     },3000);
     await initMic();
     await publishMic();
-    sendToStage({type:'mic-connected',roomCode});
+    if (roleAllowsStageSignals()) sendToStage({type:'mic-connected',roomCode});
     log('mic-connected sent to stage', 'ok');
     setupPushNotifications().catch(e => log('Push setup error: ' + e.message, 'warn'));
 
@@ -1147,7 +1147,7 @@ function toggleDeepAREffect(eff){
   if(wasActive){
     // Deactivate
     delete activeDeepARSlots[eff.slot];
-    sendToStage({ type:'set-deepar-effect', slot:eff.slot, url:null });
+    if (roleAllowsStageSignals()) sendToStage({ type:'set-deepar-effect', slot:eff.slot, url:null });
   } else {
     // Deactivate previous in same slot
     const prevId = activeDeepARSlots[eff.slot];
@@ -1156,7 +1156,7 @@ function toggleDeepAREffect(eff){
       if(prevCard){ prevCard.style.borderColor='var(--color-white-soft)'; prevCard.style.background='var(--color-white-ghost)'; }
     }
     activeDeepARSlots[eff.slot] = eff.id;
-    sendToStage({ type:'set-deepar-effect', slot:eff.slot, url:eff.url });
+    if (roleAllowsStageSignals()) sendToStage({ type:'set-deepar-effect', slot:eff.slot, url:eff.url });
   }
   // Update card highlight
   const card = document.getElementById('dar-card-'+eff.id);
@@ -1170,7 +1170,7 @@ function toggleDeepAREffect(eff){
 
 function clearAllDeepAREffects(){
   Object.keys(activeDeepARSlots).forEach(slot=>delete activeDeepARSlots[slot]);
-  sendToStage({ type:'clear-deepar-effects' });
+  if (roleAllowsStageSignals()) sendToStage({ type:'clear-deepar-effects' });
   // Rebuild grid to clear highlights
   const activeGrid = document.getElementById('singer-deepar-grid') || document.getElementById('perf-deepar-grid');
   if(activeGrid) buildDeepARGrid(activeGrid.id);
@@ -1200,14 +1200,14 @@ function singerToggleAccessory(id){
   if(singerActiveAccessories.has(id)) singerActiveAccessories.delete(id);
   else singerActiveAccessories.add(id);
   syncAllCostumeGrids();
-  sendToStage({ type:'toggle-accessory', id, active: singerActiveAccessories.has(id) });
+  if (roleAllowsStageSignals()) sendToStage({ type:'toggle-accessory', id, active: singerActiveAccessories.has(id) });
   log('sendToStage toggle-accessory: '+id+' active:'+singerActiveAccessories.has(id), 'info');
 }
 
 function sendClearAllAccessories(){
   singerActiveAccessories.clear();
   syncAllCostumeGrids();
-  sendToStage({ type:'clear-accessories' });
+  if (roleAllowsStageSignals()) sendToStage({ type:'clear-accessories' });
 }
 
 function buildCostumeGrid(gridId, cardPrefix){
@@ -1263,13 +1263,13 @@ async function doSearch(){
   document.getElementById('srch-result-list').innerHTML='<div class="empty">Searching...</div>';
 
   saveRecent(q);
-  sendToStage({type:'tv-search',query:q,results:[]});
+  if (roleAllowsStageSignals()) sendToStage({type:'tv-search',query:q,results:[]});
 
   if(YT_API_KEY==='YOUR_YOUTUBE_API_KEY'){
     const demos=buildDemos();
     lastSearchResults=demos;
     renderResults(demos);
-    sendToStage({type:'tv-search',query:q,results:demos});
+    if (roleAllowsStageSignals()) sendToStage({type:'tv-search',query:q,results:demos});
     return;
   }
   try{
@@ -1300,7 +1300,7 @@ async function doSearch(){
     }
     lastSearchResults=filtered;
     renderResults(filtered);
-    sendToStage({type:'tv-search',query:q,results:filtered});
+    if (roleAllowsStageSignals()) sendToStage({type:'tv-search',query:q,results:filtered});
   }catch(e){ document.getElementById('srch-result-list').innerHTML='<div class="empty">Search failed — check connection</div>'; }
 }
 
@@ -1326,7 +1326,7 @@ function renderResults(items){
         <div class="res-title" style="white-space:normal;line-height:1.3;font-size:13px;">${escH(cleanedTitle)}</div>
       </div>
       <div style="font-size:16px;color:var(--color-border);">›</div>`;
-    el.onclick=()=>{ sendToStage({type:'tv-result-highlight',index:i}); selectResult(r); };
+    el.onclick=()=>{ if (roleAllowsStageSignals()) sendToStage({type:'tv-result-highlight',index:i}); selectResult(r); };
     c.appendChild(el);
   });
 }
@@ -1343,7 +1343,7 @@ async function selectResult(r){
   showScreen('screen-home');
   showToast('Loading lyrics...');
   syncedLyrics=await fetchLyrics(r.title, r.artist);
-  sendToStage({type:'song-select',videoId:r.videoId,title:r.title,artist:r.artist,thumb:r.thumb||'',lyrics:syncedLyrics,isDemo:r.videoId.startsWith('d')});
+  if (roleAllowsStageSignals()) sendToStage({type:'song-select',videoId:r.videoId,title:r.title,artist:r.artist,thumb:r.thumb||'',lyrics:syncedLyrics,isDemo:r.videoId.startsWith('d')});
   if(syncedLyrics.length > 0) showToast('✓ '+syncedLyrics.length+' lyric lines loaded');
   else { showToast('⚠️ No lyrics found'); document.getElementById('song-artist').textContent=(r.artist||'')+' · No lyrics'; }
 }
@@ -1406,7 +1406,7 @@ function clearSearch(){
   document.getElementById('srch-result-list').style.display='none';
   renderRecent();
   inp.focus();
-  sendToStage({type:'tv-search-clear'});
+  if (roleAllowsStageSignals()) sendToStage({type:'tv-search-clear'});
 }
 // ── COUNTDOWN ──
 function goToCountdown(){
@@ -1680,7 +1680,7 @@ function showStageOverlay(){
         const card = document.createElement('div');
         card.style.cssText = `padding:12px 8px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid ${v.id===currentVenueId?'var(--color-gold-dim)':'var(--color-white-soft)'};background:${v.id===currentVenueId?'var(--color-gold-faint)':'var(--color-white-ghost)'};-webkit-user-select:none;position:relative;`;
         card.innerHTML = `
-          <div style="font-size:24px;margin-bottom:4px;">${v.icon}</div>
+          <img src="../venues/${v.id}.jpg" style="width:100%;height:60px;object-fit:cover;border-radius:6px;margin-bottom:6px;display:block;" alt="${v.name}" onerror="this.style.display='none'">
           <div style="font-size:10px;color:rgba(255,220,150,.8);font-family:var(--font-mono);letter-spacing:.04em;">${v.name}</div>
           ${v.skyboxId ? `<div class="btn-360-singer" onclick="event.stopPropagation();requestVenueTour('${v.id}')" style="position:absolute;top:5px;right:5px;font-size:8px;font-family:var(--font-mono);font-weight:bold;color:var(--color-gold-dim);border:1px solid var(--color-border);border-radius:4px;padding:1px 4px;background:rgba(0,0,0,0.3);letter-spacing:0.04em;">360°</div>` : ''}
         `;
@@ -1704,9 +1704,9 @@ function requestVenueTour(venueId){
   if(v && currentVenueId !== venueId){
     selectVenue(v);
     // Small delay to let venue load before tour starts
-    setTimeout(()=>{ sendToStage({type:'venue-tour'}); }, 3500);
+    setTimeout(()=>{ if (roleAllowsStageSignals()) sendToStage({type:'venue-tour'}); }, 3500);
   } else {
-    sendToStage({type:'venue-tour'});
+    if (roleAllowsStageSignals()) sendToStage({type:'venue-tour'});
   }
   showToast('360° tour ▶');
   hideStageOverlay();
@@ -1715,7 +1715,7 @@ function requestVenueTour(venueId){
 function selectVenue(v){
   currentVenueId = v.id;
   document.getElementById('stage-venue-sub').textContent = v.name;
-  sendToStage({type:'set-venue', venueId:v.id});
+  if (roleAllowsStageSignals()) sendToStage({type:'set-venue', venueId:v.id});
   log('Venue selected: '+v.name, 'ok');
   showToast('Stage: '+v.name);
   // Re-render to show gold highlight on selected venue — stay open until X tapped
@@ -1762,11 +1762,12 @@ function setVenuePreviewView(view){
     singerTab.style.color = 'rgba(255,220,150,.4)';
   }
   // Tell stage to switch view
-  sendToStage({type:'set-view', view});
+  if (roleAllowsStageSignals()) sendToStage({type:'set-view', view});
   log('Venue preview: '+view, 'info');
 }
 
 function sendVenuePan(delta){
+  if (!roleAllowsStageSignals()) return;
   if(venuePreviewView==='singer') sendToStage({type:'singer-pan', delta});
   else sendToStage({type:'venue-pan', delta});
 }
@@ -2161,6 +2162,31 @@ async function refreshSessionState() {
   }
 
   renderSessionUI();
+}
+
+/**
+ * §5: Gate for stage-bound preview/browse signals.
+ *
+ * Active Singer owns the TV stage. Queued and Audience-eligible users
+ * browsing on phone must NOT pollute the stage with their previews.
+ *
+ * Returns true for: Active Singer (any sub-state), Way 1 fallback
+ * (no session, legacy behavior preserved).
+ * Returns false for: Queued, Audience.
+ *
+ * Wraps every non-deliberate stage-modification signal: tv-search,
+ * tv-result-highlight, song-select, set-deepar-effect, toggle-accessory,
+ * set-venue, venue-pan, set-view, mic-connected, etc.
+ *
+ * NOT wrapped (only reachable from Active code paths anyway):
+ * start-countdown, lyrics-*, perf-screen pan/zoom, song-ended.
+ *
+ * NOT wrapped (deliberate stage-altering features available to all roles):
+ * video-chat-open/close, home-screen toggle-comments.
+ */
+function roleAllowsStageSignals() {
+  if (!currentMyRow) return true;  // Way 1 / legacy fallback
+  return currentMyRow.participation_role === 'active';
 }
 
 /**
