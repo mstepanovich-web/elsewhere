@@ -205,7 +205,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.105</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.106</div>
 </div>
 
 <!-- HOME -->
@@ -215,7 +215,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.105</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.106</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -2215,16 +2215,86 @@ async function doSelfRoleUpdate(updates) {
   }
 }
 
-// §2: Primary CTA dispatcher. Routes by current role + state.
-// Real behavior wired in §3 (Add to Queue / Update / Start Song /
-// Start Performance) and §6 (Take Stage modal flow).
-function handleHomePrimaryCTA() {
+// §3: Primary CTA dispatcher — routes by role + session state.
+// Branches:
+//   • Way 1 fallback (no role): goToCountdown directly (legacy).
+//   • active:                   goToCountdown (no DB write — already in slot).
+//   • queued:                   commit song update to own row, stay on home.
+//   • audience + idle stage:    promote self to active, go to countdown.
+//   • audience + busy stage:    insert self into queue, stay on home.
+// "Idle stage" = queue empty AND no active singer (heuristic per audit).
+// Realtime subscription refreshes the banner / button label after success.
+async function handleHomePrimaryCTA() {
   const role = currentMyRow?.participation_role;
-  const hasSong = !!(currentMyRow?.pre_selections?.song);
-  log('handleHomePrimaryCTA stub — role=' + role + ' hasSong=' + hasSong);
-  // §3 will dispatch: queued+hasSong → update song; audience+empty queue →
-  // start song; audience+queue or live song → add to queue;
-  // active → start performance (existing goToCountdown)
+  const hasSong = !!selectedVideo;
+
+  // Way 1 fallback — no session, no DB. Preserve legacy behavior.
+  if (!role) {
+    log('handleHomePrimaryCTA: legacy fallback → goToCountdown');
+    goToCountdown();
+    return;
+  }
+
+  // Active pre-song — confirm ready, no DB write needed.
+  if (role === 'active') {
+    log('handleHomePrimaryCTA: active → goToCountdown');
+    goToCountdown();
+    return;
+  }
+
+  // Remaining branches (queued / audience) require a selected song to commit.
+  // Defensive — button should be hidden by renderSessionUI when no song is
+  // picked yet, but guard anyway.
+  if (!hasSong) {
+    log('handleHomePrimaryCTA: aborted — no selectedVideo');
+    showToast('Pick a song first');
+    return;
+  }
+
+  if (role === 'queued') {
+    log('handleHomePrimaryCTA: queued → updating song');
+    const result = await doSelfRoleUpdate({ pre_selections: { song: selectedVideo } });
+    if (result.ok) {
+      showToast('Song updated ✓');
+    } else {
+      showToast("Couldn't update song — try again");
+    }
+    return;
+  }
+
+  if (role === 'audience') {
+    const queueEmpty  = currentParticipants.filter(p => p.participation_role === 'queued').length === 0;
+    const songPlaying = currentActiveSinger != null;
+    const canStartImmediately = queueEmpty && !songPlaying;
+
+    if (canStartImmediately) {
+      log('handleHomePrimaryCTA: audience → going active immediately');
+      const result = await doSelfRoleUpdate({
+        participation_role: 'active',
+        pre_selections:     { song: selectedVideo },
+      });
+      if (result.ok) {
+        goToCountdown();
+      } else {
+        showToast("Couldn't start — try again");
+      }
+    } else {
+      log('handleHomePrimaryCTA: audience → adding to queue');
+      const result = await doSelfRoleUpdate({
+        participation_role: 'queued',
+        pre_selections:     { song: selectedVideo },
+      });
+      if (result.ok) {
+        showToast('Added to queue ✓');
+        // Realtime subscription will re-render banner + button label.
+      } else {
+        showToast("Couldn't join queue — try again");
+      }
+    }
+    return;
+  }
+
+  log('handleHomePrimaryCTA: unknown role=' + role + ' — no-op');
 }
 
 // §2: Leave Queue stub. Wired to doSelfRoleUpdate in §4.
