@@ -112,6 +112,10 @@ Phantom/aspirational venues don't stay in the JSON — if there's no `.jpg` in `
 ### Theme system
 `elsewhere-theme.css` is the single source of truth for colors, fonts, spacing, radii, z-index. Every HTML file links it (mostly via the absolute GitHub Pages URL `https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css` so the deployed pages get the live theme). New UI should reach for `var(--color-*)`, `var(--font-*)`, `var(--text-*)`, `var(--tracking-*)`, `var(--radius-*)` etc. instead of hardcoding values. Per-product overrides ride on body classes (e.g. `theme-worlds`, `theme-movies`). An unused `theme-fashion` class is still defined in the stylesheet — left in place because `archive/fashion` references it; no live page uses it.
 
+## Doctrine
+
+- **`participation_role` enum overload is intentional.** The schema (`db/008`) defines `participation_role` as `'active'` / `'queued'` / `'audience'`. The `'audience'` value is overloaded by surface: on `karaoke/singer.html` it means "Available Singer (not queued)"; on `karaoke/audience.html` it means "watching only." The schema doesn't distinguish because eligibility (HHU + at-home + has-TV) is enforced **upstream** by the Elsewhere shell's gate on the Karaoke tile — never stored in the DB. By the time a user has a `participation_role` row, eligibility is implicit from the path that got them there. See `docs/SESSION-5-PART-2E-MODEL-AUDIT.md` for the full audit and `docs/KARAOKE-CONTROL-MODEL.md:42-49` for the canonical four-role mapping. **Future reviewers who see the audience-overload should fix the surface render, not split the enum.**
+
 ## Conventions worth knowing
 
 - **Versioning.** Every page renders a `v2.NN` badge (search for `v2.88` to find them all). The convention from git history is: every commit bumps the version and every page that has the badge gets updated together — feature commits use `[vX.YY]` in the subject, e.g. `feat: 'Join as manager' checkbox on join screen [v2.88]`. When you ship a change, bump every `v2.NN` string in files you touched and any peer files that share the badge.
