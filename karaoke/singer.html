@@ -205,7 +205,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.104</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.105</div>
 </div>
 
 <!-- HOME -->
@@ -215,7 +215,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.104</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.105</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -225,7 +225,8 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
       <div id="song-title">No song selected</div>
       <div id="song-artist">Search to pick a song</div>
       <div style="margin-top:12px;">
-        <div class="btn primary" id="start-btn" onclick="goToCountdown()" style="display:none;">▶ Start Performance</div>
+        <div class="btn primary" id="start-btn" onclick="handleHomePrimaryCTA()" style="display:none;"></div>
+        <div id="leave-queue-link" onclick="handleLeaveQueueTap()" style="display:none; margin-top:8px; font-size:12px; color:rgba(255,200,120,.5); text-align:center; cursor:pointer; text-decoration:underline;">🚪 Leave Queue</div>
       </div>
     </div>
 
@@ -248,11 +249,6 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
         <div class="ac-sub" id="home-mute-sub">Tap to unmute</div>
       </div>
 
-      <!-- Home -->
-      <div class="action-card" onclick="window.location.href='https://mstepanovich-web.github.io/elsewhere/tv2.html'">
-        <div class="ac-label">⌂ Home</div>
-        <div class="ac-sub">Switch mode</div>
-      </div>
       <!-- Invite -->
       <div class="action-card" onclick="doInvite()">
         <div class="ac-icon">📨</div>
@@ -1875,7 +1871,7 @@ function renderQueuePositionText() {
     .sort((a, b) => (a.queue_position ?? 999999) - (b.queue_position ?? 999999));
   const idx = queued.indexOf(currentMyRow);
   if (idx < 0) return 'You are queued — waiting for your turn';
-  return "You're #" + (idx + 1) + ' of ' + queued.length + ' in line';
+  return 'Queued — #' + (idx + 1) + ' of ' + queued.length;
 }
 
 function renderSessionUI() {
@@ -1905,6 +1901,37 @@ function renderSessionUI() {
   } else {
     // null (legacy), 'active' (uses song-card UX), or unknown role — hidden.
     banner.style.display = 'none';
+  }
+
+  // §2: Drive #start-btn (label + visibility) and #leave-queue-link by role.
+  // Doctrine: every 'audience' user on singer.html is by construction
+  // eligible (HHU + at-home + has-TV gated upstream). No client-side
+  // eligibility check — see db/008 doctrine note.
+  const startBtn  = document.getElementById('start-btn');
+  const leaveLink = document.getElementById('leave-queue-link');
+
+  if (role === 'active') {
+    if (startBtn)  { startBtn.textContent = '▶ Start Performance'; startBtn.style.display = 'block'; }
+    if (leaveLink) { leaveLink.style.display = 'none'; }
+  } else if (role === 'queued') {
+    if (startBtn)  { startBtn.textContent = '✏️ Update My Song'; startBtn.style.display = 'block'; }
+    if (leaveLink) { leaveLink.style.display = 'block'; }
+  } else if (role === 'audience') {
+    if (startBtn) {
+      if (!currentActiveSinger && !currentQueueHead) {
+        startBtn.textContent = '▶ Start Song';        // idle stage — start now
+      } else {
+        startBtn.textContent = '➕ Add to Queue';     // someone performing or queue waiting
+      }
+      startBtn.style.display = 'block';
+    }
+    if (leaveLink) { leaveLink.style.display = 'none'; }
+  } else {
+    // Legacy / Way 1 fallback. Visibility is controlled by selectResult();
+    // we only reset the label so a stale role-aware text doesn't persist
+    // (e.g. user disconnected mid-session).
+    if (startBtn)  { startBtn.textContent = '▶ Start Performance'; }
+    if (leaveLink) { leaveLink.style.display = 'none'; }
   }
 }
 
@@ -2186,6 +2213,24 @@ async function doSelfRoleUpdate(updates) {
     log('selfUpdate EXCEPTION: ' + e.message);
     return { ok: false, error: e.message };
   }
+}
+
+// §2: Primary CTA dispatcher. Routes by current role + state.
+// Real behavior wired in §3 (Add to Queue / Update / Start Song /
+// Start Performance) and §6 (Take Stage modal flow).
+function handleHomePrimaryCTA() {
+  const role = currentMyRow?.participation_role;
+  const hasSong = !!(currentMyRow?.pre_selections?.song);
+  log('handleHomePrimaryCTA stub — role=' + role + ' hasSong=' + hasSong);
+  // §3 will dispatch: queued+hasSong → update song; audience+empty queue →
+  // start song; audience+queue or live song → add to queue;
+  // active → start performance (existing goToCountdown)
+}
+
+// §2: Leave Queue stub. Wired to doSelfRoleUpdate in §4.
+function handleLeaveQueueTap() {
+  log('handleLeaveQueueTap stub — would call doSelfRoleUpdate');
+  // §4: confirm dialog, then doSelfRoleUpdate({participation_role: 'audience'})
 }
 
 // ── Session 4.10.3: Back-to-Elsewhere ──
