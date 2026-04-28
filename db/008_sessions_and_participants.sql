@@ -10,6 +10,15 @@
 --
 -- See docs/SESSION-5-PLAN.md commit 2b40313 for the full architectural plan.
 --
+-- Doctrine note (2026-04-27, see docs/SESSION-5-PART-2E-MODEL-AUDIT.md):
+-- participation_role is karaoke-shaped ('active'/'queued'/'audience').
+-- 'audience' is intentionally overloaded by surface — singer.html reads it
+-- as "Available Singer (not queued)"; audience.html reads it as "watching
+-- only". The schema does not distinguish because eligibility (HHU + at-home
+-- + has-TV) is enforced UPSTREAM by the Elsewhere shell's gate on the
+-- Karaoke tile, never stored in this table. See KARAOKE-CONTROL-MODEL.md
+-- :42-49. Future reviewers: fix surface render, don't split the enum.
+--
 -- Tables created:
 --   • sessions              — one row per active session on a given TV
 --   • session_participants  — one row per user per session
