@@ -205,7 +205,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.103</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.104</div>
 </div>
 
 <!-- HOME -->
@@ -215,7 +215,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.103</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.104</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -2134,6 +2134,58 @@ async function refreshSessionState() {
   }
 
   renderSessionUI();
+}
+
+/**
+ * Update the caller's own session_participants row.
+ *
+ * Used by 2e.2 self-write actions (add/update queue, leave queue,
+ * voluntary active->audience). Does NOT handle cross-user mutations
+ * (manager queue management — that's 2e.3).
+ *
+ * NOTE: rpc_session_update_participant REPLACES pre_selections (not merge).
+ * This helper merges client-side at the top level so callers can update
+ * one of {song, venue, costume} without clobbering the others.
+ *
+ * @param {Object} updates - any subset of:
+ *   { participation_role: 'queued'|'audience'|'active',
+ *     pre_selections: { song?, venue?, costume? } }
+ * @returns {Promise<{ok: boolean, error?: string}>}
+ *
+ * Defensive: returns {ok:false, error:'no-session'} (without throwing)
+ * when no session loaded (Way 1 fallback) or sb/currentUser unavailable.
+ */
+async function doSelfRoleUpdate(updates) {
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!currentSession || !window.sb || !user) {
+    log('selfUpdate: no session/auth, skipping (Way 1 fallback)');
+    return { ok: false, error: 'no-session' };
+  }
+  try {
+    const params = {
+      p_session_id: currentSession.id,
+      p_user_id: user.id,
+    };
+    if (updates.participation_role !== undefined) {
+      params.p_participation_role = updates.participation_role;
+    }
+    if (updates.pre_selections !== undefined) {
+      // DB REPLACES, not merges — merge at top level here so callers
+      // can update one of {song, venue, costume} without clobbering others.
+      const existing = currentMyRow?.pre_selections || {};
+      params.p_pre_selections = { ...existing, ...updates.pre_selections };
+    }
+    const { data, error } = await window.sb.rpc('rpc_session_update_participant', params);
+    if (error) {
+      log('selfUpdate FAILED: ' + error.message);
+      return { ok: false, error: error.message };
+    }
+    log('selfUpdate OK: ' + JSON.stringify(updates));
+    return { ok: true };
+  } catch (e) {
+    log('selfUpdate EXCEPTION: ' + e.message);
+    return { ok: false, error: e.message };
+  }
 }
 
 // ── Session 4.10.3: Back-to-Elsewhere ──
