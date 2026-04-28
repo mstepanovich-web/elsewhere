@@ -205,7 +205,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.108</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.109</div>
 </div>
 
 <!-- HOME -->
@@ -215,7 +215,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.108</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.109</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -584,6 +584,12 @@ let currentQueueHead      = null;   // derived: row with participation_role='que
 let _singerRealtimeChannel = null;  // Supabase realtime channel instance
 let _singerRealtimeChannelDeviceKey = null;
 let _authChangeWired = false;       // G3: onAuthChange listener wired once per page load
+
+// §6a: Take Stage modal audio cue. Pre-loaded so the chime is ready when
+// the first promotion fires. Absolute URL to match the existing sound /
+// theme convention on this page (deployed pages need stable absolute paths).
+const takeStageAudio = new Audio('https://mstepanovich-web.github.io/elsewhere/sounds/ui/take-stage.mp3');
+takeStageAudio.preload = 'auto';
 
 // ── SCREENS ──
 function showScreen(id){
@@ -2346,6 +2352,58 @@ async function handleLeaveQueueTap() {
   }
 }
 
+/**
+ * §6a: Show the Take Stage modal with audio cue + vibration.
+ *
+ * Idempotent — calling while already shown is a no-op (audio doesn't
+ * re-fire). Caller is responsible for ensuring the right user is being
+ * prompted; this function does not validate role state.
+ *
+ * @param {Object} target - { display_name?: string, user_id?: string }
+ */
+function showTakeStageModal(target) {
+  const modal = document.getElementById('take-stage-modal');
+  if (!modal) {
+    log('showTakeStageModal: modal DOM missing');
+    return;
+  }
+  if (modal.style.display !== 'none' && modal.style.display !== '') {
+    log('showTakeStageModal: already visible, no-op');
+    return;
+  }
+  log('showTakeStageModal: showing for ' + (target?.display_name || target?.user_id || 'unknown'));
+  const nameEl = document.getElementById('take-stage-singer-name');
+  if (nameEl) {
+    nameEl.textContent = target?.display_name || 'Singer';
+  }
+  modal.style.display = 'flex';
+  // Audio (best-effort; autoplay generally allowed since user has already
+  // gestured during the join flow).
+  try {
+    takeStageAudio.currentTime = 0;
+    takeStageAudio.play().catch(e => log('takeStageAudio play failed: ' + e.message));
+  } catch (e) {
+    log('takeStageAudio threw: ' + e.message);
+  }
+  // Vibration (no-op on desktop / iOS Safari, fine on Android Chrome).
+  try {
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]);
+  } catch (e) {
+    // silent
+  }
+}
+
+/**
+ * §6a: Dismiss modal and advance to screen-home.
+ * Section 2 role-aware logic shows the right CTA from there.
+ */
+function dismissTakeStageModal() {
+  const modal = document.getElementById('take-stage-modal');
+  if (modal) modal.style.display = 'none';
+  log('Take Stage modal dismissed → screen-home');
+  showScreen('screen-home');
+}
+
 // ── Session 4.10.3: Back-to-Elsewhere ──
 // Tapped from the top-right pill button. Publishes exit_app on the
 // tv_device:<device_key> realtime channel so the TV returns to apps
@@ -2395,6 +2453,10 @@ if (!wireBackToElsewhereVisibility()) {
   document.addEventListener('elsewhere:sb-ready', wireBackToElsewhereVisibility, { once: true });
 }
 
+// §6a: Expose modal show/dismiss for console testing before §6b realtime hookup.
+window.showTakeStageModal = showTakeStageModal;
+window.dismissTakeStageModal = dismissTakeStageModal;
+
 </script>
 
 <!-- Debug log panel -->
@@ -2404,6 +2466,15 @@ if (!wireBackToElsewhereVisibility()) {
     <div onclick="toggleSingerLog()" style="font-size:16px;cursor:pointer;color:rgba(255,200,120,.5);padding:2px 8px;">✕</div>
   </div>
   <div id="singer-dbg" style="flex:1;overflow-y:auto;font-family:var(--font-mono);-webkit-overflow-scrolling:touch;padding:4px 10px;"></div>
+</div>
+
+<!-- §6a: Take Stage modal — fires on promotion to active role.
+     Full-screen overlay; tap anywhere to dismiss + advance to screen-home. -->
+<div id="take-stage-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:9999; background:rgba(0,0,0,0.92); flex-direction:column; align-items:center; justify-content:center; padding:20px; text-align:center; cursor:pointer;" onclick="dismissTakeStageModal()">
+  <div style="font-size:64px; margin-bottom:24px;">🎤</div>
+  <div id="take-stage-singer-name" style="font-family:var(--font-mono); font-size:14px; color:rgba(255,200,120,.7); margin-bottom:8px; letter-spacing:.15em; text-transform:uppercase;"></div>
+  <div style="font-size:48px; color:var(--color-gold-dim); margin-bottom:40px; letter-spacing:.02em; font-weight:300;">YOU'RE UP!</div>
+  <div class="btn primary" style="font-size:18px; padding:16px 32px; pointer-events:none;">Tap to take the stage</div>
 </div>
 
 <!-- Session 4.10.3 + 2c.3.2: Back-to-Elsewhere button (top-right).
