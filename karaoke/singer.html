@@ -95,6 +95,13 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
 .mq-arrow{width:36px;height:30px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--color-gold-dim);background:var(--color-gold-ghost);border:1px solid var(--color-border-dim);border-radius:6px;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;transition:all .15s;}
 .mq-arrow:active{background:var(--color-gold-faint);}
 .mq-arrow.disabled{opacity:.25;cursor:not-allowed;pointer-events:none;}
+.mq-actions-reorder{display:flex;flex-direction:column;gap:4px;}
+.mq-actions-cross{display:flex;flex-direction:column;gap:4px;margin-top:6px;}
+.mq-action-btn{padding:5px 10px;font-size:10px;letter-spacing:.06em;font-family:var(--font-mono);border:1px solid var(--color-border-dim);border-radius:6px;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;text-align:center;min-width:72px;transition:all .15s;}
+.mq-action-btn.promote{color:var(--color-gold);background:var(--color-gold-ghost);border-color:var(--color-gold-soft);}
+.mq-action-btn.promote:active{background:var(--color-gold-faint);}
+.mq-action-btn.remove{color:rgba(196,122,107,.85);background:rgba(196,122,107,.08);border-color:rgba(196,122,107,.4);}
+.mq-action-btn.remove:active{background:rgba(196,122,107,.18);}
 
 /* SEARCH */
 #screen-search{overflow:hidden;}
@@ -232,7 +239,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.113</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.114</div>
 </div>
 
 <!-- HOME -->
@@ -242,7 +249,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.113</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.114</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -2418,8 +2425,12 @@ function renderManageQueueList() {
 
     const position = isActive ? 'NOW' : isQueued ? '#' + (p.queue_position ?? '?') : '';
     const badge    = isActive ? 'ACTIVE' : isQueued ? 'QUEUED' : '';
-    const actionsHtml = isQueued
+    const reorderHtml = isQueued
       ? renderQueueActionsHtml(p, queuedIndexById.get(p.user_id) ?? -1, queuedCount)
+      : '';
+    const crossHtml = renderCrossActionsHtml(p);
+    const actionsHtml = (reorderHtml || crossHtml)
+      ? `<div class="mq-actions">${reorderHtml}${crossHtml}</div>`
       : '';
 
     return `
@@ -2448,7 +2459,7 @@ function renderQueueActionsHtml(p, queuedIndex, queuedCount) {
   const downDisabled = queuedIndex >= queuedCount - 1;
   const userIdAttr   = encodeURIComponent(p.user_id);
   return `
-    <div class="mq-actions">
+    <div class="mq-actions-reorder">
       <div class="mq-arrow${upDisabled ? ' disabled' : ''}"
            ${upDisabled ? '' : `onclick="handleQueueArrowTap('${userIdAttr}','up')"`}
            role="button" aria-label="Move up">▲</div>
@@ -2560,6 +2571,169 @@ async function handleQueueArrowTap(user_id_encoded, direction) {
   if (!result.ok && result.error !== 'at-edge') {
     showToast('Could not reorder');
   }
+}
+
+// 2e.3.1 §4: render the cross-user action buttons (Promote, Remove).
+// Promote applies to queued AND schema-audience rows. On singer.html
+// (HHU-eligible by construction), schema-audience rows are Available Singers.
+// Remove applies only to queued rows. Returns empty string for active rows.
+function renderCrossActionsHtml(p) {
+  const role = p.participation_role;
+  const isQueued = role === 'queued';
+  // On singer.html (HHU-eligible by construction), schema-audience rows are
+  // Available Singers. Promote applies; Remove does not.
+  const isSchemaAudience = role === 'audience';
+  if (!isQueued && !isSchemaAudience) return '';
+  const userIdAttr = encodeURIComponent(p.user_id);
+  return `
+    <div class="mq-actions-cross">
+      <div class="mq-action-btn promote"
+           onclick="handleQueuePromoteTap('${userIdAttr}')"
+           role="button">Promote</div>
+      ${isQueued ? `<div class="mq-action-btn remove"
+           onclick="handleQueueRemoveTap('${userIdAttr}')"
+           role="button">Remove</div>` : ''}
+    </div>
+  `;
+}
+
+// 2e.3.1 §4: manager force-promotes a queued or schema-audience user to
+// active. Approach A (single-write, no displacement) per §4 lock — if the
+// session already has an active singer, the RPC raises errcode '55000'
+// "session at capacity" and we surface a guidance toast directing the
+// manager to skip the current song first. Take-over is the Skip→Promote
+// workflow (Skip lands in §5).
+//
+// Inline RPC (not via doCrossUserRoleUpdate) so we can branch on errcode
+// '55000'. The §1 helper returns only error.message for RPC failures, so
+// errcode access requires either a contract change to the helper (rejected
+// in §4 review) or inline RPC call. Inlined here. Auth/self-target guards
+// duplicated from the helper for defensive parity.
+async function handleQueuePromoteTap(user_id_encoded) {
+  const user_id = decodeURIComponent(user_id_encoded);
+  const target = currentParticipants.find(p => p.user_id === user_id);
+  if (!target) {
+    log('promoteTap: target not in currentParticipants', 'warn');
+    return;
+  }
+  const targetName = target.display_name || 'this singer';
+
+  if (!confirm(`Promote ${targetName} to active singer?`)) {
+    log('promoteTap: user cancelled');
+    return;
+  }
+
+  // Inline RPC. Auth + self-target guards mirror doCrossUserRoleUpdate's
+  // defensive shape. We don't re-route through the helper because we need
+  // error.code (specifically '55000' for capacity) and the helper currently
+  // returns only error.message for RPC failures.
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!currentSession || !window.sb || !user) {
+    log('promoteTap: no session/auth, skipping', 'warn');
+    return;
+  }
+
+  const { error } = await window.sb.rpc('rpc_session_update_participant', {
+    p_session_id: currentSession.id,
+    p_user_id: user_id,
+    p_participation_role: 'active',
+  });
+
+  if (error) {
+    if (error.code === '55000') {
+      log('promoteTap: capacity error — guidance toast', 'warn');
+      showToast("There's already an active singer — skip the current song first");
+    } else {
+      log('promoteTap FAILED: ' + error.message + ' (code=' + (error.code || 'none') + ')', 'err');
+      showToast('Could not promote');
+    }
+    return;
+  }
+
+  // Publish realtime events. Caller-side per shell/realtime.js doctrine.
+  if (_singerRealtimeChannelDeviceKey) {
+    if (window.publishParticipantRoleChanged) {
+      try {
+        await window.publishParticipantRoleChanged(_singerRealtimeChannelDeviceKey, {
+          session_id: currentSession.id,
+        });
+      } catch (e) {
+        log('promoteTap: publishParticipantRoleChanged failed: ' + (e?.message || e), 'warn');
+      }
+    }
+    if (window.publishQueueUpdated) {
+      try {
+        await window.publishQueueUpdated(_singerRealtimeChannelDeviceKey, {
+          session_id: currentSession.id,
+        });
+      } catch (e) {
+        log('promoteTap: publishQueueUpdated failed: ' + (e?.message || e), 'warn');
+      }
+    }
+  }
+
+  log('promoteTap OK: ' + targetName, 'ok');
+  // Silent success — list re-render via realtime is the feedback.
+}
+
+// 2e.3.1 §4: manager removes a queued user from the queue. Single write
+// (queued → schema-audience, which on singer.html is the Available Singer
+// label). Per locked decision, no destructive consequences beyond removing
+// the queue position; user remains in the session.
+//
+// Routes through doCrossUserRoleUpdate (not inline) — no errcode branching
+// needed for Remove (no capacity violations possible on demote). Helper-side
+// auth + self-target guards apply. Pre-existing publish gap: helper doesn't
+// auto-publish; handler-side publishes per the §3 doMoveQueuePosition pattern.
+async function handleQueueRemoveTap(user_id_encoded) {
+  const user_id = decodeURIComponent(user_id_encoded);
+  const target = currentParticipants.find(p => p.user_id === user_id);
+  if (!target) {
+    log('removeTap: target not in currentParticipants', 'warn');
+    return;
+  }
+  const targetName = target.display_name || 'this singer';
+
+  if (!confirm(`Remove ${targetName} from queue?`)) {
+    log('removeTap: user cancelled');
+    return;
+  }
+
+  const result = await doCrossUserRoleUpdate({
+    user_id,
+    participation_role: 'audience',
+  });
+
+  if (!result.ok) {
+    log('removeTap FAILED: ' + result.error, 'err');
+    showToast('Could not remove');
+    return;
+  }
+
+  // Publish realtime events. Caller-side per shell/realtime.js doctrine.
+  if (_singerRealtimeChannelDeviceKey) {
+    if (window.publishParticipantRoleChanged) {
+      try {
+        await window.publishParticipantRoleChanged(_singerRealtimeChannelDeviceKey, {
+          session_id: currentSession.id,
+        });
+      } catch (e) {
+        log('removeTap: publishParticipantRoleChanged failed: ' + (e?.message || e), 'warn');
+      }
+    }
+    if (window.publishQueueUpdated) {
+      try {
+        await window.publishQueueUpdated(_singerRealtimeChannelDeviceKey, {
+          session_id: currentSession.id,
+        });
+      } catch (e) {
+        log('removeTap: publishQueueUpdated failed: ' + (e?.message || e), 'warn');
+      }
+    }
+  }
+
+  log('removeTap OK: ' + targetName, 'ok');
+  // Silent success.
 }
 
 // 2e.3.1 §1: Cross-user role update helper for manager queue management.
