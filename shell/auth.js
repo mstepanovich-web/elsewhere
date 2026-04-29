@@ -15,12 +15,28 @@
 //   elsewhere://auth/callback?code=…     PKCE sign-in completion
 //   elsewhere://auth/callback#access_token=…   implicit-flow sign-in completion
 //   elsewhere://games?room=X&mgrname=Y&…  forward to games/player.html with query preserved
+//
+// Web auth callback (BUG-5 fix): on browsers without Capacitor, AUTH_REDIRECT_URL
+// is the GitHub Pages https:// URL. Supabase 302-redirects there with tokens in
+// the URL fragment after magic-link confirmation. index.html's initShell handles
+// URL-param parsing and session establishment for the web path.
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
 const SUPABASE_URL = 'https://gbrnuxyzrlzbybvcvyzm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_QQTDPpfpUI0NJlGawfYljw_O3d6Z9RK';
-const AUTH_REDIRECT_URL = 'elsewhere://auth/callback';
+
+// BUG-5 fix: branch redirect on platform. iOS Capacitor handles the
+// elsewhere:// custom scheme via appUrlOpen listener (this file lines 125+).
+// Web (desktop / mobile Safari) needs an https:// URL it can land on; the
+// post-load handler in index.html's initShell reads URL params and calls
+// exchangeCodeForSession / setSession to complete the magic-link flow.
+//
+// The web URL must be added to Supabase project Auth Settings → URL
+// Configuration → Redirect URLs allow-list before this works end-to-end.
+const AUTH_REDIRECT_URL = window.Capacitor?.isNativePlatform?.()
+  ? 'elsewhere://auth/callback'
+  : 'https://mstepanovich-web.github.io/elsewhere/';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: {

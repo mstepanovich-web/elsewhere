@@ -1208,7 +1208,7 @@
         <div id="account-status"></div>
         <button class="cta-btn" id="account-submit" onclick="submitAccount()">Send magic link →</button>
         <div id="desktop-note">
-          Sign-in requires the Elsewhere iOS app. If you're on desktop, you can still continue as guest from the home screen.
+          The iOS app provides the best experience, but you can sign in here too.
         </div>
         <div class="account-toggle-link" id="account-toggle" onclick="toggleAccountMode()">
           Don't have an account? Create one
@@ -1655,7 +1655,7 @@
     </div>
   </div>
 
-  <div class="ver">v2.99</div>
+  <div class="ver">v2.100</div>
 
   <script>
     // ── Wait for shell/auth.js module to initialize ──────────
@@ -1672,6 +1672,13 @@
         document.addEventListener('elsewhere:sb-ready', initShell, { once: true });
         return;
       }
+
+      // BUG-5: web auth callback. When Supabase magic-link confirmation lands
+      // here on a desktop browser (no Capacitor), the URL has #access_token=…
+      // (implicit flow) or ?code=… (PKCE). Mirror the Capacitor handler in
+      // shell/auth.js: parse params, complete the session, clean the URL.
+      // No-op when no auth params present (normal page load).
+      handleWebAuthCallback();
 
       // Re-render on every auth change. onAuthChange fires once immediately
       // with the current user, so this also handles initial state.
@@ -1727,6 +1734,54 @@
       // into the Capacitor app. Payload is { device_key }.
       document.addEventListener('elsewhere:tv-claim',  onTvClaimDeepLink);
       document.addEventListener('elsewhere:tv-signin', onTvSigninDeepLink);
+    }
+
+    // BUG-5: parse magic-link confirmation params on page load and complete
+    // the Supabase session. Mirrors shell/auth.js's Capacitor handler (lines
+    // 133-162). Web flow: Supabase 302-redirects to AUTH_REDIRECT_URL with
+    // tokens in the URL fragment (#access_token=…&refresh_token=…) for OTP
+    // magic links, or in the query (?code=…) for PKCE. Either way: parse,
+    // call exchangeCodeForSession or setSession, clean the URL, let
+    // onAuthChange fire to render signed-in state.
+    //
+    // No-op when no auth params are present (normal page load) — keeps
+    // pre-BUG-5 behavior intact for users not arriving via email link.
+    async function handleWebAuthCallback() {
+      // Capacitor handles its own deep-link flow; skip on native to avoid
+      // double-processing (web handler runs only when not in the iOS app).
+      if (window.Capacitor?.isNativePlatform?.()) return;
+
+      const hasCode = !!new URLSearchParams(location.search).get('code');
+      const hash = location.hash.startsWith('#') ? location.hash.slice(1) : location.hash;
+      const hashParams = new URLSearchParams(hash);
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      const hasTokens = accessToken && refreshToken;
+
+      if (!hasCode && !hasTokens) return;
+
+      try {
+        if (hasCode) {
+          const code = new URLSearchParams(location.search).get('code');
+          const { error } = await window.sb.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+        } else {
+          const { error } = await window.sb.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (error) throw error;
+        }
+        // Clean the URL so refresh doesn't re-attempt with a now-spent token.
+        history.replaceState(null, '', location.pathname);
+      } catch (e) {
+        console.error('[elsewhere] web auth callback error:', e);
+        document.dispatchEvent(new CustomEvent('elsewhere:auth-error', {
+          detail: { message: 'Sign-in failed: ' + (e?.message || 'link may be expired.') },
+        }));
+        // Clean URL even on error so user can retry without stale params.
+        history.replaceState(null, '', location.pathname);
+      }
     }
 
     // ── Render based on current user ─────────────────────────

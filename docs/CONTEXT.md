@@ -141,7 +141,7 @@ Sync only when you need to test something native (push notifications, Capacitor 
 ### Supabase backend
 Project: `gbrnuxyzrlzbybvcvyzm`
 
-- **Auth:** SSO (Apple, Google) via Supabase Auth
+- **Auth:** Supabase magic-link OTP. Sign-in via emailed link; iOS app uses `elsewhere://auth/callback` deep link, web uses GitHub Pages URL.
 - **Database:** Postgres with RLS. Migrations in `db/`. RPCs do most of the writes.
 - **Realtime:** broadcast channels per device (e.g., `tv_device:<device_key>`). Listeners on phone, TV, and audience all subscribe to the same channel.
 - **Edge Functions:** in `supabase/functions/`. Currently: `send-push-notification`.
