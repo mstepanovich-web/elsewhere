@@ -202,10 +202,16 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // §6b: service-role auth branch. Trigger calls (pg_net) authenticate
-    // with the service_role key in the Authorization header; treat as
-    // authoritative and skip JWT user verification.
-    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+    // §6b: shared-secret auth branch for the Postgres trigger (db/015).
+    // Trigger calls (pg_net) send `Bearer <PROMOTION_TRIGGER_SECRET>`. The
+    // value is provisioned via `supabase secrets set` and stored in
+    // Supabase Vault under name `service_role_key` (legacy name kept for
+    // db/015 compatibility) so the trigger can read it without code change.
+    // SUPABASE_SERVICE_ROLE_KEY auto-provisioned by Supabase is no longer
+    // matched here; that path was a dead end since Supabase migrated to
+    // sb_secret_... key format.
+    const triggerSecret = Deno.env.get("PROMOTION_TRIGGER_SECRET");
+    const isServiceRole = !!triggerSecret && authHeader === `Bearer ${triggerSecret}`;
 
     if (!isServiceRole) {
       const userJwt = authHeader.replace("Bearer ", "");
