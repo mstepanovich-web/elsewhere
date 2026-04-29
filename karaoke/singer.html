@@ -247,7 +247,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.116</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.117</div>
 </div>
 
 <!-- HOME -->
@@ -257,7 +257,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.116</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.117</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -663,6 +663,7 @@ function showScreen(id){
     }
     setTimeout(()=>{ const inp=document.getElementById('srch-in'); if(inp&&!inp.value) inp.focus(); },100);
   }
+  if(id==='screen-manage-queue') ensureManagerOverrideReady();
 }
 
 // ── AUTO-JOIN FROM URL ──
@@ -2351,6 +2352,30 @@ async function doSelfRoleUpdate(updates) {
   } catch (e) {
     log('selfUpdate EXCEPTION: ' + e.message);
     return { ok: false, error: e.message };
+  }
+}
+
+// 2e.3.2 §1: confirm Agora connectivity for manager override commands
+// (which land in §2-§4: pause/resume/restart/end-song/clear-costume/
+// comments-toggle). All singer.html users already have agoraClient from
+// doJoin (every user joins as Agora host — pre-Session-5 pattern) — this
+// helper just verifies it's ready and applies a defensive mic-mute for
+// the silent-host pattern. Idempotent; fires on every entry to
+// screen-manage-queue.
+function ensureManagerOverrideReady() {
+  if (!agoraClient || !agoraReady) {
+    log('manageQueue: agoraClient not ready — override commands unavailable', 'warn');
+    return;
+  }
+  // Active-singer-as-manager guard: don't force-mute someone who's
+  // actively performing. Their unmuted mic is intentional.
+  if (currentMyRow?.participation_role === 'active') {
+    log('manageQueue: skipping force-mute (manager is active singer)', 'info');
+    return;
+  }
+  if (!muted) {
+    muteMic();
+    log('manageQueue: forced mic mute for silent-host discipline', 'info');
   }
 }
 
