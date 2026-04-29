@@ -205,7 +205,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.109</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.110</div>
 </div>
 
 <!-- HOME -->
@@ -215,7 +215,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.109</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.110</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -2020,7 +2020,37 @@ async function startSingerRealtimeSub(device_key) {
   let channel = null;
   try {
     channel = window.sb.channel('tv_device:' + device_key);
-    channel.on('broadcast', { event: 'participant_role_changed' }, () => refreshSessionState());
+    channel.on('broadcast', { event: 'participant_role_changed' }, async (msg) => {
+      // §6b: detect own queued → active promotion.
+      // Payload shape: { session_id, user_id, control_role, participation_role }.
+      // No old_role; capture local before-state and compare against post-refresh state.
+      const payload = msg?.payload || {};
+      const myUserId = window.elsewhere?.getCurrentUser?.()?.id;
+      const myOldRole = currentMyRow?.participation_role;
+      await refreshSessionState();
+      if (payload.user_id && myUserId && payload.user_id === myUserId
+          && myOldRole === 'queued'
+          && currentMyRow?.participation_role === 'active') {
+        if (document.visibilityState === 'visible') {
+          log('§6b: own promotion received foregrounded → modal');
+          const user = window.elsewhere?.getCurrentUser?.();
+          const displayName = user?.user_metadata?.full_name
+                           || user?.email?.split('@')[0]
+                           || 'You';
+          showTakeStageModal({ display_name: displayName, user_id: myUserId });
+        } else {
+          log('§6b: own promotion received backgrounded → flag set, push trigger handles notify');
+          try {
+            sessionStorage.setItem('elsewhere.missed-promotion', JSON.stringify({
+              session_id: currentSession?.id || null,
+              ts:         Date.now(),
+            }));
+          } catch (e) {
+            log('§6b: sessionStorage set failed: ' + e.message);
+          }
+        }
+      }
+    });
     channel.on('broadcast', { event: 'queue_updated' },            () => refreshSessionState());
     channel.on('broadcast', { event: 'session_ended' },            () => {
       // 2d.1 already wires session_ended via Agora handleStageMsg. This realtime path
@@ -2453,7 +2483,40 @@ if (!wireBackToElsewhereVisibility()) {
   document.addEventListener('elsewhere:sb-ready', wireBackToElsewhereVisibility, { once: true });
 }
 
-// §6a: Expose modal show/dismiss for console testing before §6b realtime hookup.
+// §6b: visibilitychange safety net for missed promotions while backgrounded.
+// Set by the realtime handler when it sees own queued→active while hidden;
+// re-checked here on foreground. If currentMyRow is still active after a
+// fresh refresh, fire the modal so the user has the same UX whether or not
+// they tapped a push notification to foreground.
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible') return;
+  let flag;
+  try { flag = sessionStorage.getItem('elsewhere.missed-promotion'); }
+  catch (e) { return; }
+  if (!flag) return;
+  try { sessionStorage.removeItem('elsewhere.missed-promotion'); } catch (e) {}
+
+  log('§6b: visibilitychange foreground + missed-promotion flag → re-querying session');
+  try {
+    await refreshSessionState();
+  } catch (e) {
+    log('§6b: refreshSessionState failed: ' + e.message);
+    return;
+  }
+
+  if (currentMyRow?.participation_role === 'active') {
+    log('§6b: foreground recovery — still active, firing modal');
+    const user = window.elsewhere?.getCurrentUser?.();
+    const displayName = user?.user_metadata?.full_name
+                     || user?.email?.split('@')[0]
+                     || 'You';
+    showTakeStageModal({ display_name: displayName, user_id: user?.id });
+  } else {
+    log('§6b: foreground recovery — no longer active, skipping modal');
+  }
+});
+
+// §6a: Expose modal show/dismiss for console testing.
 window.showTakeStageModal = showTakeStageModal;
 window.dismissTakeStageModal = dismissTakeStageModal;
 

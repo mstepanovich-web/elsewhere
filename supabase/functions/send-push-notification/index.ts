@@ -19,11 +19,16 @@
 // Response:
 //   { "sent": N, "failed": M, "details": [ ... per-token results ... ] }
 //
-// Auth model (2e.0):
-//   - Caller must be authenticated (any logged-in user).
-//   - TODO 2e.3: Verify caller is Session Manager of an active session
-//     containing the target user, and that the push corresponds to a
-//     legitimate state transition (e.g., promotion to active singer).
+// Auth model:
+//   - Caller is either a logged-in user (Bearer = user JWT) or the
+//     Postgres trigger via pg_net (Bearer = service_role key).
+//   - Service-role calls are treated as authoritative server-side and
+//     skip JWT user verification. Body shape may include `type` (e.g.
+//     'promotion') which causes the function to synthesize canonical
+//     title/body so the SQL caller can stay minimal.
+//   - TODO 2e.3: Verify caller (when not service-role) is Session Manager
+//     of an active session containing the target user, and that the push
+//     corresponds to a legitimate state transition.
 //
 // Spec source: docs/SESSION-5-PART-2E-AUDIT.md (locked decisions appendix).
 
@@ -197,25 +202,42 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const userJwt = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await supabase.auth.getUser(
-      userJwt,
-    );
-    if (userError || !userData?.user) {
-      return new Response(
-        JSON.stringify({ error: "invalid token" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+    // §6b: service-role auth branch. Trigger calls (pg_net) authenticate
+    // with the service_role key in the Authorization header; treat as
+    // authoritative and skip JWT user verification.
+    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+
+    if (!isServiceRole) {
+      const userJwt = authHeader.replace("Bearer ", "");
+      const { data: userData, error: userError } = await supabase.auth.getUser(
+        userJwt,
       );
+      if (userError || !userData?.user) {
+        return new Response(
+          JSON.stringify({ error: "invalid token" }),
+          {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+      console.log(`[send-push] caller=${userData.user.id}`);
+    } else {
+      console.log(`[send-push] caller=service-role`);
     }
 
-    const callerId = userData.user.id;
-    console.log(`[send-push] caller=${callerId}`);
-
     const body = await req.json();
-    const { user_id, title, body: pushBody, data } = body;
+    let { user_id, title, body: pushBody, data } = body;
+
+    // §6b: synthesize canonical title/body for known notification types
+    // so the SQL caller doesn't have to embed copy. Only honored on
+    // service-role calls; user-JWT calls still require explicit text.
+    if (isServiceRole && body.type === "promotion") {
+      title   = title   || "You're up!";
+      pushBody = pushBody || "Tap to take the stage";
+      data    = data    || { type: "promotion", session_id: body.session_id };
+    }
+
     if (!user_id || !title || !pushBody) {
       return new Response(
         JSON.stringify({
