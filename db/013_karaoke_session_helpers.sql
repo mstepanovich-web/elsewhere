@@ -77,6 +77,17 @@
 -- Both transitions clear queue_position. Idempotent — safe under multi-tab
 -- and multi-call scenarios via SELECT FOR UPDATE on sessions and
 -- state-check ladder.
+--
+-- Canonical "advance queue by one" primitive — used by:
+--   - karaoke/stage.html on YouTube song-end (the original use case)
+--   - karaoke/singer.html §5 manager-skip-active in 2e.3.1 (added 2026-04-29)
+-- Despite the name, this function is not coupled to song-end semantics; it
+-- is a queue-state mutation that can be triggered by any caller with the
+-- broad auth gate (session participant OR TV household member).
+--
+-- Note: this comment block is file-level (above CREATE OR REPLACE). Updating
+-- it does not require re-applying the migration to Supabase. The function
+-- body and COMMENT ON FUNCTION (line ~170 below) are unchanged in this edit.
 create or replace function public.rpc_karaoke_song_ended(
   p_session_id uuid
 )

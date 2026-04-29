@@ -102,6 +102,9 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
 .mq-action-btn.promote:active{background:var(--color-gold-faint);}
 .mq-action-btn.remove{color:rgba(196,122,107,.85);background:rgba(196,122,107,.08);border-color:rgba(196,122,107,.4);}
 .mq-action-btn.remove:active{background:rgba(196,122,107,.18);}
+.mq-actions-skip{display:flex;flex-direction:column;gap:4px;}
+.mq-action-btn.skip{color:rgba(196,122,107,.85);background:rgba(196,122,107,.08);border-color:rgba(196,122,107,.4);}
+.mq-action-btn.skip:active{background:rgba(196,122,107,.18);}
 
 /* SEARCH */
 #screen-search{overflow:hidden;}
@@ -239,7 +242,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.114</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.115</div>
 </div>
 
 <!-- HOME -->
@@ -249,7 +252,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.114</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.115</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -2107,6 +2110,19 @@ async function startSingerRealtimeSub(device_key) {
           }
         }
       }
+
+      // 2e.3.1 §5: detect own active → schema-audience transition (manager
+      // skipped me). Compares pre-refresh and post-refresh state, like §6b
+      // above. Suppresses toast when caller is the manager themself
+      // (defensive; manager-as-singer self-skip is allowed via the Skip
+      // button, but no need to surface a "you've been skipped" notification
+      // to the actor who initiated the skip).
+      if (myUserId && myOldRole === 'active'
+          && currentMyRow?.participation_role === 'audience'
+          && currentMyRow?.control_role !== 'manager') {
+        log('§5: own active → audience detected (skipped by manager)');
+        showToast('The manager moved you off stage');
+      }
     });
     channel.on('broadcast', { event: 'queue_updated' },            () => refreshSessionState());
     channel.on('broadcast', { event: 'session_ended' },            () => {
@@ -2429,8 +2445,9 @@ function renderManageQueueList() {
       ? renderQueueActionsHtml(p, queuedIndexById.get(p.user_id) ?? -1, queuedCount)
       : '';
     const crossHtml = renderCrossActionsHtml(p);
-    const actionsHtml = (reorderHtml || crossHtml)
-      ? `<div class="mq-actions">${reorderHtml}${crossHtml}</div>`
+    const activeHtml = renderActiveActionsHtml(p);
+    const actionsHtml = (reorderHtml || crossHtml || activeHtml)
+      ? `<div class="mq-actions">${reorderHtml}${crossHtml}${activeHtml}</div>`
       : '';
 
     return `
@@ -2597,6 +2614,23 @@ function renderCrossActionsHtml(p) {
   `;
 }
 
+// 2e.3.1 §5: render the Skip button for the active singer row.
+// Single Skip action invokes rpc_karaoke_song_ended (the canonical
+// "advance queue by one" primitive), which atomically demotes the
+// active singer to schema-audience and promotes the queue head to
+// active. Returns empty string for non-active rows.
+function renderActiveActionsHtml(p) {
+  if (p.participation_role !== 'active') return '';
+  const userIdAttr = encodeURIComponent(p.user_id);
+  return `
+    <div class="mq-actions-skip">
+      <div class="mq-action-btn skip"
+           onclick="handleSkipActiveTap('${userIdAttr}')"
+           role="button">Skip</div>
+    </div>
+  `;
+}
+
 // 2e.3.1 §4: manager force-promotes a queued or schema-audience user to
 // active. Approach A (single-write, no displacement) per §4 lock — if the
 // session already has an active singer, the RPC raises errcode '55000'
@@ -2734,6 +2768,77 @@ async function handleQueueRemoveTap(user_id_encoded) {
 
   log('removeTap OK: ' + targetName, 'ok');
   // Silent success.
+}
+
+// 2e.3.1 §5: manager skips the current active singer. Single RPC
+// (rpc_karaoke_song_ended) does the dual transition atomically:
+// active → schema-audience AND queue head → active. Push fires
+// on the queued → active half via db/015 trigger; the demoted
+// active singer gets a "you've been skipped" toast on their phone
+// via the realtime branch in handleParticipantRoleChanged.
+//
+// Inline RPC (not via a wrapper helper) — rpc_karaoke_song_ended
+// is a different RPC than rpc_session_update_participant, so the
+// existing doSelfRoleUpdate / doCrossUserRoleUpdate helpers don't
+// apply. Auth/session guards inlined for defensive parity with
+// other §3+ handlers.
+async function handleSkipActiveTap(user_id_encoded) {
+  const user_id = decodeURIComponent(user_id_encoded);
+  const target = currentParticipants.find(p => p.user_id === user_id);
+  if (!target) {
+    log('skipTap: target not in currentParticipants', 'warn');
+    return;
+  }
+  const targetName = target.display_name || 'this singer';
+
+  if (!confirm(`Skip ${targetName}'s turn? This will end their song.`)) {
+    log('skipTap: user cancelled');
+    return;
+  }
+
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!currentSession || !window.sb || !user) {
+    log('skipTap: no session/auth, skipping', 'warn');
+    return;
+  }
+
+  const { error } = await window.sb.rpc('rpc_karaoke_song_ended', {
+    p_session_id: currentSession.id,
+  });
+
+  if (error) {
+    log('skipTap FAILED: ' + error.message + ' (code=' + (error.code || 'none') + ')', 'err');
+    showToast('Could not skip');
+    return;
+  }
+
+  // Publish realtime events. Caller-side per shell/realtime.js doctrine.
+  // rpc_karaoke_song_ended mutates 2 participant rows + 1 queue position;
+  // both events appropriate per the §3 doMoveQueuePosition + §4 promote
+  // pattern.
+  if (_singerRealtimeChannelDeviceKey) {
+    if (window.publishParticipantRoleChanged) {
+      try {
+        await window.publishParticipantRoleChanged(_singerRealtimeChannelDeviceKey, {
+          session_id: currentSession.id,
+        });
+      } catch (e) {
+        log('skipTap: publishParticipantRoleChanged failed: ' + (e?.message || e), 'warn');
+      }
+    }
+    if (window.publishQueueUpdated) {
+      try {
+        await window.publishQueueUpdated(_singerRealtimeChannelDeviceKey, {
+          session_id: currentSession.id,
+        });
+      } catch (e) {
+        log('skipTap: publishQueueUpdated failed: ' + (e?.message || e), 'warn');
+      }
+    }
+  }
+
+  log('skipTap OK: ' + targetName, 'ok');
+  // Silent success — list re-render via realtime is the feedback.
 }
 
 // 2e.3.1 §1: Cross-user role update helper for manager queue management.
