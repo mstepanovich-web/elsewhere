@@ -69,6 +69,29 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
 .aud-row{font-size:12px;color:rgba(255,220,150,.65);display:flex;align-items:center;gap:6px;}
 .aud-dot{width:5px;height:5px;border-radius:50%;background:var(--color-green);flex-shrink:0;}
 
+/* MANAGE QUEUE (2e.3.1 §2) */
+.mq-row{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid rgba(255,255,255,.06);min-height:56px;}
+.mq-row.active{background:rgba(255,180,80,.08);border-left:2px solid var(--color-gold);padding-left:16px;}
+.mq-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;font-family:var(--font-mono);color:#fff;flex-shrink:0;}
+.mq-row.active .mq-avatar{box-shadow:0 0 0 2px var(--color-gold);}
+.mq-info{flex:1;min-width:0;}
+.mq-name{font-size:14px;color:rgba(255,220,150,.92);font-family:var(--font-mono);letter-spacing:.04em;line-height:1.2;}
+.mq-row.active .mq-name{color:var(--color-gold);}
+.mq-meta{font-size:11px;color:rgba(255,200,120,.5);margin-top:3px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);}
+.mq-trailing{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;}
+.mq-position{font-size:11px;color:var(--color-gold-dim);font-family:var(--font-mono);letter-spacing:.05em;}
+.mq-badge{font-size:9px;letter-spacing:.15em;font-family:var(--font-mono);padding:2px 6px;border-radius:3px;}
+.mq-row.active .mq-badge{color:var(--color-gold);background:rgba(255,180,80,.15);}
+.mq-row.queued .mq-badge{color:var(--color-gold-dim);background:rgba(255,180,80,.06);}
+.mq-empty{padding:40px 20px;text-align:center;font-size:12px;color:var(--color-text-faint);font-family:var(--font-mono);line-height:1.6;}
+.mq-avatar.avatar-1{background:var(--color-avatar-1);}
+.mq-avatar.avatar-2{background:var(--color-avatar-2);}
+.mq-avatar.avatar-3{background:var(--color-avatar-3);}
+.mq-avatar.avatar-4{background:var(--color-avatar-4);}
+.mq-avatar.avatar-5{background:var(--color-avatar-5);}
+.mq-avatar.avatar-6{background:var(--color-avatar-6);}
+.mq-avatar.avatar-7{background:var(--color-avatar-7);}
+
 /* SEARCH */
 #screen-search{overflow:hidden;}
 #srch-body{flex:1;display:flex;flex-direction:column;overflow:hidden;}
@@ -205,7 +228,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.111</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.112</div>
 </div>
 
 <!-- HOME -->
@@ -215,7 +238,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.111</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.112</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -529,16 +552,14 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   </div>
 </div>
 
-<!-- 2e.3.1 §1: Manage Queue screen — empty shell, list rendering lands in §2 -->
+<!-- 2e.3.1 Manage Queue screen — list populated by renderManageQueueList -->
 <div id="screen-manage-queue" class="screen" style="overflow-y:scroll;-webkit-overflow-scrolling:touch;">
   <div id="mic-top2">
     <div class="nav-back" onclick="showScreen('screen-home')">← Home</div>
     <div id="mic-info2">Manage Queue</div>
     <div></div>
   </div>
-  <div style="padding:24px 18px;text-align:center;color:var(--color-text-faint);font-family:var(--font-mono);font-size:12px;letter-spacing:.04em;">
-    Queue management coming
-  </div>
+  <div id="mq-list"></div>
 </div>
 
 <!-- POST SONG — not used, goes straight to home -->
@@ -1962,6 +1983,9 @@ function renderSessionUI() {
 
   // 2e.3.1 §1: manager-only Manage Queue tile visibility.
   applyManagerHomeVisibility();
+
+  // 2e.3.1 §2: render the participant list inside screen-manage-queue.
+  renderManageQueueList();
 }
 
 // ── Push notifications (2e.0) ──
@@ -2308,6 +2332,98 @@ function applyManagerHomeVisibility() {
   if (!tile) return;
   const isManager = currentMyRow?.control_role === 'manager';
   tile.style.display = isManager ? '' : 'none';
+}
+
+// 2e.3.1 §2: render helpers (avatar + escape) — verbatim ports from stage.html.
+// Stage.html introduced these for the queue panel (lines ~5447-5459); singer.html
+// reuses identical logic so display-name handling stays consistent across the
+// two surfaces.
+function avatarClassForName(name) {
+  const s = (name || '').trim() || '?';
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h + s.charCodeAt(i)) >>> 0;
+  return 'avatar-' + ((h % 7) + 1);
+}
+function avatarInitialsForName(name) {
+  const s = (name || '').trim();
+  if (!s) return '?';
+  const parts = s.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+function escTv(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// 2e.3.1 §2: render the Manage Queue participant list.
+// Reads from currentParticipants (always includes display_name via
+// rpc_session_get_participants). Shows all participants — active + queued +
+// Available Singers (HHU eligibles whose participation_role='audience') —
+// so manager sees full session state. Sort: active → queued by queue_position
+// → Available Singers by joined_at. Sub-action affordances land in §3+.
+function renderManageQueueList() {
+  const container = document.getElementById('mq-list');
+  if (!container) return;
+
+  // Defensive — if currentParticipants is empty (Way 1 / pre-load), show
+  // empty placeholder. Way 1 callers can't reach this screen anyway because
+  // the Manage Queue tile is gated on currentMyRow.control_role === 'manager'
+  // in §1, but defense-in-depth.
+  if (!currentSession || !currentParticipants?.length) {
+    container.innerHTML = '<div class="mq-empty">No session.</div>';
+    return;
+  }
+
+  const sorted = currentParticipants.slice().sort((a, b) => {
+    const orderOf = p =>
+      p.participation_role === 'active'   ? 0 :
+      p.participation_role === 'queued'   ? 1 : 2;
+    const oa = orderOf(a);
+    const ob = orderOf(b);
+    if (oa !== ob) return oa - ob;
+    if (oa === 1) {
+      // Both queued — sort by queue_position ascending.
+      return (a.queue_position ?? 999999) - (b.queue_position ?? 999999);
+    }
+    if (oa === 2) {
+      // Both Available Singers (participation_role='audience') — sort by
+      // joined_at ascending (stable, predictable).
+      return (a.joined_at || '').localeCompare(b.joined_at || '');
+    }
+    // Both active — only one possible per session by design.
+    return 0;
+  });
+
+  container.innerHTML = sorted.map(p => {
+    const role       = p.participation_role;
+    const isActive   = role === 'active';
+    const isQueued   = role === 'queued';
+    const name       = p.display_name || 'Unknown singer';
+    const initials   = avatarInitialsForName(name);
+    const colorClass = avatarClassForName(name);
+    const songTitle  = p.pre_selections?.song?.title  || '(no song selected)';
+    const songArtist = p.pre_selections?.song?.artist || '';
+    const venueName  = p.pre_selections?.venue?.name  || '';
+    const songLine   = songArtist ? songTitle + ' · ' + songArtist : songTitle;
+    const meta       = venueName  ? songLine + ' · ' + venueName    : songLine;
+
+    const position = isActive ? 'NOW' : isQueued ? '#' + (p.queue_position ?? '?') : '';
+    const badge    = isActive ? 'ACTIVE' : isQueued ? 'QUEUED' : '';
+
+    return `
+      <div class="mq-row ${role}">
+        <div class="mq-avatar ${colorClass}">${initials}</div>
+        <div class="mq-info">
+          <div class="mq-name">${escTv(name)}</div>
+          <div class="mq-meta">${escTv(meta)}</div>
+        </div>
+        <div class="mq-trailing">
+          ${position ? `<div class="mq-position">${position}</div>` : ''}
+          ${badge ? `<div class="mq-badge">${badge}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 // 2e.3.1 §1: Cross-user role update helper for manager queue management.
