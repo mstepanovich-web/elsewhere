@@ -1551,6 +1551,103 @@ Don't bundle with 2d.1 implementation — keeping legacy code in place during 2d
 
 ---
 
+## Edge Function deploy `--no-verify-jwt` wrapper script
+
+**Surfaced:** 2e.2 (2026-04-29).
+**Severity:** Low — operational footgun.
+**Affected:** `supabase/functions/send-push-notification`.
+
+The `send-push-notification` Edge Function MUST be deployed with the
+`--no-verify-jwt` flag because the Postgres trigger sends a non-JWT bearer
+token (`PROMOTION_TRIGGER_SECRET`). Without the flag, Supabase's edge gateway
+rejects the call with `UNAUTHORIZED_INVALID_JWT_FORMAT` before the function
+code ever runs, breaking the push pipeline silently.
+
+A vanilla `supabase functions deploy send-push-notification` will silently
+re-enable JWT verification at the gateway, breaking the trigger. This has
+already happened once in the 2e.2 verification phase.
+
+**Proposed fix:** add `scripts/deploy-push-fn.sh` that wraps the deploy with
+the correct flag. Document in CLAUDE.md (already noted in CLAUDE.md locked
+doctrine; script is the actionable safety net).
+
+```bash
+#!/usr/bin/env bash
+# scripts/deploy-push-fn.sh
+set -euo pipefail
+cd "$(dirname "$0")/.."
+supabase functions deploy send-push-notification --no-verify-jwt
+```
+
+**Effort:** 5 minutes. Defer until next time the function is deployed.
+
+---
+
+## TV's app-launch realtime not reaching tv2.html
+
+**Surfaced:** 2e.2 verification (2026-04-29).
+**Severity:** Medium — blocks one path of TV-side testing.
+**Affected:** `tv2.html` realtime listener; possibly `shell/realtime.js`.
+
+During 2e.2 testing, tapping Karaoke from the household home on the phone
+did NOT navigate the TV from `tv2.html` (idle launcher) to
+`karaoke/stage.html`. The phone's downstream effects all worked correctly
+(joined session, mic published, push token registered), suggesting the
+phone's realtime publish fired. But the TV's listener didn't pick it up.
+
+TV LOG showed `realtime: subscribed` and `state: authed + registered →
+apps` (waiting at launcher) but no app-launch event received.
+
+Possible causes (not yet investigated):
+- Channel name mismatch between tv2.html subscriber and phone publisher
+- §5's `roleAllowsStageSignals()` accidentally suppressing the launch signal
+- tv2.html subscribed to a different topic than phone publishes to
+- Less likely: phone never fires the publish (would have other observable
+  failures, none of which occurred)
+
+**Workaround:** during 2e.2, joined session via QR/code path (Way 1) — TV
+stuck at launcher didn't block push testing.
+
+**Investigate before:** 2e.3 testing of Manager Override (Workstream B),
+which involves manager phone joining Agora as silent host. End-to-end
+testing requires a working TV-stage. Time-box investigation to ~30 min in
+2e.3; if not obvious, file as separate small commit and continue with
+Way 1 testing.
+
+**Effort:** 30 min – 2 hr depending on root cause.
+
+---
+
+## Pre-existing JS error at singer.html:645
+
+**Surfaced:** 2e.2 Xcode console capture (2026-04-29).
+**Severity:** Low — likely cosmetic, possibly fixed already by 2e.2's DOM
+changes.
+**Affected:** `karaoke/singer.html`.
+
+Xcode console captured an error during the v2.99 (pre-2e.2) bundle's
+startup:
+
+```
+TypeError: null is not an object (evaluating
+'document.getElementById("stat-w").textContent=n')
+```
+
+at `singer.html:645:40`. The `stat-w` element didn't exist in the DOM at
+the time the code ran. Pre-existing in v2.99-ish.
+
+**Status uncertain:** did not reproduce in v2.110 during 2e.2 testing.
+Possibly fixed by 2e.2's screen-home DOM changes. Possibly still latent
+and just not reached by the test paths used.
+
+**Investigate when:** next time touching singer.html. Quick grep for
+`stat-w` + audit of the surrounding code at line 645. Either confirm fix
+and remove note, or fix and remove note.
+
+**Effort:** 15-30 min.
+
+---
+
 ## Migrated from PHASE1-NOTES.md
 
 The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captured here in summary form; the full original text lives in PHASE1-NOTES.md git history (commit `9296a50` or earlier). Future fill-outs should flesh these into the full entry format above when someone picks one up.
