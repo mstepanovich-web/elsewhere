@@ -1,10 +1,48 @@
 # Karaoke Control Model
 
 **Created:** 2026-04-25
+**Updated:** 2026-04-29 (vocabulary-trap callout added; phase status synced to 2e.2 shipped)
 **Purpose:** Defines the role hierarchy, state machine, and permission matrix for karaoke sessions in Elsewhere. Specifies what each role can do, how transitions happen, and how the manager intervenes when needed.
 **Scope:** karaoke/singer.html and karaoke/stage.html. References audience.html as a frozen surface (no new features in Session 5).
 **Anchored to:** `docs/PHONE-AND-TV-STATE-MODEL.md` (platform-level user model). Where this doc references HHU, HHM, household admin, proximity, or Modes A/B/C, those concepts are defined in the state model. This doc does not redefine them.
 **Referenced by:** `docs/SESSION-5-PART-2-BREAKDOWN.md` 2d, 2e, 2f sub-parts.
+
+---
+
+## ⚠️ Critical vocabulary trap: "audience"
+
+**The word "audience" means two different things in karaoke and they get conflated constantly.** This callout is the single most important thing in this doc. Read it before reading anything else, and re-read it any time a manager-action discussion uses the word "audience."
+
+There are two distinct meanings:
+
+### Schema-state `'audience'` (database value)
+
+`session_participants.participation_role = 'audience'` — a database enum value meaning "this user is in the session but is neither the active singer nor in the queue." It is a state, not a role label.
+
+Users with this schema state include both:
+
+- **Available Singers who haven't queued yet** — HHU + at home + has TV device. Eligible to sing. Hasn't tapped Add to Queue. Surface-label: "Available Singer (not queued)."
+- **Actual non-singing audience members** — NHHU, OR HHU not at home, OR HHU without a TV device. Cannot sing. Surface-label: "Audience."
+
+The schema does not distinguish these two populations because the underlying queue/promotion logic doesn't need to. Eligibility is computed client-side at the moment of action (Add to Queue, Start Song, etc.).
+
+### Surface-label "Audience" (UI role)
+
+A karaoke UI role meaning "watching only, cannot sing." Lives on `audience.html`. Applied to NHHU users, or HHU users not at home, or HHU users without a TV device. **These users have no path to the queue, no path to active, and the manager UI cannot promote them.**
+
+### What this means for manager actions in this doc
+
+When this doc says "force-promote from audience," "promote an audience user," or anything similar — it is *always* talking about the schema state, never the surface label. The user being acted on is an Available Singer in disguise (HHU at home with a TV device whose `participation_role` happens to be `'audience'` because they haven't queued yet).
+
+The manager UI on singer.html operates only on rows in `session_participants`. Surface-label Audience users on `audience.html` don't appear in that table in any actionable way — see Section 4.3 (audience.html freeze). So there is no path by which a manager could force-promote a "can't sing" user; the schema makes this impossible by construction. Combined with the doctrine that singer.html is HHU-eligible by construction (model audit Path A), every `'audience'` row the manager sees on singer.html is, by construction, an Available Singer.
+
+### Reading rule
+
+- See `'audience'` in code voice or schema discussion (backticks, `participation_role = 'audience'`, "schema-state audience") → **schema state**. Includes both populations. Manager UI can act on these rows.
+- See "Audience" capitalized as a UI role label (in role tables, surface vocabulary, UX copy) → **surface label**. Watching-only users on audience.html. Manager UI cannot act on them.
+- When in doubt, the four-role table in Section 1 below is canonical. Refer back.
+
+If you find yourself thinking "but audience users can't sing — why is the manager promoting them?" — the language tripped you. Re-read it as the schema state.
 
 ---
 
@@ -45,6 +83,8 @@ The mapping for karaoke:
 | Queued (sub-state of Available Singer) | `queued` | HHU + at-home + has TV device |
 | Available Singer (not queued) | `audience` | HHU + at-home + has TV device |
 | Audience | `audience` | NHHU, OR HHU not at home, OR no TV device |
+
+> **⚠️ Reminder:** the bottom two rows both have `participation_role = 'audience'` in the database, but they are different surface-level roles. Available Singer (not queued) is eligible to sing; Audience is not. See the vocabulary trap callout at the top of this doc. Manager actions on `'audience'` rows always operate on the Available Singer population — Audience users (the watching-only role) live on audience.html and are not reachable from the manager UI.
 
 Eligibility (the "Available Singer" vs "Audience" distinction) is **a client-side, self-only derivation**. Each user computes their own eligibility for their own UI. No cross-user eligibility check is ever required because Session Manager only promotes from queue, and queue entry is self-gated by eligibility at the moment a user taps "Add to Queue."
 
@@ -128,6 +168,10 @@ When the active-singer slot becomes empty (song ends with queue waiting, OR some
    - **Tap to take stage** → they become Active Singer (pre-song). Their pre-selections load onto the TV. They can adjust before starting.
    - **Remove themselves from queue** → they decline this turn. Their queue entry is removed. System computes the next next-in-queue and repeats from step 1. If queue empties out from sequential declines, system enters Idle state.
 
+**Manager intervention powers (overview; see vocabulary trap at top):**
+
+The Session Manager has cross-user authority on any `session_participants` row. Manager actions on a row with `participation_role = 'audience'` always operate on an Available Singer (per the singer.html HHU-eligibility doctrine — surface-label Audience users live on audience.html and aren't reachable here).
+
 **Manager intervention during promotion stall:**
 
 If the next-up user doesn't respond and the Session Manager wants to push things along:
@@ -182,7 +226,7 @@ The principle: **Stop ≠ End Turn.** A singer who stops mid-song stays as Activ
 
 This respects the casual family/friends context — singers who flub a song shouldn't lose their turn just because they hit Stop. They get to retry.
 
-### Manager intervention powers (recap)
+### Manager intervention powers (full list)
 
 The Session Manager can intervene at any point. Per the hybrid model (Q-2A from product discussion):
 
@@ -201,6 +245,8 @@ These match Active Singer's mid-song controls. Session Manager has Override auth
 
 - **Skip current Active Singer:** force-ends their turn even if no song completed. Triggers promotion of next-in-queue (or Idle if queue empty).
 - **Skip next-up unresponsive singer:** removes them from queue position 1 without making them active. Promotes the queue position 2 user instead.
+- **Force-promote a queued user to Active Singer:** pulls a specific queued user out of order, makes them active immediately.
+- **Force-promote an Available Singer (schema-state `'audience'`) directly to Active Singer:** see vocabulary-trap callout at top of doc. This acts on a `participation_role='audience'` row that, by HHU-eligibility doctrine on singer.html, is an Available Singer who hasn't queued yet. Not on a Surface-label Audience user — that's a separate population on audience.html and isn't reachable from the manager UI.
 - **Take over active singer slot:** Session Manager promotes themselves (or another specific person) to Active Singer immediately, displacing the current Active Singer if any.
 
 **Session-level interventions:**
@@ -217,7 +263,7 @@ The 2e implementation needs to design this mechanism. Options under consideratio
 - **Option B:** Session Manager's phone gets direct stage-channel access and sends Agora commands directly.
 - **Option C:** New RPC layer for session-state mutations that publishes events stage.html consumes.
 
-Decision deferred to 2e implementation pass. Documented as known implementation gap.
+**Status: locked to Option B in the 2e audit (`docs/SESSION-5-PART-2E-AUDIT.md` — Locked Decisions appendix).** Manager phone joins Agora as silent host with mic-mute discipline. Implementation in 2e.3.
 
 ---
 
@@ -263,7 +309,7 @@ Singer.html's main hub screen after joining a session.
 | 1.9 | Toggle "Video Chat with Audience" | Override | Yes | Yes | No |
 | 1.10 | View "Back to Elsewhere" pill | Yes (if HHU/HHM) | Yes (if HHU/HHM) | Yes (if HHU/HHM) | Yes (all audience — see footnote) |
 
-**Removed in 2e:** the "Leave" button (`screen-home`) is redundant with Back-to-Elsewhere and will be removed in 2e implementation.
+**Removed in 2e.2:** the "Leave"/"Home" tile (`screen-home`) was redundant with Back-to-Elsewhere and was removed.
 
 **Footnote 1.4 / 1.6 — Audience browse for marketing:** Spec intent is Yes (advertising / user acquisition value). Implementation requires audience.html UI changes, which is frozen for Session 5. Captured as DEFERRED: "Audience browsing of venues/costumes for marketing." Implementation lands when audience surface migrates to unified app post-Session-5.
 
@@ -299,10 +345,11 @@ Singer.html's main hub screen after joining a session.
 
 **Footnote 2.6b — Manager force-start scenarios:** Per the hybrid intervention model, Session Manager can:
 - Take the stage themselves (force-promote self to Active Singer)
-- Force-promote a specific person from the queue
+- Force-promote a specific queued person to Active Singer
+- Force-promote a specific Available Singer (schema-state `'audience'` row — see vocabulary-trap callout at top) directly to Active Singer
 - Force-start a song on the Active Singer's behalf (deferred per Q-2B helper feature)
 
-**Footnote 2.11–2.13 — Manager Override mechanism:** Currently no implementation exists. See Section 2's "Manager Override mechanism — implementation note" for the architectural decision deferred to 2e.
+**Footnote 2.11–2.13 — Manager Override mechanism:** Locked to Option B — manager phone joins Agora as silent host. See Section 2's "Manager Override mechanism — implementation note" and `docs/SESSION-5-PART-2E-AUDIT.md`. Implementation in 2e.3.
 
 ### Section 3.3: Active Singer live controls (mid-song / pre-song unified)
 
@@ -423,6 +470,8 @@ Singer.html today operates as a single-singer model. Under the new role model, i
 - All settings screens accessible — selections apply to their own pre-selection
 - Back-to-Elsewhere pill
 
+(Note: "Available Singer (not queued)" has `participation_role = 'audience'` in the schema. See vocabulary trap at top of doc.)
+
 **Session Manager sees:**
 
 - All Available Singer affordances PLUS
@@ -461,7 +510,7 @@ Stage.html is the TV-side display surface. Per the platform model, the phone is 
 - Tappable any time, including during active songs (testing utility)
 - No auto-show, no auto-hide
 - Visible to everyone with stage.html access (not gated by role)
-- The same queue list rendering component is reused on Session Manager's phone UI in 2e (with action affordances overlaid for reorder/remove/promote)
+- The same queue list rendering component is reused on Session Manager's phone UI in 2e.3 (with action affordances overlaid for reorder/remove/promote)
 
 **Existing testing/admin affordances (kept as-is for Session 5):**
 
@@ -521,7 +570,7 @@ This consistency reduces user confusion and reuses the existing animation/dismis
 
 This section maps the spec's contents to specific implementation work in Session 5 sub-parts (2d, 2e, 2f) and post-Session-5. It identifies what ships when, what gets deferred, and what architectural decisions remain open for implementation passes.
 
-### 5.1 Session 5 — Part 2d (karaoke/stage.html session integration)
+### 5.1 Session 5 — Part 2d (karaoke/stage.html session integration) — SHIPPED
 
 **Sub-split:** 2d.0 (prerequisite migration, ~1-1.5 hours) + 2d.1 (read/display + event-driven mutations, ~6-8 sections, ~3-4 hours). 2d.2 collapsed into 2d.1 per audit (`docs/SESSION-5-PART-2D-AUDIT.md` DECISION-AUDIT-2).
 
@@ -574,14 +623,21 @@ This is the largest sub-part. Singer.html becomes role-aware per Section 4.1.
 - Queue editing: Inactive Singer edits own entry (song / venue / costume / comments-toggle / remove)
 - Phone-side venue preview for non-active singers (currently TV-only)
 - Phone-side costume preview images for non-active singers
-- Session Manager queue management UI (reorder, remove, force-promote, skip current/next, take over)
-- Remove redundant "Leave" button from screen-home (Back-to-Elsewhere replaces it)
+- Session Manager queue management UI: reorder, remove, force-promote queued user, force-promote Available Singer (schema-state `'audience'` row — see vocabulary-trap callout at top), skip current/next, take over
+- Remove redundant "Leave"/"Home" tile from screen-home (Back-to-Elsewhere replaces it)
 - Restart, Pause, Stop, End-Song semantics per Section 2 (Stop ≠ End Turn)
-- Manager override mechanism implementation (per Section 2 implementation note — choose Option A/B/C in pre-implementation audit)
+- Manager override mechanism implementation (Option B locked — manager phone joins Agora as silent host with mic-mute discipline)
+
+**Phase status:**
+
+- **2e.0** — push notification infrastructure: ✓ SHIPPED
+- **2e.1** — read-only role-aware UI: ✓ SHIPPED
+- **2e.2** — self write actions (queue, leave, update song, start song; promotion push trigger; Take Stage modal): ✓ SHIPPED (singer.html v2.110)
+- **2e.3** — manager queue management UI + Manager Override (Option B): PENDING (next session, ~3-4 hr)
 
 **Deferred (per Q-2B):**
 
-- Manager picks song/venue/costume/mic on behalf of Active Singer (helper-for-elderly-relative scenario)
+- Manager picks song/venue/costume on behalf of Active Singer (helper-for-elderly-relative scenario)
 
 ### 5.3 Session 5 — Part 2f (karaoke/audience.html session integration)
 
@@ -595,7 +651,7 @@ Original 2f plan included audience read-only queue display. Per the audience.htm
 - Update Back-to-Elsewhere visibility rule from "HHU only" to "all audience users" (small change, removes household-membership gate on existing pill)
 - Bug fixes only beyond this
 
-2f may not need a dedicated implementation pass. It could land as part of 2e's verification work or as a small standalone commit.
+2f may not need a dedicated implementation pass. It could land as part of 2e.3's verification work or as a small standalone commit.
 
 ### 5.4 Post-Session-5 — Audience-to-NHHU conversion path
 
@@ -640,25 +696,13 @@ This is captured as DEFERRED entry: "Migrate audience.html into unified app as p
 
 This is captured as DEFERRED entry: "Manager picks song/venue/costume on behalf of Active Singer."
 
-### 5.7 Architectural decisions deferred to implementation passes
+### 5.7 Architectural decisions
 
-**Manager Override mechanism:** How the Session Manager's phone sends mid-song commands that affect the Active Singer's TV stage. Three options under consideration:
+**Manager Override mechanism:** locked to Option B in 2e audit. Manager phone joins Agora as silent host (`setClientRole('audience')` initially, upgrade to `'host'` only when sending data-channel commands), with mic-mute discipline. Implementation in 2e.3.
 
-- **Option A:** Session Manager phone sends Supabase realtime command → Active Singer's phone listens and re-broadcasts as Agora to stage
-- **Option B:** Session Manager phone gets direct stage-channel access; sends Agora commands directly
-- **Option C:** New RPC layer for session-state mutations that publishes events stage.html consumes
+**Push notification mechanism:** locked in 2e.0 and shipped end-to-end in 2e.2. Capacitor `@capacitor/push-notifications` + APNs HTTP/2 via Edge Function `send-push-notification`. Postgres trigger on `session_participants` UPDATE (queued→active only) fires `pg_net.http_post` to Edge Function. Operational on iOS Capacitor app, sandbox cert. Production cert flip pending.
 
-Decision deferred to 2e implementation pass.
-
-**Push notification mechanism:** "You are up — click to take stage" notification when phone is backgrounded.
-
-- Web Push API requires service worker registration and user permission grant
-- Native push requires app shell (Capacitor wrapper) configured for FCM/APNs
-- Decision deferred — likely native via Capacitor since the iOS app shell already exists
-
-**Take-over UI specifics:** When Session Manager force-takes-over, what does the displaced Active Singer see on their phone? Sudden state change with explanation? Toast notification? Undo affordance for the manager (within a few seconds)?
-
-Decision deferred to 2e implementation pass.
+**Take-over UI specifics:** When Session Manager force-takes-over, what does the displaced Active Singer see on their phone? Per 2e.3 framing, the cheap path is "silent flip — role-aware UI re-renders." Toast/explanation is a polish addition deferred post-2e.
 
 ### 5.8 Implementation summary by sub-part
 
@@ -670,12 +714,14 @@ Decision deferred to 2e implementation pass.
 | 2c.2 | ✓ SHIPPED (commit `0a3a9ea`) | Post-login home unification + proximity banner |
 | 2c.3.1 | ✓ SHIPPED (commit `e4a348e`) | Active-session rendering + rejoin + cross-app switch |
 | 2c.3.2 | ✓ SHIPPED (commit `5617689`) | Back-to-Elsewhere visibility across play-pages |
-| 2d.1 | PENDING | Stage.html read/display (queue panel, realtime subs, idle state, "Up Next" card) |
-| 2d.2 | PENDING — possibly collapses into 2d.1 | Stage.html state mutation handlers (pre-selections load, navigation on session_ended) |
-| 2e | PENDING — largest remaining sub-part | Singer.html role-aware (most of this control model's net-new work) |
+| 2d.1 | ✓ SHIPPED | Stage.html read/display (queue panel, realtime subs, idle state, "Up Next" card) |
+| 2e.0 | ✓ SHIPPED | Push notification infrastructure (Capacitor + APNs + Edge Function) |
+| 2e.1 | ✓ SHIPPED | Read-only role-aware UI on singer.html |
+| 2e.2 | ✓ SHIPPED (singer.html v2.110) | Self write actions on singer.html (queue, leave, update song, start song) + promotion push trigger end-to-end |
+| 2e.3 | PENDING — next session | Manager queue management UI + Manager Override (Option B) |
 | 2f | PENDING — significantly reduced | Audience.html session lifecycle verification + Back-to-Elsewhere visibility rule update |
 
-Total Session 5 scope after this control model: 2d, 2e, 2f. Estimated remaining time depends on how 2d.2 collapses and the 2e architectural decisions; rough estimate is 6-10 hours of focused work across all three sub-parts.
+Total Session 5 scope after this control model: 2e.3, 2f. Estimated remaining time: 4-6 hours of focused work.
 
 ### 5.9 Documents updated alongside this spec
 
@@ -690,5 +736,5 @@ When this control model lands, the following docs need synchronized updates:
   4. Migrate audience.html into unified app as parameterized NHHU view
   5. Audience browsing of venues/costumes for marketing
   6. Audience read-only queue display
-  7. Manager Override mechanism design (architectural decision)
+  7. Manager Override mechanism design (architectural decision) — RESOLVED: Option B locked in 2e audit
 - `docs/SESSION-5-HANDOFF.md` — point at this control model as the spec source for 2d/2e/2f implementation

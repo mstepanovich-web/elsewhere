@@ -12,6 +12,27 @@ At the start of any session, read these docs in order for current context:
 
 Both `ROADMAP.md` and `DEFERRED.md` are updated at the end of each session. To check freshness, compare `git log -1 --format=%H docs/ROADMAP.md` against `git log -1 --format=%H` on main. If ROADMAP.md wasn't updated in the most recent feature commit or within 2-3 commits of it, flag to the user that the roadmap may be out of date before acting on it.
 
+### For chat-session Claude assistants (not Claude Code)
+
+If you're a Claude assistant in a chat interface (claude.ai web, mobile app) — i.e. you don't have direct file-system access to this repo — and the user has just pasted `docs/CONTEXT.md` as their first message, that document is the kickoff briefing. It contains the project's mental model, doctrine, and current state in inline form. After reading it, you have enough context to do most work without further file reads.
+
+If the user starts a chat session WITHOUT pasting CONTEXT.md, ask them to paste it before substantive work. The project is too large to reconstruct from scratch each session, and the cost of asking is small compared to the cost of building wrong assumptions.
+
+For task-specific context, see `docs/README.md` "Doc Bundle Recipes" — it maps task types (karaoke session work, push debugging, games work, new-app/surface work) to specific doc bundles to paste alongside CONTEXT.md. Same recipes apply to Claude Code: when working on a specific task type, pre-read those exact docs.
+
+### Task type → doc bundle (summary)
+
+| Task type | Read in addition to CONTEXT.md |
+|---|---|
+| Karaoke session work (roles, queues, manager UI, singer.html) | `SESSION-5-PART-2E-AUDIT.md`, `KARAOKE-CONTROL-MODEL.md`, most recent `SESSION-5-PART-2EN-LOG.md` |
+| Push notification debugging | `SESSION-5-PART-2E0-LOG.md`, `SESSION-5-PART-2E2-LOG.md` |
+| Games work | `ROADMAP.md`, `DEFERRED.md`, any games-specific session log |
+| New app or surface (Wellness, Room Mode) | `ROADMAP.md`, `SESSION-5-PART-2-BREAKDOWN.md`, `PHONE-AND-TV-STATE-MODEL.md` |
+| Roadmap / planning questions | `ROADMAP.md`, `DEFERRED.md` |
+| Picking up mid-thread | most recent session log |
+
+The full recipe text (with copy-pasteable bash commands for chat sessions) is in `docs/README.md`.
+
 ## What this repo is
 
 Elsewhere is a multi-device browser party app (Karaoke, Games) that pairs a TV/big-screen "host" page with phone "client" pages over Agora RTC. There is no build step — every entry point is a static HTML file served from GitHub Pages at `https://mstepanovich-web.github.io/elsewhere`.
@@ -36,7 +57,9 @@ games/
   engine/                 # ESM modules — last-card.js, trivia.js, sync.js
 venues/  *.jpg            # panorama backgrounds (shared across products — keep at root)
 sounds/  *.mp3            # matching ambient audio for each venue (shared)
+sounds/ui/  *.mp3         # application UI sounds (notifications, transitions); separate from venue ambient
 db/       *.sql           # Supabase schema migrations (Path B)
+supabase/functions/       # Edge Functions (e.g. send-push-notification)
 ```
 
 A Phase 1 Path B restructure (commit `[v2.93]`) moved the karaoke pages into `karaoke/` and deleted the orphaned root `index.html` + stale `tv.html`. `venues/` and `sounds/` stayed at the root on purpose so future products (e.g. wellness) can share them.
@@ -52,6 +75,16 @@ npx http-server . -S -C cert.pem -K key.pem -p 8443
 ```
 
 When testing on a phone you must hit the deployed HTTPS URL (or a tunneled HTTPS dev server) — the Agora `AgoraRTC_N` SDK throws `SDK not loaded` on insecure origins, and singer/audience both bail out with that exact error string.
+
+### Edge Function deploys
+
+The `send-push-notification` Edge Function MUST be deployed with the `--no-verify-jwt` flag:
+
+```bash
+supabase functions deploy send-push-notification --no-verify-jwt
+```
+
+See the doctrine section below for why. A vanilla `supabase functions deploy send-push-notification` will silently break the push trigger.
 
 ## Architecture
 
@@ -118,9 +151,37 @@ Phantom/aspirational venues don't stay in the JSON — if there's no `.jpg` in `
 
 - **Roadmap and post-Session-5 plans are in the docs, not in Claude's head.** The unified-app migration (audience.html absorbed into HHU app), audience-to-NHHU conversion path, cross-app venue rendering module, and games venue integration are all documented in `docs/DEFERRED.md` and `docs/KARAOKE-CONTROL-MODEL.md` § 5.4-5.5. Future Claudes asked "what's after 2e" or "what's the post-Session-5 plan" should READ THESE DOCS FIRST and surface what's documented, not estimate from first principles. The work is already broken down — find it.
 
+- **Direct SQL UPDATEs on `session_participants` do not publish realtime events.** The realtime publish path runs inside RPCs (e.g., `rpc_session_update_participant`), not at the table level. Manual SQL testing won't exercise client realtime handlers — connected phones won't see the change until a refresh path runs. Use RPC calls or real client actions when testing flows that involve realtime reactions. The Postgres triggers in `db/` (e.g., `db/015` push trigger) DO fire on direct SQL because they're pure database-side; only the client-side realtime broadcast publishing is RPC-gated. (Surfaced 2e.2; see `docs/SESSION-5-PART-2E2-LOG.md`.)
+
+- **`send-push-notification` Edge Function deploys MUST include `--no-verify-jwt`.** The Postgres trigger sends a non-JWT shared secret in the `Authorization: Bearer` header. Without `--no-verify-jwt`, Supabase's edge gateway rejects the call before it reaches function code with `UNAUTHORIZED_INVALID_JWT_FORMAT`. A vanilla `supabase functions deploy send-push-notification` will silently re-enable JWT verification at the gateway and break the trigger. This is a real footgun — consider a wrapper script (`scripts/deploy-push-fn.sh`) if/when you forget once. The shared secret design itself is in the function header comment and in `db/015`. (Locked 2e.2.)
+
+- **iOS bundle drift mid-session is acceptable.** The Capacitor app at `~/Projects/elsewhere-app/` bundles its own copy of the web files via `cap sync` from `~/Projects/elsewhere-app/www/`. That bundle is updated via rsync from the repo, then `npx cap sync ios`, then Xcode rebuild + install. Don't sync after every web edit — only when testing native concerns (push notifications, Capacitor plugins, fullscreen). Mobile Safari against GitHub Pages handles most iteration. End-of-session sync if a final on-device verification is needed.
+
+- **Application UI sounds go in `sounds/ui/`.** Notifications, transitions, alerts. The root `sounds/` directory is for venue ambient (matched 1:1 with `venues/`). Don't bury app-level sounds inside per-app folders. (Convention locked 2e.2; first inhabitant is `sounds/ui/take-stage.mp3`.)
+
 ## Conventions worth knowing
 
-- **Versioning.** Every page renders a `v2.NN` badge (search for `v2.88` to find them all). The convention from git history is: every commit bumps the version and every page that has the badge gets updated together — feature commits use `[vX.YY]` in the subject, e.g. `feat: 'Join as manager' checkbox on join screen [v2.88]`. When you ship a change, bump every `v2.NN` string in files you touched and any peer files that share the badge.
+- **Versioning.** Every page renders a `v2.NN` badge (search for `v2.88` to find them all). The convention from git history is: every commit bumps the version and every page that has the badge gets updated together — feature commits use `[vX.YY]` in the subject, e.g. `feat: 'Join as manager' checkbox on join screen [v2.88]`. When you ship a change, bump every `v2.NN` string in files you touched and any peer files that share the badge. Note: different surfaces have independent stamps — `singer.html` may be at `v2.110` while shell `index.html` is at `v2.99`. Bump only the surfaces you touched.
 - **No build step.** Don't introduce one. Don't add `<script type="module">` for the karaoke/audience HTML — the inline scripts assume globals. The games engines under `games/engine/` are the only ESM in the repo and are imported by the games TV/player pages.
 - **The Agora App ID is in source on purpose.** Don't try to "fix" it by moving to env vars — there is no server, every client needs it. Same for `YT_API_KEY` in `karaoke/singer.html` (it's domain-restricted in the Google console).
 - **Debug log panels.** Most pages have a "LOG" button bottom-left/right that pops a transcript — it's the primary way users report bugs. When adding new flows, call into the existing `log()` / `tvLog()` helpers instead of `console.log` only.
+- **TextEdit will mangle code files.** macOS TextEdit silently applies auto-formatting (smart quotes, encoding changes) that corrupts code on save. Always use Cursor, VS Code, BBEdit, or similar. If a file got opened in TextEdit and saved, check `git diff` for surprise character substitutions before committing.
+- **Chat clients autolink filenames as markdown links.** Filenames with `.md`, `.ts`, `.sql`, `.html` extensions get rendered as `[name](http://name)` in chat windows — both your messages going in and Claude's responses coming back. This is purely visual rendering. The actual filesystem and git always have clean filenames. To verify: `ls | cat` shows the bytes without TTY rendering, or screenshot your real Terminal. When pasting commands that reference filenames, build paths from variables (`F=~/path/file.md; ls "$F"`) or use `pbcopy` from terminal directly to bypass chat copy-paste.
+
+## End-of-session ritual
+
+Before pushing the final commit of any session, work this checklist:
+
+1. **Session log written and committed.** Create `docs/SESSION-X.X.X-LOG.md` covering what shipped, what was discovered, what was deferred. Include verification status. The log is append-only history — write it for someone who wasn't in the session.
+
+2. **`docs/CONTEXT.md` current-state section updated.** If the session shipped meaningful new state (new version stamps, new locked decisions, new architecture pieces), reflect it. CONTEXT.md is the kickoff briefing for the next chat session — stale state here costs the next 30 minutes of every future chat.
+
+3. **`docs/DEFERRED.md`: append every item surfaced during the session that isn't being fixed in this session.** Use the existing entry format (Deferred-in / Priority / Area / Status / Context / What's deferred / Options / When to pick up / Related). Items mentioned only in session logs are discoverable only by archaeology. If something came up during the session and got punted — even a small papercut — write the entry now while the context is fresh.
+
+4. **`docs/DEFERRED.md`: mark resolved items with `**Status:** Completed in Session X.Y`.** If the session closed out items that were on the backlog, update them in place — don't delete. The status change is the audit trail.
+
+5. **`docs/ROADMAP.md` updated if direction changed.** Session pipeline shifts, scope changes for future sessions, new sessions inserted — capture them. Don't update ROADMAP just because a session completed normally; that's not direction change.
+
+The DEFERRED.md step (item 3) is the most likely to be skipped under time pressure. Treat it as non-optional. Items mentioned only in session logs are functionally lost — the session log is the trail, DEFERRED.md is the inbox. Items that don't make it to the inbox don't get worked on, even when you remember they exist; they just sit in your head as nagging unease that something is being dropped.
+
+If the user says "we're done" without working through this checklist, prompt them. The checklist is cheap (15 minutes for a productive session); skipping it is expensive (every future session pays for the gap).
