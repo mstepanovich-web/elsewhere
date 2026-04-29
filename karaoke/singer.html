@@ -69,7 +69,8 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
 .aud-row{font-size:12px;color:rgba(255,220,150,.65);display:flex;align-items:center;gap:6px;}
 .aud-dot{width:5px;height:5px;border-radius:50%;background:var(--color-green);flex-shrink:0;}
 
-/* MANAGE QUEUE (2e.3.1 §2) */
+/* MANAGE QUEUE (2e.3.1 §2; #mq-list spacing tightened in §6) */
+#mq-list{padding-top:8px;}
 .mq-row{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid rgba(255,255,255,.06);min-height:56px;}
 .mq-row.active{background:rgba(255,180,80,.08);border-left:2px solid var(--color-gold);padding-left:16px;}
 .mq-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;font-family:var(--font-mono);color:#fff;flex-shrink:0;}
@@ -148,6 +149,10 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
 #screen-mic{align-items:center;justify-content:space-between;}
 #mic-top2{width:100%;padding:0 18px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
 #mic-info2{font-family:var(--font-display);font-size:13px;font-style:italic;color:rgba(255,220,150,.5);text-align:center;flex:1;padding:0 10px;}
+/* 2e.3.1 §6: dedicated header for screen-manage-queue. Left-aligned title, no
+   counterweight needed against .back-to-elsewhere pill (z:8000 top-right). */
+#mq-top{width:100%;padding:0 18px 12px;display:flex;align-items:center;justify-content:flex-start;gap:14px;flex-shrink:0;background:var(--color-bg);border-bottom:1px solid var(--color-border-dim);}
+#mq-title{font-family:var(--font-display);font-size:15px;font-style:italic;color:rgba(255,220,150,.7);}
 #mic-centre{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
 #mute-btn{width:180px;height:180px;border-radius:50%;border:3px solid rgba(0,232,122,.4);background:radial-gradient(circle at 40% 35%,rgba(0,232,122,.14),rgba(0,232,122,.04));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;position:relative;touch-action:manipulation;transition:all .25s;-webkit-user-select:none;}
 #mute-btn.muted{border-color:rgba(196,122,107,.5);background:radial-gradient(circle at 40% 35%,rgba(196,122,107,.14),rgba(196,122,107,.04));}
@@ -242,7 +247,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.115</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.116</div>
 </div>
 
 <!-- HOME -->
@@ -252,7 +257,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.115</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.116</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -568,10 +573,9 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
 
 <!-- 2e.3.1 Manage Queue screen — list populated by renderManageQueueList -->
 <div id="screen-manage-queue" class="screen" style="overflow-y:scroll;-webkit-overflow-scrolling:touch;">
-  <div id="mic-top2">
+  <div id="mq-top">
     <div class="nav-back" onclick="showScreen('screen-home')">← Home</div>
-    <div id="mic-info2">Manage Queue</div>
-    <div></div>
+    <div id="mq-title">Manage Queue</div>
   </div>
   <div id="mq-list"></div>
 </div>
