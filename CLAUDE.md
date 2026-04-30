@@ -54,7 +54,6 @@ karaoke/
 games/
   tv.html                 # lobby + board
   player.html             # phone (controls, manager bar, per-player tiles; also the iOS-app payload)
-  engine/                 # ESM modules — last-card.js, trivia.js, sync.js
 venues/  *.jpg            # panorama backgrounds (shared across products — keep at root)
 sounds/  *.mp3            # matching ambient audio for each venue (shared)
 sounds/ui/  *.mp3         # application UI sounds (notifications, transitions); separate from venue ambient
@@ -106,7 +105,7 @@ Both modes use the same Agora App ID (`b2c6543a9ed946829e6526cb68c7efc9`, hardco
 1. **1KB chunking.** Agora silently drops stream messages over ~1KB. Every sender chunks payloads larger than that with an `_chunk: true / id / i / n / d` envelope and every receiver reassembles them in a per-uid buffer (search for `_chunkBuf` / `audChunkBuf` / `_tvChunkBuf`). When you add a new message type, if the JSON could ever exceed ~900 bytes (e.g. full game state, hand snapshots) it MUST go through the chunked sender — see commit `f7ae144` for the regression that motivated this.
 2. **`createDataStream` is not always supported.** Some Agora SDK versions (notably the live-mode one used by `karaoke/singer.html` / `karaoke/stage.html`) throw on `createDataStream` and the code falls back to `client.sendStreamMessage(bytes, true)` with a null `streamId`. Both call shapes exist in the codebase — don't "clean up" one into the other.
 
-`games/engine/sync.js` is the only place this is wrapped in a class (`GameSync`). The karaoke code does it inline because it predates the wrapper.
+Games TV and player code use Agora data streams inline (matching the karaoke pattern). The earlier-shipped `games/engine/` directory was removed in Session 5 Part 3a.1 — it contained never-imported draft modules (`last-card.js`, `trivia.js`, `sync.js`) that did not match the actual inline implementations in `games/player.html`.
 
 ### Karaoke (stage / singer / audience)
 All karaoke HTML lives under `karaoke/`. The DeepAR effect bundles live at `karaoke/effects/`.
@@ -137,10 +136,9 @@ Phantom/aspirational venues don't stay in the JSON — if there's no `.jpg` in `
 
 ### Games (last-card / trivia / euchre)
 - `games/tv.html` is the lobby + board renderer. `games/player.html` is the phone (with controls, the manager bar, and per-player camera tiles).
-- `games/engine/last-card.js` and `games/engine/trivia.js` are pure-function game engines: `createGame(...)`, `applyMove(state, action) → newState`. State is plain JSON, designed to be sent verbatim over Agora. Euchre is implemented inline in `games/player.html` and `games/tv.html` (no engine module yet, despite being listed in `GAME_INFO`).
-- `games/engine/sync.js` is the wrapper class new game code should use. The existing TV/player files predate it and use Agora directly.
-- Trivia hits the Anthropic API directly from the browser (`generateQuestions` in `trivia.js`). There is no auth header in that fetch — if you're touching this, the manager's API key has to be supplied somewhere or the call will 401. Don't add a hard-coded server key.
-- The "manager" role (one player per room) is the only one allowed to start/end games and select the next game; it's chosen by the `?mgr=1` URL param or a checkbox on the join screen.
+- All three games (Last Card, Trivia, Euchre) are implemented inline in `games/player.html` (~3300 lines). The TV-side rendering for each game is in `games/tv.html`. Game state is plain JSON broadcast over Agora `sendStreamMessage` from the manager (authoritative state holder); receivers replace local state on each broadcast. Per-game state machines: Trivia (`waiting → question → reveal → ... → game-end`), Last Card (`playing → round-end`), Euchre (`bid1 → bid2 → play → hand-end → ... → game-end`).
+- Trivia hits the Anthropic API directly from the browser (`triviaGenerate` in `games/player.html`). There is no auth header in that fetch — if you're touching this, the manager's API key has to be supplied somewhere or the call will 401. Don't add a hard-coded server key.
+- The "manager" role (one player per room) is the only one allowed to start/end games and select the next game; manager identity is set when a user taps the Games tile in the Elsewhere shell (which calls `rpc_session_start`, inserting the caller as `control_role='manager'`). Pre-Session-5 the role was set via a `?mgr=1` URL param or a join-screen checkbox; both retired in 3a.1.
 
 ### Theme system
 `elsewhere-theme.css` is the single source of truth for colors, fonts, spacing, radii, z-index. Every HTML file links it (mostly via the absolute GitHub Pages URL `https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css` so the deployed pages get the live theme). New UI should reach for `var(--color-*)`, `var(--font-*)`, `var(--text-*)`, `var(--tracking-*)`, `var(--radius-*)` etc. instead of hardcoding values. Per-product overrides ride on body classes (e.g. `theme-worlds`, `theme-movies`). An unused `theme-fashion` class is still defined in the stylesheet — left in place because `archive/fashion` references it; no live page uses it.
@@ -164,7 +162,7 @@ Phantom/aspirational venues don't stay in the JSON — if there's no `.jpg` in `
 ## Conventions worth knowing
 
 - **Versioning.** Every page renders a `v2.NN` badge (search for `v2.88` to find them all). The convention from git history is: every commit bumps the version and every page that has the badge gets updated together — feature commits use `[vX.YY]` in the subject, e.g. `feat: 'Join as manager' checkbox on join screen [v2.88]`. When you ship a change, bump every `v2.NN` string in files you touched and any peer files that share the badge. Note: different surfaces have independent stamps — `singer.html` may be at `v2.110` while shell `index.html` is at `v2.99`. Bump only the surfaces you touched.
-- **No build step.** Don't introduce one. Don't add `<script type="module">` for the karaoke/audience HTML — the inline scripts assume globals. The games engines under `games/engine/` are the only ESM in the repo and are imported by the games TV/player pages.
+- **No build step.** Don't introduce one. Don't add `<script type="module">` for inline scripts — they assume globals. The repo uses ESM only for `shell/auth.js` and `shell/realtime.js` (loaded as `<script type="module">` from each consumer page).
 - **The Agora App ID is in source on purpose.** Don't try to "fix" it by moving to env vars — there is no server, every client needs it. Same for `YT_API_KEY` in `karaoke/singer.html` (it's domain-restricted in the Google console).
 - **Debug log panels.** Most pages have a "LOG" button bottom-left/right that pops a transcript — it's the primary way users report bugs. When adding new flows, call into the existing `log()` / `tvLog()` helpers instead of `console.log` only.
 - **TextEdit will mangle code files.** macOS TextEdit silently applies auto-formatting (smart quotes, encoding changes) that corrupts code on save. Always use Cursor, VS Code, BBEdit, or similar. If a file got opened in TextEdit and saved, check `git diff` for surprise character substitutions before committing.

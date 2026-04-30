@@ -482,7 +482,7 @@
   </div>
   <div id="log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.99</div>
+<div class="ver">v2.100</div>
 
 <script>
 'use strict';
@@ -508,19 +508,50 @@ document.getElementById('tv-room-badge').textContent   = 'Room ' + roomCode;
 let agoraClient = null;
 let currentGame = null;
 let gameState   = null;
-let players     = {};   // uid → { name, isManager, player_id, hasCamera, videoTrack }
 let invitedList = [];   // names invited but not yet joined
 let streamId    = null; // Agora data stream id (or null → use fallback sendStreamMessage signature)
 
-// Session 4.8 TV-pairing state.
-// Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
-// tvDisplays: [{ owner_id, tv_uid, tv_name }]
-// tvUidSet:   Set of Agora uids that are paired TVs (not players)
-// pendingRemovals: 10s grace timers keyed by player_id or tv_uid
-let tvDisplays      = [];
-const tvUidSet      = new Set();
+// 3a.1: Session 5 module state. Mirrors karaoke/stage.html (lines 5057-5062).
+// Source of truth for who's in the session and what role each plays.
+// Populated by refreshSessionState() via rpc_session_get_participants.
+// TV doesn't have a "self" participant, so no currentMyRow.
+let currentSession      = null;  // sessions row
+let currentParticipants = [];    // session_participants rows + display_name
+
+// 3a.1: Agora-level transient state. Keyed by Agora uid (rotates on reconnect).
+// Distinct from currentParticipants (session-level, durable, keyed by user_id).
+// Render functions join the two via uidToUserId map populated by the
+// agora-identity-bind protocol.
+//
+// Note: TV does NOT store videoEl in cameraState (unlike player.html). Render
+// functions on tv.html create video elements at render time and attach the
+// track via videoTrack.play(el). Pre-3a tv.html stored .videoTrack only on
+// players{}; this matches that pattern.
+//
+// agora-identity-bind: ephemeral identity-binding Agora message carrying
+// (Agora uid → auth user_id, player_id) at announce time. TV maintains both
+// maps but does NOT broadcast its own bind — TV has no participant identity.
+let cameraState        = {};   // uid       → { hasCamera, videoTrack }
+let uidToUserId        = {};   // uid       → auth user_id (for camera-tile attachment)
+let playerIdToUserId   = {};   // player_id → auth user_id (for tv-display-added owner translation)
+
+// 3a.1: tv-display-added state. Keyed by user_id (translated from wire field
+// msg.owner_id, which is a player_id, via playerIdToUserId). Replaces pre-3a
+// tvDisplays[] flat array and tvUidSet (no longer needed — currentParticipants
+// from DB is the canonical "who's a player vs not" source; TVs that join Agora
+// don't appear in currentParticipants).
+let tvDisplaysByUserId = {};   // user_id → [{ tv_uid, tv_name }]
+
+// pendingRemovals: 10s grace timers for tv_uid disconnect-flicker mitigation.
+// Pre-3a: keyed by player_id OR tv_uid. Post-3a-1: tv_uid only — player
+// session state is durable in session_participants, so player Agora user-left
+// just clears cameraState (no grace needed; camera-tile flicker acceptable).
 const pendingRemovals = new Map();
 const TV_GRACE_MS   = 10000;
+
+// 3a.1: Realtime channel state. Bound to tv_device:<device_key> topic.
+let _tvRealtimeChannel          = null;
+let _tvRealtimeChannelDeviceKey = null;
 
 // ── Color helpers ────────────────────────────────────────────
 // game-semantic, intentionally not themed — Last Card per-suit BG hex (COLOR_BG used on inline styles)
@@ -544,14 +575,10 @@ async function initAgora() {
 
   agoraClient.on('user-joined', u => {
     tvLog('user-joined: '+u.uid);
-    // Session 4.8: paired TVs announce themselves via tv-display-added
-    // which arrives shortly after user-joined. If we already know this
-    // uid is a TV (from a prior broadcast this session) skip adding to
-    // players — otherwise provisionally add and tv-display-added handler
-    // will move it out.
-    if (tvUidSet.has(u.uid)) return;
-    if (!players[u.uid]) players[u.uid] = { name:'...', isManager:false, hasCamera:false };
-    renderLobby();
+    // 3a.1: no longer pre-create a placeholder players{} entry. Session-level
+    // membership is read from currentParticipants (populated via DB). Camera
+    // state arrives via user-published (video track) and gets stored on
+    // cameraState[uid]. Render runs on next refresh or camera event.
   });
 
   // Session 4.8: grace-period removal. Players + TVs are held 10s before
@@ -567,9 +594,9 @@ async function initAgora() {
   agoraClient.on('user-published', async (user, mediaType) => {
     if (mediaType === 'video') {
       await agoraClient.subscribe(user, 'video');
-      if (!players[user.uid]) players[user.uid] = { name:'...', isManager:false, hasCamera:false };
-      players[user.uid].hasCamera  = true;
-      players[user.uid].videoTrack = user.videoTrack;
+      // 3a.1: store on cameraState[uid] instead of players[uid]. Render
+      // functions join via uidToUserId reverse-lookup against currentParticipants.
+      cameraState[user.uid] = { hasCamera: true, videoTrack: user.videoTrack };
       tvLog('video from: '+user.uid);
       renderLobby();
       renderPlayerTiles();
@@ -577,7 +604,9 @@ async function initAgora() {
   });
 
   agoraClient.on('user-unpublished', (user) => {
-    if (players[user.uid]) { players[user.uid].hasCamera=false; players[user.uid].videoTrack=null; }
+    if (cameraState[user.uid]) {
+      cameraState[user.uid] = { hasCamera: false, videoTrack: null };
+    }
     renderLobby();
     renderPlayerTiles();
   });
@@ -646,54 +675,59 @@ function handleMessage(uid, data) {
     if (msg._chunk) { msg = handleChunk(msg); if (!msg) return; }
     tvLog('← '+msg.type+' '+(msg._name||''));
 
-    // Session 4.8: players identified by stable player_id. On reconnect
-    // the Agora uid rotates; find existing entry by player_id and move
-    // it to the new uid so TV ownership etc. stays consistent.
-    // Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
-    if (msg.type==='player-join' || msg.type==='player-join-ack') {
-      const pid = msg.player_id || null;
-      // Look for existing entry by player_id first.
-      let oldUid = null;
-      if (pid) {
-        for (const [k, p] of Object.entries(players)) {
-          if (p.player_id === pid && k !== String(uid)) { oldUid = k; break; }
-        }
+    // 3a.1: Agora identity binding. TV maintains uidToUserId{} (camera-tile
+    // attachment) and playerIdToUserId{} (tv-display-added owner translation).
+    // TV does NOT broadcast its own bind — TV has no participant identity.
+    // TV does NOT echo received binds — pre-3a tv.html never broadcast at
+    // join, and echoing here would create network noise without value.
+    // Idempotent — receiving an existing-known bind re-writes the same value.
+    if (msg.type === 'agora-identity-bind') {
+      if (msg.user_id) {
+        uidToUserId[uid] = msg.user_id;
+        if (msg.player_id) playerIdToUserId[msg.player_id] = msg.user_id;
       }
-      if (oldUid) {
-        // Reconnect: move the entry to the new uid.
-        players[uid] = players[oldUid];
-        delete players[oldUid];
-      }
-      if (!players[uid]) players[uid] = { hasCamera:false };
-      players[uid].name      = msg.name;
-      players[uid].isManager = msg.isManager;
-      if (pid) players[uid].player_id = pid;
-      // Cancel any pending-removal grace timer.
-      if (pid && pendingRemovals.has(pid)) { clearTimeout(pendingRemovals.get(pid)); pendingRemovals.delete(pid); }
-      // Remove from invited when they join lobby
-      if (msg.name) invitedList = invitedList.filter(n => n.toLowerCase() !== msg.name.toLowerCase());
+      // Re-render — newly-bound camera tile may now be attachable.
       renderLobby();
+      renderPlayerTiles();
+      return;
     }
 
-    // Session 4.8: tv-display-added — a secondary paired TV announced
-    // itself. Move its uid out of players (if we provisionally added it
-    // on user-joined) and into tvDisplays.
+    // 3a.1: player-join / player-join-ack handlers retired. Lobby state on
+    // tv.html now comes from currentParticipants (populated via
+    // refreshSessionState), propagated by realtime participant_role_changed
+    // events. Bind handler above covers Agora uid rebinding on reconnect.
+
+    // 3a.1: tv-display-added — write to tvDisplaysByUserId map, keyed by
+    // user_id (translated from wire field msg.owner_id which is a player_id,
+    // via playerIdToUserId map populated by the agora-identity-bind handler
+    // above). Pre-3a tvUidSet is gone — currentParticipants from DB is the
+    // canonical "who's a player" source; TVs that join Agora don't appear
+    // in currentParticipants.
     if (msg.type==='tv-display-added') {
       const tvUid = msg.tv_uid;
-      // Drop provisional player entry for this TV's uid.
-      if (players[tvUid]) delete players[tvUid];
-      tvUidSet.add(tvUid);
       // Cancel any pending removal for this TV.
       if (pendingRemovals.has(tvUid)) { clearTimeout(pendingRemovals.get(tvUid)); pendingRemovals.delete(tvUid); }
-      if (!tvDisplays.some(d => d.tv_uid === tvUid)) {
-        tvDisplays.push({ owner_id: msg.owner_id, tv_uid: tvUid, tv_name: msg.tv_name });
+      const ownerUserId = playerIdToUserId[msg.owner_id];
+      if (ownerUserId) {
+        if (!tvDisplaysByUserId[ownerUserId]) tvDisplaysByUserId[ownerUserId] = [];
+        if (!tvDisplaysByUserId[ownerUserId].some(t => t.tv_uid === tvUid)) {
+          tvDisplaysByUserId[ownerUserId].push({ tv_uid: tvUid, tv_name: msg.tv_name });
+        }
+      } else {
+        // Owner's bind hasn't arrived yet — log and skip. The TV will
+        // rebroadcast on Agora reconnect (per tv.html line 591-594), giving
+        // another chance after the bind arrives.
+        tvLog('tv-display-added with unknown owner_id='+msg.owner_id+' — bind not received yet, skipping');
       }
       renderLobby();
     }
 
     if (msg.type==='invite-sent') {
       if (msg.names) {
-        invitedList = msg.names.filter(n => !Object.values(players).find(p=>p.name===n));
+        // 3a.1: source for "already-in-session" check moves from players{}
+        // to currentParticipants. display_name is the post-3a-1 canonical
+        // name source (matches what's rendered in the roster).
+        invitedList = msg.names.filter(n => !currentParticipants.find(p => p.display_name === n));
       } else if (msg.name && !invitedList.includes(msg.name)) {
         invitedList.push(msg.name);
       }
@@ -710,8 +744,8 @@ function handleMessage(uid, data) {
       tvLog('game-selected: '+msg.game);
     }
 
-    if (msg.type==='camera-on')  { if(players[uid]) players[uid].hasCamera=true; renderLobby(); renderPlayerTiles(); }
-    if (msg.type==='camera-off') { if(players[uid]) { players[uid].hasCamera=false; players[uid].videoTrack=null; } renderLobby(); renderPlayerTiles(); }
+    if (msg.type==='camera-on')  { cameraState[uid] = { ...(cameraState[uid] || {}), hasCamera: true }; renderLobby(); renderPlayerTiles(); }
+    if (msg.type==='camera-off') { if (cameraState[uid]) cameraState[uid] = { hasCamera: false, videoTrack: null }; renderLobby(); renderPlayerTiles(); }
 
     if (msg.type==='game-start') {
       gameState = msg.state;
@@ -759,14 +793,24 @@ function showTrivia() {
 // Schedule removal 10s after user-left; cancel if the same player_id
 // (via player-join) or tv_uid (via tv-display-added) reappears.
 // Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+// 3a.1: simplified to TV grace-timer + camera-state-only player handling.
+// Lobby/session state is durable in session_participants; Agora user-left
+// no longer mutates lobby. TV pairing state (tvDisplaysByUserId) gets a
+// grace-period removal so brief TV reconnects don't flicker the displays.
 function scheduleRemoval(uid) {
-  // Paired TV?
-  if (tvUidSet.has(uid) || tvDisplays.some(d => d.tv_uid === uid)) {
+  // Paired TV? Scan tvDisplaysByUserId for this tv_uid.
+  let isPairedTv = false;
+  for (const list of Object.values(tvDisplaysByUserId)) {
+    if (list.some(t => t.tv_uid === uid)) { isPairedTv = true; break; }
+  }
+  if (isPairedTv) {
     if (pendingRemovals.has(uid)) return;
     const timer = setTimeout(() => {
       pendingRemovals.delete(uid);
-      tvUidSet.delete(uid);
-      tvDisplays = tvDisplays.filter(d => d.tv_uid !== uid);
+      // Remove this tv_uid from whichever user's list contains it.
+      for (const userId of Object.keys(tvDisplaysByUserId)) {
+        tvDisplaysByUserId[userId] = tvDisplaysByUserId[userId].filter(t => t.tv_uid !== uid);
+      }
       renderLobby();
       tvLog('TV removed after grace: '+uid);
     }, TV_GRACE_MS);
@@ -774,59 +818,58 @@ function scheduleRemoval(uid) {
     tvLog('TV disconnect grace: '+uid);
     return;
   }
-  // Otherwise a player (or a user we never identified).
-  const p = players[uid];
-  const pid = p?.player_id || null;
-  if (pid) {
-    if (pendingRemovals.has(pid)) return;
-    const timer = setTimeout(() => {
-      pendingRemovals.delete(pid);
-      if (players[uid] && players[uid].player_id === pid) delete players[uid];
-      renderLobby();
-      renderPlayerTiles();
-      tvLog('player removed after grace: '+pid);
-    }, TV_GRACE_MS);
-    pendingRemovals.set(pid, timer);
-    tvLog('player disconnect grace: '+pid);
-  } else {
-    // Unknown — no player_id. Immediate removal.
-    delete players[uid];
-    renderLobby();
-    renderPlayerTiles();
-  }
+  // Otherwise: player disconnect. Session state is durable; only camera
+  // state needs cleanup. No grace timer — camera tile flicker is acceptable.
+  if (cameraState[uid]) delete cameraState[uid];
+  if (uidToUserId[uid]) delete uidToUserId[uid];
+  renderLobby();
+  renderPlayerTiles();
 }
 
 // ── Lobby rendering ───────────────────────────────────────────
 function renderLobby() {
   const lobbyList   = document.getElementById('tv-lobby-list');
   const invitedEl   = document.getElementById('tv-invited-list');
-  // Skip entries still at their '...' placeholder — they're in the brief
-  // window between Agora user-joined and player-join. Hiding the dots
-  // prevents a flicker of '...' rows for paired TVs (whose player-join
-  // never arrives, only tv-display-added does).
-  const playerList  = Object.entries(players).filter(([,p]) => p.name && p.name !== '...');
 
-  if (playerList.length === 0) {
+  // 3a.1: source iterates currentParticipants (post-3a-1 canonical session
+  // state) instead of Object.entries(players). Camera-tile attachment via
+  // uidToUserId reverse-lookup against cameraState. Pre-3a "skip '...'
+  // placeholder" filter is gone — currentParticipants contains real session
+  // members only (no provisional Agora-user placeholders).
+  function findUidForUser(userId) {
+    for (const [u, uid_user] of Object.entries(uidToUserId)) {
+      if (uid_user === userId) return u;
+    }
+    return null;
+  }
+
+  if (currentParticipants.length === 0) {
     lobbyList.innerHTML = '<div class="lobby-empty">Waiting for players...</div>';
   } else {
-    lobbyList.innerHTML = playerList.map(([uid, p]) => {
-      const videoHtml = p.hasCamera && p.videoTrack
+    lobbyList.innerHTML = currentParticipants.map(p => {
+      const uid       = findUidForUser(p.user_id);
+      const cam       = uid ? cameraState[uid] : null;
+      const hasCamera = !!cam?.hasCamera;
+      const isManager = p.control_role === 'manager';
+      const videoHtml = hasCamera && cam.videoTrack
         ? '<video class="lobby-player-video" id="tv-vid-'+uid+'" autoplay muted playsinline></video>'
         : '';
       return `<div class="lobby-player-row">
-        <div class="lobby-dot ${p.isManager?'dot-gold':'dot-green'}"></div>
-        <div class="lobby-player-name">${p.name}</div>
-        ${p.isManager ? '<div class="lobby-badge badge-mgr">Host</div>' : ''}
-        ${p.hasCamera ? '<span style="font-size:14px;">📷</span>' : ''}
+        <div class="lobby-dot ${isManager?'dot-gold':'dot-green'}"></div>
+        <div class="lobby-player-name">${p.display_name}</div>
+        ${isManager ? '<div class="lobby-badge badge-mgr">Host</div>' : ''}
+        ${hasCamera ? '<span style="font-size:14px;">📷</span>' : ''}
         ${videoHtml}
       </div>`;
     }).join('');
 
     // Attach video tracks
-    playerList.forEach(([uid, p]) => {
-      if (p.hasCamera && p.videoTrack) {
+    currentParticipants.forEach(p => {
+      const uid = findUidForUser(p.user_id);
+      const cam = uid ? cameraState[uid] : null;
+      if (cam?.hasCamera && cam.videoTrack) {
         const el = document.getElementById('tv-vid-'+uid);
-        if (el) p.videoTrack.play(el);
+        if (el) cam.videoTrack.play(el);
       }
     });
   }
@@ -917,7 +960,25 @@ function renderPlayerTiles() {
     const score      = gameState?.scores?.[name] || 0;
     const isActive   = gameState && gameState.players[gameState.currentPlayerIdx] === name;
     const isLastCard = handCount === 1;
-    const pInfo      = Object.values(players).find(p => p.name === name) || {};
+    // 3a.1: pInfo synthesized from currentParticipants + uidToUserId + cameraState.
+    // Pre-3a's name-based join from gameState.players → players{} is replaced by
+    // name-based join from gameState.players → currentParticipants → cameraState.
+    // The duplicate-display-name fragility (Phase 1 Open Question A.1) is
+    // unchanged from pre-3a; tracked as DEFERRED.
+    const pInfo = (() => {
+      const part = currentParticipants.find(p => p.display_name === name);
+      if (!part) return {};
+      let uid = null;
+      for (const [u, userId] of Object.entries(uidToUserId)) {
+        if (userId === part.user_id) { uid = u; break; }
+      }
+      const cam = uid ? cameraState[uid] : null;
+      return {
+        isManager:  part.control_role === 'manager',
+        hasCamera:  !!cam?.hasCamera,
+        videoTrack: cam?.videoTrack || null,
+      };
+    })();
 
     const tile = document.createElement('div');
     tile.className = 'player-tile';
@@ -1223,6 +1284,10 @@ window.addEventListener('resize', () => {
 
 // ── Boot ──────────────────────────────────────────────────────
 initAgora();
+// 3a.1: kick off session-state lookup. Runs in parallel with initAgora;
+// no dependency on Agora being up. Mirrors stage.html's parallel-init
+// pattern. Failure paths fall back to solo mode (dev/direct-nav workflow).
+refreshSessionState().catch(e => tvLog('refreshSessionState bootup failed: ' + (e?.message || e)));
 
 // Session 4.10.3 / Session 5 Part 1c — wire exit_app listener. Helper in
 // shell/realtime.js reads device_key from localStorage and waits for
@@ -1270,6 +1335,159 @@ async function onExit() {
 
   tvLog('exit_app: no active session — navigating to tv2.html');
   location.href = '../tv2.html';
+}
+
+// ════════════════════════════════════════════════════════════════════
+// 3a.1: Session 5 helpers — refreshSessionState, realtime sub.
+// Mirrors karaoke/stage.html (lines 5380-5670 area). TV-side simplification:
+// no currentMyRow (TV has no self-participant), no role-based UI gating.
+// ════════════════════════════════════════════════════════════════════
+
+// 3a.1: session-state cold-path refresh on tv.html. Looks up session by
+// tv_device_id (stage.html pattern, NOT room_code), populates currentSession
+// + currentParticipants, subscribes to realtime events. Mirrors stage.html
+// refreshSessionState (line 5380).
+async function refreshSessionState() {
+  if (!window.sb) {
+    tvLog('refreshSessionState: supabase client unavailable — solo mode');
+    await resetSessionStateToSolo();
+    return;
+  }
+
+  let device_key = null;
+  try { device_key = localStorage.getItem('elsewhere.tv.device_key'); } catch (_) {}
+  if (!device_key) {
+    tvLog('refreshSessionState: no device_key in localStorage — solo mode (dev/direct-nav)');
+    await resetSessionStateToSolo();
+    return;
+  }
+
+  let tv = null;
+  try {
+    const { data, error } = await window.sb
+      .from('tv_devices').select('id').eq('device_key', device_key).maybeSingle();
+    if (error) throw error;
+    tv = data;
+  } catch (e) {
+    tvLog('refreshSessionState: tv_devices lookup failed (' + (e?.message || e) + ') — solo mode');
+    await resetSessionStateToSolo();
+    return;
+  }
+
+  if (!tv?.id) {
+    tvLog('refreshSessionState: tv_devices row not found — solo mode');
+    await resetSessionStateToSolo();
+    return;
+  }
+
+  let session = null;
+  try {
+    const { data, error } = await window.sb
+      .from('sessions')
+      .select('id, app, manager_user_id, admission_mode, capacity, room_code, started_at, current_state')
+      .eq('tv_device_id', tv.id)
+      .is('ended_at', null)
+      .maybeSingle();
+    if (error) throw error;
+    session = data;
+  } catch (e) {
+    tvLog('refreshSessionState: sessions query failed (' + (e?.message || e) + ') — solo mode');
+    await resetSessionStateToSolo();
+    return;
+  }
+
+  if (!session) {
+    tvLog('refreshSessionState: no active session for this TV — solo mode');
+    await resetSessionStateToSolo();
+    return;
+  }
+
+  let participants = [];
+  try {
+    const { data, error } = await window.sb
+      .rpc('rpc_session_get_participants', { p_session_id: session.id });
+    if (error) throw error;
+    participants = data || [];
+  } catch (e) {
+    tvLog('refreshSessionState: rpc_session_get_participants failed (' + (e?.message || e) + ') — partial state');
+    participants = [];
+  }
+
+  currentSession      = session;
+  currentParticipants = participants;
+
+  // Filter invitedList to drop names that have already joined.
+  // Pre-3a this filter ran inside the player-join handler (now retired).
+  invitedList = invitedList.filter(n => !currentParticipants.find(p => p.display_name === n));
+
+  tvLog('refreshSessionState: session ' + session.id + ' loaded with ' + participants.length + ' participants');
+
+  // Subscribe to realtime events. Idempotent — no-op if already subscribed.
+  await startGamesTvRealtimeSub(device_key);
+
+  renderLobby();
+  renderPlayerTiles();
+}
+
+// 3a.1: solo-mode reset (mirrors stage.html resetSessionStateToSolo). Called
+// from refreshSessionState failure paths. Keeps tv.html functional in
+// dev/direct-nav workflows where no DB session exists.
+async function resetSessionStateToSolo() {
+  currentSession      = null;
+  currentParticipants = [];
+  await stopGamesTvRealtimeSub();
+}
+
+// 3a.1: realtime sub on tv_device:<device_key>. Mirrors karaoke/stage.html
+// startStageRealtimeSub (line 5628) with games-specific event handlers.
+async function startGamesTvRealtimeSub(device_key) {
+  if (!device_key) return;
+  if (!window.sb) return;
+  if (_tvRealtimeChannel && _tvRealtimeChannelDeviceKey === device_key) return;
+  if (_tvRealtimeChannel) await stopGamesTvRealtimeSub();
+
+  let channel = null;
+  try {
+    channel = window.sb.channel('tv_device:' + device_key);
+    channel.on('broadcast', { event: 'participant_role_changed' }, () => refreshSessionState());
+    channel.on('broadcast', { event: 'queue_updated' },            () => refreshSessionState());
+    channel.on('broadcast', { event: 'session_ended' },            () => {
+      tvLog('realtime: session_ended — navigating to tv2.html');
+      location.href = '../tv2.html';
+    });
+
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (!settled) { settled = true; reject(new Error('realtime subscribe timed out')); }
+      }, 5000);
+      channel.subscribe(status => {
+        if (settled) return;
+        if (status === 'SUBSCRIBED') {
+          settled = true; clearTimeout(timer); resolve();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          settled = true; clearTimeout(timer); reject(new Error('realtime ' + status));
+        }
+      });
+    });
+
+    _tvRealtimeChannel          = channel;
+    _tvRealtimeChannelDeviceKey = device_key;
+    tvLog('startGamesTvRealtimeSub: subscribed to tv_device:' + device_key.slice(0, 8));
+  } catch (e) {
+    tvLog('startGamesTvRealtimeSub failed: ' + (e?.message || e) + ' — continuing without realtime');
+    if (channel) {
+      try { window.sb.removeChannel(channel); } catch (_) {}
+    }
+  }
+}
+
+async function stopGamesTvRealtimeSub() {
+  if (!_tvRealtimeChannel) return;
+  try { await _tvRealtimeChannel.unsubscribe(); } catch (_) {}
+  try { window.sb.removeChannel(_tvRealtimeChannel); } catch (_) {}
+  _tvRealtimeChannel          = null;
+  _tvRealtimeChannelDeviceKey = null;
 }
 
 function wireUp() {

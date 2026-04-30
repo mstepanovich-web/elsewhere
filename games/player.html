@@ -381,13 +381,6 @@
         <div class="join-label">Room Code</div>
         <input class="join-input" id="join-code" type="text" placeholder="ABCDEF" maxlength="6" autocomplete="off" spellcheck="false">
       </div>
-      <div class="join-field" style="display:flex;align-items:center;gap:10px;padding:12px 16px;border:1px solid var(--color-border-dim);border-radius:var(--radius-md);background:rgba(0,0,0,.2);cursor:pointer;" onclick="document.getElementById('join-mgr-check').click()">
-        <input type="checkbox" id="join-mgr-check" style="width:20px;height:20px;cursor:pointer;" onclick="event.stopPropagation()">
-        <div style="flex:1;">
-          <div style="font-size:14px;color:var(--color-text);font-weight:500;">Join as manager</div>
-          <div style="font-size:11px;color:var(--color-text-faint);margin-top:2px;">Check this if you're starting the game — you'll see Start Game, End Game, and other controls</div>
-        </div>
-      </div>
       <button class="action-btn" id="join-btn" onclick="doJoin()" disabled style="max-width:300px;">Join →</button>
     </div>
 
@@ -783,7 +776,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.99</div>
+<div class="ver">v2.100</div>
 
 <script>
 'use strict';
@@ -822,20 +815,78 @@ let roomCode     = (urlP.get('room')||'').toUpperCase();
 const urlGame    = urlP.get('game')||null;
 const urlMgrName = decodeURIComponent(urlP.get('mgrname')||'');
 
-let myName='', myUid=null, isManager=false;
+let myName='', myUid=null;
 let agoraClient=null, streamId=null, agoraReady=false;
 let videoTrack=null, cameraOn=false;
 
 let currentGame='lastcard', playerLimit=6;
-let managerIsPlayer=true;
+let managerIsPlayer=true;  // TRANSITIONAL state — read by per-game start
+                           // functions (lines 1779/2284/2466) until 3a.2's
+                           // Section F retires both the variable and those
+                           // read sites alongside the toggle UI rewrite.
+// 3a.1 TRANSITIONAL — synthesized from currentParticipants on every
+// refreshSessionState call (see synthesis block at the tail of
+// refreshSessionState). Per-game read sites (lines 1038/1622/1626/1779/
+// 2206/2214-2216/2284/2466/2748) keep working without modification via the
+// synthesis. Retired in 3a.2 (Section F) alongside managerIsPlayer.
+//
+// Do NOT extend this synthesis. New per-game logic should read
+// currentParticipants directly, not lobbyPlayers.
+//
+// Why this exists: Phase 2 split 3a into 3a.1 (plumbing) and 3a.2 (manager
+// controls including the participation_role toggle). The per-game start
+// functions in player.html read lobbyPlayers to derive their player list.
+// Retiring lobbyPlayers in 3a.1 without the matching read-site swaps in
+// 3a.2 would break game start. This synthesis bridges that gap for one
+// commit cycle.
 let lobbyPlayers=[];   // {uid,player_id,name,isManager,status:'active'|'queue',hasCamera,videoEl,hasTVs:[{tv_uid,tv_name}]}
 let invitedNames=[];   // names of people invited but not yet joined
 // Session 4.8: 10s grace timers so brief disconnects don't flicker the
 // lobby. Keys: player_id for players, tv_uid for TVs.
-// Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+// 3a.1 note: still used by removePlayer/scheduleRemoval analogs even though
+// session-state durability has moved to session_participants. Camera-state
+// flicker mitigation only.
 const pendingRemovals = new Map();
 let gameInProgress=false;
 let playAgainResponses={};
+
+// 3a.1: Session 5 module state. Mirrors karaoke/singer.html (lines 642-650).
+// Source of truth for session-level identity (who's in, what role each plays).
+// Populated by refreshSessionState() via rpc_session_get_participants.
+let currentSession      = null;  // sessions row
+let currentParticipants = [];    // session_participants rows + display_name
+let currentMyRow        = null;  // my row in currentParticipants
+
+// 3a.1: Agora-level transient state. Keyed by Agora uid (rotates on reconnect).
+// Distinct from currentParticipants (session-level, durable, keyed by user_id).
+// Render functions join the two via uidToUserId map populated by the
+// agora-identity-bind protocol.
+//
+// agora-identity-bind: ephemeral identity-binding Agora message carrying
+// (Agora uid → auth user_id, player_id) at announce time. Semantically
+// distinct from the retired player-join Agora message: bind carries ONLY
+// identity binding, not lobby state. Lobby state lives in session_participants.
+// Future-Claude: don't merge these — the bind is for camera-tile attachment
+// and tv-display-added owner translation ONLY.
+let cameraState        = {};   // uid       → { hasCamera, videoTrack, videoEl }
+let uidToUserId        = {};   // uid       → auth user_id (for camera-tile attachment)
+let playerIdToUserId   = {};   // player_id → auth user_id (for tv-display-added owner translation)
+
+// 3a.1 TRANSITIONAL — separate map for tv-display-added state. Pre-3a, hasTVs
+// lived per-player on lobbyPlayers[*]; under γ-1 synthesis, the synthesis
+// can't preserve write-side mutations across re-syntheses, so tv-display-added
+// state moves into this standalone map. Keyed by user_id (translated from
+// the wire field msg.owner_id, which is a player_id) via playerIdToUserId.
+//
+// Retired in 3a.2 alongside Section F's renderRoster rewrite, which will
+// move tv-display rendering off the lobbyPlayers[*].hasTVs path.
+let tvDisplaysByUserId = {};   // user_id → [{ tv_uid, tv_name }]
+
+// 3a.1: Realtime channel state (mirrors karaoke/singer.html lines 642-643).
+// Bound to tv_device:<device_key> topic. BUG-10: long-lived sub reused for
+// outbound publishes via shell/realtime.js helpers' optional channel arg.
+let _playerRealtimeChannel          = null;
+let _playerRealtimeChannelDeviceKey = null;
 
 let gameState=null, myHand=[], selectedCard=null;
 let triviaCategory='general', triviaDiff='Medium', timerInterval=null;
@@ -930,8 +981,6 @@ if (window.Capacitor?.Plugins?.App) {
       const signedInName = currentUser?.user_metadata?.full_name || '';
       if (signedInName)   nameInput.value = signedInName;
       else if (mgrName)   nameInput.value = mgrName;
-      const mgrCheck = document.getElementById('join-mgr-check');
-      if (mgrCheck) mgrCheck.checked = true;
       checkJoin();
       if (!joinBtn.disabled) setTimeout(() => joinBtn.click(), 300);
     } catch (e) { /* malformed URL — ignore */ }
@@ -953,7 +1002,7 @@ async function doJoin() {
   try {
     agoraClient = AgoraRTC.createClient({ mode:'rtc', codec:'vp8' });
     agoraClient.on('user-joined',    u => { log('user-joined: '+u.uid); checkTvPresent(); });
-    agoraClient.on('user-left',      u => { log('user-left: '+u.uid); removePlayer(u.uid); checkTvPresent(); });
+    agoraClient.on('user-left',      u => { log('user-left: '+u.uid); clearCameraStateForUid(u.uid); checkTvPresent(); });
     agoraClient.on('stream-message', (uid,data) => handleMessage(uid,data));
     agoraClient.on('user-published', async (user, mediaType) => {
       if (mediaType === 'video') {
@@ -977,45 +1026,92 @@ async function doJoin() {
     // Keepalive: send ping every 20s to keep data channel fresh
     setInterval(()=>{ if(agoraReady) send({type:'ping'}); }, 20000);
 
-    // URL param takes precedence, otherwise check the manual checkbox on the join screen
-    const mgrFromUrl = urlP.get('mgr') === '1';
-    const mgrFromCheckbox = document.getElementById('join-mgr-check')?.checked || false;
-    isManager = mgrFromUrl || mgrFromCheckbox;
-    userTVMode = isManager; // manager defaults to TV On, players to No TV
-    log('isManager:'+isManager+' userTVMode:'+userTVMode);
-    // Will call setTVMode after game starts to style buttons correctly
-    if (isManager) document.getElementById('manager-bar').classList.add('visible');
+    // 3a.1: bind own Agora uid to user_id + player_id. Sent once on Agora join
+    // and retried every 3s for up to 60s if no peer ack. Recipients build
+    // uidToUserId{} (camera-tile attachment) and playerIdToUserId{} (tv-display-
+    // added owner translation). Distinct from the retired player-join Agora
+    // message: this carries ONLY identity bindings, not lobby state. Lobby
+    // state comes from session_participants via refreshSessionState below.
+    const user = window.elsewhere?.getCurrentUser?.();
+    if (user) {
+      uidToUserId[myUid]            = user.id;
+      playerIdToUserId[myPlayerId]  = user.id;
+      let bindAcked = false;
+      function announceBind() {
+        if (bindAcked) return;
+        send({ type: 'agora-identity-bind', user_id: user.id, player_id: myPlayerId });
+      }
+      announceBind();
+      const bindRetry = setInterval(() => { if (bindAcked) clearInterval(bindRetry); else announceBind(); }, 3000);
+      setTimeout(() => clearInterval(bindRetry), 60000);
+      agoraClient.on('stream-message', (uid, data) => {
+        const m = parseMsg(data);
+        if (m?.type === 'agora-identity-bind' && m._uid !== myUid) bindAcked = true;
+      });
+    } else {
+      log('Bind: not signed in — skipping agora-identity-bind (legacy mode; camera tiles will not attach)');
+    }
 
     // Check if TV is present (non-player watcher on channel)
     checkTvPresent();
 
-    // Add myself to lobby (Session 4.8: self entry carries player_id + hasTVs).
-    lobbyPlayers.push({uid:myUid, player_id:myPlayerId, name:myName, isManager, status:'active', hasCamera:false, hasTVs:[]});
-
-    // Announce with retry
-    let acked = false;
-    function announce() {
-      if (acked) return;
-      log('Announcing...');
-      // player_id (Session 4.8) stays stable across Agora reconnects so
-      // receivers can dedup by it rather than the rotating Agora uid.
-      // Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
-      send({type:'player-join', name:myName, isManager, player_id:myPlayerId});
+    // 3a.1: Session 5 join. Look up session by room_code, call rpc_session_join,
+    // populate state. On any failure: legacy single-game mode (no role-aware UI).
+    // Mirrors karaoke/singer.html lines 737-778 (resolves the games equivalent
+    // of B1 from the 2e audit — games/player.html doesn't call rpc_session_join
+    // today). Manager identity comes from currentMyRow.control_role after
+    // refresh — no URL param or checkbox.
+    try {
+      if (!user) {
+        log('Session: not signed in — legacy mode');
+      } else if (!window.sb) {
+        log('Session: supabase client unavailable — legacy mode');
+      } else {
+        const { data: sessRow, error: sessErr } = await window.sb
+          .from('sessions')
+          .select('id')
+          .eq('room_code', roomCode)
+          .is('ended_at', null)
+          .maybeSingle();
+        if (sessErr) throw sessErr;
+        if (!sessRow?.id) {
+          log('Session: no active session found for room_code ' + roomCode + ' — legacy mode');
+        } else {
+          const { error: joinErr } = await window.sb.rpc('rpc_session_join', {
+            p_session_id: sessRow.id,
+            p_participation_role: 'audience',
+          });
+          if (joinErr) throw joinErr;
+          log('Session: joined session ' + sessRow.id + ' as audience');
+          await refreshSessionState();
+        }
+      }
+    } catch (e) {
+      // 23505 = already a participant (page refresh / shell-side rpc_session_start
+      // already inserted manager row). Refresh state from the existing row.
+      if (e && e.code === '23505') {
+        log('Session: already a participant — refreshing state');
+        try { await refreshSessionState(); }
+        catch (e2) { log('Session: refreshSessionState after 23505 failed (' + (e2?.message || e2) + ') — legacy mode'); }
+      } else {
+        log('Session: rpc_session_join failed (' + (e?.message || e) + ') — legacy mode');
+      }
     }
-    announce();
-    const retry = setInterval(() => { if(acked){clearInterval(retry);return;} announce(); }, 3000);
-    setTimeout(() => clearInterval(retry), 60000);
 
-    agoraClient.on('stream-message', (uid,data) => {
-      const msg = parseMsg(data);
-      if (msg?.type==='player-join-ack' && msg._uid!==myUid) { acked=true; log('ack received'); }
-    });
-
-    if (isManager) {
+    // Routing: managers go to game picker (lobby); everyone else to game-room.
+    // Manager identity from currentMyRow.control_role (post-refresh). If
+    // refresh failed (legacy mode) or user is not signed in, currentMyRow is
+    // null and we fall through to the non-manager branch (game-room or
+    // screen-watching depending on gameInProgress).
+    const isManagerOnJoin = currentMyRow?.control_role === 'manager';
+    userTVMode = isManagerOnJoin;  // pre-3a default: managers see TV-on layout
+    if (isManagerOnJoin) {
       currentGame = urlGame || 'lastcard';
       goToLobby();
     } else {
-      // Invited player
+      // Non-manager (or legacy mode). Existing late-joiner branch preserved
+      // (screen-watching stays for 3a per Section J descope; per-game admission
+      // UX lands in 3b/3c/3d).
       if (urlGame) { currentGame=urlGame; playerLimit=GAME_LIMITS[urlGame]?.default||6; }
       if (urlMgrName) { const el=document.getElementById('manager-name-display'); if(el) el.textContent=urlMgrName; }
       if (gameInProgress) {
@@ -1078,16 +1174,21 @@ async function toggleCamera() {
   }
 }
 
+// 3a.1: mutate cameraState (uid-keyed transient Agora state). Stores both
+// the videoTrack (for re-attachment if needed) AND the <video> DOM element
+// (created here in attachRemoteVideo and consumed by downstream renderers
+// that expect lobbyPlayers[*].videoEl). Synthesis at refreshSessionState
+// tail joins cameraState[uid] back into lobbyPlayers shape via uidToUserId
+// reverse-lookup. Calling syncLobbyPlayersFromState here ensures renderers
+// see the new state without waiting for a DB refresh.
 function attachRemoteVideo(uid, track) {
-  const p = lobbyPlayers.find(p=>p.uid===uid);
-  if (p) p.hasCamera=true;
   // Create a video element for this player
   const vid = document.createElement('video');
   vid.autoplay=true; vid.muted=true; vid.playsInline=true;
   vid.style.cssText='width:100%;height:100%;object-fit:cover;transform:scaleX(-1);';
   track.play(vid);
-  // Store reference
-  if (p) p.videoEl = vid;
+  cameraState[uid] = { hasCamera: true, videoTrack: track, videoEl: vid };
+  syncLobbyPlayersFromState();
   renderRoster();
   renderOthersStrip();
   // Tell TV
@@ -1095,15 +1196,17 @@ function attachRemoteVideo(uid, track) {
 }
 
 function detachRemoteVideo(uid) {
-  const p = lobbyPlayers.find(p=>p.uid===uid);
-  if (p) { p.hasCamera=false; p.videoEl=null; }
+  if (cameraState[uid]) {
+    cameraState[uid] = { ...cameraState[uid], hasCamera: false, videoTrack: null, videoEl: null };
+  }
+  syncLobbyPlayersFromState();
   renderRoster();
   renderOthersStrip();
 }
 
 function updateLobbyCamera(uid, on) {
-  const p = lobbyPlayers.find(p=>p.uid===uid);
-  if (p) p.hasCamera=on;
+  cameraState[uid] = { ...(cameraState[uid] || {}), hasCamera: on };
+  syncLobbyPlayersFromState();
   renderRoster();
   renderOthersStrip();
 }
@@ -1151,7 +1254,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     log('Tab visible — connection may need refresh if game went idle');
     // Request current state from manager
-    if (!isManager && agoraReady) send({type:'request-state'});
+    if (!(currentMyRow?.control_role === 'manager') && agoraReady) send({type:'request-state'});
   } else {
     log('Tab hidden');
   }
@@ -1186,49 +1289,59 @@ function handleMessage(uid, data) {
   }
   log('← '+msg.type+' from '+(msg._name||uid));
 
-  // Session 4.8: dedup by player_id first (stable across Agora reconnects),
-  // fall back to uid for older clients that don't send player_id.
-  // Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
-  if (msg.type==='player-join' || msg.type==='player-join-ack') {
-    const pid = msg.player_id || null;
-    let existing = pid ? lobbyPlayers.find(p=>p.player_id===pid) : null;
-    if (!existing) existing = lobbyPlayers.find(p=>p.uid===uid);
-    if (existing) {
-      // Reconnect — uid rotated, update it. Cancel any pending removal.
-      existing.uid = uid;
-      if (pid && !existing.player_id) existing.player_id = pid;
-      existing.name = msg.name;
-      existing.isManager = msg.isManager;
-      if (pid && pendingRemovals.has(pid)) { clearTimeout(pendingRemovals.get(pid)); pendingRemovals.delete(pid); }
-    } else {
-      const active = lobbyPlayers.filter(p=>p.status==='active').length;
-      lobbyPlayers.push({uid, player_id:pid, name:msg.name, isManager:msg.isManager, status:active<playerLimit?'active':'queue', hasCamera:false, hasTVs:[]});
-      invitedNames = invitedNames.filter(n=>n.toLowerCase()!==msg.name.toLowerCase());
+  // 3a.1: Agora identity binding. Receivers populate uidToUserId{} (for
+  // camera-tile attachment to roster rows) and playerIdToUserId{} (for
+  // tv-display-added owner translation). Echoes own bind in response ONLY
+  // when the incoming bind teaches us something new — prevents ping-pong
+  // between two peers (both echo on first arrival, then both stop because
+  // subsequent re-receipts of the same bind are not "new").
+  // Idempotent — receiving an existing-known bind re-writes the same value.
+  if (msg.type === 'agora-identity-bind') {
+    const wasNew = !uidToUserId[uid] || uidToUserId[uid] !== msg.user_id;
+    if (msg.user_id) {
+      uidToUserId[uid] = msg.user_id;
+      if (msg.player_id) playerIdToUserId[msg.player_id] = msg.user_id;
     }
-    if (msg.isManager) { const el=document.getElementById('manager-name-display'); if(el) el.textContent=msg.name; }
-    renderRoster(); renderInvited(); renderTvDisplays();
-    if (msg.type==='player-join') {
-      send({type:'player-join-ack', name:myName, isManager, player_id:myPlayerId});
+    // Echo only when responding to a NEW peer's bind. Idempotent — already-
+    // known peers don't trigger another echo.
+    if (wasNew) {
+      const me = window.elsewhere?.getCurrentUser?.();
+      if (me?.id) send({ type: 'agora-identity-bind', user_id: me.id, player_id: myPlayerId });
     }
+    // Re-render roster — newly-bound camera tile may now be attachable.
+    syncLobbyPlayersFromState();
+    renderRoster();
+    return;  // bind is fully handled; skip remaining branches
   }
 
-  // Session 4.8: tv-display-added — attach TV to its owning player's
-  // hasTVs list (dedup by tv_uid), cancel any pending-removal timer
-  // if the TV is reappearing within the grace window.
-  // Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+  // Note: 3a.1 retired the player-join / player-join-ack handler. Lobby state
+  // now comes from session_participants via refreshSessionState, propagated
+  // by the realtime participant_role_changed event. The bind handler above
+  // covers Agora-identity rebinding on reconnect.
+
+  // 3a.1: tv-display-added — write to tvDisplaysByUserId map (translates wire
+  // field msg.owner_id which is a player_id, via playerIdToUserId map populated
+  // by the agora-identity-bind handler above). Synthesis at refreshSessionState
+  // tail joins this map back into lobbyPlayers[*].hasTVs for renderRoster
+  // compat; renderTvDisplays reads tvDisplaysByUserId directly (Edit 16).
+  // pendingRemovals grace timers preserved for TV uid (camera-state flicker
+  // mitigation only; not lobby state anymore).
   if (msg.type==='tv-display-added') {
-    const owner = lobbyPlayers.find(p=>p.player_id === msg.owner_id);
+    const ownerUserId = playerIdToUserId[msg.owner_id];
     const tvUid = msg.tv_uid;
     if (tvUid && pendingRemovals.has(tvUid)) { clearTimeout(pendingRemovals.get(tvUid)); pendingRemovals.delete(tvUid); }
-    if (owner) {
-      if (!owner.hasTVs.some(t=>t.tv_uid===tvUid)) {
-        owner.hasTVs.push({tv_uid: tvUid, tv_name: msg.tv_name});
+    if (ownerUserId) {
+      if (!tvDisplaysByUserId[ownerUserId]) tvDisplaysByUserId[ownerUserId] = [];
+      if (!tvDisplaysByUserId[ownerUserId].some(t=>t.tv_uid===tvUid)) {
+        tvDisplaysByUserId[ownerUserId].push({tv_uid: tvUid, tv_name: msg.tv_name});
       }
     } else {
-      // Owner hasn't announced yet — the render will pick this up when
-      // the owner's player-join arrives (we skip tracking orphan TVs).
-      log('tv-display-added with unknown owner_id='+msg.owner_id+' — deferring until owner joins');
+      // Owner's bind hasn't arrived yet — log and skip. The TV will rebroadcast
+      // on Agora reconnect (per games/tv.html line 591-594), which gives
+      // another chance to capture the bind first.
+      log('tv-display-added with unknown owner_id='+msg.owner_id+' — bind not received yet, skipping');
     }
+    syncLobbyPlayersFromState();
     renderTvDisplays();
     if (msg.owner_id === myPlayerId) onMyTvPaired(msg.tv_name);
   }
@@ -1248,12 +1361,12 @@ function handleMessage(uid, data) {
   if (msg.type==='camera-on')  { updateLobbyCamera(uid, true); }
   if (msg.type==='camera-off') { updateLobbyCamera(uid, false); }
 
-  if (msg.type==='limit-changed') { playerLimit=msg.limit; recomputeQueue(); renderRoster(); }
+  if (msg.type==='limit-changed') { playerLimit=msg.limit; renderRoster(); }
 
   if (msg.type==='game-selected') {
     log('game-selected: '+msg.game);
     currentGame=msg.game; playerLimit=GAME_LIMITS[msg.game]?.default||6;
-    if (!isManager) goToGameRoom();
+    if (!(currentMyRow?.control_role === 'manager')) goToGameRoom();
   }
 
   if (msg.type==='game-start') {
@@ -1272,7 +1385,7 @@ function handleMessage(uid, data) {
     if (currentGame==='lastcard') {
       if (activeScreen !== 'screen-lastcard') startLastCard();
       else {
-        if (isManager) {
+        if (currentMyRow?.control_role === 'manager') {
           const eg = document.getElementById('mgr-endgame');
           if (eg) eg.style.display='block';
         }
@@ -1319,12 +1432,12 @@ function handleMessage(uid, data) {
   // Silent keepalive ping handler
   if (msg.type==='ping') return;
 
-  if (msg.type==='request-state' && isManager) {
+  if (msg.type==='request-state' && currentMyRow?.control_role === 'manager') {
     log('state requested by '+msg._name+' — broadcasting');
     if (gameState) broadcastState();
   }
 
-  if (msg.type==='player-action' && isManager) {
+  if (msg.type==='player-action' && currentMyRow?.control_role === 'manager') {
     log('player-action from '+msg._name+': '+msg.action);
     if (!gameState) return;
     // Verify it's actually this player's turn
@@ -1388,7 +1501,7 @@ function handleMessage(uid, data) {
     }
   }
 
-  if (msg.type==='trivia-answer-received' && isManager) {
+  if (msg.type==='trivia-answer-received' && currentMyRow?.control_role === 'manager') {
     if (!gameState.answers) gameState.answers={};
     gameState.answers[msg._name]={answer:msg.answer, timeRemaining:msg.timeRemaining||0};
     broadcastState();
@@ -1404,43 +1517,46 @@ function handleMessage(uid, data) {
 // Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
 const TV_GRACE_MS = 10000;
 
+// 3a.1: simplified to camera-state-only cleanup. Lobby/session state is
+// durable in session_participants; Agora user-left no longer mutates lobby.
+// TV pairing state (tvDisplaysByUserId) gets a grace-period removal so brief
+// TV reconnects don't flicker the displays section.
 function removePlayer(uid) {
-  // Is this uid a paired TV?
-  for (const p of lobbyPlayers) {
-    const tv = p.hasTVs.find(t=>t.tv_uid===uid);
-    if (tv) {
-      if (pendingRemovals.has(uid)) return; // already scheduled
-      const timer = setTimeout(() => {
-        pendingRemovals.delete(uid);
-        const owner = lobbyPlayers.find(pp=>pp.hasTVs.some(t=>t.tv_uid===uid));
-        if (owner) owner.hasTVs = owner.hasTVs.filter(t=>t.tv_uid!==uid);
-        renderTvDisplays();
-        log('TV removed after grace: '+uid);
-      }, TV_GRACE_MS);
-      pendingRemovals.set(uid, timer);
-      log('TV disconnect grace timer started: '+uid);
-      return;
-    }
+  // Is this uid a paired TV (in any user's tvDisplaysByUserId entry)?
+  let isPairedTv = false;
+  for (const list of Object.values(tvDisplaysByUserId)) {
+    if (list.some(t => t.tv_uid === uid)) { isPairedTv = true; break; }
   }
-  // Otherwise treat as player disconnect.
-  const player = lobbyPlayers.find(p=>p.uid===uid);
-  if (!player) return;
-  const pid = player.player_id;
-  if (pid) {
-    if (pendingRemovals.has(pid)) return;
+  if (isPairedTv) {
+    if (pendingRemovals.has(uid)) return;
     const timer = setTimeout(() => {
-      pendingRemovals.delete(pid);
-      lobbyPlayers = lobbyPlayers.filter(p=>p.player_id!==pid);
-      recomputeQueue(); renderRoster(); renderTvDisplays();
-      log('player removed after grace: '+pid);
+      pendingRemovals.delete(uid);
+      // Remove this tv_uid from whichever user's list contains it.
+      for (const userId of Object.keys(tvDisplaysByUserId)) {
+        tvDisplaysByUserId[userId] = tvDisplaysByUserId[userId].filter(t => t.tv_uid !== uid);
+      }
+      syncLobbyPlayersFromState();
+      renderTvDisplays();
+      log('TV removed after grace: '+uid);
     }, TV_GRACE_MS);
-    pendingRemovals.set(pid, timer);
-    log('player disconnect grace timer started: '+pid);
-  } else {
-    // No player_id known — fall back to immediate removal (legacy clients).
-    lobbyPlayers = lobbyPlayers.filter(p=>p.uid!==uid);
-    recomputeQueue(); renderRoster(); renderTvDisplays();
+    pendingRemovals.set(uid, timer);
+    log('TV disconnect grace timer started: '+uid);
+    return;
   }
+  // Otherwise: player disconnect. Session state is durable; only camera state
+  // needs cleanup. No grace timer — camera tile flicker is acceptable.
+  clearCameraStateForUid(uid);
+}
+
+// 3a.1: clear all transient state for an Agora uid that has left.
+// Called from Agora user-left and from removePlayer above.
+// Session_participants membership is unaffected; participants leave the
+// session via rpc_session_leave or rpc_session_remove_participant (3a.2).
+function clearCameraStateForUid(uid) {
+  if (cameraState[uid]) delete cameraState[uid];
+  if (uidToUserId[uid]) delete uidToUserId[uid];
+  syncLobbyPlayersFromState();
+  renderRoster();
 }
 
 // ── Screen management ─────────────────────────────────────────
@@ -1459,7 +1575,7 @@ function goToLobby()     {
 }
 
 function selectGame(game) {
-  if (!isManager) return;
+  if (!(currentMyRow?.control_role === 'manager')) return;
   currentGame=game;
   playerLimit=GAME_LIMITS[game]?.default||6;
   const info=GAME_INFO[game];
@@ -1497,6 +1613,7 @@ function goToGamePicker() {
 
 function goToGameRoom() {
   const info=GAME_INFO[currentGame]||GAME_INFO.lastcard;
+  const isManager = currentMyRow?.control_role === 'manager';
   document.getElementById('room-title').textContent=info.title;
   document.getElementById('room-code-sub').textContent='Room '+roomCode;
   document.getElementById('room-manager-section').style.display=isManager?'block':'none';
@@ -1507,6 +1624,9 @@ function goToGameRoom() {
   renderRoster(); renderInvited(); renderTvDisplays();
   goTo('screen-game-room');
   if (isManager && currentGame==='trivia') setTimeout(()=>showTriviaSetup(),200);
+  // Apply manager-bar visibility (post-3a-1 the bar is gated on currentMyRow,
+  // not the legacy isManager boolean). Idempotent.
+  applyManagerBarVisibility();
 }
 
 function toggleSchedule() {
@@ -1516,18 +1636,18 @@ function toggleSchedule() {
 
 // ── Player limit ──────────────────────────────────────────────
 function changeLimit(delta) {
-  if (!isManager) return;
+  if (!(currentMyRow?.control_role === 'manager')) return;
   const l=GAME_LIMITS[currentGame]||{min:2,max:20};
   playerLimit=Math.max(l.min,Math.min(l.max,playerLimit+delta));
   document.getElementById('limit-val').textContent=playerLimit;
-  recomputeQueue(); renderRoster();
+  renderRoster();
   send({type:'limit-changed', limit:playerLimit});
 }
 
-function recomputeQueue() {
-  let n=0;
-  lobbyPlayers.forEach(p=>{ p.status=n<playerLimit?'active':'queue'; if(p.status==='active')n++; });
-}
+// 3a.1: recomputeQueue retired. The synthesis at refreshSessionState's tail
+// sets status='active' for every participant (preserves pre-3a "everyone in
+// lobby is active" UX). Per-game queueing semantics (status='queue' for
+// over-capacity arrivals) lands in 3b/3c/3d alongside per-game admission_mode.
 
 function toggleManagerAsPlayer(checked) {
   managerIsPlayer=checked;
@@ -1537,23 +1657,246 @@ function toggleManagerAsPlayer(checked) {
   send({type:'manager-player-status', isPlayer:checked});
 }
 
+// ════════════════════════════════════════════════════════════════════
+// 3a.1: Session 5 helpers — refreshSessionState, realtime sub, render
+// gates. Mirrors karaoke/singer.html (lines 2080-2354 area) with games-
+// specific simplifications.
+// ════════════════════════════════════════════════════════════════════
+
+// 3a.1: manager-bar visibility helper. Toggles #manager-bar based on
+// currentMyRow.control_role. Defensive — if currentMyRow is null
+// (pre-load / legacy mode), bar stays hidden. Called from refreshSessionState
+// and goToGameRoom. Mirrors singer.html applyManagerHomeVisibility (line 2461).
+function applyManagerBarVisibility() {
+  const bar = document.getElementById('manager-bar');
+  if (!bar) return;
+  const isManager = currentMyRow?.control_role === 'manager';
+  bar.classList.toggle('visible', isManager);
+}
+
+// 3a.1: session-state cold-path refresh. Mirrors karaoke/singer.html
+// refreshSessionState (line 2268). Looks up session by room_code, populates
+// currentSession, currentParticipants, currentMyRow; subscribes to realtime
+// events; runs the γ-1 synthesis at tail to populate transitional
+// lobbyPlayers from currentParticipants + cameraState + uidToUserId +
+// tvDisplaysByUserId.
+async function refreshSessionState() {
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!user) {
+    log('refreshSessionState: not signed in — legacy mode');
+    await resetSessionStateToLegacy();
+    return;
+  }
+  if (!window.sb) {
+    log('refreshSessionState: supabase client unavailable — legacy mode');
+    await resetSessionStateToLegacy();
+    return;
+  }
+  if (!roomCode) {
+    log('refreshSessionState: no roomCode yet — legacy mode');
+    await resetSessionStateToLegacy();
+    return;
+  }
+
+  let session = null;
+  try {
+    const { data, error } = await window.sb
+      .from('sessions')
+      .select('id, app, manager_user_id, admission_mode, capacity, room_code, started_at, current_state, tv_device_id')
+      .eq('room_code', roomCode)
+      .is('ended_at', null)
+      .maybeSingle();
+    if (error) throw error;
+    session = data;
+  } catch (e) {
+    log('refreshSessionState: sessions query failed (' + (e?.message || e) + ') — legacy mode');
+    await resetSessionStateToLegacy();
+    return;
+  }
+
+  if (!session) {
+    log('refreshSessionState: no active session for room_code ' + roomCode + ' — legacy mode');
+    await resetSessionStateToLegacy();
+    return;
+  }
+
+  let device_key = null;
+  try {
+    const { data, error } = await window.sb
+      .from('tv_devices')
+      .select('device_key')
+      .eq('id', session.tv_device_id)
+      .maybeSingle();
+    if (error) throw error;
+    device_key = data?.device_key || null;
+  } catch (e) {
+    log('refreshSessionState: tv_devices lookup failed (' + (e?.message || e) + ') — partial state');
+  }
+
+  let participants = [];
+  try {
+    const { data, error } = await window.sb
+      .rpc('rpc_session_get_participants', { p_session_id: session.id });
+    if (error) throw error;
+    participants = data || [];
+  } catch (e) {
+    log('refreshSessionState: rpc_session_get_participants failed (' + (e?.message || e) + ') — partial state');
+    participants = [];
+  }
+
+  currentSession      = session;
+  currentParticipants = participants;
+  currentMyRow        = participants.find(p => p.user_id === user.id) || null;
+
+  log('refreshSessionState: session ' + session.id + ' loaded with ' + participants.length + ' participants; my role=' + (currentMyRow?.participation_role || 'none'));
+
+  if (device_key) {
+    await startPlayerRealtimeSub(device_key);
+  }
+
+  // γ-1 synthesis: populate transitional lobbyPlayers from authoritative
+  // session state. Per-game read sites (lines 1038/1622/1626/1779/2206/
+  // 2214-2216/2284/2466/2748) keep working without modification. Retired
+  // in 3a.2 alongside Section F's renderRoster rewrite.
+  syncLobbyPlayersFromState();
+
+  // Apply UI gates that depend on currentMyRow.
+  applyManagerBarVisibility();
+  // Roster + TV displays re-render with fresh data.
+  renderRoster();
+  renderTvDisplays();
+}
+
+// 3a.1: γ-1 synthesis. Re-derives transitional lobbyPlayers from
+// (currentParticipants, cameraState, uidToUserId, tvDisplaysByUserId).
+// Called from refreshSessionState's tail and from event handlers that
+// mutate the state stores (Agora camera events, tv-display-added).
+//
+// TRANSITIONAL — synthesis retired in 3a.2 alongside Section F's manager
+// toggle rewrite. Do not extend this synthesis. New per-game logic should
+// read currentParticipants directly, not lobbyPlayers.
+function syncLobbyPlayersFromState() {
+  if (!currentParticipants || currentParticipants.length === 0) {
+    lobbyPlayers = [];
+    return;
+  }
+  // Reverse-lookup helper: find Agora uid bound to a given user_id, if any.
+  function findUidForUser(userId) {
+    for (const [u, uid_user] of Object.entries(uidToUserId)) {
+      if (uid_user === userId) return u;
+    }
+    return null;
+  }
+  lobbyPlayers = currentParticipants.map(p => {
+    const uid = findUidForUser(p.user_id);
+    const cam = uid ? cameraState[uid] : null;
+    return {
+      uid:        uid,
+      player_id:  null,  // legacy field; not used post-3a-1
+      name:       p.display_name,
+      isManager:  p.control_role === 'manager',
+      status:     'active',  // pre-3a "everyone-in-lobby is active" UX preserved
+      hasCamera:  !!cam?.hasCamera,
+      videoEl:    cam?.videoEl || null,
+      hasTVs:     tvDisplaysByUserId[p.user_id] || [],
+    };
+  });
+}
+
+// 3a.1: legacy-mode reset (mirrors singer.html resetSessionStateToLegacy
+// line 2178). Called from refreshSessionState failure paths.
+async function resetSessionStateToLegacy() {
+  currentSession      = null;
+  currentParticipants = [];
+  currentMyRow        = null;
+  // Keep lobbyPlayers as-is — pre-3a code paths populate it from
+  // player-join broadcasts. In legacy mode the synthesis is bypassed.
+  await stopPlayerRealtimeSub();
+}
+
+// 3a.1: realtime sub on tv_device:<device_key>. Mirrors karaoke/singer.html
+// startSingerRealtimeSub (line 2080) with games-specific event handlers.
+async function startPlayerRealtimeSub(device_key) {
+  if (!device_key) return;
+  if (!window.sb) return;
+  if (_playerRealtimeChannel && _playerRealtimeChannelDeviceKey === device_key) return;
+  if (_playerRealtimeChannel) await stopPlayerRealtimeSub();
+
+  let channel = null;
+  try {
+    channel = window.sb.channel('tv_device:' + device_key);
+    channel.on('broadcast', { event: 'participant_role_changed' }, async () => {
+      await refreshSessionState();
+      // L1: if I was a participant but my row is gone, manager removed me.
+      if (currentSession && !currentMyRow) {
+        log("realtime: my row gone from session — was removed by manager");
+        showToast("You've been removed from this session");
+        setTimeout(() => handleBackToElsewhere(), 2000);
+      }
+    });
+    channel.on('broadcast', { event: 'queue_updated' }, () => refreshSessionState());
+    channel.on('broadcast', { event: 'session_ended' }, () => {
+      log('realtime: session_ended — navigating to Elsewhere');
+      handleBackToElsewhere();
+    });
+
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (!settled) { settled = true; reject(new Error('realtime subscribe timed out')); }
+      }, 5000);
+      channel.subscribe(status => {
+        if (settled) return;
+        if (status === 'SUBSCRIBED') {
+          settled = true; clearTimeout(timer); resolve();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          settled = true; clearTimeout(timer); reject(new Error('realtime ' + status));
+        }
+      });
+    });
+
+    _playerRealtimeChannel          = channel;
+    _playerRealtimeChannelDeviceKey = device_key;
+    log('startPlayerRealtimeSub: subscribed to tv_device:' + device_key.slice(0, 8));
+  } catch (e) {
+    log('startPlayerRealtimeSub failed: ' + (e?.message || e) + ' — continuing without realtime');
+    if (channel) {
+      try { window.sb.removeChannel(channel); } catch (_) {}
+    }
+  }
+}
+
+async function stopPlayerRealtimeSub() {
+  if (!_playerRealtimeChannel) return;
+  try { await _playerRealtimeChannel.unsubscribe(); } catch (_) {}
+  try { window.sb.removeChannel(_playerRealtimeChannel); } catch (_) {}
+  _playerRealtimeChannel          = null;
+  _playerRealtimeChannelDeviceKey = null;
+}
+
 // ── Roster + invited + TV displays rendering ──────────────────
-// Session 4.8 — TV Displays section is populated by aggregating
-// lobbyPlayers[*].hasTVs. Hidden when total TVs == 0.
-// Will move to Supabase realtime in Session 5 — see PHASE1-NOTES.
+// 3a.1: TV Displays reads tvDisplaysByUserId directly (post-3a-1 source of
+// TV pairing state). Owner display name comes from currentParticipants via
+// user_id lookup. Pre-3a iterated lobbyPlayers[*].hasTVs; under γ-1 synthesis
+// hasTVs is populated FROM tvDisplaysByUserId, so reading it directly here
+// avoids a synthesis round-trip and lets renderTvDisplays survive 3a.2's
+// retirement of lobbyPlayers without changes. "Lobby order" preservation
+// now comes from currentParticipants iteration order (matches the order
+// rpc_session_get_participants returns).
 function renderTvDisplays() {
   const section = document.getElementById('tv-displays-section');
   const listEl  = document.getElementById('tv-displays-list');
   if (!section || !listEl) return;
-  // Collect each TV with its owner's display name, preserving lobby order.
+  // Collect each TV with its owner's display name, preserving participant order.
   const rows = [];
-  for (const p of lobbyPlayers) {
-    if (!p.hasTVs || p.hasTVs.length === 0) continue;
-    p.hasTVs.forEach((tv, idx) => {
-      const total = p.hasTVs.length;
+  for (const p of currentParticipants) {
+    const tvs = tvDisplaysByUserId[p.user_id];
+    if (!tvs || tvs.length === 0) continue;
+    tvs.forEach((tv, idx) => {
+      const total = tvs.length;
       const label = total === 1
-        ? `${p.name}'s TV`
-        : `${p.name}'s TV (${idx+1})`;
+        ? `${p.display_name}'s TV`
+        : `${p.display_name}'s TV (${idx+1})`;
       rows.push({ tv_uid: tv.tv_uid, label });
     });
   }
@@ -1806,6 +2149,7 @@ function managerStartLastCard() {
 }
 
 function startLastCard() {
+  const isManager = currentMyRow?.control_role === 'manager';
   goTo('screen-lastcard');
   setTVMode(userTVMode); // init button styles + layout
   if (isManager) {
@@ -1909,7 +2253,7 @@ function renderLastCard() {
       turnEl.textContent = isMyWin ? '🎉 You win!' : '🎉 '+winnerName+' wins!';
       turnEl.className = 'lc-turn-label mine';
     }
-    if (isManager) {
+    if (currentMyRow?.control_role === 'manager') {
       document.getElementById('mgr-next').style.display='block';
       document.getElementById('mgr-next').textContent='Next Round →';
       document.getElementById('mgr-next').onclick=managerNextRound;
@@ -1937,7 +2281,7 @@ function renderHand(myTurn, s, handId, drawId, playId) {
       drawBtn.textContent = 'Pass Turn';
       drawBtn.disabled = false;
       drawBtn.onclick = () => {
-        if (isManager) {
+        if (currentMyRow?.control_role === 'manager') {
           const st=JSON.parse(JSON.stringify(gameState));
           st.awaitingPlayAfterDraw=null; advance(st); gameState=st;
           myHand=[...gameState.hands[myName]];
@@ -2040,7 +2384,7 @@ function lcChooseSuit(suit) {
 }
 
 function applyOrSendPlay(card, chosenSuit) {
-  if (isManager) {
+  if (currentMyRow?.control_role === 'manager') {
     doPlayCard(card, chosenSuit);
   } else {
     send({type:'player-action', action:'play', card, chosenSuit});
@@ -2081,7 +2425,7 @@ function doPlayCard(card,chosenSuit,playerName) {
 function lcDraw() {
   hideSelectedPreview();
   if (!gameState) return;
-  if (isManager) {
+  if (currentMyRow?.control_role === 'manager') {
     const s=JSON.parse(JSON.stringify(gameState));
     const isPenalty = s.pendingDraw > 0;
     const cnt = isPenalty ? s.pendingDraw : 1;
@@ -2123,7 +2467,7 @@ function lcApplyDraw(state) {
 
 function lcDeclareLastCard() {
   document.getElementById('last-card-btn').style.display='none';
-  if (isManager) {
+  if (currentMyRow?.control_role === 'manager') {
     const s=JSON.parse(JSON.stringify(gameState));
     s.lastCard[myName]=true; gameState=s;
     broadcastState();
@@ -2152,6 +2496,7 @@ function cardPts(c){if(['J','Q','K','A','10'].includes(c.value))return 10;if(c.v
 
 // ── GAME OVER ─────────────────────────────────────────────────
 function showGameOver(scores) {
+  const isManager = currentMyRow?.control_role === 'manager';
   goTo('screen-gameover');
   const sorted=Object.entries(scores||{}).sort((a,b)=>b[1]-a[1]);
   const medals=['🥇','🥈','🥉','4th','5th','6th','7th','8th'];
@@ -2302,6 +2647,7 @@ function managerStartTrivia() {
 }
 
 function startTrivia(state) {
+  const isManager = currentMyRow?.control_role === 'manager';
   gameState=state; goTo('screen-trivia');
   document.getElementById('trivia-setup').style.display='none';
   document.getElementById('trivia-game').style.display='flex';
@@ -2343,7 +2689,7 @@ function triviaAnswer(letter) {
   if (!gameState.answers) gameState.answers={};
   gameState.answers[myName]={answer:letter,timeRemaining:gameState.timer||0};
   send({type:'trivia-answer-received',answer:letter,timeRemaining:gameState.timer||0});
-  if (isManager) broadcastState();
+  if (currentMyRow?.control_role === 'manager') broadcastState();
   renderTrivia();
 }
 
@@ -2383,7 +2729,7 @@ function startTriviaTimer() {
     gameState.timer=Math.max(0,(gameState.timer||0)-1);
     const fill=document.getElementById('trivia-timer-fill');
     if (fill) fill.style.width=(gameState.timer/gameState.timePerQuestion*100)+'%';
-    if (gameState.timer<=0){stopTriviaTimer();if(isManager)triviaReveal();}
+    if (gameState.timer<=0){stopTriviaTimer();if(currentMyRow?.control_role === 'manager')triviaReveal();}
   },1000);
 }
 function stopTriviaTimer(){if(timerInterval){clearInterval(timerInterval);timerInterval=null;}}
@@ -2521,7 +2867,7 @@ function euCompressState(state) {
 
 function startEuchre() {
   goTo('screen-euchre');
-  if (isManager) document.getElementById('eu-endgame-btn').style.display = 'block';
+  if (currentMyRow?.control_role === 'manager') document.getElementById('eu-endgame-btn').style.display = 'block';
   renderEuchre();
 }
 
@@ -2758,23 +3104,23 @@ function euRenderOthers() {
 
 // ── Player actions (bidding) ──────────────────────────────────
 function euBidPass() {
-  if (isManager) euApplyBidPass(myName);
+  if (currentMyRow?.control_role === 'manager') euApplyBidPass(myName);
   else send({ type:'player-action', action:'eu-bid-pass' });
 }
 
 function euOrderUp(alone) {
-  if (isManager) euApplyOrderUp(myName, alone);
+  if (currentMyRow?.control_role === 'manager') euApplyOrderUp(myName, alone);
   else send({ type:'player-action', action:'eu-order-up', alone });
 }
 
 function euCallSuit(suit) {
   const alone = document.getElementById('eu-alone-check')?.checked || false;
-  if (isManager) euApplyCallSuit(myName, suit, alone);
+  if (currentMyRow?.control_role === 'manager') euApplyCallSuit(myName, suit, alone);
   else send({ type:'player-action', action:'eu-call-suit', suit, alone });
 }
 
 function euDealerDiscard(card) {
-  if (isManager) euApplyDealerDiscard(myName, card);
+  if (currentMyRow?.control_role === 'manager') euApplyDealerDiscard(myName, card);
   else send({ type:'player-action', action:'eu-dealer-discard', card });
 }
 
@@ -2784,13 +3130,13 @@ function euPlayCard() {
   euHideSelectedPreview();
   euSelectedCard = null;
   document.getElementById('eu-play-btn').disabled = true;
-  if (isManager) euApplyPlayCard(myName, card);
+  if (currentMyRow?.control_role === 'manager') euApplyPlayCard(myName, card);
   else send({ type:'player-action', action:'eu-play', card });
 }
 
 // ── Manager-side state transitions ────────────────────────────
 function euApplyBidPass(playerName) {
-  if (!isManager) return;
+  if (!(currentMyRow?.control_role === 'manager')) return;
   const s = JSON.parse(JSON.stringify(gameState));
   if (s.players[s.currentPlayerIdx] !== playerName) { log('eu-bid-pass: not '+playerName+'\'s turn'); return; }
   s.currentPlayerIdx = (s.currentPlayerIdx + 1) % 4;
@@ -2814,7 +3160,7 @@ function euApplyBidPass(playerName) {
 }
 
 function euApplyOrderUp(playerName, alone) {
-  if (!isManager) return;
+  if (!(currentMyRow?.control_role === 'manager')) return;
   const s = JSON.parse(JSON.stringify(gameState));
   if (s.players[s.currentPlayerIdx] !== playerName) return;
   if (s.phase !== 'bid1') return;
@@ -2839,7 +3185,7 @@ function euApplyOrderUp(playerName, alone) {
 }
 
 function euApplyCallSuit(playerName, suit, alone) {
-  if (!isManager) return;
+  if (!(currentMyRow?.control_role === 'manager')) return;
   const s = JSON.parse(JSON.stringify(gameState));
   if (s.players[s.currentPlayerIdx] !== playerName) return;
   if (s.phase !== 'bid2') return;
@@ -2866,7 +3212,7 @@ function euApplyCallSuit(playerName, suit, alone) {
 }
 
 function euApplyDealerDiscard(playerName, card) {
-  if (!isManager) return;
+  if (!(currentMyRow?.control_role === 'manager')) return;
   const s = JSON.parse(JSON.stringify(gameState));
   if (s.players[s.dealerIdx] !== playerName) return;
   if (s.phase !== 'dealer-discard') return;
@@ -2885,7 +3231,7 @@ function euApplyDealerDiscard(playerName, card) {
 }
 
 function euApplyPlayCard(playerName, card) {
-  if (!isManager) return;
+  if (!(currentMyRow?.control_role === 'manager')) return;
   const s = JSON.parse(JSON.stringify(gameState));
   if (s.players[s.currentPlayerIdx] !== playerName) return;
   if (s.phase !== 'play') return;
@@ -2992,7 +3338,7 @@ function euEndHand(s) {
 }
 
 function euNextHand() {
-  if (!isManager || !gameState) return;
+  if (!(currentMyRow?.control_role === 'manager') || !gameState) return;
   const s = JSON.parse(JSON.stringify(gameState));
   // Rotate dealer
   s.dealerIdx = (s.dealerIdx + 1) % 4;
@@ -3029,12 +3375,12 @@ function euNextHand() {
 }
 
 function euRedealHand() {
-  if (!isManager) return;
+  if (!(currentMyRow?.control_role === 'manager')) return;
   euNextHand();
 }
 
 function broadcastState() {
-  if (!isManager) return;
+  if (!(currentMyRow?.control_role === 'manager')) return;
   send({type:'game-state', state: compressState(gameState)});
 }
 
