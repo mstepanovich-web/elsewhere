@@ -247,7 +247,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.117</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.118</div>
 </div>
 
 <!-- HOME -->
@@ -257,7 +257,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.117</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.118</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -1915,6 +1915,32 @@ function toggleSingerLog(){
   if(dbgVisible) renderLog();
 }
 
+// 2e.3.2 BUG-10: Copy log to clipboard. Mike previously typed logs back
+// from screenshots — needs a fast ferry path to chat. navigator.clipboard
+// works in iOS WKWebView (capacitor:// is a secure context) and on HTTPS
+// web. Falls back to a logged warning if the browser rejects; that signal
+// tells us whether to add @capacitor/clipboard later.
+async function copySingerLog(evt) {
+  evt?.stopPropagation?.();
+  // logEntries is newest-first; reverse for chronological reading.
+  const text = [...logEntries].reverse()
+    .map(e => e.ts + ' ' + e.msg)
+    .join('\n');
+  const btn = document.getElementById('singer-dbg-copy');
+  const restore = (label) => {
+    if (!btn) return;
+    btn.textContent = label;
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+  };
+  try {
+    await navigator.clipboard.writeText(text);
+    restore('Copied');
+  } catch (e) {
+    log('copySingerLog failed: ' + (e?.message || e), 'warn');
+    restore('Failed');
+  }
+}
+
 document.addEventListener('touchmove',e=>{if(!e.target.closest('#srch-results,#home-body,#aud-list,#singer-venue-grid,#singer-dbg,#stage-venue-grid,#screen-costume,#singer-costume-grid,#singer-deepar-grid,#perf-costume-grid,#perf-deepar-grid,#perf-costume-overlay')) e.preventDefault();},{passive:false});
 
 // Session 5 Part 2e.1 — role-aware UI rendering.
@@ -2138,6 +2164,8 @@ async function startSingerRealtimeSub(device_key) {
       refreshSessionState();
     });
 
+    const _subT0 = performance.now();
+    log('realtime: subscribing to tv_device:' + device_key.slice(0, 8), 'info');
     await new Promise((resolve, reject) => {
       let settled = false;
       const timer = setTimeout(() => {
@@ -2155,7 +2183,7 @@ async function startSingerRealtimeSub(device_key) {
 
     _singerRealtimeChannel = channel;
     _singerRealtimeChannelDeviceKey = device_key;
-    log('startSingerRealtimeSub: subscribed to tv_device:' + device_key, 'info');
+    log('realtime: subscribed in ' + Math.round(performance.now() - _subT0) + 'ms (key=' + device_key.slice(0, 8) + ')', 'info');
   } catch (e) {
     log('startSingerRealtimeSub failed: ' + (e?.message || e) + ' — continuing without realtime', 'warn');
     if (channel) {
@@ -2171,6 +2199,32 @@ async function stopSingerRealtimeSub() {
   try { window.sb.removeChannel(_singerRealtimeChannel); } catch (_) {}
   _singerRealtimeChannel = null;
   _singerRealtimeChannelDeviceKey = null;
+}
+
+// 2e.3.2 BUG-10: Timed/logged publish wrapper. Logs the attempt with
+// device_key prefix + path tag from the helper's return shape so a single
+// grep for "realtime:" reveals subscribe ack timing AND every publish's
+// chosen path (reused vs broadcast). If the channel ref is ever stale —
+// e.g., publish proceeds on the wrong topic silently — the path tag
+// disagreeing with the intent line surfaces it immediately.
+async function publishWithLog(label, publishFn) {
+  const t0 = performance.now();
+  const keyShort = _singerRealtimeChannelDeviceKey
+    ? _singerRealtimeChannelDeviceKey.slice(0, 8)
+    : 'none';
+  const intent = _singerRealtimeChannel ? 'on reused channel' : 'via broadcast';
+  log('realtime: publishing ' + label + ' ' + intent + ' (key=' + keyShort + ')', 'info');
+  try {
+    const result = await publishFn();
+    const dt = Math.round(performance.now() - t0);
+    const pathTag = result?.path ? '(path: ' + result.path + ')' : '';
+    log('realtime: ' + label + ' ok (' + dt + 'ms) ' + pathTag, 'ok');
+    return result;
+  } catch (e) {
+    const dt = Math.round(performance.now() - t0);
+    log('realtime: ' + label + ' failed (' + dt + 'ms): ' + (e?.message || e), 'warn');
+    throw e;
+  }
 }
 
 // Session 5 Part 2e.1 — legacy-mode state reset (mirrors stage.html resetSessionStateToSolo)
@@ -2592,12 +2646,11 @@ async function doMoveQueuePosition(target_user_id, direction) {
     // mode / pre-load), skip publish silently.
     if (_singerRealtimeChannelDeviceKey && window.publishQueueUpdated) {
       try {
-        await window.publishQueueUpdated(_singerRealtimeChannelDeviceKey, {
-          session_id: currentSession.id,
-        });
-      } catch (e) {
-        log('moveQueue: publishQueueUpdated failed: ' + (e?.message || e), 'warn');
-      }
+        await publishWithLog('queue_updated', () =>
+          window.publishQueueUpdated(_singerRealtimeChannelDeviceKey, {
+            session_id: currentSession.id,
+          }, _singerRealtimeChannel));
+      } catch (_) { /* logged inside publishWithLog */ }
     }
 
     log('moveQueue OK: target=' + target_user_id + ' direction=' + direction, 'ok');
@@ -2717,21 +2770,19 @@ async function handleQueuePromoteTap(user_id_encoded) {
   if (_singerRealtimeChannelDeviceKey) {
     if (window.publishParticipantRoleChanged) {
       try {
-        await window.publishParticipantRoleChanged(_singerRealtimeChannelDeviceKey, {
-          session_id: currentSession.id,
-        });
-      } catch (e) {
-        log('promoteTap: publishParticipantRoleChanged failed: ' + (e?.message || e), 'warn');
-      }
+        await publishWithLog('participant_role_changed', () =>
+          window.publishParticipantRoleChanged(_singerRealtimeChannelDeviceKey, {
+            session_id: currentSession.id,
+          }, _singerRealtimeChannel));
+      } catch (_) {}
     }
     if (window.publishQueueUpdated) {
       try {
-        await window.publishQueueUpdated(_singerRealtimeChannelDeviceKey, {
-          session_id: currentSession.id,
-        });
-      } catch (e) {
-        log('promoteTap: publishQueueUpdated failed: ' + (e?.message || e), 'warn');
-      }
+        await publishWithLog('queue_updated', () =>
+          window.publishQueueUpdated(_singerRealtimeChannelDeviceKey, {
+            session_id: currentSession.id,
+          }, _singerRealtimeChannel));
+      } catch (_) {}
     }
   }
 
@@ -2777,21 +2828,19 @@ async function handleQueueRemoveTap(user_id_encoded) {
   if (_singerRealtimeChannelDeviceKey) {
     if (window.publishParticipantRoleChanged) {
       try {
-        await window.publishParticipantRoleChanged(_singerRealtimeChannelDeviceKey, {
-          session_id: currentSession.id,
-        });
-      } catch (e) {
-        log('removeTap: publishParticipantRoleChanged failed: ' + (e?.message || e), 'warn');
-      }
+        await publishWithLog('participant_role_changed', () =>
+          window.publishParticipantRoleChanged(_singerRealtimeChannelDeviceKey, {
+            session_id: currentSession.id,
+          }, _singerRealtimeChannel));
+      } catch (_) {}
     }
     if (window.publishQueueUpdated) {
       try {
-        await window.publishQueueUpdated(_singerRealtimeChannelDeviceKey, {
-          session_id: currentSession.id,
-        });
-      } catch (e) {
-        log('removeTap: publishQueueUpdated failed: ' + (e?.message || e), 'warn');
-      }
+        await publishWithLog('queue_updated', () =>
+          window.publishQueueUpdated(_singerRealtimeChannelDeviceKey, {
+            session_id: currentSession.id,
+          }, _singerRealtimeChannel));
+      } catch (_) {}
     }
   }
 
@@ -2848,21 +2897,19 @@ async function handleSkipActiveTap(user_id_encoded) {
   if (_singerRealtimeChannelDeviceKey) {
     if (window.publishParticipantRoleChanged) {
       try {
-        await window.publishParticipantRoleChanged(_singerRealtimeChannelDeviceKey, {
-          session_id: currentSession.id,
-        });
-      } catch (e) {
-        log('skipTap: publishParticipantRoleChanged failed: ' + (e?.message || e), 'warn');
-      }
+        await publishWithLog('participant_role_changed', () =>
+          window.publishParticipantRoleChanged(_singerRealtimeChannelDeviceKey, {
+            session_id: currentSession.id,
+          }, _singerRealtimeChannel));
+      } catch (_) {}
     }
     if (window.publishQueueUpdated) {
       try {
-        await window.publishQueueUpdated(_singerRealtimeChannelDeviceKey, {
-          session_id: currentSession.id,
-        });
-      } catch (e) {
-        log('skipTap: publishQueueUpdated failed: ' + (e?.message || e), 'warn');
-      }
+        await publishWithLog('queue_updated', () =>
+          window.publishQueueUpdated(_singerRealtimeChannelDeviceKey, {
+            session_id: currentSession.id,
+          }, _singerRealtimeChannel));
+      } catch (_) {}
     }
   }
 
@@ -3178,7 +3225,10 @@ window.dismissTakeStageModal = dismissTakeStageModal;
 <div id="singer-dbg-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;height:200px;z-index:9000;background:rgba(4,2,8,.95);border-top:1px solid var(--color-border);flex-direction:column;overflow:hidden;pointer-events:auto;">
   <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 10px;border-bottom:1px solid var(--color-gold-faint);flex-shrink:0;">
     <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,200,120,.5);font-family:var(--font-mono);">Debug Log — tap costume while this is open</div>
-    <div onclick="toggleSingerLog()" style="font-size:16px;cursor:pointer;color:rgba(255,200,120,.5);padding:2px 8px;">✕</div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <div id="singer-dbg-copy" onclick="copySingerLog(event)" style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,200,120,.6);padding:4px 8px;cursor:pointer;border:1px solid var(--color-gold-faint);border-radius:3px;font-family:var(--font-mono);">Copy</div>
+      <div onclick="toggleSingerLog()" style="font-size:16px;cursor:pointer;color:rgba(255,200,120,.5);padding:2px 8px;">✕</div>
+    </div>
   </div>
   <div id="singer-dbg" style="flex:1;overflow-y:auto;font-family:var(--font-mono);-webkit-overflow-scrolling:touch;padding:4px 10px;"></div>
 </div>

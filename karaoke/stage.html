@@ -449,7 +449,7 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:var(--color-gold);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.99</div>
+    <div style="font-size:14px;color:var(--color-gold);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.100</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -606,7 +606,7 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:var(--color-gold-dim);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.99</div>
+  <div style="margin-top:12px;font-size:14px;color:var(--color-gold-dim);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.100</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -3966,16 +3966,27 @@ async function triggerSongEndRpc() {
     log('triggerSongEndRpc: rpc_karaoke_song_ended succeeded for session ' + currentSession.id, 'info');
 
     // Publish realtime events per DECISION-AUDIT-7 B5 (caller-side publishing).
+    // 2e.3.2 BUG-10: pass _stageRealtimeChannel as 3rd arg to reuse the
+    // long-lived sub and skip the subscribe-handshake race. Helper returns
+    // { path: 'reused' | 'broadcast' } — log it for regression visibility.
     if (device_key) {
+      const keyShort = device_key.slice(0, 8);
+      const intent = _stageRealtimeChannel ? 'on reused channel' : 'via broadcast';
       try {
-        await window.publishParticipantRoleChanged(device_key, { session_id: currentSession.id });
+        const t0 = performance.now();
+        log('realtime: publishing participant_role_changed ' + intent + ' (key=' + keyShort + ')', 'info');
+        const r = await window.publishParticipantRoleChanged(device_key, { session_id: currentSession.id }, _stageRealtimeChannel);
+        log('realtime: participant_role_changed ok (' + Math.round(performance.now() - t0) + 'ms) (path: ' + (r?.path || '?') + ')', 'ok');
       } catch (e) {
-        log('triggerSongEndRpc: publishParticipantRoleChanged failed: ' + (e?.message || e), 'warn');
+        log('realtime: participant_role_changed failed: ' + (e?.message || e), 'warn');
       }
       try {
-        await window.publishQueueUpdated(device_key, { session_id: currentSession.id });
+        const t0 = performance.now();
+        log('realtime: publishing queue_updated ' + intent + ' (key=' + keyShort + ')', 'info');
+        const r = await window.publishQueueUpdated(device_key, { session_id: currentSession.id }, _stageRealtimeChannel);
+        log('realtime: queue_updated ok (' + Math.round(performance.now() - t0) + 'ms) (path: ' + (r?.path || '?') + ')', 'ok');
       } catch (e) {
-        log('triggerSongEndRpc: publishQueueUpdated failed: ' + (e?.message || e), 'warn');
+        log('realtime: queue_updated failed: ' + (e?.message || e), 'warn');
       }
     }
   } catch (e) {
@@ -5642,6 +5653,8 @@ async function startStageRealtimeSub(device_key) {
     channel.on('broadcast', { event: 'queue_updated' },            () => refreshSessionState());
     channel.on('broadcast', { event: 'session_ended' },            () => handleSessionEnded());
 
+    const _subT0 = performance.now();
+    log('realtime: subscribing to tv_device:' + device_key.slice(0, 8), 'info');
     await new Promise((resolve, reject) => {
       let settled = false;
       const timer = setTimeout(() => {
@@ -5659,7 +5672,7 @@ async function startStageRealtimeSub(device_key) {
 
     _stageRealtimeChannel = channel;
     _stageRealtimeChannelDeviceKey = device_key;
-    log('startStageRealtimeSub: subscribed to tv_device:' + device_key, 'info');
+    log('realtime: subscribed in ' + Math.round(performance.now() - _subT0) + 'ms (key=' + device_key.slice(0, 8) + ')', 'info');
   } catch (e) {
     log('startStageRealtimeSub failed: ' + (e?.message || e) + ' — continuing without realtime', 'warn');
     if (channel) {

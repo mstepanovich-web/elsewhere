@@ -219,6 +219,15 @@ window.wireExitAppListener = function wireExitAppListener(onExit) {
 // ─────────────────────────────────────────────────────────────────────────
 // Session 5 event publishers.
 // Each wraps the shared broadcast() helper with an event-specific name.
+//
+// Optional `channel` argument on publishParticipantRoleChanged +
+// publishQueueUpdated: pass an already-subscribed channel when the caller
+// holds a long-lived sub on the target topic. This avoids the
+// subscribe-handshake race that causes "Realtime subscribe timed out" when
+// broadcast() allocates a fresh channel on a topic the client already owns.
+// Returns { path: 'reused' | 'broadcast' } so callsites can log which path
+// fired and detect regressions where a stale channel ref is passed.
+// See BUG-10 (Session 5 Part 2e.3.2).
 // ─────────────────────────────────────────────────────────────────────────
 
 // Shared subscribe/send/unsubscribe/removeChannel ceremony. Private to
@@ -268,16 +277,26 @@ window.publishManagerChanged = async function publishManagerChanged(device_key, 
 // See file-top emission matrix for the full list of triggering RPCs.
 // Payload: { session_id, user_id, control_role, participation_role } —
 // always includes the CURRENT values of both roles (not a delta).
-window.publishParticipantRoleChanged = async function publishParticipantRoleChanged(device_key, payload) {
-  return broadcast(device_key, 'participant_role_changed', payload);
+window.publishParticipantRoleChanged = async function publishParticipantRoleChanged(device_key, payload, channel = null) {
+  if (channel) {
+    await channel.send({ type: 'broadcast', event: 'participant_role_changed', payload });
+    return { path: 'reused' };
+  }
+  await broadcast(device_key, 'participant_role_changed', payload);
+  return { path: 'broadcast' };
 };
 
 // Fired for pure queue metadata changes that don't involve role transitions:
 // queue-position reorder, or pre-selection update. Consumers re-query
 // session_participants to get authoritative state.
 // Payload: { session_id }.
-window.publishQueueUpdated = async function publishQueueUpdated(device_key, payload) {
-  return broadcast(device_key, 'queue_updated', payload);
+window.publishQueueUpdated = async function publishQueueUpdated(device_key, payload, channel = null) {
+  if (channel) {
+    await channel.send({ type: 'broadcast', event: 'queue_updated', payload });
+    return { path: 'reused' };
+  }
+  await broadcast(device_key, 'queue_updated', payload);
+  return { path: 'broadcast' };
 };
 
 // Fired after rpc_session_end or after rpc_session_leave results in session
