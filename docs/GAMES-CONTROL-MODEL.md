@@ -82,6 +82,22 @@ The current games code conflates "End Game" and "End Session" — the existing "
 
 **No more `player-join` / `player-join-ack` Agora messages.** Replaced by realtime `participant_role_changed` events on `tv_device:<device_key>`.
 
+### 2.2a Camera state separation
+
+The current `lobbyPlayers[]` array on player.html conflates two kinds of state:
+
+- **Session-level state** (durable, from RPC): name, role, participation, user_id
+- **Agora-level state** (transient, from RTC streams): hasCamera, videoTrack, agora uid
+
+Part 3 splits these into two stores:
+
+- `currentParticipants[]` — populated by `rpc_session_get_participants`, refreshed on realtime events. Source of truth for who's in the session and what role they have.
+- `cameraState{}` — keyed by user_id, stores transient Agora state (hasCamera, videoTrack, agora uid). Lives separately because Agora streams are transient and don't belong in the durable session model.
+
+Mirrors what `games/tv.html` already does with `players{}` (uid-keyed transient Agora state) vs `tvDisplays[]` (paired-TV state). Player.html catches up to the same pattern.
+
+Render functions that need both (e.g., `renderRoster` showing names + camera tiles) join the two stores by user_id. Display name comes from `currentParticipants[*].display_name`; camera affordances come from `cameraState[user_id]`.
+
 ### 2.3 Manager identity
 
 **Today:** `isManager` boolean from URL `?mgr=1` or join-screen checkbox. Multiple managers possible.
@@ -102,6 +118,15 @@ The current games code has these manager-only buttons (per audit findings):
 **Part 3 keeps existing manager controls.** No new override panels per game (unlike Karaoke 2e.3.2 §2 which built 6 new buttons). Existing buttons just route through `currentMyRow.control_role === 'manager'` instead of `isManager` boolean.
 
 **One new cross-game manager control:** Remove Player.
+
+**Manager "Play in this game" toggle preserved.** The existing UX (`<input id="mgr-is-player">` checkbox in `games/player.html` lines 473-485, default checked) lets the manager choose between playing as a player or running as referee. Today this lives in a `managerIsPlayer` boolean and an `isPlayer` field on the lobby row. Part 3 maps it to `participation_role` on the manager's own row:
+
+- Toggle ON → manager has `control_role='manager'` AND `participation_role='active'` (default; can play)
+- Toggle OFF → manager has `control_role='manager'` AND `participation_role='audience'` (referee mode; sees TV/lobby but isn't dealt cards / doesn't get questions)
+
+The toggle calls `rpc_session_update_participant` with the manager's own `user_id` to flip their `participation_role`. `control_role` stays `'manager'` regardless. Realtime `participant_role_changed` propagates to other clients so the TV shows/hides the manager in player tiles correspondingly.
+
+**Default state:** manager joins with `participation_role='active'` (playing). Same as today's default-checked checkbox behavior.
 
 ### 2.5 Remove Player (cross-game)
 
@@ -367,14 +392,16 @@ Part 3 ships across 4 sub-parts, foundation-first:
 
 | Sub-part | Files |
 |---|---|
-| 3a | `games/tv.html`, `games/player.html`, delete `games/engine/`, `CLAUDE.md` (correction) |
+| 3a | `games/tv.html`, `games/player.html`, delete `games/engine/`, `CLAUDE.md` (correction). Includes camera-state split (split `lobbyPlayers[]` into durable `currentParticipants[]` from RPC + transient `cameraState{}` per § 2.2a) and the new `db/016_remove_participant.sql` migration. |
 | 3b | `games/player.html` (Trivia logic + late-joiner choice screen) |
 | 3c | `games/player.html`, `games/tv.html` (Last Card logic + overflow picker UI) |
 | 3d | `games/player.html`, `games/tv.html` (Euchre logic + seat-filling picker UI) |
 
-No new schema migrations. Part 3 reuses existing `sessions` and `session_participants` from Part 1.
+**One new schema migration:** `db/016_remove_participant.sql` — adds `rpc_session_remove_participant(p_session_id, p_user_id)` for manager-only soft-removal of other participants (sets `left_at = now()` on target's row). Required for the Remove Player UI per § 2.5. Ships as a 3a prereq.
 
-No new RPCs. Part 3 reuses existing `rpc_session_start`, `rpc_session_join`, `rpc_session_get_participants`, `rpc_session_update_participant`, `rpc_session_end`. The participation_role transitions (queued → active on auto-promote, queued → audience on sit-out) all flow through `rpc_session_update_participant`.
+Beyond that, Part 3 reuses existing `sessions` and `session_participants` from Part 1.
+
+Existing RPCs reused: `rpc_session_start`, `rpc_session_join`, `rpc_session_get_participants`, `rpc_session_update_participant`, `rpc_session_end`. The participation_role transitions (queued → active on auto-promote, queued → audience on sit-out, manager toggle active ↔ audience per § 2.4) all flow through `rpc_session_update_participant`.
 
 ### 4.3 Entry criteria per sub-part
 

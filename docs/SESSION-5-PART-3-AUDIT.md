@@ -70,6 +70,7 @@ The per-game branches are entirely game-specific state machines and rendering. S
 - `camera-on` / `camera-off` — video tile state
 - `limit-changed` — manager adjusts player capacity
 - `ping` — keepalive at 20s interval
+- `manager-player-status` (manager → all) — broadcasts manager-as-player toggle state. **Investigation pending:** handler not found in either file via re-verification grep; possibly vestigial. See "Open follow-ups" below.
 
 **Game lifecycle:**
 - `game-selected` (manager → all) — pre-start game choice
@@ -79,13 +80,18 @@ The per-game branches are entirely game-specific state machines and rendering. S
 - `game-restart` — return to lobby
 - `switch-game` — manager exits current game; back to game selection
 - `request-state` (player → manager) — late-joiner / reconnect state request
+- `ask-play-again` (manager → all) — post-game restart prompt
+- `play-again-response` (player → manager) — yes/no response to ask-play-again
 
-**Trivia-specific:**
-- `trivia-answer-received` (player → manager) — answer submission
+**Per-game gameplay (envelope: `player-action`):**
+- `player-action` (player → manager) — non-manager sends a game move; manager applies it to authoritative state, then broadcasts updated `game-state`. Carries `action` sub-field with per-game payload:
+  - **Last Card:** `'play'` (with card + chosenSuit), `'draw'`, `'pass'`, `'declare-last-card'`
+  - **Euchre:** `'eu-bid-pass'`, `'eu-order-up'`, `'eu-call-suit'`, `'eu-dealer-discard'`, `'eu-play'`
+- `trivia-answer-received` (player → manager) — Trivia answer submission. Older message that predates the `player-action` envelope.
 
-No game-specific messages found for Last Card or Euchre. Both rely entirely on the generic `game-state` broadcast — manager applies moves locally then broadcasts new state.
+**Per-game game logic flows through the `player-action` envelope's `action` sub-field; the `game-state` broadcast is downstream of that.** An earlier draft of this audit claimed Last Card and Euchre had no game-specific messages — that was incorrect. Both games rely heavily on `player-action`, just embedded inside one envelope rather than as top-level message types.
 
-**Chunked sender** is required for Euchre. Euchre full state (4 hands × 5 cards + trump + tricks won + scores + dealer + maker) can exceed 1KB during play. `compressState()` and `euCompressState()` minimize payload by sending opponent hand cards as counts not card lists.
+**Chunked sender** is required for Euchre full state (4 hands × 5 cards + trump + tricks won + scores + dealer + maker can exceed 1KB during play). `compressState()` and `euCompressState()` minimize payload by sending opponent hand cards as counts not card lists.
 
 ## Pre-Session-5 issues confirmed present in code
 
@@ -127,6 +133,7 @@ Part 3a operates on a single set of shared shell code. Concrete replacements:
 - **Trivia:** Anthropic API auth fragility — separate concern, not Part 3 scope.
 - **Trivia:** Old model name `claude-sonnet-4-20250514` — opportunistic update later, not Part 3 scope.
 - **`sync.js`** chunked-message reassembly bug (`_handleChunk` splits on `:` but tries `meta.split(',')` on a string with no commas) — dead code anyway, but worth noting if `games/engine/` ever gets revived.
+- **`manager-player-status` Agora message vestigiality** — sent by `toggleManagerAsPlayer` (`games/player.html` line 1537) but no handler found in either `games/player.html` or `games/tv.html` via re-verification grep. May be vestigial. Confirm during 3a implementation; if so, retire alongside the other lobby-state Agora messages.
 
 ## Conclusion
 
