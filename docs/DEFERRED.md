@@ -1425,7 +1425,7 @@ NHHU audience users tap Back-to-Elsewhere from audience.html and land on a place
 **Deferred on:** 2026-04-26
 **Priority:** N/A — constraint, not deliverable
 **Area:** Platform architecture — audience surface
-**Status:** Active constraint through Session 5; bug fixes only on audience.html
+**Status:** Active constraint through Session 5; no investment, regression fixes only. Defer all features, spec-compliance updates, design-decision reversals, and polish to the unified-app consolidation.
 
 #### Context
 
@@ -1645,6 +1645,158 @@ and just not reached by the test paths used.
 and remove note, or fix and remove note.
 
 **Effort:** 15-30 min.
+
+---
+
+### Deferred: doCrossUserRoleUpdate doesn't auto-publish realtime + mixed-shape return contract
+
+**Deferred in:** Session 5 Part 2e.3.1
+**Deferred on:** 2026-04-30
+**Priority:** Low
+**Area:** Karaoke / singer.html
+**Status:** Open papercut
+
+#### Context
+
+Helper used by `handleQueuePromoteTap` and `handleQueueRemoveTap` in singer.html. Two issues:
+
+1. **Mixed-shape return contract.** Returns `{ok:true}` on success or `{ok:false, error}` on failure, where `error` is the RPC error's `message` string. Caller has to substring-match `"55000"` in the message to detect capacity errors — error.code is not exposed separately.
+2. **Doesn't auto-publish realtime.** Helper executes the RPC but the caller has to wrap both the call AND the realtime publish (`publishParticipantRoleChanged` + `publishQueueUpdated`) afterward. The publish is mechanical and could be absorbed into the helper.
+
+#### Options when picking up
+
+- Expose `error.code` alongside `error.message` in the failure shape (or return the raw error object).
+- Move the realtime publish block inside the helper. Caller passes session_id; helper publishes on success. Reduces duplication across promote/remove handlers.
+
+#### When to pick this up
+
+Next time the helper is touched. Not urgent.
+
+#### Related
+
+- `karaoke/singer.html` — `doCrossUserRoleUpdate` definition
+- BUG-13 fix (v2.119) added `await refreshSessionState()` to the same handlers — folds nicely if helper absorbs the publish too
+
+---
+
+### Deferred: §6b foreground-promotion realtime branch reachability audit
+
+**Deferred in:** Session 5 Part 2e.3.1
+**Deferred on:** 2026-04-30
+**Priority:** Low
+**Area:** Karaoke / singer.html
+**Status:** Open — audit needed
+
+#### Context
+
+§6b's foreground-promotion realtime subscription branch in `handleParticipantRoleChanged` was designed before BUG-13 fix landed. Now that cross-user write handlers refresh state directly (BUG-13 fix in v2.119, commit `ad97ea5`), the realtime echo path is unreachable on the **originating device** for own-action flows. The branch still fires for OTHER devices receiving the broadcast (e.g., a queued user's phone receiving `participant_role_changed` when manager promotes them) — so not strictly dead, but the originator path is.
+
+#### Options when picking up
+
+Audit whether the branch is reachable in current flow. If only OTHER-device reachable, document as such inline. If fully unreachable, remove.
+
+#### When to pick this up
+
+Next time §6b is touched. Quick audit (~15 min).
+
+#### Related
+
+- `karaoke/singer.html` — `handleParticipantRoleChanged` foreground-promotion branch
+- BUG-13 fix commit `ad97ea5`
+
+---
+
+### Deferred: Push trigger semantics on audience→active for manager force-promote
+
+**Deferred in:** Session 5 Part 2e.3.1
+**Deferred on:** 2026-04-30
+**Priority:** Low — intentional, but worth tracking
+**Area:** Karaoke / push notifications
+**Status:** Verified intentional; tracked for scope changes
+
+#### Context
+
+`db/015_promotion_push_trigger.sql` fires push on `participation_role` `'queued'`→`'active'` transitions, NOT on `'audience'`→`'active'`. Manager force-promote from schema-state audience (Available Singer who hasn't queued yet) does NOT fire push.
+
+Verified intentional during 2e.3.1 implementation: Available Singers are at the phone right now (the manager just yanked them up from a list they were browsing) — no need for a backgrounded push wake-up. Sending one would be noise.
+
+#### Options when picking up
+
+If push semantics for force-promote ever become a real product question (e.g., manager wants to "tap someone in" who's NOT actively at the phone), revisit by either widening the trigger WHEN clause or adding a separate trigger for `audience`→`active`.
+
+#### When to pick this up
+
+If push semantics for force-promote become a real product question.
+
+#### Related
+
+- `db/015_promotion_push_trigger.sql` — current trigger WHEN clause
+- Karaoke Control Model § 5.2 — push notification spec
+
+---
+
+### Deferred: Custom confirm-modal styling papercut
+
+**Deferred in:** Session 5 Part 2c.2 (originally); reaffirmed 2c.3, 2e.2, 2e.3.1, 2e.3.2 §2
+**Deferred on:** 2026-04-30 (consolidating prior surfacings)
+**Priority:** Low
+**Area:** Shell / native confirm()
+**Status:** Carried; bundle into polish session
+
+#### Context
+
+Multiple flows use native `confirm()` with browser-default `[OK]/[Cancel]` buttons but locked design copy specifies `[Continue]/[Cancel]` or other custom labels. Native `confirm()` doesn't support label customization. Affects:
+
+- 2c.2 proximity "No" confirm
+- 2c.3 cross-app switch confirm
+- 2e.2 Leave Queue confirm
+- 2e.3.1 Skip / Promote / Remove confirms
+- 2e.3.2 §2 End Song confirm
+
+Custom modal would solve uniformly across all confirm dialogs. Pattern would also unblock richer copy (multiple paragraphs, visual emphasis).
+
+#### Options when picking up
+
+- Build a single `showConfirm(message, opts)` helper using existing modal CSS patterns; replace all `confirm()` callsites uniformly.
+- Or accept the papercut indefinitely if it's not user-friction-noisy.
+
+#### When to pick this up
+
+Bundled polish session, OR when any confirm dialog flow gets product attention for UX reasons.
+
+#### Related
+
+- `karaoke/singer.html`, `index.html` — multiple `confirm()` callsites
+
+---
+
+### Deferred: NHHU pill gap on audience.html (known limitation under no-investment rule)
+
+**Deferred in:** Session 5 Part 2 closeout
+**Deferred on:** 2026-04-30
+**Priority:** Medium — real UX gap
+**Area:** Karaoke / audience.html
+**Status:** Known limitation, accepted. Resolves naturally when consolidation work ships.
+
+#### Context
+
+NHHU users on audience.html cannot navigate back to the Elsewhere shell. The Back-to-Elsewhere pill on audience.html is gated by `isLikelyHouseholdMember()` which returns false for NHHU. Karaoke Control Model § 4.4 specs universal visibility but implementation requires touching audience.html — disallowed under the no-investment rule (KARAOKE-CONTROL-MODEL § 4.3, tightened in Session 5 Part 2 closeout).
+
+NHHU users are stuck on audience.html with no exit until the consolidation work absorbs audience.html into singer.html (where the pill is universal by default).
+
+#### Options when picking up
+
+Folds into "Migrate audience.html into unified app as parameterized NHHU view" entry. No standalone fix planned; consolidation work resolves it.
+
+#### When to pick this up
+
+When consolidation work begins (post-Session-5).
+
+#### Related
+
+- Karaoke Control Model § 4.4 (universal pill visibility)
+- "Migrate audience.html into unified app as parameterized NHHU view" DEFERRED entry
+- Audience.html freeze DEFERRED entry
 
 ---
 

@@ -268,30 +268,27 @@ The largest remaining sub-part. Singer.html becomes role-aware per Karaoke Contr
 **Rough commit count:** 3-5 (large sub-part, multiple section commits expected)
 **Spec source:** docs/KARAOKE-CONTROL-MODEL.md § 4.1 (singer.html UI surfaces) + § 5.2 (work item list)
 
-### 2f — karaoke/audience.html session integration [PENDING — significantly reduced per Karaoke Control Model § 5.3]
+### 2f — karaoke/audience.html session integration [DEFERRED — no-op under no-investment rule]
 
-**Scope reduced under audience.html freeze decision** (Karaoke Control Model § 4.3 + § 5.5). Audience.html receives no new features in Session 5; new audience-experience features build into the unified app post-Session-5. Original 2f scope (read-only spectator with `rpc_session_join('audience')`, queue display) was largely landed in 2c.3.2's audience.html Back-to-Elsewhere wiring. What remains:
+**Scope reduced under audience.html freeze decision** (Karaoke Control Model § 4.3 + § 5.5). Audience.html receives no investment in Session 5 — regression fixes only. The pill visibility update from Karaoke Control Model § 4.4 is a spec evolution, not a regression fix; deferred to consolidation work. NHHU users on audience.html have no exit affordance until consolidation — accepted gap.
 
 **Scope:**
-- Verify audience.html still functions correctly with new session lifecycle (regression test: arrival via deep link, session_ended navigation, realtime resilience)
-- Update Back-to-Elsewhere visibility rule from "HHU only" to "all audience users" (small change to `isLikelyHouseholdMember()` gating in audience.html — removes the household-membership filter on the existing pill, lands the universal-visibility rule from Karaoke Control Model § 4.4)
-- Bug fixes only beyond this
+- 2f is now no-op. No commits required.
 
-2f may not need a dedicated implementation pass. Could land as part of 2e's verification work or as a small standalone commit.
-
-**Deferred from 2f (per audience.html freeze):**
-- Audience read-only queue display (waits for unified-app migration — DEFERRED)
-- Audience venue/costume browsing for marketing (waits for unified-app migration — DEFERRED)
-- Audience-to-NHHU conversion path full funnel (Phase 1 placeholder may ship; full conversion post-Session-5 — DEFERRED)
+**Deferred from 2f (per audience.html no-investment rule):**
+- Universal Back-to-Elsewhere visibility on audience.html (Karaoke Control Model § 4.4 — folds into consolidation work)
+- Audience read-only queue display (per audience.html freeze)
+- Audience venue/costume browsing for marketing (per freeze)
+- Audience-to-NHHU conversion path full funnel
 
 **Locked decisions:**
-- Audience.html is frozen for Session 5 (bug fixes only; no new features)
-- Back-to-Elsewhere now visible for all audience users (decoupled visibility from destination — household lands on home, NHHU lands on placeholder)
+- Audience.html is in no-investment mode for Session 5. Regression fixes only.
+- Universal pill visibility deferred to unified-app consolidation.
 
 **Entry criteria:** 2b complete (independent of 2d/2e)
-**Exit criteria:** audience.html regression-clean; Back-to-Elsewhere visibility rule update lands without breaking the existing pill behavior
-**Files touched:** `karaoke/audience.html`
-**Rough commit count:** 0-1 (may collapse into 2e verification)
+**Exit criteria:** 2f is no-op. Closes when consolidation work begins post-Session-5.
+**Files touched:** none
+**Rough commit count:** 0 (no-op)
 **Spec source:** docs/KARAOKE-CONTROL-MODEL.md § 4.3 (audience.html freeze) + § 4.4 (Back-to-Elsewhere visibility) + § 5.3 (sub-part scope)
 
 ## Dependency graph

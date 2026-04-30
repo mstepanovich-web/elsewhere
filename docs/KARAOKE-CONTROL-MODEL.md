@@ -283,7 +283,7 @@ Capabilities that are purely self-affecting (configuring own mic, browsing venue
 
 ### Audience.html freeze
 
-Audience.html is frozen for Session 5: bug fixes only, no new features. Audience capabilities in this matrix reflect what's available in audience.html today. Where the spec intent goes beyond what audience.html currently supports, those rows are flagged as deferred to post-Session-5 unified-app migration.
+Audience.html is frozen for Session 5: regression fixes only — fix things that were working and stopped working. No new features, no spec-compliance updates, no design-decision reversals, no polish. Defer all other changes to the unified-app consolidation. Audience capabilities in this matrix reflect what's available in audience.html today. Where the spec intent goes beyond what audience.html currently supports, those rows are flagged as deferred to post-Session-5 unified-app migration.
 
 ### Roles in the matrix
 
@@ -681,7 +681,7 @@ This is captured as DEFERRED entry: "Audience-to-NHHU conversion path."
 
 This is captured as DEFERRED entry: "Migrate audience.html into unified app as parameterized NHHU view."
 
-**Constraint during migration window:** No new features land on audience.html. Bug fixes only. New audience-experience features build into the unified app.
+**Constraint during migration window:** No investment in audience.html. Defer all features and all fixes other than regressions (things that were working and stopped working). New audience-experience features build into the unified app.
 
 ### 5.6 Post-Session-5 — Manager helper feature (Q-2B)
 
