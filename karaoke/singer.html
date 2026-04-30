@@ -150,8 +150,11 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
 #mic-top2{width:100%;padding:0 18px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
 #mic-info2{font-family:var(--font-display);font-size:13px;font-style:italic;color:rgba(255,220,150,.5);text-align:center;flex:1;padding:0 10px;}
 /* 2e.3.1 §6: dedicated header for screen-manage-queue. Left-aligned title, no
-   counterweight needed against .back-to-elsewhere pill (z:8000 top-right). */
-#mq-top{width:100%;padding:0 18px 12px;display:flex;align-items:center;justify-content:flex-start;gap:14px;flex-shrink:0;background:var(--color-bg);border-bottom:1px solid var(--color-border-dim);}
+   counterweight needed against .back-to-elsewhere pill (z:8000 top-right).
+   BUG-3: left padding 60px clears the fixed-position LOG button (~52px wide
+   at top-left). Title is short enough that the offset doesn't visually
+   decentre. */
+#mq-top{width:100%;padding:0 18px 12px 60px;display:flex;align-items:center;justify-content:flex-start;gap:14px;flex-shrink:0;background:var(--color-bg);border-bottom:1px solid var(--color-border-dim);}
 #mq-title{font-family:var(--font-display);font-size:15px;font-style:italic;color:rgba(255,220,150,.7);}
 #mic-centre{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
 #mute-btn{width:180px;height:180px;border-radius:50%;border:3px solid rgba(0,232,122,.4);background:radial-gradient(circle at 40% 35%,rgba(0,232,122,.14),rgba(0,232,122,.04));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;position:relative;touch-action:manipulation;transition:all .25s;-webkit-user-select:none;}
@@ -205,8 +208,10 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
 #ps-title{font-family:var(--font-display);font-size:28px;color:var(--color-text-dim);font-style:italic;text-align:center;}
 #ps-actions{display:flex;flex-direction:column;gap:10px;width:100%;max-width:300px;}
 
-/* TOAST */
-#toast{position:fixed;top:max(60px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(4,2,6,.95);border:1px solid var(--color-border-dim);border-radius:8px;padding:10px 18px;font-size:12px;color:var(--color-text);z-index:999;display:none;white-space:nowrap;pointer-events:none;backdrop-filter:blur(6px);max-width:90vw;overflow:hidden;text-overflow:ellipsis;}
+/* TOAST
+   BUG-7: drop white-space:nowrap + overflow:hidden + text-overflow:ellipsis
+   so long messages wrap to 2-3 lines instead of truncating with ellipsis. */
+#toast{position:fixed;top:max(60px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(4,2,6,.95);border:1px solid var(--color-border-dim);border-radius:8px;padding:10px 18px;font-size:12px;color:var(--color-text);z-index:999;display:none;pointer-events:none;backdrop-filter:blur(6px);max-width:88vw;text-align:center;line-height:1.4;}
 ::-webkit-scrollbar{width:2px;}
 ::-webkit-scrollbar-thumb{background:var(--color-border);border-radius:1px;}
 
@@ -247,7 +252,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.118</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.119</div>
 </div>
 
 <!-- HOME -->
@@ -257,7 +262,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.118</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.119</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -663,7 +668,14 @@ function showScreen(id){
     }
     setTimeout(()=>{ const inp=document.getElementById('srch-in'); if(inp&&!inp.value) inp.focus(); },100);
   }
-  if(id==='screen-manage-queue') ensureManagerOverrideReady();
+  if(id==='screen-manage-queue') {
+    ensureManagerOverrideReady();
+    // BUG-13: pull fresh DB state on entry so navigating into the screen
+    // always shows current queue. Fire-and-forget (showScreen is sync;
+    // renderSessionUI re-runs from refresh's tail).
+    refreshSessionState().catch(e =>
+      log('manageQueue: enter-refresh failed: ' + (e?.message || e), 'warn'));
+  }
 }
 
 // ── AUTO-JOIN FROM URL ──
@@ -2653,6 +2665,11 @@ async function doMoveQueuePosition(target_user_id, direction) {
       } catch (_) { /* logged inside publishWithLog */ }
     }
 
+    // BUG-13: Supabase Realtime defaults to self:false — sender doesn't
+    // receive own broadcasts. Refresh originating device's UI from DB.
+    log('moveQueue: refreshing after manager action', 'info');
+    await refreshSessionState();
+
     log('moveQueue OK: target=' + target_user_id + ' direction=' + direction, 'ok');
     return { ok: true };
   } catch (e) {
@@ -2786,8 +2803,11 @@ async function handleQueuePromoteTap(user_id_encoded) {
     }
   }
 
+  // BUG-13: refresh originating device's UI (self:false on broadcasts).
+  log('promoteTap: refreshing after manager action', 'info');
+  await refreshSessionState();
+
   log('promoteTap OK: ' + targetName, 'ok');
-  // Silent success — list re-render via realtime is the feedback.
 }
 
 // 2e.3.1 §4: manager removes a queued user from the queue. Single write
@@ -2844,8 +2864,11 @@ async function handleQueueRemoveTap(user_id_encoded) {
     }
   }
 
+  // BUG-13: refresh originating device's UI (self:false on broadcasts).
+  log('removeTap: refreshing after manager action', 'info');
+  await refreshSessionState();
+
   log('removeTap OK: ' + targetName, 'ok');
-  // Silent success.
 }
 
 // 2e.3.1 §5: manager skips the current active singer. Single RPC
@@ -2913,8 +2936,11 @@ async function handleSkipActiveTap(user_id_encoded) {
     }
   }
 
+  // BUG-13: refresh originating device's UI (self:false on broadcasts).
+  log('skipTap: refreshing after manager action', 'info');
+  await refreshSessionState();
+
   log('skipTap OK: ' + targetName, 'ok');
-  // Silent success — list re-render via realtime is the feedback.
 }
 
 // 2e.3.1 §1: Cross-user role update helper for manager queue management.
