@@ -1800,6 +1800,175 @@ When consolidation work begins (post-Session-5).
 
 ---
 
+### Deferred: BUG-4 — sign-in OTP error UX for unregistered emails
+
+**Deferred in:** Session 5 Part 2e.2 (surfaced); Session 5 Part 2 closeout (filed)
+**Deferred on:** 2026-04-30
+**Priority:** Low — UX papercut on auth path
+**Area:** Shell / auth
+**Status:** Open
+
+#### Context
+
+Sign-in flow shows raw error message "Signups not allowed for otp" when an unregistered email tries to sign in via magic link. The underlying behavior is correct (we don't auto-create accounts from sign-in), but the error string is internal Supabase-speak and confusing to users.
+
+Should show user-friendly copy directing them to sign up first, or auto-route to the sign-up flow.
+
+#### Options when picking up
+
+- Catch the specific error code/message in the sign-in handler; swap copy to user-friendly version ("This email isn't registered. Sign up first?")
+- Or auto-route to sign-up when this specific error fires
+- Confirm the exact error code Supabase returns; substring-match on "Signups not allowed for otp" is fragile
+
+#### When to pick this up
+
+Bundled UX polish session, OR before customer-facing release. Not blocking dev/test workflows.
+
+#### Related
+
+- `shell/auth.js` — sign-in handler
+- BUG-5 (web sign-up redirect regression, fixed in commit `ce36fe5`) — adjacent auth UX bug
+
+---
+
+### Deferred: BUG-6 — singer.html silently degrades for non-HHU users
+
+**Deferred in:** Session 5 Part 2e.2 (surfaced); Session 5 Part 2 closeout (filed)
+**Deferred on:** 2026-04-30
+**Priority:** Medium — real architectural bug; affects role-routing correctness
+**Area:** Karaoke / singer.html
+**Status:** Open
+
+#### Context
+
+Non-HHU users who land on singer.html (via deep link, wrong nav, or testing) silently fall back to legacy single-singer mode instead of being redirected to audience.html where they belong.
+
+Per the singer.html HHU-eligibility doctrine (Karaoke Control Model § 4.1), singer.html is HHU-eligible by construction. Non-HHU users should never reach it. When they do, the page should detect this and redirect to audience.html.
+
+Currently the page neither detects nor redirects — it just renders legacy mode (Way 1 fallback designed for dev/testing). This means a non-HHU user who somehow gets to singer.html sees a partially-broken UI and can't actually sing (no TV device, no proximity, no household membership).
+
+#### Options when picking up
+
+- Add eligibility check on singer.html mount: HHU + at-home with TV device required.
+- If check fails, redirect to audience.html with appropriate parameters (preserve session context if any).
+- Consider whether this is even reachable post-2c.2 (the unified home does the gating upstream). Audit reachable paths first.
+
+#### When to pick this up
+
+Before customer-facing release. Session 5 Part 2 follow-up, OR folded into Part 3 prep.
+
+#### Related
+
+- `karaoke/singer.html` — mount handler
+- Karaoke Control Model § 4.1 (HHU-eligibility doctrine)
+- 2c.2 unified home (does HHU gating on Karaoke tile tap)
+
+---
+
+### Deferred: BUG-8 — laptop singer.html shows wrong role state
+
+**Deferred in:** Session 5 Part 2e.3 testing (surfaced); Session 5 Part 2 closeout (filed)
+**Deferred on:** 2026-04-30
+**Priority:** Low — affects multi-device testing workflow
+**Area:** Karaoke / singer.html / multi-device
+**Status:** Open
+
+#### Context
+
+During 2e.3 multi-device testing, when laptop browser joined the karaoke session as a singer, the role state rendered on singer.html was incorrect — UI showed user as 'singer' (active or queued) when DB had role as 'audience' (Available Singer not queued).
+
+iPhone Capacitor app does NOT exhibit this bug. Suggests a render-cache, initial-state-load, or platform-specific timing issue that doesn't apply to the phone surface.
+
+Symptoms: laptop sees Skip button when it should see Add to Queue button, etc. Real DB state is correct; the UI just renders the wrong derived role.
+
+#### Options when picking up
+
+- Investigate during multi-device hardware verification pass.
+- Compare laptop vs. iPhone init paths in singer.html mount.
+- Likely candidates: refreshSessionState ordering, sessionStorage staleness, browser-specific Supabase client behavior.
+
+#### When to pick this up
+
+Hardware verification pass with TV running stage.html. Folds naturally into multi-device validation.
+
+#### Related
+
+- `karaoke/singer.html` — mount + refreshSessionState path
+- BUG-13 (manager actions don't refresh originating device, fixed in v2.119) — adjacent state-refresh bug
+
+---
+
+### Deferred: BUG-12 — proximity prompt unresponsive on iPhone
+
+**Deferred in:** Session 5 Part 2c.2 testing (surfaced); reaffirmed 2e.2; Session 5 Part 2 closeout (filed)
+**Deferred on:** 2026-04-30
+**Priority:** Medium — blocks at-home flag for normal users; forces manual SQL workaround
+**Area:** Shell / proximity prompt / iOS Capacitor
+**Status:** Open
+
+#### Context
+
+Proximity banner appears on iPhone Capacitor app at the expected trigger points (per state model 4-condition AND), but the Yes/No buttons don't respond to taps. User can't set at-home status without manual SQL UPDATE on household_members.
+
+Affects HHU eligibility client-side computation — at-home flag is one of the inputs to "Available Singer" derivation. Without the flag, eligible users can't sing even when they should be able to.
+
+Workaround during 2e dev/test: Mike sets at-home flag manually via SQL on the household_members row.
+
+Web browser (laptop) does NOT exhibit this bug — buttons respond correctly there.
+
+#### Options when picking up
+
+- Investigate touch event handling specifically on iOS Capacitor.
+- Check button hit areas, z-index, any overlay capturing taps.
+- Audit any iOS-specific Capacitor weirdness with onclick handlers.
+- Likely candidates: pointer-events CSS, parent element with touch-action overrides, Capacitor WebView quirks.
+
+#### When to pick this up
+
+Before customer-facing release. Without it, HHU users on iPhone can't self-declare at-home status — major usability gap.
+
+#### Related
+
+- `index.html` — proximity banner markup + handler
+- 2c.2 implementation (commit `0a3a9ea`) — banner originally shipped
+- `docs/PHONE-AND-TV-STATE-MODEL.md` — proximity firing rule
+
+---
+
+### Deferred: BUG-14 — "You can sing" banner copy misleading on screen-home
+
+**Deferred in:** Session 5 Part 2 closeout (surfaced and filed)
+**Deferred on:** 2026-04-30
+**Priority:** Low — UX copy
+**Area:** Karaoke / singer.html / screen-home
+**Status:** Open
+
+#### Context
+
+Banner on singer.html screen-home reads "🎤 You can sing — pick a song to add to the queue" for users with `participation_role='audience'` on singer.html (i.e., Available Singers — HHU at home with TV device, not yet queued).
+
+To fresh users this reads as "you're singing now" rather than "you're eligible to queue up." Compounded by the "▶ START SONG" button rendered immediately below (which is the queue-add flow, not "start singing now"), and the "NOW SELECTED / No song selected / SEARCH TO PICK A SONG" copy in the same visual block.
+
+The Available Singer (not queued) state has misleading copy that conflates with active singer state. Surfaced today (2026-04-30) when Mike noticed the banner appeared after a Skip and read as if he was the active singer when he wasn't.
+
+#### Options when picking up
+
+- Rewrite to "You're eligible to queue up — pick a song to join the queue" or similar
+- Consider rewording "▶ START SONG" button to "▶ Add to Queue & Start" or context-conditional label
+- Audit the entire visual block for active-singer-vs-Available-Singer copy clarity
+
+#### When to pick this up
+
+Bundled UX polish session, OR before customer-facing release. Not blocking.
+
+#### Related
+
+- `karaoke/singer.html` — screen-home banner + START SONG button
+- Karaoke Control Model § 4.1 (Available Singer surface description)
+- Closing log (Session 5 Part 2) — open bugs list
+
+---
+
 ## Migrated from PHASE1-NOTES.md
 
 The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captured here in summary form; the full original text lives in PHASE1-NOTES.md git history (commit `9296a50` or earlier). Future fill-outs should flesh these into the full entry format above when someone picks one up.
