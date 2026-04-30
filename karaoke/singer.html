@@ -106,6 +106,15 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
 .mq-actions-skip{display:flex;flex-direction:column;gap:4px;}
 .mq-action-btn.skip{color:rgba(196,122,107,.85);background:rgba(196,122,107,.08);border-color:rgba(196,122,107,.4);}
 .mq-action-btn.skip:active{background:rgba(196,122,107,.18);}
+/* 2e.3.2 §2: manager-override controls panel below active row.
+   Renders only when a participant has participation_role='active'.
+   Visually attached to active row via shared gold-accent left border;
+   3-column grid fits 6 buttons in 2 rows on iPhone widths. */
+.mq-active-controls{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px 12px 12px;margin:0 0 6px 0;background:rgba(255,180,80,.04);border-left:2px solid var(--color-gold);border-bottom-left-radius:6px;border-bottom-right-radius:6px;}
+.mq-active-btn{padding:8px 6px;font-size:10px;letter-spacing:.04em;font-family:var(--font-mono);border:1px solid var(--color-border-dim);border-radius:6px;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;text-align:center;color:var(--color-gold-dim);background:var(--color-gold-ghost);transition:all .15s;}
+.mq-active-btn:active{background:var(--color-gold-faint);}
+.mq-active-btn.danger{color:rgba(196,122,107,.85);background:rgba(196,122,107,.08);border-color:rgba(196,122,107,.4);}
+.mq-active-btn.danger:active{background:rgba(196,122,107,.18);}
 
 /* SEARCH */
 #screen-search{overflow:hidden;}
@@ -252,7 +261,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
   <p style="font-size:10px;color:rgba(255,200,120,.2);letter-spacing:.1em;text-transform:uppercase;text-align:center;line-height:2;">
     Use headphones to prevent echo · mic activates when song starts
   </p>
-  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.119</div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.120</div>
 </div>
 
 <!-- HOME -->
@@ -262,7 +271,7 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
     <!-- Top bar: back to search left (if came from search), version, settings -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:-4px;">
       <div id="back-to-search-btn" onclick="goBackToSearch()" style="display:none;font-size:12px;color:rgba(255,200,120,.6);letter-spacing:.08em;font-family:var(--font-mono);cursor:pointer;">← Search</div>
-      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.119</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.120</div>
       <div onclick="showScreen('screen-mic')" style="font-size:20px;cursor:pointer;padding:2px 4px;opacity:0.6;-webkit-user-select:none;" title="Mic Setup">⚙️</div>
     </div>
 
@@ -2545,7 +2554,7 @@ function renderManageQueueList() {
       ? `<div class="mq-actions">${reorderHtml}${crossHtml}${activeHtml}</div>`
       : '';
 
-    return `
+    const rowHtml = `
       <div class="mq-row ${role}">
         <div class="mq-avatar ${colorClass}">${initials}</div>
         <div class="mq-info">
@@ -2559,7 +2568,28 @@ function renderManageQueueList() {
         ${actionsHtml}
       </div>
     `;
+    // 2e.3.2 §2: append manager-override controls panel directly after
+    // active row. Sibling at top level under #mq-list.
+    return isActive ? rowHtml + renderActiveOverrideControlsHtml() : rowHtml;
   }).join('');
+}
+
+// 2e.3.2 §2: render the manager-override controls panel for the active
+// singer. 6 buttons fire commands via handleManagerOverrideTap dispatcher.
+// Renders only when called from the map iteration for the active row;
+// sits directly below as a sibling under #mq-list (active is always
+// first in sorted order, so the panel appears between active and queued).
+function renderActiveOverrideControlsHtml() {
+  return `
+    <div class="mq-active-controls">
+      <div class="mq-active-btn" onclick="handleManagerOverrideTap('pause')" role="button">⏸ Pause</div>
+      <div class="mq-active-btn" onclick="handleManagerOverrideTap('resume')" role="button">▶ Resume</div>
+      <div class="mq-active-btn" onclick="handleManagerOverrideTap('restart')" role="button">↩ Restart</div>
+      <div class="mq-active-btn danger" onclick="handleManagerOverrideTap('end-song')" role="button">■ End Song</div>
+      <div class="mq-active-btn" onclick="handleManagerOverrideTap('clear-costume')" role="button">🧹 Clear Costume</div>
+      <div class="mq-active-btn" onclick="handleManagerOverrideTap('comments-toggle')" role="button">💬 Comments</div>
+    </div>
+  `;
 }
 
 // 2e.3.1 §3: render the up/down arrow buttons inside .mq-actions for a queued
@@ -2941,6 +2971,96 @@ async function handleSkipActiveTap(user_id_encoded) {
   await refreshSessionState();
 
   log('skipTap OK: ' + targetName, 'ok');
+}
+
+// 2e.3.2 §2: Single dispatcher for the 6 manager-override commands
+// rendered by renderActiveOverrideControlsHtml. All commands route
+// through the same Agora data-channel sendToStage() that singer.html's
+// own perf-screen controls use — same payloads, different surface,
+// different role context.
+//
+// Pause/Resume are TWO separate buttons (no toggle state) per §2 design
+// lock — avoids state-sync risk if singer also pauses themselves locally
+// from the perf screen.
+//
+// Clear Costume issues two sequential sendToStage calls
+// (clear-deepar-effects + clear-accessories) because the singer-side
+// "Clear All" affordance also pairs them — same effect from manager surface.
+//
+// End Song is the ONLY command with a confirm dialog. Doctrine: End Song
+// stops the current song; singer remains active and can pick another.
+// NOT the same as Skip (§5) which transitions roles via
+// rpc_karaoke_song_ended (active → schema-audience, queue head → active).
+//
+// NOTE: §2 commands do NOT call refreshSessionState (unlike §3-§5
+// cross-user writes). These commands fire transient Agora data-channel
+// effects on stage.html (pause/resume/restart playback, costume display,
+// comments display) — they don't mutate session_participants. No DB
+// state to re-fetch.
+async function handleManagerOverrideTap(command) {
+  // Defensive: re-check Agora readiness. ensureManagerOverrideReady
+  // already fires on screen-manage-queue entry (showScreen hook), but
+  // the connection could drop between paint and tap.
+  if (!agoraClient || !agoraReady) {
+    log('manageQueue: override unavailable — Agora not ready', 'warn');
+    showToast('Stage controls not ready');
+    return;
+  }
+
+  switch (command) {
+    case 'pause':
+      sendToStage({ type: 'pause' });
+      log('manageQueue: pause sent', 'ok');
+      break;
+
+    case 'resume':
+      sendToStage({ type: 'resume' });
+      log('manageQueue: resume sent', 'ok');
+      break;
+
+    case 'restart':
+      sendToStage({ type: 'restart-song' });
+      log('manageQueue: restart sent', 'ok');
+      break;
+
+    case 'end-song': {
+      // Defensive: bail if no active singer in current state. The panel
+      // only renders End Song when an active row exists, but state can
+      // shift between paint and tap (concurrent skip / session-end via
+      // realtime).
+      const active = currentParticipants.find(p => p.participation_role === 'active');
+      if (!active) {
+        log('manageQueue: end-song with no active singer — bailing', 'warn');
+        return;
+      }
+      const name = active.display_name || 'this singer';
+      if (!confirm(`Stop ${name}'s song now?`)) {
+        log('manageQueue: end-song cancelled');
+        return;
+      }
+      // Doctrine: end-song stops audio; singer remains active and can
+      // pick another song. NOT the same as Skip (§5) which transitions
+      // roles via rpc_karaoke_song_ended.
+      sendToStage({ type: 'stop-song' });
+      log('manageQueue: end-song sent', 'ok');
+      break;
+    }
+
+    case 'clear-costume':
+      // Two sequential calls mirror the singer-side Clear All flow.
+      await sendToStage({ type: 'clear-deepar-effects' });
+      await sendToStage({ type: 'clear-accessories' });
+      log('manageQueue: clear-costume sent (2 messages)', 'ok');
+      break;
+
+    case 'comments-toggle':
+      sendToStage({ type: 'toggle-comments' });
+      log('manageQueue: comments-toggle sent', 'ok');
+      break;
+
+    default:
+      log('manageQueue: unknown override command: ' + command, 'warn');
+  }
 }
 
 // 2e.3.1 §1: Cross-user role update helper for manager queue management.
