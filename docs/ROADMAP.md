@@ -7,9 +7,9 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 ## Active session
 
 **Session 5 — Universal session + participants + queue model**
-- **Status:** In progress. Part 1 complete (schema + RPCs + `shell/realtime.js` extraction). Part 2a complete (realtime event publishers). Parts 2b–2f and 3–5 pending.
-- **Estimated:** 4–6 hours remaining (multi-session work)
-- **References:** `docs/SESSION-5-PLAN.md`, `docs/SESSION-5-PART-2-BREAKDOWN.md`
+- **Status:** Part 1 complete. Part 2 complete (2a-2e shipped; 2f deferred to consolidation per audience.html no-investment doctrine, closeout `1d481b4`). Parts 3-5 pending.
+- **Estimated remaining:** 10-15 hours across 3-5 sessions. Part 3 ~8-12 hr (Games — likely needs Games Control Model doc + sub-decomposition; SESSION-5-PLAN.md's 2-3 commit estimate is under-scoped per Part 2 precedent). Part 4 ~0-1 hr (substantially absorbed into 2c). Part 5 ~2-3 hr verification with 2+ test accounts.
+- **References:** `docs/SESSION-5-PLAN.md`, `docs/SESSION-5-PART-2-BREAKDOWN.md`, `docs/SESSION-5-PART-2-CLOSING-LOG.md`
 
 ### Commits shipped in Session 5
 
@@ -20,10 +20,18 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 - `5f60d13` — Part 1b.3: role and queue mutation RPCs (db/011)
 - `9e10bf4` — Part 1c: extract realtime helpers into `shell/realtime.js`
 
-**Part 2a — Session 5 event publishers:**
-- `d1b4edd` — 5 new realtime event publishers (`session_started`, `manager_changed`, `participant_role_changed`, `queue_updated`, `session_ended`)
+**Part 2 — Karaoke integration:** (full commit detail in `docs/SESSION-5-PART-2-CLOSING-LOG.md`)
+- 2a: realtime publishers (`d1b4edd`)
+- 2b: session lifecycle wiring (`601d125`)
+- 2c.1/2/3.1/3.2: home unification + active session relabeling + Back-to-Elsewhere visibility (`daa8718`, `0a3a9ea`, `e4a348e`, `5617689`)
+- 2d.0/1: karaoke session helpers + stage.html session integration (`db/013` + multiple commits)
+- 2e.0/1/2: push notification infrastructure + role-aware UI + self write actions (multiple commits, latest `9ec5006`/`ee7849a`)
+- 2e.3.1/2: manager queue UI + manager override commands panel (multiple commits, latest `af1e468` at v2.120)
+- 2f: deferred to consolidation (no commits)
+- BUG fixes during 2e.3: `ce36fe5` (BUG-5 web sign-up redirect), `1b870d3` (BUG-10 realtime publish race at v2.118), `ad97ea5` (BUG-13/3/7 manager refresh + cosmetic at v2.119)
+- Closeout: `1d481b4` (audience.html no-investment doctrine + 5 papercuts + closing log), `7f8f97e` (5 open bugs filed to DEFERRED)
 
-**Next up:** Part 2b — session lifecycle wiring. See `docs/SESSION-5-PART-2-BREAKDOWN.md` for full scope + locked decisions.
+**Next up:** Part 3 — Games integration. SESSION-5-PLAN.md § Part 3 specifies role manifests for Last Card / Trivia / Euchre and obsoleting the `?mgr=1` URL param via session_participants lookup. **Likely Part 3 prerequisites** (parallels Part 2 work): pre-implementation audit doc + Games Control Model doc + per-game sub-decomposition (3a/3b/3c). See `docs/SESSION-5-PLAN.md` lines 333-349 for the original Part 3 work breakdown.
 
 ---
 
