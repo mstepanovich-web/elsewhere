@@ -7,9 +7,9 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 ## Active session
 
 **Session 5 — Universal session + participants + queue model**
-- **Status:** Part 1 complete. Part 2 complete (2a-2e shipped; 2f deferred to consolidation per audience.html no-investment doctrine, closeout `1d481b4`). Parts 3-5 pending.
-- **Estimated remaining:** 10-15 hours across 3-5 sessions. Part 3 ~8-12 hr (Games — likely needs Games Control Model doc + sub-decomposition; SESSION-5-PLAN.md's 2-3 commit estimate is under-scoped per Part 2 precedent). Part 4 ~0-1 hr (substantially absorbed into 2c). Part 5 ~2-3 hr verification with 2+ test accounts.
-- **References:** `docs/SESSION-5-PLAN.md`, `docs/SESSION-5-PART-2-BREAKDOWN.md`, `docs/SESSION-5-PART-2-CLOSING-LOG.md`
+- **Status:** Part 1 complete. Part 2 complete (2a-2e shipped; 2f deferred to consolidation per audience.html no-investment doctrine, closeout `1d481b4`). Part 3a shipped (3a.1 plumbing + 3a.2 manager controls). 3b/3c/3d (per-game admission UX) + Parts 4-5 pending.
+- **Estimated remaining:** 8-12 hours across 3-4 sessions. Part 3 ~6-9 hr remaining (3b/3c/3d per `docs/GAMES-CONTROL-MODEL.md` § 4.1). Part 4 ~0-1 hr (substantially absorbed into 2c). Part 5 ~2-3 hr verification with 2+ test accounts.
+- **References:** `docs/SESSION-5-PLAN.md`, `docs/SESSION-5-PART-2-BREAKDOWN.md`, `docs/SESSION-5-PART-2-CLOSING-LOG.md`, `docs/SESSION-5-PART-3-AUDIT.md`, `docs/GAMES-CONTROL-MODEL.md`
 
 ### Commits shipped in Session 5
 
@@ -31,7 +31,12 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 - BUG fixes during 2e.3: `ce36fe5` (BUG-5 web sign-up redirect), `1b870d3` (BUG-10 realtime publish race at v2.118), `ad97ea5` (BUG-13/3/7 manager refresh + cosmetic at v2.119)
 - Closeout: `1d481b4` (audience.html no-investment doctrine + 5 papercuts + closing log), `7f8f97e` (5 open bugs filed to DEFERRED)
 
-**Next up:** Part 3 — Games integration. SESSION-5-PLAN.md § Part 3 specifies role manifests for Last Card / Trivia / Euchre and obsoleting the `?mgr=1` URL param via session_participants lookup. **Likely Part 3 prerequisites** (parallels Part 2 work): pre-implementation audit doc + Games Control Model doc + per-game sub-decomposition (3a/3b/3c). See `docs/SESSION-5-PLAN.md` lines 333-349 for the original Part 3 work breakdown.
+**Part 3 — Games integration:**
+- 3a prereq: `db/016_remove_participant.sql` — manager-only soft-removal RPC (`05d2cae`)
+- 3a.1: session/participants plumbing — manager identity from `control_role`, agora-identity-bind protocol, γ-1 lobbyPlayers synthesis as transitional bridge (`ea89c48` at v2.100)
+- 3a.2: manager controls — End Session button (`rpc_session_end` + `publishSessionEnded`); manager-as-player toggle via `rpc_session_update_participant`; Remove Player UI (`rpc_session_remove_participant`); `lobbyPlayers` + `managerIsPlayer` + γ-1 synthesis retired; `manager-player-status` Agora message retired (`8bff27b` at v2.101)
+
+**Next up:** 3b/3c/3d — per-game admission UX (Trivia, Last Card, Euchre). Per-game state machines, queueing semantics, and late-joiner flows per `docs/GAMES-CONTROL-MODEL.md` § 3 + § 4.1. SESSION-5-PLAN.md lines 333-349's original Part 3 work breakdown is now superseded by the Control Model's sub-decomposition.
 
 ---
 
