@@ -1985,7 +1985,7 @@ The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captur
 - [x] ~~tv2.html camera init: currently requests camera permission during setup. Per architectural decision, should lazy-init only when entering a camera-requiring product~~ — **Resolved in Session 4.10 Part C.** tv2.html rewritten to a boot-only launcher (claim / signin / apps grid). No camera preview, no DeepAR init, no Agora watchers. Camera permission is now first requested by the product page the user launches (karaoke/stage.html, games/tv.html), which is the correct lazy-init surface per the original architectural decision.
 
 ### Deferred — Games
-- [ ] Lobby state fragility — broadcast-ephemeral lobbyPlayers[] diagnosis; session 5 structural fix via session_participants
+- [x] ~~Lobby state fragility — broadcast-ephemeral lobbyPlayers[] diagnosis; session 5 structural fix via session_participants~~ — **Resolved in Session 5 Part 3a.** 3a.1 introduced session_participants synthesis as a transitional bridge; 3a.2 retired `lobbyPlayers[]` entirely (`renderRoster`, `renderOthersStrip`, and per-game start functions now read `currentParticipants` directly).
 - [ ] Last Card end-game state leakage — investigated, deferred pending repro
 - [ ] Direct-launch UX — when user opens games/player.html with no room code
 - [ ] Player tile avatar unification — currently inconsistent across tile types
@@ -2000,8 +2000,8 @@ The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captur
 - [ ] Profile photo capture — avatar currently initials-only
 
 ### Pre-Session 5 Blockers
-- [ ] **Games deep-link auto-manager bug** — `games/player.html` lines 928-929: `mgrCheck.checked = true` fires unconditionally on every `elsewhere://games?...` deep-link arrival, making every invitee a manager of the room they join. Breaks single-manager assumption across games code. **Scope: games only.** Does NOT affect Session 4.10 (different deep-link URLs, different handler). Fix options: (a) gate on `?role=manager` URL param, or (b) remove auto-check and trust URL `?mgr=1` exclusively. Structurally resolved by Session 5 when `session_participants` replaces ad-hoc manager flag. Logged: Session 4.8 (v2.98, commit `e3aaa05`). Still live as of v2.99.
-- [ ] Lobby state fragility (also listed in Games) — gets structurally resolved by session_participants schema
+- [x] ~~**Games deep-link auto-manager bug** — `games/player.html` lines 928-929: `mgrCheck.checked = true` fires unconditionally on every `elsewhere://games?...` deep-link arrival, making every invitee a manager of the room they join. Breaks single-manager assumption across games code. **Scope: games only.** Does NOT affect Session 4.10 (different deep-link URLs, different handler). Fix options: (a) gate on `?role=manager` URL param, or (b) remove auto-check and trust URL `?mgr=1` exclusively. Structurally resolved by Session 5 when `session_participants` replaces ad-hoc manager flag. Logged: Session 4.8 (v2.98, commit `e3aaa05`). Still live as of v2.99.~~ — **Resolved in Session 5 Part 3a.1.** (DEFERRED entry not updated at 3a.1 time; closed out retroactively in 3a.2.) Manager identity now derives from `session_participants.control_role`; `?mgr=1` URL param + `mgrCheck` checkbox both retired.
+- [x] ~~Lobby state fragility (also listed in Games) — gets structurally resolved by session_participants schema~~ — **Resolved in Session 5 Part 3a.2.** See "Lobby state fragility" entry under "Deferred — Games" above.
 
 ### Phase 2 Deferred
 - [ ] Auth enhancements beyond magic-link / password / QR

@@ -362,7 +362,8 @@
     <button class="mgr-btn"         id="mgr-skip"   onclick="managerSkip()"   style="display:none">Skip</button>
     <button class="mgr-btn"                         onclick="goToLobby()">☰ Games</button>
     <button class="mgr-btn"    id="mgr-endgame"       onclick="managerEndGame()" style="display:none">End Game</button>
-    <button class="mgr-btn danger"                  onclick="managerEnd()">End Session</button>
+    <button class="mgr-btn"                         onclick="managerSwitchGame()">Switch Game</button>
+    <button class="mgr-btn danger"                  onclick="managerEndSession()">End Session</button>
   </div>
 
   <div id="screen-wrap">
@@ -512,8 +513,8 @@
         </div>
       </div>
 
-      <!-- TV Displays (Session 4.8) — hidden when tvDisplays is empty.
-           Populated by lobbyPlayers[*].hasTVs aggregation in Part C. -->
+      <!-- TV Displays (Session 4.8) — hidden when tvDisplaysByUserId is empty.
+           Rendered by renderTvDisplays from tvDisplaysByUserId. -->
       <div id="tv-displays-section" style="display:none;margin-top:16px;">
         <div class="section-label">TV Displays</div>
         <div class="player-list" id="tv-displays-list"></div>
@@ -776,7 +777,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.100</div>
+<div class="ver">v2.101</div>
 
 <script>
 'use strict';
@@ -820,32 +821,10 @@ let agoraClient=null, streamId=null, agoraReady=false;
 let videoTrack=null, cameraOn=false;
 
 let currentGame='lastcard', playerLimit=6;
-let managerIsPlayer=true;  // TRANSITIONAL state — read by per-game start
-                           // functions (lines 1779/2284/2466) until 3a.2's
-                           // Section F retires both the variable and those
-                           // read sites alongside the toggle UI rewrite.
-// 3a.1 TRANSITIONAL — synthesized from currentParticipants on every
-// refreshSessionState call (see synthesis block at the tail of
-// refreshSessionState). Per-game read sites (lines 1038/1622/1626/1779/
-// 2206/2214-2216/2284/2466/2748) keep working without modification via the
-// synthesis. Retired in 3a.2 (Section F) alongside managerIsPlayer.
-//
-// Do NOT extend this synthesis. New per-game logic should read
-// currentParticipants directly, not lobbyPlayers.
-//
-// Why this exists: Phase 2 split 3a into 3a.1 (plumbing) and 3a.2 (manager
-// controls including the participation_role toggle). The per-game start
-// functions in player.html read lobbyPlayers to derive their player list.
-// Retiring lobbyPlayers in 3a.1 without the matching read-site swaps in
-// 3a.2 would break game start. This synthesis bridges that gap for one
-// commit cycle.
-let lobbyPlayers=[];   // {uid,player_id,name,isManager,status:'active'|'queue',hasCamera,videoEl,hasTVs:[{tv_uid,tv_name}]}
 let invitedNames=[];   // names of people invited but not yet joined
-// Session 4.8: 10s grace timers so brief disconnects don't flicker the
-// lobby. Keys: player_id for players, tv_uid for TVs.
-// 3a.1 note: still used by removePlayer/scheduleRemoval analogs even though
-// session-state durability has moved to session_participants. Camera-state
-// flicker mitigation only.
+// 10s grace timers so brief disconnects don't flicker camera tiles. Keys:
+// tv_uid for TVs. (Lobby state durability lives in session_participants;
+// these timers are camera-flicker mitigation only.)
 const pendingRemovals = new Map();
 let gameInProgress=false;
 let playAgainResponses={};
@@ -857,29 +836,20 @@ let currentSession      = null;  // sessions row
 let currentParticipants = [];    // session_participants rows + display_name
 let currentMyRow        = null;  // my row in currentParticipants
 
-// 3a.1: Agora-level transient state. Keyed by Agora uid (rotates on reconnect).
+// Agora-level transient state. Keyed by Agora uid (rotates on reconnect).
 // Distinct from currentParticipants (session-level, durable, keyed by user_id).
-// Render functions join the two via uidToUserId map populated by the
-// agora-identity-bind protocol.
-//
-// agora-identity-bind: ephemeral identity-binding Agora message carrying
-// (Agora uid → auth user_id, player_id) at announce time. Semantically
-// distinct from the retired player-join Agora message: bind carries ONLY
-// identity binding, not lobby state. Lobby state lives in session_participants.
-// Future-Claude: don't merge these — the bind is for camera-tile attachment
-// and tv-display-added owner translation ONLY.
+// Render functions join the two via uidToUserId, populated by the
+// agora-identity-bind Agora message (carries uid → user_id, player_id at
+// announce time). Lobby state lives in session_participants — bind carries
+// identity binding ONLY.
 let cameraState        = {};   // uid       → { hasCamera, videoTrack, videoEl }
 let uidToUserId        = {};   // uid       → auth user_id (for camera-tile attachment)
 let playerIdToUserId   = {};   // player_id → auth user_id (for tv-display-added owner translation)
 
-// 3a.1 TRANSITIONAL — separate map for tv-display-added state. Pre-3a, hasTVs
-// lived per-player on lobbyPlayers[*]; under γ-1 synthesis, the synthesis
-// can't preserve write-side mutations across re-syntheses, so tv-display-added
-// state moves into this standalone map. Keyed by user_id (translated from
-// the wire field msg.owner_id, which is a player_id) via playerIdToUserId.
-//
-// Retired in 3a.2 alongside Section F's renderRoster rewrite, which will
-// move tv-display rendering off the lobbyPlayers[*].hasTVs path.
+// TV pairing state. Keyed by participant user_id; populated by the
+// tv-display-added Agora message (which carries owner_id as a player_id —
+// translated via playerIdToUserId). Read directly by renderRoster (per-row
+// TV badges) and renderTvDisplays (TV list section).
 let tvDisplaysByUserId = {};   // user_id → [{ tv_uid, tv_name }]
 
 // 3a.1: Realtime channel state (mirrors karaoke/singer.html lines 642-643).
@@ -1128,11 +1098,11 @@ async function doJoin() {
 }
 
 function checkTvPresent() {
-  // TV watcher joins the games channel too — if there are remote users beyond players, TV is present
-  // We detect TV by checking if the games/tv.html Agora watcher is on the channel
-  // For now: if any remote user exists that isn't in our player list, assume TV
-  const knownUids = lobbyPlayers.map(p=>p.uid);
-  tvPresent = agoraClient?.remoteUsers.some(u => !knownUids.includes(u.uid)) || false;
+  // TV watcher joins the games channel too. Any remote uid not bound to a
+  // participant via agora-identity-bind is assumed to be the TV. (Catches
+  // TVs that haven't yet announced via tv-display-added.)
+  const knownUids = Object.keys(uidToUserId);
+  tvPresent = agoraClient?.remoteUsers.some(u => !knownUids.includes(String(u.uid))) || false;
   log('tvPresent:'+tvPresent+' ipad:'+IS_IPAD);
 }
 
@@ -1174,24 +1144,17 @@ async function toggleCamera() {
   }
 }
 
-// 3a.1: mutate cameraState (uid-keyed transient Agora state). Stores both
-// the videoTrack (for re-attachment if needed) AND the <video> DOM element
-// (created here in attachRemoteVideo and consumed by downstream renderers
-// that expect lobbyPlayers[*].videoEl). Synthesis at refreshSessionState
-// tail joins cameraState[uid] back into lobbyPlayers shape via uidToUserId
-// reverse-lookup. Calling syncLobbyPlayersFromState here ensures renderers
-// see the new state without waiting for a DB refresh.
+// Mutate cameraState (uid-keyed transient Agora state). Stores the
+// videoTrack and the <video> DOM element used by renderers (looked up via
+// uidToUserId reverse from currentParticipants).
 function attachRemoteVideo(uid, track) {
-  // Create a video element for this player
   const vid = document.createElement('video');
   vid.autoplay=true; vid.muted=true; vid.playsInline=true;
   vid.style.cssText='width:100%;height:100%;object-fit:cover;transform:scaleX(-1);';
   track.play(vid);
   cameraState[uid] = { hasCamera: true, videoTrack: track, videoEl: vid };
-  syncLobbyPlayersFromState();
   renderRoster();
   renderOthersStrip();
-  // Tell TV
   send({type:'camera-on', targetUid: uid});
 }
 
@@ -1199,14 +1162,12 @@ function detachRemoteVideo(uid) {
   if (cameraState[uid]) {
     cameraState[uid] = { ...cameraState[uid], hasCamera: false, videoTrack: null, videoEl: null };
   }
-  syncLobbyPlayersFromState();
   renderRoster();
   renderOthersStrip();
 }
 
 function updateLobbyCamera(uid, on) {
   cameraState[uid] = { ...(cameraState[uid] || {}), hasCamera: on };
-  syncLobbyPlayersFromState();
   renderRoster();
   renderOthersStrip();
 }
@@ -1309,7 +1270,6 @@ function handleMessage(uid, data) {
       if (me?.id) send({ type: 'agora-identity-bind', user_id: me.id, player_id: myPlayerId });
     }
     // Re-render roster — newly-bound camera tile may now be attachable.
-    syncLobbyPlayersFromState();
     renderRoster();
     return;  // bind is fully handled; skip remaining branches
   }
@@ -1319,13 +1279,11 @@ function handleMessage(uid, data) {
   // by the realtime participant_role_changed event. The bind handler above
   // covers Agora-identity rebinding on reconnect.
 
-  // 3a.1: tv-display-added — write to tvDisplaysByUserId map (translates wire
-  // field msg.owner_id which is a player_id, via playerIdToUserId map populated
-  // by the agora-identity-bind handler above). Synthesis at refreshSessionState
-  // tail joins this map back into lobbyPlayers[*].hasTVs for renderRoster
-  // compat; renderTvDisplays reads tvDisplaysByUserId directly (Edit 16).
-  // pendingRemovals grace timers preserved for TV uid (camera-state flicker
-  // mitigation only; not lobby state anymore).
+  // tv-display-added — write to tvDisplaysByUserId, translating wire field
+  // msg.owner_id (a player_id) via playerIdToUserId (populated by the
+  // agora-identity-bind handler above). Read directly by renderRoster and
+  // renderTvDisplays. pendingRemovals grace timer keyed by tv_uid mitigates
+  // camera-tile flicker on brief disconnects.
   if (msg.type==='tv-display-added') {
     const ownerUserId = playerIdToUserId[msg.owner_id];
     const tvUid = msg.tv_uid;
@@ -1336,12 +1294,11 @@ function handleMessage(uid, data) {
         tvDisplaysByUserId[ownerUserId].push({tv_uid: tvUid, tv_name: msg.tv_name});
       }
     } else {
-      // Owner's bind hasn't arrived yet — log and skip. The TV will rebroadcast
-      // on Agora reconnect (per games/tv.html line 591-594), which gives
-      // another chance to capture the bind first.
+      // Owner's bind hasn't arrived yet — skip. The TV rebroadcasts on
+      // Agora reconnect (per games/tv.html line 591-594).
       log('tv-display-added with unknown owner_id='+msg.owner_id+' — bind not received yet, skipping');
     }
-    syncLobbyPlayersFromState();
+    renderRoster();
     renderTvDisplays();
     if (msg.owner_id === myPlayerId) onMyTvPaired(msg.tv_name);
   }
@@ -1353,8 +1310,8 @@ function handleMessage(uid, data) {
     } else if (msg.name && !invitedNames.includes(msg.name)) {
       invitedNames.push(msg.name);
     }
-    // Remove anyone already in lobby
-    lobbyPlayers.forEach(p => { invitedNames = invitedNames.filter(n=>n!==p.name); });
+    // Remove anyone already in the session
+    currentParticipants.forEach(p => { invitedNames = invitedNames.filter(n=>n!==p.display_name); });
     renderInvited();
   }
 
@@ -1422,10 +1379,6 @@ function handleMessage(uid, data) {
     gameInProgress=false; gameState=null;
     currentGame = msg.game || currentGame;
     playerLimit = GAME_LIMITS[currentGame]?.default || 6;
-    // Remove non-restarting players from lobby
-    if (msg.playerNames) {
-      lobbyPlayers = lobbyPlayers.filter(p=>msg.playerNames.includes(p.name)||p.uid===myUid);
-    }
     goToGameRoom();
   }
 
@@ -1535,7 +1488,7 @@ function removePlayer(uid) {
       for (const userId of Object.keys(tvDisplaysByUserId)) {
         tvDisplaysByUserId[userId] = tvDisplaysByUserId[userId].filter(t => t.tv_uid !== uid);
       }
-      syncLobbyPlayersFromState();
+      renderRoster();
       renderTvDisplays();
       log('TV removed after grace: '+uid);
     }, TV_GRACE_MS);
@@ -1555,7 +1508,6 @@ function removePlayer(uid) {
 function clearCameraStateForUid(uid) {
   if (cameraState[uid]) delete cameraState[uid];
   if (uidToUserId[uid]) delete uidToUserId[uid];
-  syncLobbyPlayersFromState();
   renderRoster();
 }
 
@@ -1644,17 +1596,92 @@ function changeLimit(delta) {
   send({type:'limit-changed', limit:playerLimit});
 }
 
-// 3a.1: recomputeQueue retired. The synthesis at refreshSessionState's tail
-// sets status='active' for every participant (preserves pre-3a "everyone in
-// lobby is active" UX). Per-game queueing semantics (status='queue' for
-// over-capacity arrivals) lands in 3b/3c/3d alongside per-game admission_mode.
+// recomputeQueue retired in 3a.1: lobby treats every participant as active.
+// Per-game queueing semantics (over-capacity arrivals → queue) lands in
+// 3b/3c/3d alongside per-game admission_mode.
 
-function toggleManagerAsPlayer(checked) {
-  managerIsPlayer=checked;
-  const me=lobbyPlayers.find(p=>p.uid===myUid);
-  if (me) me.isPlayer=checked;
-  renderRoster();
-  send({type:'manager-player-status', isPlayer:checked});
+async function toggleManagerAsPlayer(checked) {
+  const checkbox = document.getElementById('mgr-is-player');
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!currentSession?.id || !user) {
+    log('toggleManagerAsPlayer: no session/auth — legacy mode no-op');
+    return;
+  }
+
+  const targetRole = checked ? 'active' : 'audience';
+  const { error } = await window.sb.rpc('rpc_session_update_participant', {
+    p_session_id:         currentSession.id,
+    p_user_id:            user.id,
+    p_participation_role: targetRole,
+  });
+
+  if (error) {
+    if (error.code === '55000') {
+      showToast('Room is full — remove a player first.');
+    } else {
+      log('toggleManagerAsPlayer FAILED: ' + error.message + ' (code=' + (error.code || 'none') + ')');
+      showToast("Couldn't change your status");
+    }
+    // Revert checkbox to authoritative state.
+    if (checkbox) checkbox.checked = currentMyRow?.participation_role === 'active';
+    return;
+  }
+
+  // Publish realtime + refresh own UI (BUG-13: self:false on broadcasts).
+  if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+    try {
+      await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
+        session_id: currentSession.id,
+      }, _playerRealtimeChannel);
+    } catch (_) {}
+  }
+  await refreshSessionState();
+}
+
+// 3a.2 § 2.5: manager soft-removes another participant. Sets target's left_at.
+// Mirrors singer.html handleQueueRemoveTap (line 2852) — confirm prompt, RPC,
+// caller-side realtime publish, BUG-13 self-refresh.
+async function handleRemovePlayer(user_id_encoded) {
+  const user_id = decodeURIComponent(user_id_encoded);
+  const target  = currentParticipants.find(p => p.user_id === user_id);
+  if (!target) {
+    log('handleRemovePlayer: target not in currentParticipants');
+    return;
+  }
+  const targetName = target.display_name || 'this player';
+  if (!confirm(`Remove ${targetName} from the session?`)) return;
+
+  if (!currentSession?.id) {
+    log('handleRemovePlayer: no session — legacy mode no-op');
+    return;
+  }
+
+  const { error } = await window.sb.rpc('rpc_session_remove_participant', {
+    p_session_id: currentSession.id,
+    p_user_id:    user_id,
+  });
+
+  if (error) {
+    log('handleRemovePlayer FAILED: ' + error.message + ' (code=' + (error.code || 'none') + ')');
+    if (error.code === '42501') {
+      showToast('Only the manager can remove players.');
+    } else {
+      showToast("Couldn't remove " + targetName);
+    }
+    return;
+  }
+
+  // Publish realtime so target's phone navigates away and others re-render.
+  if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+    try {
+      await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
+        session_id: currentSession.id,
+      }, _playerRealtimeChannel);
+    } catch (_) {}
+  }
+
+  // BUG-13: refresh own UI (self:false on broadcasts).
+  await refreshSessionState();
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -1674,12 +1701,10 @@ function applyManagerBarVisibility() {
   bar.classList.toggle('visible', isManager);
 }
 
-// 3a.1: session-state cold-path refresh. Mirrors karaoke/singer.html
+// Session-state cold-path refresh. Mirrors karaoke/singer.html
 // refreshSessionState (line 2268). Looks up session by room_code, populates
 // currentSession, currentParticipants, currentMyRow; subscribes to realtime
-// events; runs the γ-1 synthesis at tail to populate transitional
-// lobbyPlayers from currentParticipants + cameraState + uidToUserId +
-// tvDisplaysByUserId.
+// events; re-renders roster + TV displays.
 async function refreshSessionState() {
   const user = window.elsewhere?.getCurrentUser?.();
   if (!user) {
@@ -1754,63 +1779,32 @@ async function refreshSessionState() {
     await startPlayerRealtimeSub(device_key);
   }
 
-  // γ-1 synthesis: populate transitional lobbyPlayers from authoritative
-  // session state. Per-game read sites (lines 1038/1622/1626/1779/2206/
-  // 2214-2216/2284/2466/2748) keep working without modification. Retired
-  // in 3a.2 alongside Section F's renderRoster rewrite.
-  syncLobbyPlayersFromState();
-
   // Apply UI gates that depend on currentMyRow.
   applyManagerBarVisibility();
+  // Sync manager-as-player checkbox to authoritative role.
+  const checkbox = document.getElementById('mgr-is-player');
+  if (checkbox) checkbox.checked = currentMyRow?.participation_role === 'active';
   // Roster + TV displays re-render with fresh data.
   renderRoster();
   renderTvDisplays();
 }
 
-// 3a.1: γ-1 synthesis. Re-derives transitional lobbyPlayers from
-// (currentParticipants, cameraState, uidToUserId, tvDisplaysByUserId).
-// Called from refreshSessionState's tail and from event handlers that
-// mutate the state stores (Agora camera events, tv-display-added).
-//
-// TRANSITIONAL — synthesis retired in 3a.2 alongside Section F's manager
-// toggle rewrite. Do not extend this synthesis. New per-game logic should
-// read currentParticipants directly, not lobbyPlayers.
-function syncLobbyPlayersFromState() {
-  if (!currentParticipants || currentParticipants.length === 0) {
-    lobbyPlayers = [];
-    return;
+// Reverse-lookup helper: find Agora uid bound to a given participant user_id.
+// Returns null if no agora-identity-bind has arrived for this user yet.
+// Used by renderers to attach camera state (cameraState is uid-keyed).
+function findUidForUser(userId) {
+  for (const [u, uid_user] of Object.entries(uidToUserId)) {
+    if (uid_user === userId) return u;
   }
-  // Reverse-lookup helper: find Agora uid bound to a given user_id, if any.
-  function findUidForUser(userId) {
-    for (const [u, uid_user] of Object.entries(uidToUserId)) {
-      if (uid_user === userId) return u;
-    }
-    return null;
-  }
-  lobbyPlayers = currentParticipants.map(p => {
-    const uid = findUidForUser(p.user_id);
-    const cam = uid ? cameraState[uid] : null;
-    return {
-      uid:        uid,
-      player_id:  null,  // legacy field; not used post-3a-1
-      name:       p.display_name,
-      isManager:  p.control_role === 'manager',
-      status:     'active',  // pre-3a "everyone-in-lobby is active" UX preserved
-      hasCamera:  !!cam?.hasCamera,
-      videoEl:    cam?.videoEl || null,
-      hasTVs:     tvDisplaysByUserId[p.user_id] || [],
-    };
-  });
+  return null;
 }
 
-// 3a.1: legacy-mode reset (mirrors singer.html resetSessionStateToLegacy
-// line 2178). Called from refreshSessionState failure paths.
+// Legacy-mode reset (mirrors singer.html resetSessionStateToLegacy line 2178).
+// Called from refreshSessionState failure paths.
 async function resetSessionStateToLegacy() {
   currentSession      = null;
   currentParticipants = [];
   currentMyRow        = null;
-  // Keep lobbyPlayers as-is — pre-3a code paths populate it from
-  // player-join broadcasts. In legacy mode the synthesis is bypassed.
   await stopPlayerRealtimeSub();
 }
 
@@ -1875,14 +1869,9 @@ async function stopPlayerRealtimeSub() {
 }
 
 // ── Roster + invited + TV displays rendering ──────────────────
-// 3a.1: TV Displays reads tvDisplaysByUserId directly (post-3a-1 source of
-// TV pairing state). Owner display name comes from currentParticipants via
-// user_id lookup. Pre-3a iterated lobbyPlayers[*].hasTVs; under γ-1 synthesis
-// hasTVs is populated FROM tvDisplaysByUserId, so reading it directly here
-// avoids a synthesis round-trip and lets renderTvDisplays survive 3a.2's
-// retirement of lobbyPlayers without changes. "Lobby order" preservation
-// now comes from currentParticipants iteration order (matches the order
-// rpc_session_get_participants returns).
+// renderTvDisplays reads tvDisplaysByUserId directly. Owner display name
+// comes from currentParticipants via user_id lookup; iteration order
+// matches rpc_session_get_participants return order.
 function renderTvDisplays() {
   const section = document.getElementById('tv-displays-section');
   const listEl  = document.getElementById('tv-displays-list');
@@ -1928,47 +1917,72 @@ function renderInvited() {
 }
 
 function renderRoster() {
-  const active=lobbyPlayers.filter(p=>p.status==='active');
-  const queue =lobbyPlayers.filter(p=>p.status==='queue');
+  // Source: currentParticipants. Camera state via uidToUserId reverse →
+  // cameraState. Manager sees a Remove button per row (except their own).
+  // Queue rendering deferred to 3b/3c/3d (per-game admission_mode); for
+  // now treat every active participant as in-lobby.
+  const myUserId   = currentMyRow?.user_id || null;
+  const iAmManager = currentMyRow?.control_role === 'manager';
+  const active = currentParticipants.filter(p => !p.left_at);
+
   const badge=document.getElementById('room-badge-count');
   if (badge) badge.textContent=active.length+' / '+playerLimit;
 
-  document.getElementById('lobby-roster').innerHTML=active.map(p=>`
-    <div class="player-row ${p.uid===myUid?'me':''}">
-      <div class="p-dot ${p.uid===myUid?'dot-gold':'dot-green'}"></div>
-      <div class="p-name ${p.uid===myUid?'me':''}">${p.name}</div>
-      ${p.hasCamera?'<span style="font-size:12px;">📷</span>':''}
-      ${p.isManager?'<div class="p-badge badge-mgr">Manager</div>':''}
-      ${p.uid===myUid&&!p.isManager?'<div class="p-badge badge-you">You</div>':''}
-    </div>`).join('');
+  document.getElementById('lobby-roster').innerHTML=active.map(p=>{
+    const isMe        = p.user_id === myUserId;
+    const isManager   = p.control_role === 'manager';
+    const uid         = findUidForUser(p.user_id);
+    const cam         = uid ? cameraState[uid] : null;
+    const hasCamera   = !!cam?.hasCamera;
+    const userIdEnc   = encodeURIComponent(p.user_id);
+    const removeBtn   = (iAmManager && !isMe)
+      ? `<button class="p-remove-btn" onclick="handleRemovePlayer('${userIdEnc}')" title="Remove from session" style="margin-left:auto;background:transparent;border:1px solid var(--color-border-dim);color:var(--color-text-faint);font-size:11px;padding:2px 8px;border-radius:var(--radius-sm);cursor:pointer;">Remove</button>`
+      : '';
+    return `
+    <div class="player-row ${isMe?'me':''}">
+      <div class="p-dot ${isMe?'dot-gold':'dot-green'}"></div>
+      <div class="p-name ${isMe?'me':''}">${p.display_name}</div>
+      ${hasCamera?'<span style="font-size:12px;">📷</span>':''}
+      ${isManager?'<div class="p-badge badge-mgr">Manager</div>':''}
+      ${isMe&&!isManager?'<div class="p-badge badge-you">You</div>':''}
+      ${removeBtn}
+    </div>`;
+  }).join('');
 
+  // Queue section: empty in 3a.2 (queueing semantics deferred per § 4.1).
   const ql=document.getElementById('queue-label');
   const qe=document.getElementById('lobby-queue');
-  if (queue.length>0) {
-    ql.style.display='block';
-    qe.innerHTML=queue.map(p=>`
-      <div class="player-row">
-        <div class="p-dot dot-dim"></div>
-        <div class="p-name">${p.name}</div>
-        <div class="p-badge badge-queue">Queue</div>
-      </div>`).join('');
-  } else { ql.style.display='none'; qe.innerHTML=''; }
+  if (ql) ql.style.display='none';
+  if (qe) qe.innerHTML='';
 }
 
 function renderOthersStrip() {
-  // During a game, source of truth is gameState.players. In lobby, use lobbyPlayers.
-  let othersList;
-  if (gameState && gameState.players) {
-    // Get all players in the game except me, build from gameState
-    othersList = gameState.players.filter(name => name !== myName).map(name => {
-      // Find matching lobbyPlayers entry for camera/video
-      const p = lobbyPlayers.find(lp => lp.name === name) || { name, uid:'', hasCamera:false };
-      return p;
-    });
-  } else {
-    othersList = lobbyPlayers.filter(p=>p.uid!==myUid);
+  // Build per-other-player rows. Source: gameState.players during a game,
+  // currentParticipants in lobby. Camera state looked up via uidToUserId
+  // reverse against cameraState. Each row shape: { name, uid, hasCamera, videoEl }.
+  function buildRow(name, userId) {
+    const uid = userId ? findUidForUser(userId) : null;
+    const cam = uid ? cameraState[uid] : null;
+    return {
+      name,
+      uid: uid || '',
+      hasCamera: !!cam?.hasCamera,
+      videoEl:   cam?.videoEl || null,
+    };
   }
-  const others = othersList;
+  let others;
+  if (gameState && gameState.players) {
+    others = gameState.players
+      .filter(name => name !== myName)
+      .map(name => {
+        const p = currentParticipants.find(cp => cp.display_name === name);
+        return buildRow(name, p?.user_id || null);
+      });
+  } else {
+    others = currentParticipants
+      .filter(p => p.user_id !== currentMyRow?.user_id && !p.left_at)
+      .map(p => buildRow(p.display_name, p.user_id));
+  }
   // Phone strip
   const strip=document.getElementById('lc-others-strip');
   if (strip) strip.innerHTML=others.map(p=>{
@@ -2081,9 +2095,50 @@ function managerEndGame() {
   showGameOver(scores);
 }
 
-function managerEnd() {
-  if (!confirm('End this game for all players?')) return;
+function managerSwitchGame() {
+  if (!confirm('Switch to a different game?')) return;
   send({type:'switch-game'}); gameInProgress=false; goToLobby();
+}
+
+async function managerEndSession() {
+  if (!confirm('End the session for everyone?')) return;
+  if (!currentSession?.id) {
+    // Legacy mode (not signed in / no session row) — fall through to old switch-game
+    // behavior so manager isn't stuck.
+    send({type:'switch-game'}); gameInProgress=false; goToLobby();
+    return;
+  }
+
+  const { error: endErr } = await window.sb.rpc('rpc_session_end', {
+    p_session_id: currentSession.id,
+  });
+  if (endErr) {
+    if (endErr.code === '42501') {
+      alert("Only the current manager can end the session.");
+    } else if (endErr.code === '02000') {
+      // Already ended (race). Refresh and let the realtime handler navigate.
+      await refreshSessionState();
+    } else {
+      alert("Couldn't end session: " + (endErr.message || 'unknown error'));
+    }
+    return;
+  }
+
+  // Publish session_ended per shell/realtime.js emission matrix (caller-side).
+  // Mirrors index.html lines 3056-3067.
+  const deviceKey = _playerRealtimeChannelDeviceKey;
+  if (deviceKey) {
+    try {
+      await window.publishSessionEnded(deviceKey, {
+        session_id: currentSession.id,
+        reason: 'user_ended',
+      });
+    } catch (e) {
+      console.error('[elsewhere] session_ended publish failed:', e);
+    }
+  }
+
+  handleBackToElsewhere();
 }
 
 // ── LAST CARD ─────────────────────────────────────────────────
@@ -2119,11 +2174,11 @@ function shuffle(a) {
 }
 
 function managerStartLastCard() {
-  let activePlayers=lobbyPlayers.filter(p=>p.status==='active');
-  if (managerIsPlayer&&!activePlayers.find(p=>p.uid===myUid)) {
-    activePlayers.unshift({uid:myUid,name:myName,isManager:true,status:'active'});
-  }
-  const playerNames=activePlayers.map(p=>p.name);
+  // Active players = participants whose participation_role is 'active'.
+  // Manager's own role is also 'active' iff they've checked "I'm playing".
+  const playerNames = currentParticipants
+    .filter(p => p.participation_role === 'active' && !p.left_at)
+    .map(p => p.display_name);
   log('Starting Last Card with: '+playerNames.join(', '));
   if (playerNames.length<2) { showToast('Need at least 2 players ('+playerNames.length+' in lobby)'); return; }
 
@@ -2519,8 +2574,8 @@ function managerAskPlayAgain() {
   send({type:'ask-play-again'});
   document.getElementById('play-again-manager').style.display='none';
   document.getElementById('play-again-results').style.display='block';
-  // Auto-respond yes for manager if playing
-  if (managerIsPlayer) {
+  // Auto-respond yes for manager if they're playing.
+  if (currentMyRow?.participation_role === 'active') {
     playAgainResponses[myUid]={name:myName,yes:true};
     renderPlayAgainResults();
   }
@@ -2547,18 +2602,17 @@ function renderPlayAgainResults() {
 function managerStartFromGameOver() {
   const yesNames=Object.values(playAgainResponses).filter(r=>r.yes).map(r=>r.name);
   if (yesNames.length < 2) { showToast('Need at least 2 players who said yes'); return; }
-  // Reset lobby to only yes players
-  lobbyPlayers=lobbyPlayers.filter(p=>yesNames.includes(p.name)||p.uid===myUid);
   send({type:'game-restart', playerNames:yesNames});
   gameInProgress=false; gameState=null;
   goToGameRoom();
 }
 
 function showPlayAgainSameTeam() {
-  // Restart immediately with all currently connected players
-  const connectedNames = lobbyPlayers.filter(p=>p.status==='active').map(p=>p.name);
+  // Restart immediately with all currently active participants.
+  const connectedNames = currentParticipants
+    .filter(p => p.participation_role === 'active' && !p.left_at)
+    .map(p => p.display_name);
   if (connectedNames.length < 2) { showToast('Need at least 2 players'); return; }
-  lobbyPlayers=lobbyPlayers.filter(p=>connectedNames.includes(p.name)||p.uid===myUid);
   send({type:'game-restart', playerNames:connectedNames, game: currentGame});
   gameInProgress=false; gameState=null;
   goToGameRoom();
@@ -2626,9 +2680,9 @@ async function triviaGenerate() {
     if (!resp.ok) throw new Error('API '+resp.status);
     const data=await resp.json();
     const qs=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim()).questions;
-    let activePlayers=lobbyPlayers.filter(p=>p.status==='active');
-    if (managerIsPlayer&&!activePlayers.find(p=>p.uid===myUid)) activePlayers.unshift({uid:myUid,name:myName,isManager:true});
-    const players=activePlayers.map(p=>p.name);
+    const players = currentParticipants
+      .filter(p => p.participation_role === 'active' && !p.left_at)
+      .map(p => p.display_name);
     gameState={phase:'waiting',players,questions:qs,currentQuestionIdx:0,timePerQuestion:20,timer:0,answers:{},
       scores:Object.fromEntries(players.map(p=>[p,0])),streak:Object.fromEntries(players.map(p=>[p,0])),category:cat.label};
     sta.textContent='✓ '+qs.length+' questions ready!';
@@ -2809,7 +2863,9 @@ function euTeamOf(playerName, teams) {
 }
 
 function managerStartEuchre() {
-  const playerNames = lobbyPlayers.filter(p=>p.status==='active').map(p=>p.name);
+  const playerNames = currentParticipants
+    .filter(p => p.participation_role === 'active' && !p.left_at)
+    .map(p => p.display_name);
   if (playerNames.length !== 4) { showToast('Euchre requires exactly 4 players'); return; }
 
   const deck = euShuffle(euBuildDeck());
@@ -3091,7 +3147,6 @@ function euRenderOthers() {
     const team = euTeamOf(name, s.teams);
     const isPartner = team === myTeam;
     const sittingOut = s.alone && s.aloneSitOut === name;
-    const p = lobbyPlayers.find(lp => lp.name === name) || { name, hasCamera:false };
     return `<div class="lc-other-player" style="${isActive?'border:1px solid var(--color-gold);':''}">
       <div class="lc-other-video ${isActive?'active':''} ${sittingOut?'last-card':''}" id="eu-ov-${name}">
         <span style="font-size:16px;">`+initials(name)+`</span>
