@@ -2103,7 +2103,7 @@ After GAMES-CONTROL-MODEL.md spec amendment. Bundle with active/audience cluster
 **Deferred on:** 2026-05-02
 **Priority:** Medium-High — second instance of a migration committed-but-not-applied slipping through; will recur and cost more time per slip until fixed
 **Area:** Operations — `db/` directory + deployment process
-**Status:** Deferred — quick fix recommended before next migration ships
+**Status:** Resolved 2026-05-02 — `db/MIGRATIONS_APPLIED.md` checklist created with all 16 migrations enumerated; 1 marked `❓ Verify` (db/015 — pending audit against `pg_trigger`). CLAUDE.md doctrine added: "A migration committed to repo is NOT shipped until applied to prod."
 
 #### Context
 

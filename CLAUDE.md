@@ -159,6 +159,8 @@ Phantom/aspirational venues don't stay in the JSON — if there's no `.jpg` in `
 
 - **Application UI sounds go in `sounds/ui/`.** Notifications, transitions, alerts. The root `sounds/` directory is for venue ambient (matched 1:1 with `venues/`). Don't bury app-level sounds inside per-app folders. (Convention locked 2e.2; first inhabitant is `sounds/ui/take-stage.mp3`.)
 
+- **A migration committed to repo is NOT shipped until applied to prod.** Before claiming a migration has shipped in any session log, update `db/MIGRATIONS_APPLIED.md` with the applied date and applier. The 3a.2 verification on 2026-05-02 surfaced two cases where this slipped (db/015 history unclear, db/016 confirmed slipped — `rpc_session_remove_participant` 404'd at the hardware-verification gate); a third slip is preventable with this tracking. (Locked 2026-05-02.)
+
 ## Conventions worth knowing
 
 - **Versioning.** Every page renders a `v2.NN` badge (search for `v2.88` to find them all). The convention from git history is: every commit bumps the version and every page that has the badge gets updated together — feature commits use `[vX.YY]` in the subject, e.g. `feat: 'Join as manager' checkbox on join screen [v2.88]`. When you ship a change, bump every `v2.NN` string in files you touched and any peer files that share the badge. Note: different surfaces have independent stamps — `singer.html` may be at `v2.110` while shell `index.html` is at `v2.99`. Bump only the surfaces you touched.
