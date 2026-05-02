@@ -777,7 +777,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.103</div>
+<div class="ver">v2.104</div>
 
 <script>
 'use strict';
@@ -1047,12 +1047,17 @@ async function doJoin() {
         if (!sessRow?.id) {
           log('Session: no active session found for room_code ' + roomCode + ' — legacy mode');
         } else {
+          // Per GAMES-CONTROL-MODEL.md § 2.4.4: lobby-state self-join defaults
+          // to 'active' — joiners are committing to play. 'audience' is reserved
+          // for explicit opt-out via the participant toggle (§ 2.4.3) or post-
+          // capacity declines (§ 1). Caller-side override; RPC default in
+          // db/009 (still 'audience') stays as-is to avoid affecting karaoke flows.
           const { error: joinErr } = await window.sb.rpc('rpc_session_join', {
             p_session_id: sessRow.id,
-            p_participation_role: 'audience',
+            p_participation_role: 'active',
           });
           if (joinErr) throw joinErr;
-          log('Session: joined session ' + sessRow.id + ' as audience');
+          log('Session: joined session ' + sessRow.id + ' as active');
           await refreshSessionState();
           // Publish participant_role_changed so other clients (notably the
           // manager) see the new participant without a manual refresh. Caller-
