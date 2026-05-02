@@ -105,9 +105,45 @@ Then end the active session via the End Session button (or `UPDATE sessions SET 
 
 If verification is green, proceed with Commit 3 of the cluster. If red (e.g., 23505 catch path is the failure mode), fix-forward before Commit 3.
 
+### v2.105 — full default-role fix (this commit)
+
+Hardware verification of v2.104 surfaced two diagnosed bypass paths the partial fix didn't cover. Diagnosis captured in this session via two read-only investigations that confirmed:
+
+1. **Manager bypass.** `rpc_session_start` (db/009:108-114) hardcoded the initial manager's `participation_role = 'audience'` regardless of `p_app`. v2.104's caller-side override only applies to `rpc_session_join`, not `rpc_session_start`. The shell (`index.html:3109`) calls `rpc_session_start` for the manager's session create, so the manager's row was inserted as `'audience'` and never visited the v2.104 code path. Confirmed via single-call-site-of-rpc-session-start grep + db/009 signature read.
+2. **Rejoin/refresh bypass.** doJoin always called `rpc_session_join` and the 23505 catch swallowed every "already-a-participant" case without examining the existing role. Since the games surface never calls `rpc_session_leave` (users navigate away leaving rows alive), every browser refresh while in lobby hit the 23505 path — making v2.104's `'active'` value a no-op for returning users. Confirmed via `rpc_session_leave` zero-call-site grep + doJoin trace.
+
+**v2.105 ships:**
+- `db/018_session_start_active_default.sql` — `CREATE OR REPLACE FUNCTION rpc_session_start` with the manager-row insert branched on `p_app`: `'games'` → `'active'` (per § 2.4.4); `'karaoke'` and any other → `'audience'` (preserves karaoke schema-state semantics where 'audience' for HHU = "Available Singer (not queued)" per `docs/KARAOKE-CONTROL-MODEL.md` § 1). db/009 stays in repo as historical record (migrations are append-only). Applied to prod 2026-05-02 alongside this commit.
+- `games/player.html` doJoin restructured from "join then handle 23505 in catch" to "check then conditionally join". `refreshSessionState` does the existence check (it already queries sessions + populates `currentMyRow`), so no new RPC or query needed. Three branches: (a) no active session → legacy mode; (b) existing row → preserve state, no insert, no publish; (c) no row → fresh join with `'active'` and publish `participant_role_changed`. The 23505 catch becomes a true race-condition path (concurrent tab/device), not the every-refresh path.
+- Version bump v2.104 → v2.105.
+
+### v2.105 verification plan
+
+Use a **fresh session** (new room code) and clean test users — Mike + Michael, both signed in. Don't reuse TAML5W or any prior test session.
+
+1. **Manager path.** Mike taps Games tile on shell home screen. Verify post-deploy:
+   - Mike's row in `session_participants` has `participation_role = 'active'` (not `'audience'`).
+   - Mike's player.html log shows: "Session: already a participant (role=active) — using existing row" (the doJoin-after-shell-rpc_session_start branch (b) path).
+   - No `rpc_session_join` 23505 in logs (the new code skips the call when a row exists).
+2. **Non-manager fresh join.** Michael joins via room code in Chrome. Verify:
+   - Michael's row has `participation_role = 'active'`.
+   - Michael's log shows: "Session: joined session ... as active" (branch (c)).
+   - Mike's iPhone roster shows Michael as active within 1-2s (realtime publish path).
+3. **Refresh preservation.** After Mike + Michael are both in lobby with role = `'active'`, refresh Michael's Chrome page. Verify:
+   - Michael's role stays `'active'` (not flipped to `'audience'` and not flipped to `'active'` from a stale `'audience'` either).
+   - Michael's log shows: "Session: already a participant (role=active) — using existing row" (branch (b)).
+   - No `participant_role_changed` published from Michael's refresh (since nothing changed).
+4. **Karaoke regression check.** Mike taps Karaoke tile (after ending the games session). Verify:
+   - Mike's row in karaoke session has `participation_role = 'audience'` (per karaoke schema-state semantics — Available Singer not queued).
+   - Karaoke "Add to Queue" / promote flows still work as before.
+
+If v2.105 verifies green on all four steps, proceed with **Commit 4 (v2.106)** of the active/audience cluster: participant toggle UI + roster sectioning per § 2.4.3 + § 2.4.5. The Commit-3 prompt at `docs/PROMPTS/active-audience-commit-3.md` is still accurate for that work — only the version number shifts (v2.105 → v2.106 instead of v2.104 → v2.105).
+
 ### Cluster status snapshot (end of 2026-05-02 session)
 
 - Spec: ✅ shipped, applied to docs.
-- Migration: ✅ shipped, applied to prod.
-- Commit 2 (default-role): ✅ shipped, hardware verification pending.
-- Commit 3 (toggle UI + roster split): ⏳ pending v2.104 verification.
+- Migration db/017 (participant self-flip RPC): ✅ shipped, applied to prod.
+- Migration db/018 (rpc_session_start branched manager default): ✅ shipped, applied to prod.
+- Commit 2 (default-role partial — non-manager fresh-join): ✅ shipped (v2.104).
+- Commit 2.5 (default-role full — db/018 + doJoin restructure): ✅ shipped this commit (v2.105), applied to prod.
+- Commit 4 (toggle UI + roster split, v2.106): ⏳ pending v2.105 verification (was labeled "Commit 3" before the v2.104→v2.105 partial-then-full split renumbered the queue).

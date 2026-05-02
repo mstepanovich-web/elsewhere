@@ -6,7 +6,7 @@
 >
 > Read top-to-bottom. Pointers to deeper docs are at the end.
 
-Last updated: 2026-05-02 (active/audience UX cluster mid-flight — spec + migration + default-role shipped; toggle UI + roster sectioning pending)
+Last updated: 2026-05-02 (active/audience UX cluster mid-flight — spec + migrations + full default-role fix shipped through v2.105; toggle UI + roster sectioning pending in v2.106)
 
 ---
 
@@ -223,34 +223,36 @@ Don't put server-side dirs (`db/`, `supabase/`) into the iOS bundle — they're 
 ## Current state (May 2026)
 
 ### Latest shipped: Active/audience UX cluster (mid-flight) + 3a.2 verification fix-forward
-- `games/player.html` at `v2.104` on `origin/main`
+- `games/player.html` at `v2.105` on `origin/main`
 - 3a foundation chain (3a.1 plumbing → 3a.2 manager controls → 3a.2 hardware verification + fix-forward): see `docs/SESSION-5-PART-3-CLOSING-LOG.md` and `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md`
 - 3a.2 hardware-verified on iPhone Safari + laptop Chrome 2026-05-02: 4/6 gate items fully green; 2/6 partial for environmental + feature-gap reasons (not regressions)
 - Two 3a.2 fix-forward commits 2026-05-02:
   - `b5e1af2` (v2.102) — `publishSessionEnded` reused-channel pattern (BUG-10 redux)
   - `7dde17c` (v2.103) — `doJoin` publishes `participant_role_changed` (manager roster propagation on rejoin)
-- Active/audience UX cluster started 2026-05-02 (2 of 3 commits shipped):
+- Active/audience UX cluster started 2026-05-02 (3 of 4 commits shipped):
   - Spec amendment: `410ccc1` — GAMES-CONTROL-MODEL.md § 2.4 cluster (§ 2.4.1–§ 2.4.6 NEW: manager-bar buttons, manager toggle, participant toggle, default role at lobby join, manager visibility split, lock-on-start) + § 1 audience definition extended for lobby-state opt-out path
-  - Migration: `8c83b35` — `db/017_set_my_participation_role.sql` (self-only RPC for participant active↔audience flip); applied to prod at `b1a8e4a`
-  - Default role fix: `754d0a8` (v2.104) — `doJoin` defaults new participants to `'active'` not `'audience'` per § 2.4.4
-  - **Pending Commit 3:** participant "I'm playing in this game" toggle UI (per § 2.4.3) + lobby roster sectioning into PLAYING (N) / WATCHING (M) headers (per § 2.4.5)
-- Migrations tracker shipped 2026-05-02: `97f1e83` — `db/MIGRATIONS_APPLIED.md` checklist + CLAUDE.md doctrine ("a migration committed to repo is NOT shipped until applied to prod"). All 17 migrations listed; db/015 marked ❓ Verify pending pg_trigger audit; db/017 added then flipped to ✅ same-day.
+  - Migration db/017: `8c83b35` — `db/017_set_my_participation_role.sql` (self-only RPC for participant active↔audience flip); applied to prod at `b1a8e4a`
+  - Default role fix (PARTIAL): `754d0a8` (v2.104) — `doJoin` caller-side override to `'active'` for non-manager fresh joins per § 2.4.4. Hardware verification 2026-05-02 revealed two bypass paths the partial fix didn't cover: (i) the manager path (`rpc_session_start` in db/009 hardcoded `'audience'` regardless of app); (ii) the rejoin/refresh path (doJoin's 23505 catch swallowed all already-a-participant cases without examining role).
+  - Default role fix (FULL): v2.105 (2026-05-02) — completes § 2.4.4 implementation. Migration `db/018_session_start_active_default.sql` branches `rpc_session_start`'s manager insert on `p_app` ('games' → 'active'; 'karaoke' and other → 'audience' preserving karaoke schema-state semantics per `docs/KARAOKE-CONTROL-MODEL.md` § 1). doJoin restructured from join-then-handle-23505 to check-then-conditionally-join via `refreshSessionState` — eliminates 23505 as the every-refresh path; preserves participant toggle state across refresh.
+  - **Pending Commit 4 (v2.106):** participant "I'm playing in this game" toggle UI (per § 2.4.3) + lobby roster sectioning into PLAYING (N) / WATCHING (M) headers (per § 2.4.5). Previously labeled "Commit 3" before the v2.104→v2.105 partial-then-full split.
+- Migrations tracker shipped 2026-05-02: `97f1e83` — `db/MIGRATIONS_APPLIED.md` checklist + CLAUDE.md doctrine ("a migration committed to repo is NOT shipped until applied to prod"). All 18 migrations listed; db/015 marked ❓ Verify pending pg_trigger audit; db/017 + db/018 both flipped to ✅ same-day after manual prod application.
 - `db/016_remove_participant.sql` applied to prod 2026-05-02 (manual application via Supabase SQL Editor mid 3a.2 verification)
 - iOS Capacitor bundle still at v2.99 (pre-3a.1) — sync deferred until next Capacitor-relevant work; Mobile Safari is the verification target per CLAUDE.md doctrine
 - See `docs/SESSION-5-PART-3-CLOSING-LOG.md`, `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md`, and `docs/GAMES-CONTROL-MODEL.md` § 2.4 for full details
 
 ### Hardware verification status (mid-flight)
 - **v2.102 + v2.103 fix-forward** — verified green 2026-05-02 against fresh test environment.
-- **v2.104 default-role fix — NOT YET VERIFIED.** Test environment hit a state where Michael's stale `session_participants` rows from earlier `'audience'`-default joins blocked fresh `doJoin` re-testing. Test setup remediation steps to re-establish in next session — see `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` addendum.
-- **Commit 3 of cluster** — not yet written; ships after v2.104 verifies green.
+- **v2.104 default-role fix — superseded by v2.105.** Hardware test surfaced the partial-fix gap (manager bypass via db/009 hardcode; rejoin bypass via 23505 catch). Diagnosis captured; v2.105 completes the fix. Original v2.104 verification plan is moot — verify v2.105 directly.
+- **v2.105 default-role fix (full) — NOT YET VERIFIED.** Ships db/018 (server-side branch on p_app) + doJoin restructure. See `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` addendum sub-section "v2.105" for the verification plan.
+- **Pending Commit 4 of cluster (v2.106)** — toggle UI + roster sectioning. Not yet written; gated on v2.105 verification.
 
 ### Active deferred items
 
-Active/audience UX cluster (mid-flight 2026-05-02; 2 of 3 commits shipped):
+Active/audience UX cluster (mid-flight 2026-05-02; 3 of 4 commits shipped):
 - ~~GAMES-CONTROL-MODEL.md spec gap on lobby-state participation~~ — **Resolved 2026-05-02 in `410ccc1`** (§ 2.4 cluster amendment + § 1 audience extension).
-- ~~Default `participation_role` for self-join is `'audience'` instead of `'active'`~~ — **Resolved 2026-05-02 in `754d0a8` (v2.104)**, hardware verification pending.
-- No participant-side "I'm playing in this game" toggle — db/017 RPC shipped (`8c83b35` + applied at `b1a8e4a`); UI ships in pending Commit 3.
-- Manager lobby view doesn't differentiate active vs audience — ships in pending Commit 3 (PLAYING/WATCHING roster sectioning per § 2.4.5).
+- ~~Default `participation_role` for self-join is `'audience'` instead of `'active'`~~ — **Partially resolved 2026-05-02 in `754d0a8` (v2.104, non-manager fresh-join only); fully resolved in v2.105 (this commit) — adds db/018 for manager path + doJoin restructure for rejoin/refresh path.** Hardware verification of v2.105 pending.
+- No participant-side "I'm playing in this game" toggle — db/017 RPC shipped (`8c83b35` + applied at `b1a8e4a`); UI ships in pending Commit 4 (v2.106).
+- Manager lobby view doesn't differentiate active vs audience — ships in pending Commit 4 (v2.106) (PLAYING/WATCHING roster sectioning per § 2.4.5).
 
 Other 3a.2-era items (filed 2026-05-02):
 - ~~No tracking of which `db/*.sql` migrations have been applied to production~~ — **Resolved 2026-05-02 in `97f1e83`** (`db/MIGRATIONS_APPLIED.md` checklist + CLAUDE.md doctrine).
@@ -264,9 +266,14 @@ Carried from earlier sessions:
 - Custom confirm-modal styling (papercut from 2c.2 / 2c.3 / 2e.2 §4)
 - Pre-existing JS error at `singer.html:645` (`stat-w` element missing)
 
-### Up next: hardware-verify v2.104 + ship Commit 3 of active/audience cluster
-1. **Verify v2.104 default-role fix on hardware.** Use a clean test environment — fresh session, fresh devices, both on v2.104. If reusing prior test environment, manually clean stale `session_participants` rows for the test user before testing (SQL Editor: `UPDATE session_participants SET left_at = now() WHERE user_id = '<test-user-uid>' AND left_at IS NULL;` then start a fresh session). Expected: Michael (non-manager joining via room code) lands as `participation_role = 'active'`, visible in Mike's roster after the `participant_role_changed` realtime broadcast.
-2. **Once v2.104 verifies green, ship Commit 3 (active/audience cluster final).** Per the prompt drafted in the prior chat session: participant-side "I'm playing in this game" toggle UI (uses `rpc_session_set_my_participation_role` from db/017 — already applied to prod) + lobby roster sectioning into PLAYING (N) / WATCHING (M) headers per § 2.4.5. Single commit, version bump v2.104 → v2.105.
+### Up next: hardware-verify v2.105 + ship Commit 4 of active/audience cluster
+1. **Verify v2.105 full default-role fix on hardware.** Use a fresh session (new room code) and clean test users — Mike + Michael, both signed in. Expected:
+   - Mike taps Games tile → shell calls `rpc_session_start` → manager row inserted with `participation_role = 'active'` (per db/018 branch on `p_app = 'games'`). Mike's Chrome shows manager-as-active.
+   - Mike's player.html doJoin runs → `refreshSessionState` populates `currentMyRow` → branch (b) "already a participant" fires (manager row already exists from shell-side rpc_session_start) → log "already a participant (role=active)" → no rpc_session_join call, no 23505.
+   - Michael joins via room code → doJoin runs → `refreshSessionState` finds session, `currentMyRow` is null (Michael has no row yet) → branch (c) "fresh join" fires → `rpc_session_join` with `'active'` → Michael's row inserted as active. Mike's roster updates within 1-2s via `participant_role_changed` realtime.
+   - Both phones show role = `'active'` in DB query / console probe.
+   - Page refresh on either phone: doJoin runs again → branch (b) → log shows their existing role unchanged. No participant_role_changed published (since nothing changed).
+2. **Once v2.105 verifies green, ship Commit 4 (v2.106) — active/audience cluster final.** Per the prompt at `docs/PROMPTS/active-audience-commit-3.md`: participant-side "I'm playing in this game" toggle UI (uses `rpc_session_set_my_participation_role` from db/017 — already applied to prod) + lobby roster sectioning into PLAYING (N) / WATCHING (M) headers per § 2.4.5. Single commit, version bump v2.105 → v2.106. Note the prompt's filename references "commit-3" — that label predates the v2.104→v2.105 partial-then-full split; the prompt content itself is still accurate, just one version higher than the filename suggests.
 3. **After cluster ships,** Session 5 Part 3b (Trivia integration per `docs/GAMES-CONTROL-MODEL.md` § 4.1) becomes unblocked. Per `docs/SESSION-5-PART-3-CLOSING-LOG.md` § "Up next": Trivia uses `self_join` admission, late-joiner choice screen (Active vs Audience), manager controls (Reveal/Next/Skip) routed through `control_role` check.
 
 ---

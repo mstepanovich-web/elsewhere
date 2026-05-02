@@ -2019,8 +2019,8 @@ First step of 3b prep. Blocks the active/audience cluster, which itself blocks 3
 **Deferred in:** Session 5 Part 3a.2 verification (2026-05-02, session R5YTPS)
 **Deferred on:** 2026-05-02
 **Priority:** High — surfaces as visible UX confusion (joiner shows up in roster but isn't in the active player list at game-start)
-**Area:** Games — `rpc_session_join` + `games/player.html` `doJoin`
-**Status:** Deferred — needs spec amendment + implementation
+**Area:** Games — `rpc_session_join` + `games/player.html` `doJoin` + `rpc_session_start` (db/009)
+**Status:** Partially resolved 2026-05-02 in `754d0a8` (v2.104, non-manager fresh-join only — caller-side override on rpc_session_join). Fully resolved 2026-05-02 in v2.105 (same commit as this status update) — `db/018_session_start_active_default.sql` branches the manager-row insert in `rpc_session_start` on `p_app` ('games' → 'active'; 'karaoke' and other → 'audience'); `games/player.html doJoin` restructured to check-then-conditionally-join via `refreshSessionState`, eliminating the 23505 catch as the every-refresh path.
 
 #### Context
 
@@ -2286,6 +2286,93 @@ Opportunistic during any nearby karaoke work, OR bundle with a broader karaoke j
 - "Re-join after removal — manager view doesn't reflect rejoiner" (Completed, commit `7dde17c`) — the games-side analog of this gap
 - Commit `7dde17c` (v2.103) — fix pattern to mirror
 - `karaoke/singer.html` lines 758-764 (doJoin)
+
+---
+
+### Deferred: db/010 reclaim paths hardcode 'audience' regardless of app
+
+**Deferred in:** Session 5 Part 3a.2 v2.105 diagnosis pass (2026-05-02)
+**Deferred on:** 2026-05-02
+**Priority:** Low — latent; reclaim paths are exercised infrequently (only when a manager goes inactive and another household member takes over). Same conceptual shape as the rpc_session_start gap fixed in db/018, but lower-traffic.
+**Area:** Database — `db/010_manager_mechanics_rpcs.sql` lines 125 + 218
+**Status:** Deferred — defer until reclaim UX is exercised on hardware
+
+#### Context
+
+Surfaced by code review during the v2.105 diagnosis pass. Two `INSERT INTO public.session_participants` sites in db/010 hardcode `participation_role = 'audience'` for the new manager row when the caller isn't already a participant:
+
+- `db/010:125` — inside one of the manager-mechanics RPCs (`rpc_session_reclaim_manager` or `rpc_session_admin_reclaim`; comment "Caller not yet a participant. Insert as manager-audience.")
+- `db/010:218` — same pattern in the other reclaim RPC
+
+For a games session reclaim, the spec § 2.4.4 says the new manager should land as `'active'` (they're committing to play — they wouldn't reclaim if they didn't intend to participate). For karaoke, `'audience'` remains correct (Available Singer not queued).
+
+The db/018 fix for `rpc_session_start` had `p_app` directly available as a parameter. db/010's reclaim RPCs do NOT take `p_app` — they accept `p_session_id` and would need a `SELECT app FROM sessions WHERE id = p_session_id` to branch.
+
+#### What's deferred
+
+Mirror db/018's branch pattern in db/010's two insert sites. New migration (db/019 or similar) using `CREATE OR REPLACE FUNCTION` on the two reclaim RPCs, with the manager-row insert branched on the session's app (looked up via `SELECT app FROM sessions WHERE id = p_session_id`).
+
+Don't ship until reclaim UX is exercised on hardware — the gap is currently theoretical. The current behavior (manager reclaims as 'audience') is wrong-per-spec but doesn't break any flow that's been tested. Karaoke side stays correct; games side has the "manager as audience" UX issue that v2.105's restructured doJoin handles via the same branch (b) "already a participant — using existing row" log path (the reclaim won't auto-flip them to active, but won't crash).
+
+#### Options when picking up
+
+- (a) New migration with `CREATE OR REPLACE FUNCTION` on both reclaim RPCs. Each adds a `SELECT app INTO v_app FROM sessions WHERE id = p_session_id` at the top, then branches the insert on `v_app` per the same pattern as db/018.
+- (b) Defer further if reclaim is never exercised in production. The Phase 1 reality is that Mike rarely uses reclaim; could stay deferred indefinitely.
+
+Recommend (a) when reclaim work next surfaces, OR (b) until then.
+
+#### When to pick this up
+
+When manager-reclaim UX is exercised on hardware AND the games-side "manager lands as audience" surfaces as a bug, OR opportunistically during any other db/010 work.
+
+#### Related
+
+- `db/010_manager_mechanics_rpcs.sql` lines 125, 218 (the two insert sites)
+- v2.105 (2026-05-02) — db/018 fix pattern to mirror for the reclaim path
+- `docs/GAMES-CONTROL-MODEL.md` § 2.4.4 — spec scope
+
+---
+
+### Deferred: index.html shell rejoin paths hardcode 'audience' for games
+
+**Deferred in:** Session 5 Part 3a.2 v2.105 diagnosis pass (2026-05-02)
+**Deferred on:** 2026-05-02
+**Priority:** Low — currently masked by v2.105's doJoin restructure (the shell call inserts 'audience'; doJoin then sees an existing row in branch (b) and preserves it; subsequent participant toggle UI in Commit 4 lets the user flip themselves to 'active'). Visible only at the brief moment between shell rejoin and toggle-up.
+**Area:** Shell — `index.html` lines 2974 (handleSameAppRejoin) + 3138 (handleTvRemoteTileTap R4 catch)
+**Status:** Deferred — revisit when shell-side rejoin UX is examined
+
+#### Context
+
+Surfaced by code review during the v2.105 diagnosis pass. Two shell-side `rpc_session_join` call sites in `index.html` hardcode `p_participation_role: 'audience'`:
+
+- `index.html:2974` — `handleSameAppRejoin`. Triggered when a user is on the shell home screen, an active session exists for their TV's same app as the tile they're tapping, and they tap that tile.
+- `index.html:3138` — inside `handleTvRemoteTileTap`'s R4 catch (the "active session already exists" 23505 fallback when the user is trying to start fresh but someone already started one).
+
+Both pre-date the active/audience cluster spec (§ 2.4.4) which says lobby-state self-join for games defaults to `'active'`. They were not in v2.104's or v2.105's scope (those covered `games/player.html doJoin` and `rpc_session_start` respectively).
+
+#### What's deferred
+
+For the games branch specifically: change both shell call sites to pass `p_participation_role: 'active'` when `app === 'games'`. Karaoke calls stay at `'audience'` per karaoke schema-state semantics. The shell knows `app` at both call sites — it's a parameter to handleSameAppRejoin and a closure variable in handleTvRemoteTileTap.
+
+Currently masked because: (1) v2.105 makes the manager land as 'active' from `rpc_session_start` for games, so `handleTvRemoteTileTap`'s R4 fallback (which only fires when start fails with 23505 and falls back to join) is rare. (2) `handleSameAppRejoin` returns the user to an existing session — if their prior row was 'active', the 23505 inside rpc_session_join leaves it intact (per db/009:174-182 "raises without modifying"). Net: the hardcoded 'audience' only takes effect when the user has zero rows in the session, which is unusual for rejoin.
+
+#### Options when picking up
+
+- (a) Branch on `app` at both call sites: pass `'active'` for games, `'audience'` for karaoke. Mirrors the db/018 server-side branch but on the client side.
+- (b) Add an `app` lookup to a hypothetical centralized rejoin helper if shell-side rejoin gets more complex.
+
+Recommend (a) — direct, minimal, mirrors existing pattern.
+
+#### When to pick this up
+
+When shell-side rejoin UX is examined or when participant toggle (Commit 4 / v2.106) ships and the brief 'audience' window between shell rejoin and toggle-up becomes user-visible.
+
+#### Related
+
+- `index.html:2974` (handleSameAppRejoin) — `rpc_session_join` call with hardcoded 'audience'
+- `index.html:3138` (handleTvRemoteTileTap R4 catch) — same hardcode
+- `db/018_session_start_active_default.sql` — server-side analog already shipped for the rpc_session_start case
+- `docs/GAMES-CONTROL-MODEL.md` § 2.4.4 — spec scope
 
 ---
 

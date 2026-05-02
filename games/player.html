@@ -777,7 +777,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.104</div>
+<div class="ver">v2.105</div>
 
 <script>
 'use strict';
@@ -1025,66 +1025,80 @@ async function doJoin() {
     // Check if TV is present (non-player watcher on channel)
     checkTvPresent();
 
-    // 3a.1: Session 5 join. Look up session by room_code, call rpc_session_join,
-    // populate state. On any failure: legacy single-game mode (no role-aware UI).
-    // Mirrors karaoke/singer.html lines 737-778 (resolves the games equivalent
-    // of B1 from the 2e audit — games/player.html doesn't call rpc_session_join
-    // today). Manager identity comes from currentMyRow.control_role after
-    // refresh — no URL param or checkbox.
+    // 3a.1 + v2.105: Session 5 join via check-then-join. refreshSessionState
+    // does its own session lookup by room_code and populates currentSession +
+    // currentMyRow, so we use it as both the existence check AND state hydration
+    // (no redundant sessions query). Three branches per docs/GAMES-CONTROL-MODEL.md
+    // § 2.4.4 + active/audience cluster:
+    //   (a) no active session for room_code → legacy mode (refreshSessionState
+    //       handled the reset internally).
+    //   (b) existing participant row → preserve their state (toggle, manager
+    //       identity, prior role). No insert, no publish — re-joining would
+    //       overwrite an explicit 'audience' toggle from § 2.4.3 since the
+    //       23505 catch path used to swallow it silently. The post-mount
+    //       routing below reads currentMyRow.control_role and works the same
+    //       whether we joined fresh or skipped.
+    //   (c) fresh join → rpc_session_join with p_participation_role='active'
+    //       per § 2.4.4. 23505 is now a genuine race (concurrent tab/device
+    //       inserted between our check and join), not the every-refresh path
+    //       it was pre-v2.105.
+    // Manager identity comes from currentMyRow.control_role after refresh —
+    // no URL param or checkbox. db/018 (companion of this commit) makes the
+    // games manager land as 'active' from rpc_session_start, so the manager
+    // path hits branch (b) post-shell-rpc_session_start with role='active'.
     try {
       if (!user) {
         log('Session: not signed in — legacy mode');
       } else if (!window.sb) {
         log('Session: supabase client unavailable — legacy mode');
       } else {
-        const { data: sessRow, error: sessErr } = await window.sb
-          .from('sessions')
-          .select('id')
-          .eq('room_code', roomCode)
-          .is('ended_at', null)
-          .maybeSingle();
-        if (sessErr) throw sessErr;
-        if (!sessRow?.id) {
-          log('Session: no active session found for room_code ' + roomCode + ' — legacy mode');
+        await refreshSessionState();
+        if (!currentSession) {
+          // (a) refreshSessionState already called resetSessionStateToLegacy
+          //     and logged "no active session for room_code ..." per its own
+          //     bail-out path. Nothing to do here.
+        } else if (currentMyRow) {
+          // (b) Existing participant — use their current row as-is. Preserves
+          //     prior toggle state and manager identity.
+          log('Session: already a participant (role=' + currentMyRow.participation_role + ') — using existing row');
         } else {
-          // Per GAMES-CONTROL-MODEL.md § 2.4.4: lobby-state self-join defaults
-          // to 'active' — joiners are committing to play. 'audience' is reserved
-          // for explicit opt-out via the participant toggle (§ 2.4.3) or post-
-          // capacity declines (§ 1). Caller-side override; RPC default in
-          // db/009 (still 'audience') stays as-is to avoid affecting karaoke flows.
+          // (c) Fresh join — insert with 'active' per § 2.4.4.
           const { error: joinErr } = await window.sb.rpc('rpc_session_join', {
-            p_session_id: sessRow.id,
+            p_session_id: currentSession.id,
             p_participation_role: 'active',
           });
-          if (joinErr) throw joinErr;
-          log('Session: joined session ' + sessRow.id + ' as active');
-          await refreshSessionState();
-          // Publish participant_role_changed so other clients (notably the
-          // manager) see the new participant without a manual refresh. Caller-
-          // side per shell/realtime.js doctrine — rpc_session_join doesn't
-          // auto-publish. Reused-channel pattern (BUG-10) — _playerRealtimeChannel
-          // was just set up by refreshSessionState above. Hardware-verified bug
-          // from 2026-05-02 session R5YTPS: removed participant rejoining left
-          // manager's roster stale because no client published the rejoin event.
-          if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
-            try {
-              await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
-                session_id: sessRow.id,
-              }, _playerRealtimeChannel);
-            } catch (_) {}
+          if (joinErr) {
+            if (joinErr.code === '23505') {
+              // Genuine race: another tab/device inserted a row between our
+              // refreshSessionState check above and this rpc_session_join.
+              // Refresh again to pick up whatever landed.
+              log('Session: 23505 race during join — refreshing state to pick up the row');
+              await refreshSessionState();
+            } else {
+              log('Session: rpc_session_join failed (' + (joinErr.message || joinErr) + ') — legacy mode');
+              throw joinErr;
+            }
+          } else {
+            log('Session: joined session ' + currentSession.id + ' as active');
+            await refreshSessionState();
+            // Publish participant_role_changed so other clients (notably the
+            // manager) see the new participant without a manual refresh.
+            // Caller-side per shell/realtime.js doctrine. Reused-channel
+            // pattern (BUG-10) — _playerRealtimeChannel set up by
+            // refreshSessionState above. Only fires on genuine fresh-join;
+            // skip-path (b) doesn't publish since nothing changed about us.
+            if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+              try {
+                await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
+                  session_id: currentSession.id,
+                }, _playerRealtimeChannel);
+              } catch (_) {}
+            }
           }
         }
       }
     } catch (e) {
-      // 23505 = already a participant (page refresh / shell-side rpc_session_start
-      // already inserted manager row). Refresh state from the existing row.
-      if (e && e.code === '23505') {
-        log('Session: already a participant — refreshing state');
-        try { await refreshSessionState(); }
-        catch (e2) { log('Session: refreshSessionState after 23505 failed (' + (e2?.message || e2) + ') — legacy mode'); }
-      } else {
-        log('Session: rpc_session_join failed (' + (e?.message || e) + ') — legacy mode');
-      }
+      log('Session: doJoin path failed (' + (e?.message || e) + ') — legacy mode');
     }
 
     // Routing: managers go to game picker (lobby); everyone else to game-room.
