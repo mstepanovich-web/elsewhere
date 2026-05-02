@@ -6,7 +6,7 @@
 >
 > Read top-to-bottom. Pointers to deeper docs are at the end.
 
-Last updated: 2026-04-29 (after Session 5 Part 2e.2; vocabulary-trap callout added)
+Last updated: 2026-05-02 (after Session 5 Part 3a.2 hardware verification + fix-forward)
 
 ---
 
@@ -220,28 +220,45 @@ Don't put server-side dirs (`db/`, `supabase/`) into the iOS bundle — they're 
 
 ---
 
-## Current state (April 2026)
+## Current state (May 2026)
 
-### Latest shipped: Session 5 Part 2e.2
-- singer.html at `v2.110` on `origin/main`
-- Push notification pipeline operational (real APNs delivery verified end-to-end on iPhone)
-- Self-write paths: queue, leave queue, update song, start song — all working
-- Server-side trigger (`db/015_promotion_push_trigger.sql`) fires on `queued → active` and pushes via Edge Function
-- iOS bundle in sync (Capacitor app v2.110)
-- See `docs/SESSION-5-PART-2E2-LOG.md` for full details
+### Latest shipped: Session 5 Part 3a (Games foundation) + 3a.2 verification fix-forward
+- `games/player.html` at `v2.103` on `origin/main`
+- 3a.1 (plumbing replacement) shipped at v2.100 commit `ea89c48` — manager identity from `session_participants.control_role`, `agora-identity-bind` protocol, `lobbyPlayers[]` retired in favor of `currentParticipants[]`
+- 3a.2 (manager controls) shipped at v2.101 commit `8bff27b` — End Session button (`rpc_session_end` + `publishSessionEnded`), manager toggle via `rpc_session_update_participant`, Remove Player UI via `rpc_session_remove_participant`
+- Two fix-forward commits during 2026-05-02 hardware verification:
+  - `b5e1af2` (v2.102) — `publishSessionEnded` reused-channel pattern (BUG-10 redux)
+  - `7dde17c` (v2.103) — `doJoin` publishes `participant_role_changed` (manager roster propagation on rejoin)
+- 3a.2 hardware-verified on iPhone Safari + laptop Chrome: 4/6 gate items fully green; 2/6 partial for documented environmental and feature-gap reasons (not regressions)
+- `db/016_remove_participant.sql` applied to prod 2026-05-02 (manual application via Supabase SQL Editor)
+- iOS Capacitor bundle still at v2.99 (pre-3a.1) — sync deferred until next Capacitor-relevant work; Mobile Safari is the verification target per CLAUDE.md doctrine
+- See `docs/SESSION-5-PART-3-CLOSING-LOG.md` and `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` for full details
 
 ### Active deferred items
+
+Active/audience UX cluster (filed 2026-05-02, blocks 3b):
+- GAMES-CONTROL-MODEL.md spec gap on lobby-state participation — must amend § 2.4 first ("spec before code")
+- Default `participation_role` for self-join is `'audience'` instead of `'active'` — `games/player.html` doJoin
+- No participant-side "I'm playing in this game" toggle — needs new RPC + UI
+- Manager lobby view doesn't differentiate active vs audience — `renderRoster` UI work
+
+Other 3a.2-era items (filed 2026-05-02):
+- No tracking of which `db/*.sql` migrations have been applied to production — second slip-through this session; recommend `db/MIGRATIONS_APPLIED.md` checklist before next migration ships
+- TV2 doesn't recover active session on cold load (and doesn't navigate when phone starts game) — Games-side analog of existing 2e.2 entry; needs bootstrap query + broadcast delivery audit
+- Cosmetic: wrong log message on `session_ended` navigation path — diagnosability only, low priority
+- Latent: `karaoke/singer.html` doJoin missing `publishParticipantRoleChanged` — same gap fixed in games/player.html v2.103, mild symptom in karaoke
+
+Carried from earlier sessions:
 - Production APNs cert + entitlement flip (carried from 2e.0)
 - Failed-token cleanup on APNs 410 BadDeviceToken (carried from 2e.0)
 - Custom confirm-modal styling (papercut from 2c.2 / 2c.3 / 2e.2 §4)
-- TV's app-launch realtime not reaching `tv2.html` (surfaced 2e.2)
 - Pre-existing JS error at `singer.html:645` (`stat-w` element missing)
 
-### Up next: Session 5 Part 2e.3
-- Manager queue management UI (cross-user actions on singer.html when `control_role === 'manager'`)
-- Manager Override mechanism (Option B from 2e audit — manager joins Agora as host)
-- Manager-side RPCs already exist (`rpc_session_update_participant` accepts cross-user calls)
-- Estimated 3-4 hours, 5-6 sections
+### Up next: Session 5 Part 3b (Trivia integration)
+- **Gated on the active/audience UX cluster shipping first** per `docs/GAMES-CONTROL-MODEL.md` § 4.1 sub-decomposition. Spec amendment to GAMES-CONTROL-MODEL.md § 2.4 is step one ("spec before code").
+- After cluster lands: Trivia integration with `self_join` admission, late-joiner choice screen (Active vs Audience), manager controls (Reveal/Next/Skip) routed through `control_role` check
+- Estimated ~2 hr per closing log; depends on cluster work landing first
+- See `docs/GAMES-CONTROL-MODEL.md` § 3.1 (Trivia spec) and § 4.1 (sub-decomposition)
 
 ---
 

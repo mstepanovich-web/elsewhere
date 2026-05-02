@@ -1969,6 +1969,326 @@ Bundled UX polish session, OR before customer-facing release. Not blocking.
 
 ---
 
+### Deferred: GAMES-CONTROL-MODEL.md spec gap on lobby-state participation
+
+**Deferred in:** Session 5 Part 3a.2 verification (2026-05-02, session R5YTPS)
+**Deferred on:** 2026-05-02
+**Priority:** High — must be amended before active/audience cluster code lands ("spec before code")
+**Area:** Documentation — `docs/GAMES-CONTROL-MODEL.md`
+**Status:** Deferred
+
+#### Context
+
+Spec assumes role evaluation happens at game-start (per-game `admission_mode`). It doesn't cover the lobby state that exists pre-game-selection: (a) default `participation_role` at lobby self-join, (b) participant-side toggle, (c) manager visibility into the active vs audience split, (d) lock-on-start interaction with `admission_mode`. Surfaced when 3a.2 hardware verification revealed manager-side and participant-side gaps that the spec gives no guidance on resolving.
+
+#### What's deferred
+
+Restructure existing § 2.4 (Manager controls — manager-as-player toggle) into a § 2.4.1–2.4.6 cluster covering:
+- § 2.4.1 — Manager toggle (existing content)
+- § 2.4.2 — Participant-side toggle (new)
+- § 2.4.3 — Default `participation_role` at lobby join (new)
+- § 2.4.4 — Manager visibility into active/audience split (new)
+- § 2.4.5 — Lock-on-start interaction with `admission_mode` (new)
+- § 2.4.6 — Capacity behavior with mixed active/audience populations (new)
+
+Plus a small addition to § 1's Audience definition for the explicit opt-out path (sit-out from active during lobby, distinct from the post-capacity decline path already documented).
+
+#### Options when picking up
+
+- (a) Spec amendment first as standalone PR; code in subsequent PRs (matches "spec before code" doctrine; user-stated preference)
+- (b) Spec + code in coupled cluster commit (faster but harder to review)
+
+Recommend (a). The active/audience UX cluster has 3 separate code-side bugs (default role, participant toggle, manager visibility); each is independent enough to ship as its own commit once the spec is anchored.
+
+#### When to pick this up
+
+First step of 3b prep. Blocks the active/audience cluster, which itself blocks 3b (Trivia integration) per `docs/GAMES-CONTROL-MODEL.md` § 4.1.
+
+#### Related
+
+- DEFERRED entry "Default participation_role for self-join is 'audience' instead of 'active'" — code-side outcome of this spec
+- DEFERRED entry "No participant-side 'I'm playing in this game' toggle" — code-side outcome of this spec
+- DEFERRED entry "Manager lobby view doesn't differentiate active vs audience" — code-side outcome of this spec
+- `docs/GAMES-CONTROL-MODEL.md` § 1, § 2.4 (existing content to extend)
+- `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` — surface point during 3a.2 gate verification
+
+---
+
+### Deferred: Default participation_role for self-join is 'audience' instead of 'active'
+
+**Deferred in:** Session 5 Part 3a.2 verification (2026-05-02, session R5YTPS)
+**Deferred on:** 2026-05-02
+**Priority:** High — surfaces as visible UX confusion (joiner shows up in roster but isn't in the active player list at game-start)
+**Area:** Games — `rpc_session_join` + `games/player.html` `doJoin`
+**Status:** Deferred — needs spec amendment + implementation
+
+#### Context
+
+When a participant joins a games session via room code (calls `rpc_session_join`), they currently land with `participation_role = 'audience'` as default. Per § 1 of `docs/GAMES-CONTROL-MODEL.md`, audience is reserved for explicit opt-outs and post-capacity declines. Lobby-state self-join should default to `'active'` — the joiner intends to play.
+
+`games/player.html` `doJoin` hardcodes `p_participation_role: 'audience'` in the rpc_session_join call. `db/009_session_lifecycle_rpcs.sql` `rpc_session_join` accepts an explicit override but defaults to `'audience'` in the absence of caller specification.
+
+#### What's deferred
+
+Decision on which surface (RPC default vs caller-side default) sets `'active'` for lobby self-join. Plus the implementation:
+- Either flip the default in `rpc_session_join` to `'active'` (broadest reach but breaks any existing caller relying on audience default)
+- OR change games/player.html doJoin to pass `p_participation_role: 'active'` explicitly (narrower; karaoke/singer.html doJoin and others stay as-is)
+
+#### Options when picking up
+
+Recommend caller-side override in games/player.html only — keeps the change scoped and doesn't affect karaoke flows. Pair with the participant-side toggle UI so users can flip themselves to audience if they don't want to play.
+
+Coupled to the active/audience UX cluster: spec gap (must amend first), participant-side toggle (must ship together), manager visibility into split (must ship together).
+
+#### When to pick this up
+
+After GAMES-CONTROL-MODEL.md spec amendment. Bundle with active/audience cluster code.
+
+#### Related
+
+- DEFERRED entry "GAMES-CONTROL-MODEL.md spec gap on lobby-state participation" — prereq
+- DEFERRED entry "No participant-side 'I'm playing in this game' toggle" — companion
+- DEFERRED entry "Manager lobby view doesn't differentiate active vs audience" — companion
+- `games/player.html` `doJoin` (current hardcoded `'audience'` in rpc_session_join call)
+- `db/009_session_lifecycle_rpcs.sql` rpc_session_join (RPC default)
+
+---
+
+### Deferred: No participant-side "I'm playing in this game" toggle
+
+**Deferred in:** Session 5 Part 3a.2 verification (2026-05-02, session R5YTPS)
+**Deferred on:** 2026-05-02
+**Priority:** High — non-managers have no way to flip lobby state without exiting + rejoining
+**Area:** Games — `games/player.html` lobby UI (non-manager view) + new RPC migration
+**Status:** Deferred — needs new RPC + UI work
+
+#### Context
+
+Manager has the toggle (existing per § 2.4 of `docs/GAMES-CONTROL-MODEL.md`, default ON, calls `rpc_session_update_participant` on the manager's own row). Participants don't have an equivalent. Per Mike's stated intent during 2026-05-02 verification, participants need agency to flip active ↔ audience post-join in lobby state — same "I'm playing" mental model as manager.
+
+`rpc_session_update_participant` is technically callable by non-managers on their own row (RLS allows self-mutation), but `games/player.html` doesn't render a checkbox for non-managers — only for the manager (line 470 in current player.html).
+
+#### What's deferred
+
+Implementation in two parts:
+- New RPC `rpc_session_set_my_participation_role(p_session_id uuid, p_role text)` — self-only via `auth.uid()`, simpler API surface than the manager-cross-user `rpc_session_update_participant`. Migration `db/017_set_my_participation_role.sql`.
+- Participant-side checkbox in `games/player.html` lobby UI for non-managers, mirroring the manager checkbox at line 470. Same "I'm playing in this game" label, same auth → publish → refresh pattern.
+
+Decision needed: keep `rpc_session_update_participant` as the single API and have participant code call it with their own user_id (simpler, no migration), OR ship a new RPC with stricter scope (cleaner API surface). Mike's preference TBD.
+
+#### Options when picking up
+
+- (a) Reuse `rpc_session_update_participant` — no new migration, less work, but exposes manager-cross-user API to participant code paths
+- (b) New RPC with self-only enforcement — cleaner separation, requires migration, slightly more work
+
+Recommend (b) for clean API boundaries; participants should not call manager-style cross-user RPCs even if RLS would block the cross-user case anyway.
+
+#### When to pick this up
+
+After GAMES-CONTROL-MODEL.md spec amendment. Bundle with active/audience cluster code.
+
+#### Related
+
+- DEFERRED entry "GAMES-CONTROL-MODEL.md spec gap on lobby-state participation" — prereq
+- DEFERRED entry "Default participation_role for self-join is 'audience' instead of 'active'" — companion
+- DEFERRED entry "Manager lobby view doesn't differentiate active vs audience" — companion
+- `games/player.html` line 470 (manager toggle, model for participant version)
+- `db/011_role_and_queue_mutation_rpcs.sql` rpc_session_update_participant (existing manager API)
+
+---
+
+### Deferred: No tracking of which db/*.sql migrations have been applied to production
+
+**Deferred in:** Session 5 Part 3a.2 verification (2026-05-02, session R5YTPS)
+**Deferred on:** 2026-05-02
+**Priority:** Medium-High — second instance of a migration committed-but-not-applied slipping through; will recur and cost more time per slip until fixed
+**Area:** Operations — `db/` directory + deployment process
+**Status:** Deferred — quick fix recommended before next migration ships
+
+#### Context
+
+The Session 5 Part 3 closing log claimed `db/016_remove_participant.sql` "shipped" at commit `05d2cae` but it had never actually been applied to production Supabase. Discovered when item 5 of the 3a.2 verification gate (Remove Player UI) failed with a 404 on `rpc_session_remove_participant`. Migration applied manually mid-session via Supabase SQL Editor; verification re-ran green afterward.
+
+There is no system to track which migrations are live in prod — discipline-driven manual application, no checklist, no CI. This is at least the second slip-through (the first was earlier in Session 5 but undocumented at the time).
+
+#### What's deferred
+
+Pick one of:
+- **(1) Cheapest viable:** Create `db/MIGRATIONS_APPLIED.md` as a date-stamped checklist with format `| Migration | Applied | Date | By | Notes |`. List every `db/*.sql` file currently in repo. Append rows on each new migration application. Add a CLAUDE.md note: "Before claiming a migration has shipped in any session log, update db/MIGRATIONS_APPLIED.md."
+- **(2) Medium effort:** Script that diffs `db/*.sql` filenames against `pg_proc` / `pg_tables` to confirm each function/table exists in prod. Run on demand or in CI.
+- **(3) Most thorough:** Adopt Supabase CLI-driven migrations (`supabase db push`). Declarative state, automated apply. May not be worth Phase 1 effort.
+
+#### Options when picking up
+
+Recommend option (1) for now — cheap, no infra, immediate value. Upgrade to (2) or (3) later if option (1) doesn't catch a future slip.
+
+#### When to pick this up
+
+Before the next migration ships. The active/audience UX cluster will likely include `db/017_set_my_participation_role.sql` — apply this fix before that migration so the new tracking discipline catches its application status.
+
+#### Related
+
+- `db/016_remove_participant.sql` — the migration that surfaced this gap on 2026-05-02
+- `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` — verification context
+- `CLAUDE.md` — should gain a note about the new tracking convention once option (1) ships
+
+---
+
+### Deferred: TV2 doesn't recover active session on cold load (and doesn't navigate when phone starts game)
+
+**Deferred in:** Session 5 Part 3a.2 verification (2026-05-02, session R5YTPS)
+**Deferred on:** 2026-05-02
+**Priority:** Medium-High — breaks TV-side experience when TV reloads or when phone starts a Games session; not yet user-visible because Games hasn't been ad-hoc tested with multi-device flow
+**Area:** TV — `tv2.html` + `games/tv.html` bootstrap
+**Status:** Deferred — needs architectural fix
+
+#### Context
+
+Two related symptoms surfaced during 3a.2 verification:
+
+**(a) Phone-starts-game broadcast doesn't reach TV2.** When phone (manager) starts a Games session via `rpc_session_start`, TV2 does NOT navigate to `games/tv.html`. Phone fires the app-launch broadcast but TV2 stays on the shell. This is the Games analog of an existing DEFERRED entry "TV's app-launch realtime not reaching tv2.html" (surfaced 2e.2) — same class of bug, Games-specific.
+
+**(b) TV2 cold-load doesn't recover active session.** On page refresh while a Games session is active, TV2 does NOT recover the active session by querying the `sessions` table — it only listens for future realtime broadcasts. So a TV reload during gameplay leaves the TV stuck on shell with no recovery path.
+
+Likely shared root cause: TV2 has no DB-query bootstrap path. It relies entirely on realtime, which is "events going forward" — there's no "what's currently happening" recovery query.
+
+#### What's deferred
+
+Architectural fix in two parts:
+- **Bootstrap query:** On TV2 cold load, query `sessions` table for active sessions belonging to this TV's `device_key`. If one exists, navigate to the per-app TV surface (e.g., `games/tv.html`) and join. Mirrors the phone-side `refreshSessionState` pattern.
+- **Broadcast delivery audit:** Investigate why phone-side app-launch broadcast doesn't reach TV2. May share root cause with v2.102 BUG-10 redux fix pattern (subscribe-handshake race) if TV2 holds a long-lived sub on the same topic.
+
+#### Options when picking up
+
+- (a) Bootstrap query first as standalone fix; broadcast investigation second. Low risk, easy to verify.
+- (b) Combined investigation/fix — likely to surface deeper architectural state-recovery questions.
+
+Recommend (a). The bootstrap query alone closes the cold-load symptom even if the broadcast issue takes longer to diagnose.
+
+#### When to pick this up
+
+After active/audience UX cluster — broader scope, benefits from fresh focus. May share patterns with 3b/3c work since per-game TV surfaces also need session-recovery on cold load.
+
+#### Related
+
+- DEFERRED entry "TV's app-launch realtime not reaching tv2.html" — original 2e.2 entry; this is the Games-side analog
+- `tv2.html` — current realtime listener, missing bootstrap query
+- `games/tv.html` — destination page, may also need cold-load recovery logic
+- `shell/realtime.js` — `publishLaunchApp` and `wireExitAppListener` for the broadcast pattern
+
+---
+
+### Deferred: Manager lobby view doesn't differentiate active vs audience participants
+
+**Deferred in:** Session 5 Part 3a.2 verification (2026-05-02, session R5YTPS)
+**Deferred on:** 2026-05-02
+**Priority:** Medium — surfaces as manager UX confusion at game-start ("do I have enough active players?")
+**Area:** Games — `games/player.html` `renderRoster`
+**Status:** Deferred — needs UI work
+
+#### Context
+
+Mike's iPhone roster (manager view in lobby) shows green dots on all participant rows regardless of `participation_role`. Manager can't see at a glance "do I have enough active players to start this game" — important for Last Card (2-8 players needed) and Euchre (exactly 4 players needed).
+
+Currently `renderRoster` filters by `!p.left_at` only and renders all rows identically. No visual distinction between `'active'` and `'audience'` participants.
+
+#### What's deferred
+
+Split lobby roster into "PLAYING (N)" and "WATCHING (M)" sectioned headers. Rendering applies to both manager and non-manager views. Manager-only Remove button stays per-row.
+
+Visual treatment: section headers with count, slightly dimmed visual weight on the WATCHING section (e.g., reduced opacity or a different dot color), per-row badges for clarity. Match existing roster styling tokens — don't introduce new design vocabulary.
+
+#### Options when picking up
+
+- (a) Section-headered split as described — clearest UX, matches existing roster patterns
+- (b) Per-row badges only (e.g., "Watching" badge alongside Manager / You badges) — simpler but less scannable
+- (c) Filter active-only by default with a "show watching (N)" toggle — most compact but hides state
+
+Recommend (a). The section split matches the manager's question ("how many active?") and scales well as sessions get larger.
+
+#### When to pick this up
+
+Bundle with active/audience UX cluster code. Once participant-side toggle ships (so participants can opt in/out), manager visibility becomes essential.
+
+#### Related
+
+- DEFERRED entry "GAMES-CONTROL-MODEL.md spec gap on lobby-state participation" — § 2.4.4 covers this case
+- DEFERRED entry "Default participation_role for self-join is 'audience' instead of 'active'" — must be paired so default is sensible
+- DEFERRED entry "No participant-side 'I'm playing in this game' toggle" — without this, the WATCHING section is empty and the split is moot
+- `games/player.html` `renderRoster` (current single-section render)
+
+---
+
+### Deferred: Cosmetic — wrong log message on session_ended navigation path
+
+**Deferred in:** Session 5 Part 3a.2 verification (2026-05-02, session R5YTPS)
+**Deferred on:** 2026-05-02
+**Priority:** Low — diagnosability nuisance only, no functional impact
+**Area:** Games — `games/player.html` `startPlayerRealtimeSub` (lines 1813-1860)
+**Status:** Deferred — opportunistic fix
+
+#### Context
+
+When a non-manager receives the `session_ended` realtime broadcast (manager taps End Session), navigation to the shell works correctly but the console log message reportedly reads `[Games] realtime: my row gone from session — was removed by manager` — a misleading leftover from when removal was the only event that triggered the navigate-away handler.
+
+Note: the `session_ended` handler at line 1832 already has its own distinct log message (`'realtime: session_ended — navigating to Elsewhere'`), and the "row gone" log only fires under `participant_role_changed` when `currentSession && !currentMyRow`. The reported observation may indicate a code path where both events fire in sequence, or a misread by the observer. Worth investigating before fixing.
+
+#### What's deferred
+
+(1) Reproduce on hardware to confirm the exact log sequence. (2) If both events DO fire on End Session and the "row gone" log appears as described, gate it on the actual removal scenario (e.g., check session is still active, or use a flag set only by the removal flow). (3) If not reproducible, close the entry as not-a-bug.
+
+#### Options when picking up
+
+Trivial investigation. Read realtime sub block, attempt repro on hardware with both manager + non-manager phones, decide whether log gating is needed.
+
+#### When to pick this up
+
+Opportunistic during any nearby code change in `startPlayerRealtimeSub`.
+
+#### Related
+
+- `games/player.html` `startPlayerRealtimeSub` (lines 1813-1860)
+- Commit `b5e1af2` (v2.102) — End Session realtime fix
+- `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` — observation point
+
+---
+
+### Deferred: Latent — karaoke/singer.html doJoin missing publishParticipantRoleChanged
+
+**Deferred in:** Session 5 Part 3a.2 verification (2026-05-02, session R5YTPS) — surfaced by code review during games/player.html doJoin fix work
+**Deferred on:** 2026-05-02
+**Priority:** Low — latent, mild symptom (other singers' phones don't auto-update on a new singer joining; users typically refresh anyway)
+**Area:** Karaoke — `karaoke/singer.html` lines 758-764 (doJoin)
+**Status:** Deferred — bundle with broader karaoke join-flow improvement
+
+#### Context
+
+The same caller-side publish gap that was fixed in `games/player.html` doJoin (commit `7dde17c`, v2.103) exists in `karaoke/singer.html` doJoin. After successful `rpc_session_join`, singer.html doesn't call `publishParticipantRoleChanged` to notify other clients of the new participant.
+
+Doesn't surface as a high-priority bug today because:
+- Karaoke's manager-side removal flow uses `rpc_session_update_participant` (sets `participation_role = 'audience'`, NOT `left_at`), and that flow already publishes `participant_role_changed`. So the symptom that surfaced the games-side bug (rejoin after removal) doesn't exist here — there's no equivalent rejoin path.
+- First-time karaoke joiners DO hit a latent propagation gap (other singers' phones don't auto-update when a new singer joins), but karaoke users typically refresh on session changes anyway, masking the symptom.
+
+#### What's deferred
+
+Mirror the games/player.html fix: after rpc_session_join success and refreshSessionState in karaoke/singer.html doJoin, publish `participant_role_changed` via the long-lived `_singerRealtimeChannel` (reused-channel pattern per BUG-10 fix). Skip publishing on the 23505 catch path.
+
+#### Options when picking up
+
+Trivial fix. Pattern is identical to games/player.html commit `7dde17c`. Same line-by-line structure, just swap `_playerRealtimeChannel` for `_singerRealtimeChannel`.
+
+#### When to pick this up
+
+Opportunistic during any nearby karaoke work, OR bundle with a broader karaoke join-flow improvement (e.g., late-joiner UX work). Don't ship as standalone — too small.
+
+#### Related
+
+- "Re-join after removal — manager view doesn't reflect rejoiner" (Completed, commit `7dde17c`) — the games-side analog of this gap
+- Commit `7dde17c` (v2.103) — fix pattern to mirror
+- `karaoke/singer.html` lines 758-764 (doJoin)
+
+---
+
 ## Migrated from PHASE1-NOTES.md
 
 The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captured here in summary form; the full original text lives in PHASE1-NOTES.md git history (commit `9296a50` or earlier). Future fill-outs should flesh these into the full entry format above when someone picks one up.
@@ -2015,4 +2335,101 @@ The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captur
 
 *(Move entries here when they're addressed. Keep the full original entry — just update **Status** to `Completed in Session X.Y` and add a one-line completion note.)*
 
-None yet.
+---
+
+### Deferred: End Session session_ended event not received by non-manager (Games)
+
+**Deferred in:** Session 5 Part 3a.2 verification (2026-05-02, session R5YTPS)
+**Deferred on:** 2026-05-02
+**Priority:** High — broke item 2 of the 3a.2 verification gate
+**Area:** Games — `shell/realtime.js` publishSessionEnded + `games/player.html` managerEndSession
+**Status:** Resolved in Session 5 Part 3a.2 verification — fixed forward 2026-05-02 via commit `b5e1af2` (v2.102)
+
+#### Context
+
+When the manager tapped End Session on `games/player.html`, they navigated correctly back to the Elsewhere shell. But non-manager participants stayed stuck on `games/player.html` — they never received the `session_ended` realtime broadcast. Manager had to force-close their browser to clear local state.
+
+#### Root cause
+
+BUG-10 redux. `publishSessionEnded` in `shell/realtime.js` called the shared `broadcast()` helper which allocated a fresh channel on `tv_device:<device_key>` and subscribed. The manager already held a long-lived sub on the same topic via `_playerRealtimeChannel`. Subscribe-handshake race: the new channel's `.subscribe()` never resolved `SUBSCRIBED`, `broadcast()` timed out at 5s, the send never fired, the catch block in `managerEndSession` silently `console.error`'d, manager navigated away while non-manager stayed stuck.
+
+Same fix pattern as `publishParticipantRoleChanged` in commit `1b870d3` (Session 5 Part 2e.3.2). `publishSessionEnded` was missed when BUG-10's fix shipped.
+
+#### Resolution
+
+`shell/realtime.js`: `publishSessionEnded` gained an optional `channel` argument matching `publishParticipantRoleChanged` + `publishQueueUpdated`. When passed, send fires on the reused channel; when null, falls back to `broadcast()` (preserves index.html cross-app-switch callsite which doesn't hold a long-lived sub on the topic).
+
+`games/player.html`: `managerEndSession` passes `_playerRealtimeChannel` as the third argument.
+
+Hardware-verified 2026-05-02 post-deploy at v2.102.
+
+#### Related
+
+- Commit `b5e1af2` (v2.102) — the fix
+- Commit `1b870d3` (BUG-10 original) — pattern source
+- `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` — verification record
+
+---
+
+### Deferred: db/016_remove_participant.sql migration not applied to prod
+
+**Deferred in:** Session 5 Part 3a.2 verification (2026-05-02, session R5YTPS)
+**Deferred on:** 2026-05-02
+**Priority:** High — broke item 5 of the 3a.2 verification gate
+**Area:** Operations — Supabase migration application discipline
+**Status:** Resolved in Session 5 Part 3a.2 verification — applied manually 2026-05-02 via Supabase SQL Editor
+
+#### Context
+
+Item 5 of the 3a.2 hardware verification gate (Remove Player UI) failed with a 404 on `rpc_session_remove_participant`. The Session 5 Part 3 closing log claimed the migration shipped at commit `05d2cae`, but the human step of applying it to prod Supabase had been skipped. There was no tracking system to catch the discrepancy between "committed" and "applied".
+
+#### Root cause
+
+Procedural — no migration tracking. Discipline-driven manual application via Supabase SQL Editor, no checklist, no CI. This was the second slip-through this session (the first was earlier and undocumented).
+
+#### Resolution
+
+Applied `db/016_remove_participant.sql` manually via Supabase SQL Editor on 2026-05-02. Verification gate item 5 retest passed.
+
+Procedural recurrence prevention deferred separately as "No tracking of which db/*.sql migrations have been applied to production" (Medium-High priority) — recommended fix is `db/MIGRATIONS_APPLIED.md` checklist before next migration ships.
+
+#### Related
+
+- DEFERRED entry "No tracking of which db/*.sql migrations have been applied to production" — recurrence prevention
+- `db/016_remove_participant.sql` — the migration file
+- Commit `05d2cae` — file shipped to repo (mistakenly believed to be applied)
+- `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` — verification record
+
+---
+
+### Deferred: Re-join after removal — manager view doesn't reflect rejoiner
+
+**Deferred in:** Session 5 Part 3a.2 verification (2026-05-02, session R5YTPS)
+**Deferred on:** 2026-05-02
+**Priority:** High — surfaced during item 6 setup of the 3a.2 verification gate
+**Area:** Games — `games/player.html` doJoin (caller-side publish gap)
+**Status:** Resolved in Session 5 Part 3a.2 verification — fixed forward 2026-05-02 via commit `7dde17c` (v2.103)
+
+#### Context
+
+When a participant was removed via the Remove Player UI and then rejoined by reloading `games/player.html` with the same room code, the manager's roster did NOT update to show the rejoiner. DB state was correct (a new `session_participants` row existed with `left_at IS NULL` and a fresh `joined_at`), but the manager's `currentParticipants` array was stale. Manager had to force-close Safari and re-navigate to see the rejoiner.
+
+#### Root cause
+
+Caller-side publish gap on `rpc_session_join`. `shell/realtime.js` emission matrix (line 41) documented `rpc_session_join` as firing `participant_role_changed`, but the actual publish call was missing from `games/player.html` `doJoin`. Manager's `startPlayerRealtimeSub` already subscribed to the event but no client was emitting it.
+
+Distinct from the v2.102 publishSessionEnded fix (BUG-10 redux) — that was a subscribe-handshake race. This was a missing publish call entirely. Same fix-forward category, different mechanism.
+
+#### Resolution
+
+Added `publishParticipantRoleChanged` after `rpc_session_join` success in `doJoin`, mirroring the `toggleManagerAsPlayer` / `handleRemovePlayer` reused-channel pattern. Skip publishing on the 23505 catch path (no state change → no event needed).
+
+Hardware-verified 2026-05-02 post-deploy at v2.103.
+
+Latent scope note (filed separately): same gap exists in `karaoke/singer.html` doJoin. Doesn't surface there today; filed as low-priority deferred for future work.
+
+#### Related
+
+- Commit `7dde17c` (v2.103) — the fix
+- DEFERRED entry "Latent — karaoke/singer.html doJoin missing publishParticipantRoleChanged" — companion scope
+- `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` — verification record
