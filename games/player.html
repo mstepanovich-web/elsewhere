@@ -777,7 +777,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.101</div>
+<div class="ver">v2.102</div>
 
 <script>
 'use strict';
@@ -2125,14 +2125,18 @@ async function managerEndSession() {
   }
 
   // Publish session_ended per shell/realtime.js emission matrix (caller-side).
-  // Mirrors index.html lines 3056-3067.
+  // BUG-10 redux: pass _playerRealtimeChannel (the long-lived sub) so the
+  // broadcast reuses the existing channel. Without this, broadcast() allocates
+  // a fresh channel on a topic the manager already owns → subscribe-handshake
+  // race → 5s timeout → send never fires → non-manager phones stay stuck on
+  // games/player.html. Hardware-verified bug from 2026-05-02 session R5YTPS.
   const deviceKey = _playerRealtimeChannelDeviceKey;
   if (deviceKey) {
     try {
       await window.publishSessionEnded(deviceKey, {
         session_id: currentSession.id,
         reason: 'user_ended',
-      });
+      }, _playerRealtimeChannel);
     } catch (e) {
       console.error('[elsewhere] session_ended publish failed:', e);
     }

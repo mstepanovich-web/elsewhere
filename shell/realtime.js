@@ -305,6 +305,18 @@ window.publishQueueUpdated = async function publishQueueUpdated(device_key, payl
 // reason 'manager_left'.
 // Payload: { session_id, reason }.
 //   reason ∈ {'user_ended', 'manager_left'}
-window.publishSessionEnded = async function publishSessionEnded(device_key, payload) {
-  return broadcast(device_key, 'session_ended', payload);
+//
+// Optional `channel` argument (BUG-10 fix extended): pass an already-
+// subscribed channel when the caller holds a long-lived sub on the target
+// topic. games/player.html's manager hits this on End Session — the
+// fresh-channel broadcast() path raced against the manager's long-lived
+// _playerRealtimeChannel and timed out, so non-manager phones never got
+// the broadcast. Pattern matches publishParticipantRoleChanged above.
+window.publishSessionEnded = async function publishSessionEnded(device_key, payload, channel = null) {
+  if (channel) {
+    await channel.send({ type: 'broadcast', event: 'session_ended', payload });
+    return { path: 'reused' };
+  }
+  await broadcast(device_key, 'session_ended', payload);
+  return { path: 'broadcast' };
 };
