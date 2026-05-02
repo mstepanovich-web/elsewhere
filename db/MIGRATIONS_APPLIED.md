@@ -22,7 +22,7 @@ This file tracks which `db/*.sql` migrations have been applied to the production
 | 014_push_subscriptions.sql | ✅ | (Session 5 Part 2e.0) | Mike | Push notification infrastructure verified end-to-end on iPhone per `docs/CONTEXT.md` history. |
 | 015_promotion_push_trigger.sql | ❓ Verify | (Session 5 Part 2e.2?) | (TBD) | Application history unclear (per Mike, 2026-05-02). Production push trigger appears functional (queued→active fires push successfully end-to-end at v2.110), implying APPLIED — but no explicit confirmation in shipping logs. Confirm by querying `pg_trigger` for the trigger name in db/015's body before next migration ships, then update this row. |
 | 016_remove_participant.sql | ✅ | 2026-05-02 | Mike | Applied manually via Supabase SQL Editor during 3a.2 hardware verification. Committed to repo at `05d2cae` earlier in Session 5 Part 3a planning; prod application slipped — caught when item 5 of the 3a.2 verification gate failed with 404 on the missing `rpc_session_remove_participant`. This file's existence was triggered by that gap. |
-| 017_set_my_participation_role.sql | ❌ Pending | (TBD) | (TBD) | Created in this commit; awaiting manual application via Supabase SQL Editor before code commits 2/3 of the active/audience cluster land (per `docs/GAMES-CONTROL-MODEL.md` § 2.4.3). Update this row to ✅ with date + applier name after applying. |
+| 017_set_my_participation_role.sql | ✅ | 2026-05-02 | Mike | Applied manually via Supabase SQL Editor 2026-05-02 immediately after migration commit `8c83b35` landed. Verified via `SELECT proname, pg_get_function_arguments(oid) FROM pg_proc WHERE proname = 'rpc_session_set_my_participation_role'` returning the function with args `(p_session_id uuid, p_role text)`. |
 
 ## How to update
 
