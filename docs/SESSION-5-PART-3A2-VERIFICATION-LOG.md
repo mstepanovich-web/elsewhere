@@ -51,3 +51,63 @@ See `docs/DEFERRED.md` for full bug entries with priority, area, context, and pi
 ## Operational note
 
 Discovered second instance of a migration committed-but-not-applied slipping through. Filed as bug "No tracking of which db/*.sql migrations have been applied to production" in DEFERRED.md. Recommend prioritizing this fix before db/017 ships (active/audience cluster).
+
+---
+
+## Addendum — Active/audience UX cluster work (2026-05-02)
+
+After 3a.2 closeout, the active/audience UX cluster started shipping per the bugs filed above. Two of three commits landed in the same session, with hardware verification of the second commit incomplete.
+
+| # | Commit | Description |
+|---|---|---|
+| Spec | `410ccc1` | `GAMES-CONTROL-MODEL.md` § 2.4 cluster (§ 2.4.1–§ 2.4.6 NEW) + § 1 audience definition extended for lobby-state opt-out path. Three coupled DEFERRED entries (default role, participant toggle, manager visibility) unblocked. |
+| Migrations tracker | `97f1e83` | `db/MIGRATIONS_APPLIED.md` checklist + CLAUDE.md doctrine ("a migration committed to repo is NOT shipped until applied to prod"). 16 existing migrations enumerated; db/015 ❓ Verify pending. |
+| 1 (cluster) | `8c83b35` | `db/017_set_my_participation_role.sql` migration (self-only RPC for participant active↔audience flip). |
+| 1a (apply gate) | `b1a8e4a` | db/017 applied to prod via Supabase SQL Editor; `MIGRATIONS_APPLIED.md` row 017 flipped from `❌ Pending` to `✅`. Verified via `pg_proc` query. |
+| 2 (cluster) | `754d0a8` (v2.104) | `doJoin` defaults new participants to `'active'` not `'audience'` per § 2.4.4. Caller-side fix only — RPC default in db/009 unchanged to avoid karaoke-side effects. |
+| 3 (cluster) | (pending) | Participant "I'm playing in this game" toggle UI (per § 2.4.3, calls `rpc_session_set_my_participation_role`) + lobby roster sectioning into PLAYING (N) / WATCHING (M) headers (per § 2.4.5). Single commit, version bump v2.104 → v2.105. |
+
+### v2.104 hardware verification — INCOMPLETE
+
+Verification of the default-role fix hit a snag: Michael's `session_participants` rows from earlier `'audience'`-default joins persisted across test runs and appear to interfere with fresh `doJoin` re-testing. The exact failure mode wasn't fully diagnosed within the session — possible causes:
+
+- Stale rows confusing `currentParticipants` derivation (manager's roster shows ghost active participant from a prior test run).
+- `rpc_session_join` 23505 (already-a-participant) catch path bypassing the new `'active'` default and reusing the prior `'audience'` row state — meaning the v2.104 caller-side override doesn't actually take effect on a returning user without a fresh row.
+- Realtime sub state from a prior test bleeding into the new test (channel reuse, stale subscription handlers).
+
+The third possibility is least likely (page reload tears down sub state). The second is most plausible — and if confirmed, it indicates v2.104 alone may not be sufficient; the 23505 catch path may need its own remediation (e.g., update the existing row's `participation_role` to `'active'` on re-join when the prior row's role was `'audience'`).
+
+### Remediation steps for next-session verification
+
+To re-establish a clean test environment for v2.104 verification:
+
+**Option A (cleanest):** SQL Editor cleanup before testing.
+```sql
+-- Mark all prior session_participants rows for the test user as left.
+UPDATE session_participants
+SET left_at = now()
+WHERE user_id = '<michael-user-id>'
+  AND left_at IS NULL;
+```
+Then end the active session via the End Session button (or `UPDATE sessions SET ended_at = now() WHERE id = '<session-id>';`), then start a fresh session.
+
+**Option B:** Use a third test account that has zero rows in `session_participants` for the target session. Simplest if available.
+
+**Option C (if 23505 path is the cause):** Investigate the 23505 catch in `games/player.html` `doJoin`. If a returning user with a previously-`'audience'` row hits the catch and never re-runs the role assignment, the v2.104 caller-side override is functionally a no-op for them. Fix-forward would update the existing row's role to `'active'` on the catch path — but only if the test environment confirms this is the failure mode.
+
+### Expected behavior once test environment is clean
+
+1. Mike (manager) creates session via Games tile.
+2. Michael (non-manager) joins via room code on v2.104.
+3. DB query confirms: Michael's row has `participation_role = 'active'` and `left_at IS NULL`.
+4. Mike's iPhone roster shows Michael as a normal active participant (flat roster until Commit 3 ships the section split).
+5. Mike's console shows `participant_role_changed` realtime broadcast received.
+
+If verification is green, proceed with Commit 3 of the cluster. If red (e.g., 23505 catch path is the failure mode), fix-forward before Commit 3.
+
+### Cluster status snapshot (end of 2026-05-02 session)
+
+- Spec: ✅ shipped, applied to docs.
+- Migration: ✅ shipped, applied to prod.
+- Commit 2 (default-role): ✅ shipped, hardware verification pending.
+- Commit 3 (toggle UI + roster split): ⏳ pending v2.104 verification.
