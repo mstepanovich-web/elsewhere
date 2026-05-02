@@ -24,7 +24,7 @@ A games session has these roles:
 | **Session Manager** | The user with session-level control authority. Always exactly one per session. Has manager-only buttons in games UI: Start, per-game controls (Reveal/Next/Skip), End Game, End Session, Remove Player. |
 | **Active Player** | A user with `participation_role = 'active'` in the session. Can act in the game (submit answers in Trivia, play cards in Last Card, etc.). Multiple Active Players per session — unlike karaoke's singular Active Singer. |
 | **Queued Player** | A user with `participation_role = 'queued'`. Waiting to become Active when capacity opens. Per-game admission rules determine when promotion happens. Queued users see a "you're #N in line" position display on their phone. |
-| **Audience** | A user with `participation_role = 'audience'`. In the session but not currently playing. Two paths in: (a) NHHU or other users who deep-link in without intent to play, or who join after capacity is reached and choose not to queue; (b) Queued users who explicitly sideline themselves to avoid auto-promotion. Audience users see a "you're in the session but not playing" screen with options to (re)join the queue when applicable. Audience users can scan the TV's QR code to view the games TV experience on their phone for spectator viewing — same QR-code-to-phone-display feature available to all games users. |
+| **Audience** | A user with `participation_role = 'audience'`. In the session but not currently playing. Three paths in: (a) NHHU or other users who deep-link in without intent to play, or who join after capacity is reached and choose not to queue; (b) Queued users who explicitly sideline themselves to avoid auto-promotion; (c) Lobby-state participants who opt out via the participant "I'm playing in this game" toggle (see § 2.4.3). Audience users see a "you're in the session but not playing" screen with options to (re)join the queue when applicable. Audience users can scan the TV's QR code to view the games TV experience on their phone for spectator viewing — same QR-code-to-phone-display feature available to all games users. |
 
 ### "Sidelining" — explicit opt-out from auto-promotion
 
@@ -106,7 +106,9 @@ Render functions that need both (e.g., `renderRoster` showing names + camera til
 
 When the manager refreshes or rejoins, they're re-identified as manager from the DB — not from URL state.
 
-### 2.4 Manager controls
+### 2.4 Manager controls and participation toggles
+
+#### 2.4.1 Manager-bar buttons
 
 The current games code has these manager-only buttons (per audit findings):
 
@@ -119,6 +121,8 @@ The current games code has these manager-only buttons (per audit findings):
 
 **One new cross-game manager control:** Remove Player.
 
+#### 2.4.2 Manager "I'm playing in this game" toggle
+
 **Manager "Play in this game" toggle preserved.** The existing UX (`<input id="mgr-is-player">` checkbox in `games/player.html` lines 473-485, default checked) lets the manager choose between playing as a player or running as referee. Today this lives in a `managerIsPlayer` boolean and an `isPlayer` field on the lobby row. Part 3 maps it to `participation_role` on the manager's own row:
 
 - Toggle ON → manager has `control_role='manager'` AND `participation_role='active'` (default; can play)
@@ -127,6 +131,64 @@ The current games code has these manager-only buttons (per audit findings):
 The toggle calls `rpc_session_update_participant` with the manager's own `user_id` to flip their `participation_role`. `control_role` stays `'manager'` regardless. Realtime `participant_role_changed` propagates to other clients so the TV shows/hides the manager in player tiles correspondingly.
 
 **Default state:** manager joins with `participation_role='active'` (playing). Same as today's default-checked checkbox behavior.
+
+#### 2.4.3 Participant "I'm playing in this game" toggle (NEW)
+
+Every non-manager participant has the same toggle in the lobby view, mirroring § 2.4.2. UI label: "I'm playing in this game" (checked = active, unchecked = audience). Tapping the toggle flips the participant's own session_participants row's participation_role.
+
+RPC: a new self-only RPC, `rpc_session_set_my_participation_role(p_session_id uuid, p_role text)`, uses `auth.uid()` to identify the caller and updates only the caller's own row. Validates `p_role IN ('active', 'audience')` and propagates capacity errors (55000) from the existing capacity trigger when an audience → active flip would exceed per-game cap. Cross-user role changes remain in manager moderation paths (`rpc_session_update_participant`; existing).
+
+Realtime: caller-side per `shell/realtime.js` doctrine. After RPC success the participant publishes `participant_role_changed` via the reused-channel pattern (accept optional channel argument, pass `_playerRealtimeChannel` from the caller — same pattern as v2.102 publishSessionEnded fix and v2.103 doJoin publish fix). Other phones in the session refresh their roster within 1-2s.
+
+Capacity behavior: if a participant attempts audience → active and the per-game cap is reached, the same 55000 capacity trigger that fires for the manager's toggle (§ 2.4.2) fires here. Client surfaces the same toast: "Room is full — remove a player first." Checkbox reverts to authoritative DB state (audience).
+
+UI label vocabulary: the user-facing labels are "Playing" / "Watching" (gerunds, plain English). The DB schema enum stays `active` / `audience`. UI labels are decoupled from schema values by design — the labels match the toggle text "I'm playing in this game" and read more naturally than the jargon DB enum values.
+
+Locked at game-start: see § 2.4.6.
+
+#### 2.4.4 Default participation_role at lobby-state self-join (NEW)
+
+When a user joins a games session via room code or deep link (`rpc_session_join`), and no specific game has been started yet, their default `participation_role` is `'active'`.
+
+Rationale: most users entering a room code are committing to play, not to spectate. Defaulting to `'active'` matches the expressed intent for the majority case. The `audience` role is reserved for explicit opt-out via § 2.4.3, post-capacity declines per § 1, or sit-out per § 2.9.
+
+This default applies in lobby state (no game running). Once a specific game has been started, per-game `admission_mode` in § 3 governs the role assignment for late joiners (e.g., Last Card late joiners get `'queued'` per § 3.2, not `'active'`).
+
+Implementation note: 3a.2 shipped with `audience` as the default. This was incorrect per spec and is corrected by the `rpc_session_join` behavior change in DEFERRED entry "Default participation_role for self-join is 'audience' instead of 'active'."
+
+#### 2.4.5 Manager visibility into the active/audience split (NEW)
+
+The lobby roster renders participants in two sections with header counts:
+
+```
+PLAYING (N)
+[list of participants where participation_role = 'active']
+
+WATCHING (M)
+[list of participants where participation_role = 'audience']
+```
+
+Both sections render even when one is empty (header reads "PLAYING (0)" with empty list under it).
+
+Rationale: the manager needs to know at a glance how many active players are in the pool — both for the practical "do we have enough" question (Last Card needs 2-8, Euchre needs exactly 4) and for the social planning question ("should I wait for more before starting?"). Single flat roster makes this hard to read at a glance.
+
+Visual treatment: the WATCHING section uses dimmed visual weight (reduced opacity, subdued dot color) to make the PLAYING section the foreground. Existing roster styling tokens are reused — no new design vocabulary.
+
+Manager-only affordances per § 2.4.1 (Remove Player button) appear on rows in either section.
+
+Non-manager participants' lobby view also renders the sectioned roster — visibility into who's playing vs watching is useful for everyone, not just the manager.
+
+#### 2.4.6 Lock-on-start interaction with admission_mode (NEW)
+
+At the moment a specific game is started (manager taps Start on Trivia/Last Card/Euchre tile), the per-game `admission_mode` evaluation in § 3 takes precedence over lobby-state defaults:
+
+- **Trivia (`self_join`):** all current participants with `participation_role IN ('active', 'audience')` keep their role. Future late joiners get the § 3.1 choice screen.
+- **Last Card (`wait_for_next`):** current `'active'` participants stay active. Current `'audience'` stay audience. Future late joiners get `'queued'` per § 3.2.
+- **Euchre (`manager_approved_batch`):** current `'active'` participants stay active up to capacity 4; if more than 4 are active, manager picker per § 3.3 surfaces. Future late joiners get queued.
+
+The participant toggle from § 2.4.3 is disabled (not hidden) once a specific game starts. The disabled checkbox shows explanatory text: "Game in progress — use [per-game sit-out UX] to step out." For Trivia, this is the late-joiner choice screen; for Last Card, the sit-out / rejoin queue UX in § 1 / § 3.2; for Euchre, the manager-approved batch flow in § 3.3.
+
+Manager toggle (§ 2.4.2) follows the same lock-on-start behavior — disabled mid-game, manager uses per-game sit-out UX if needed.
 
 ### 2.5 Remove Player (cross-game)
 
