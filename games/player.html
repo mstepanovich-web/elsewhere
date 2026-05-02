@@ -777,7 +777,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.102</div>
+<div class="ver">v2.103</div>
 
 <script>
 'use strict';
@@ -1054,6 +1054,20 @@ async function doJoin() {
           if (joinErr) throw joinErr;
           log('Session: joined session ' + sessRow.id + ' as audience');
           await refreshSessionState();
+          // Publish participant_role_changed so other clients (notably the
+          // manager) see the new participant without a manual refresh. Caller-
+          // side per shell/realtime.js doctrine — rpc_session_join doesn't
+          // auto-publish. Reused-channel pattern (BUG-10) — _playerRealtimeChannel
+          // was just set up by refreshSessionState above. Hardware-verified bug
+          // from 2026-05-02 session R5YTPS: removed participant rejoining left
+          // manager's roster stale because no client published the rejoin event.
+          if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+            try {
+              await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
+                session_id: sessRow.id,
+              }, _playerRealtimeChannel);
+            } catch (_) {}
+          }
         }
       }
     } catch (e) {
