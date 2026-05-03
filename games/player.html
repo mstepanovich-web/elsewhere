@@ -108,6 +108,7 @@
     .player-row.me { border-color: var(--color-gold-dim); }
     .player-row.ready { border-color: var(--color-green); }
     .player-row.invited { opacity: .6; border-style: dashed; }
+    .player-row.audience { opacity: .55; }
     .p-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .dot-green { background: var(--color-green); box-shadow: 0 0 6px var(--color-green); }
     .dot-gold  { background: var(--color-gold); box-shadow: 0 0 6px var(--color-gold); }
@@ -471,7 +472,7 @@
           <input type="checkbox" id="mgr-is-player" checked onchange="toggleManagerAsPlayer(this.checked)">
           <div>
             <div style="font-size:var(--text-sm);color:var(--color-text);">I'm playing in this game</div>
-            <div style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:2px;">Your name appears first in the lobby</div>
+            <div id="mgr-toggle-help" style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:2px;">Your name appears first in the lobby</div>
           </div>
         </div>
 
@@ -491,6 +492,18 @@
         </div>
       </div>
 
+      <!-- Non-manager: I'm playing toggle (mirrors manager toggle per § 2.4.3) -->
+      <div id="room-participant-section" style="display:none;">
+        <div class="section-label">Participation</div>
+        <div class="mgr-checkbox-row">
+          <input type="checkbox" id="participant-is-player" checked onchange="togglePlayerAsParticipant(this.checked)">
+          <div>
+            <div style="font-size:var(--text-sm);color:var(--color-text);">I'm playing in this game</div>
+            <div id="participant-toggle-help" style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:2px;">Uncheck to watch instead</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Lobby / Invited tab toggle — everyone sees -->
       <div style="display:flex;gap:0;margin-top:12px;border-radius:var(--radius-pill);border:1px solid var(--color-border-dim);overflow:hidden;background:var(--color-surface);">
         <div id="tab-lobby" onclick="showLobbyTab('lobby')" style="flex:1;padding:8px;text-align:center;font-size:var(--text-xs);letter-spacing:var(--tracking-wider);text-transform:uppercase;cursor:pointer;background:var(--color-gold-faint);color:var(--color-gold);border-right:1px solid var(--color-border-dim);">In the Lobby</div>
@@ -499,8 +512,7 @@
 
       <!-- Lobby tab -->
       <div id="lobby-tab-content">
-        <div class="section-label">In the lobby</div>
-      <div class="player-list" id="lobby-roster"></div>
+        <div id="lobby-roster"></div>
         <div class="section-label" id="queue-label" style="display:none;">Waiting in queue</div>
         <div class="player-list" id="lobby-queue"></div>
       </div>
@@ -749,7 +761,7 @@
       <div style="font-size:var(--text-sm);color:var(--color-text-dim);text-align:center;line-height:1.7;max-width:280px;">
         A game of <span id="watching-game-name" style="color:var(--color-gold);">Last Card</span> is already in progress.<br>You can watch but not play until the next round.
       </div>
-      <button class="action-btn" style="max-width:280px;" onclick="goTo('screen-game-room')">Watch from Lobby</button>
+      <button class="action-btn" style="max-width:280px;" onclick="watchFromLobby()">Watch from Lobby</button>
     </div>
 
   </div><!-- end screen-wrap -->
@@ -777,7 +789,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.105</div>
+<div class="ver">v2.106</div>
 
 <script>
 'use strict';
@@ -1596,14 +1608,32 @@ function goToGamePicker() {
   goTo('screen-lobby');
 }
 
+// Late-joiner "Watch from Lobby" path (button on screen-watching). This is
+// the only flow where a user lands on screen-game-room while gameInProgress
+// is true — main-flow start handlers navigate AWAY from screen-game-room
+// before the lock would matter, so the toggle's disabled state isn't
+// observable there. Here, we need an explicit applyToggleLockState() since
+// goTo() alone doesn't re-render the roster or recompute toggle state.
+function watchFromLobby() {
+  goTo('screen-game-room');
+  applyToggleLockState();
+}
+
 function goToGameRoom() {
   const info=GAME_INFO[currentGame]||GAME_INFO.lastcard;
   const isManager = currentMyRow?.control_role === 'manager';
+  // Participant toggle is shown for non-managers who have a session row;
+  // legacy-mode (no currentMyRow) still gets the waiting message only.
+  const showParticipantToggle = !!currentMyRow && !isManager;
   document.getElementById('room-title').textContent=info.title;
   document.getElementById('room-code-sub').textContent='Room '+roomCode;
   document.getElementById('room-manager-section').style.display=isManager?'block':'none';
+  document.getElementById('room-participant-section').style.display=showParticipantToggle?'block':'none';
   document.getElementById('room-waiting-msg').style.display=isManager?'none':'block';
   document.getElementById('room-start-section').style.display=isManager?'block':'none';
+  // Sync participant checkbox to authoritative role on entry.
+  const partCheckbox = document.getElementById('participant-is-player');
+  if (partCheckbox) partCheckbox.checked = currentMyRow?.participation_role === 'active';
   // Announce game to others
   if (isManager) send({type:'game-selected', game:currentGame});
   renderRoster(); renderInvited(); renderTvDisplays();
@@ -1612,6 +1642,8 @@ function goToGameRoom() {
   // Apply manager-bar visibility (post-3a-1 the bar is gated on currentMyRow,
   // not the legacy isManager boolean). Idempotent.
   applyManagerBarVisibility();
+  // Lock-on-start (§ 2.4.6) — re-evaluate when entering the room.
+  applyToggleLockState();
 }
 
 function toggleSchedule() {
@@ -1642,6 +1674,8 @@ async function toggleManagerAsPlayer(checked) {
   }
 
   const targetRole = checked ? 'active' : 'audience';
+  const wasInTargetRole = currentMyRow?.participation_role === targetRole;
+
   const { error } = await window.sb.rpc('rpc_session_update_participant', {
     p_session_id:         currentSession.id,
     p_user_id:            user.id,
@@ -1661,7 +1695,9 @@ async function toggleManagerAsPlayer(checked) {
   }
 
   // Publish realtime + refresh own UI (BUG-13: self:false on broadcasts).
-  if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+  // Gate the publish on actual role change — idempotent RPC on already-target
+  // role doesn't need a broadcast (mirrors v2.101 Prong 2 gating).
+  if (!wasInTargetRole && _playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
     try {
       await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
         session_id: currentSession.id,
@@ -1669,6 +1705,62 @@ async function toggleManagerAsPlayer(checked) {
     } catch (_) {}
   }
   await refreshSessionState();
+}
+
+// Participant counterpart to toggleManagerAsPlayer (§ 2.4.3). Non-managers
+// flip their own participation_role via the self-only RPC from db/017.
+async function togglePlayerAsParticipant(checked) {
+  const checkbox = document.getElementById('participant-is-player');
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!currentSession?.id || !user) {
+    log('togglePlayerAsParticipant: no session/auth — legacy mode no-op');
+    return;
+  }
+
+  const targetRole = checked ? 'active' : 'audience';
+  const wasInTargetRole = currentMyRow?.participation_role === targetRole;
+
+  const { error } = await window.sb.rpc('rpc_session_set_my_participation_role', {
+    p_session_id: currentSession.id,
+    p_role:       targetRole,
+  });
+
+  if (error) {
+    if (error.code === '55000') {
+      showToast('Room is full — remove a player first.');
+    } else {
+      log('togglePlayerAsParticipant FAILED: ' + error.message + ' (code=' + (error.code || 'none') + ')');
+      showToast("Couldn't change your status");
+    }
+    if (checkbox) checkbox.checked = currentMyRow?.participation_role === 'active';
+    return;
+  }
+
+  // Gate on actual role change — RPC is idempotent on no-op flips.
+  if (!wasInTargetRole && _playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+    try {
+      await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
+        session_id: currentSession.id,
+      }, _playerRealtimeChannel);
+    } catch (_) {}
+  }
+  await refreshSessionState();
+}
+
+// Lock-on-start (§ 2.4.6): both toggles disable while a specific game is in
+// progress. Help text swaps to explanatory copy. Called from renderRoster()
+// and goToGameRoom() so any state-change path that re-renders also re-applies.
+function applyToggleLockState() {
+  const locked     = !!gameInProgress;
+  const mgrToggle  = document.getElementById('mgr-is-player');
+  const partToggle = document.getElementById('participant-is-player');
+  const mgrHelp    = document.getElementById('mgr-toggle-help');
+  const partHelp   = document.getElementById('participant-toggle-help');
+  if (mgrToggle)  mgrToggle.disabled  = locked;
+  if (partToggle) partToggle.disabled = locked;
+  const lockedText = 'Game in progress — use the game-specific controls to step out.';
+  if (mgrHelp)  mgrHelp.textContent  = locked ? lockedText : 'Your name appears first in the lobby';
+  if (partHelp) partHelp.textContent = locked ? lockedText : 'Uncheck to watch instead';
 }
 
 // 3a.2 § 2.5: manager soft-removes another participant. Sets target's left_at.
@@ -1814,9 +1906,12 @@ async function refreshSessionState() {
 
   // Apply UI gates that depend on currentMyRow.
   applyManagerBarVisibility();
-  // Sync manager-as-player checkbox to authoritative role.
-  const checkbox = document.getElementById('mgr-is-player');
-  if (checkbox) checkbox.checked = currentMyRow?.participation_role === 'active';
+  // Sync both toggles to authoritative role (whichever is currently visible).
+  const mgrCheckbox  = document.getElementById('mgr-is-player');
+  const partCheckbox = document.getElementById('participant-is-player');
+  const isActive     = currentMyRow?.participation_role === 'active';
+  if (mgrCheckbox)  mgrCheckbox.checked  = isActive;
+  if (partCheckbox) partCheckbox.checked = isActive;
   // Roster + TV displays re-render with fresh data.
   renderRoster();
   renderTvDisplays();
@@ -1950,18 +2045,22 @@ function renderInvited() {
 }
 
 function renderRoster() {
-  // Source: currentParticipants. Camera state via uidToUserId reverse →
-  // cameraState. Manager sees a Remove button per row (except their own).
-  // Queue rendering deferred to 3b/3c/3d (per-game admission_mode); for
-  // now treat every active participant as in-lobby.
+  // Source: currentParticipants, sectioned by participation_role per § 2.4.5.
+  // PLAYING (active) on top, WATCHING (audience) below — both render even when
+  // empty. Camera state via uidToUserId reverse → cameraState. Manager sees a
+  // Remove button per row (except their own) on either section.
   const myUserId   = currentMyRow?.user_id || null;
   const iAmManager = currentMyRow?.control_role === 'manager';
-  const active = currentParticipants.filter(p => !p.left_at);
+  const active     = currentParticipants.filter(p => !p.left_at);
+  // Sort by joined_at to keep section ordering stable across renders.
+  const byJoinedAt = (a, b) => (a.joined_at || '').localeCompare(b.joined_at || '');
+  const playing    = active.filter(p => p.participation_role !== 'audience').sort(byJoinedAt);
+  const watching   = active.filter(p => p.participation_role === 'audience').sort(byJoinedAt);
 
   const badge=document.getElementById('room-badge-count');
   if (badge) badge.textContent=active.length+' / '+playerLimit;
 
-  document.getElementById('lobby-roster').innerHTML=active.map(p=>{
+  function renderRow(p, sectionRole) {
     const isMe        = p.user_id === myUserId;
     const isManager   = p.control_role === 'manager';
     const uid         = findUidForUser(p.user_id);
@@ -1971,22 +2070,37 @@ function renderRoster() {
     const removeBtn   = (iAmManager && !isMe)
       ? `<button class="p-remove-btn" onclick="handleRemovePlayer('${userIdEnc}')" title="Remove from session" style="margin-left:auto;background:transparent;border:1px solid var(--color-border-dim);color:var(--color-text-faint);font-size:11px;padding:2px 8px;border-radius:var(--radius-sm);cursor:pointer;">Remove</button>`
       : '';
+    const dotClass = sectionRole === 'audience' ? 'dot-dim' : (isMe ? 'dot-gold' : 'dot-green');
+    const rowClass = `player-row ${isMe?'me':''} ${sectionRole==='audience'?'audience':''}`.trim();
     return `
-    <div class="player-row ${isMe?'me':''}">
-      <div class="p-dot ${isMe?'dot-gold':'dot-green'}"></div>
+    <div class="${rowClass}">
+      <div class="p-dot ${dotClass}"></div>
       <div class="p-name ${isMe?'me':''}">${p.display_name}</div>
       ${hasCamera?'<span style="font-size:12px;">📷</span>':''}
       ${isManager?'<div class="p-badge badge-mgr">Manager</div>':''}
       ${isMe&&!isManager?'<div class="p-badge badge-you">You</div>':''}
       ${removeBtn}
     </div>`;
-  }).join('');
+  }
+
+  const playingHtml  = playing.map(p => renderRow(p, 'active')).join('');
+  const watchingHtml = watching.map(p => renderRow(p, 'audience')).join('');
+
+  document.getElementById('lobby-roster').innerHTML = `
+    <div class="section-label">Playing (${playing.length})</div>
+    <div class="player-list">${playingHtml}</div>
+    <div class="section-label" style="margin-top:14px;">Watching (${watching.length})</div>
+    <div class="player-list">${watchingHtml}</div>
+  `;
 
   // Queue section: empty in 3a.2 (queueing semantics deferred per § 4.1).
   const ql=document.getElementById('queue-label');
   const qe=document.getElementById('lobby-queue');
   if (ql) ql.style.display='none';
   if (qe) qe.innerHTML='';
+
+  // Lock-on-start (§ 2.4.6) — recompute after roster updates.
+  applyToggleLockState();
 }
 
 function renderOthersStrip() {
