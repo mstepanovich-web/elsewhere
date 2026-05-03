@@ -2434,6 +2434,116 @@ Naturally pairs with Commit 4 (toggle + roster) — that commit already changes 
 
 ---
 
+### Deferred: Last Card 'End Game' button transitions manager to Game Over screen, but non-managers stay on game-room screen
+
+**Deferred in:** Cluster Commit 4 hardware verification (2026-05-03)
+**Deferred on:** 2026-05-03
+**Priority:** High — blocks complete multiplayer game cycles in Last Card. Manager can't naturally end a multiplayer game without forcing all players to manually exit. Surfaced during Test 6 of Commit 4 verification — could not verify "toggles re-enable on game end" because non-manager never returned to lobby.
+**Area:** Last Card game logic — game-end broadcast wiring in `games/player.html` (specific function unknown without investigation; somewhere in the Last Card section that handles the manager's "End Game" tap)
+**Status:** Deferred — investigation pending; high-priority pickup.
+
+#### Context
+
+During hardware verification of cluster Commit 4 (v2.106) on 2026-05-03 against test sessions 8DSSXK / SU8RMJ / BVBZ39 / PQ6T3I, observed:
+
+- Mike (manager, iPhone Safari) tapped Start New Game in lobby. Both Mike and Michael (non-manager, Mac Chrome) navigated to Last Card game-room screen. Game running normally.
+- Mike tapped End Game button (manager-only control on Last Card screen). Mike's iPhone correctly transitioned to screen-gameover showing final scores ("Game Over" with both players ranked). Manager controls (END SESSION, SWITCH GAME, GAMES, END GAME) all visible.
+- Michael's Mac Chrome stayed on the Last Card game-room screen showing "MIKE STEPANOVICH'S TURN", his hand of cards, draw pile, etc. He never received the game-over transition.
+
+#### Expected behavior
+
+When manager ends a game, all players should transition to the Game Over screen together (or at minimum to a state where they can see the game has ended). Per spec § 4.1 and the spirit of the active/audience system, all participants share the game lifecycle.
+
+#### Hypothesized causes
+
+This is not a Commit 4 bug — none of v2.104, v2.105, v2.101, or v2.106 touched Last Card's game-end logic. Either:
+1. Pre-existing Last Card game-end broadcast wiring bug (most likely)
+2. Receiver-side handler issue (`game-over` event arrives but doesn't transition UI)
+3. Race condition between game-end broadcast and Agora channel state
+
+Investigation should start by:
+1. Searching `games/player.html` for the manager's End Game button onClick handler
+2. Following what broadcast/send call fires
+3. Checking the receive-side handler for the matching event type
+4. Testing whether the broadcast is sent at all (Mike's iPhone DEBUG log around the End Game tap)
+5. Testing whether Michael's Chrome receives it (his DEBUG log)
+
+#### Why deferred (not blocking Commit 4 close)
+
+Commit 4 ships toggle UI + roster sectioning + lock-on-start wiring. Test 6 of the Commit 4 verification plan asks "verify both toggles disable when game starts, re-enable when game ends." The "game starts" half is essentially unobservable in the main flow per yesterday's audit (start handlers navigate away from screen-game-room before lock matters). The "game ends" half is blocked by this issue — Michael can't return to the lobby because his client doesn't transition out of the game.
+
+The lock-on-start wiring itself was static-reviewed and passes the audit; we just can't fully exercise it through the main UX flow because of this pre-existing Last Card issue.
+
+#### When to pick this up
+
+High priority. Recommend tackling next, before Trivia integration (Session 5 Part 3b), because:
+1. Last Card is the only game currently usable on top of the active/audience cluster foundation. Shipping Commit 4 onto a Last Card that can't complete multiplayer cycles is leaving the foundation usable in form but broken in practice.
+2. Investigation toolkit is fresh from cluster Commit 2.6 (realtime broadcast diagnosis) — the bug shape is similar.
+3. Building Trivia on top of a still-broken Last Card just compounds technical debt.
+
+#### Related
+
+- Cluster Commit 4 (commit `ae276f7`, v2.106 games/player.html) — surfaced during its verification
+- DEFERRED entry "End Session session_ended event not received by non-manager (Games)" — adjacent broadcast-not-received pattern, resolved in v2.102 via reused-channel fix; the Last Card game-end path may need the same treatment
+- `docs/PROMPTS/active-audience-commit-3.md` — Test 6 of the verification plan that surfaced this
+
+---
+
+### Deferred: Tab suspension + Supabase auth expiry drops authenticated user into legacy-mode rejoin instead of authenticated re-attach
+
+**Deferred in:** Cluster Commit 4 hardware verification (2026-05-03)
+**Deferred on:** 2026-05-03
+**Priority:** Medium — surfaces as confusing UX ("I came back to my game and I'm no longer the manager"). Pre-HHM (home-host roles), this is somewhat expected, but the silent fallback to legacy-mode is the real issue, not the role loss itself.
+**Area:** Shell auth + `games/player.html` doJoin legacy-mode branch
+**Status:** Deferred — UX polish; resolution pending HHM roles or explicit auth-refresh flow
+
+#### Context
+
+During Commit 4 hardware verification on 2026-05-03, Mike (manager, iPhone Safari) was active in test session 8DSSXK. After ~1 hour of inactivity (browser tab backgrounded), Mike returned to find:
+
+- Lobby screen showing PLAYING (0) / WATCHING (0) — both rosters empty in his view
+- "Waiting for the manager to start the game" message
+- DEBUG log showed `Session: not signed in — legacy mode` and `Bind: not signed in — skipping agora-identity-bind`
+- v2.106 stamp still visible (correct surface)
+
+When Mike tapped through the legacy "Enter your name and room code" intermediate screen and joined, he came back as a non-manager — even though his original session_participants row (with control_role=manager) was still in the DB (verified via SQL query showing the row was unchanged with left_at = null).
+
+#### What's happening
+
+The Supabase JWT timed out during background tab inactivity (~1 hour default). Safari's aggressive tab suspension exacerbates this. When Mike returned, the auth state was expired, his client dropped to legacy mode (no auth context), and tapping Join went through the legacy doJoin path — which doesn't reattach to existing session_participants rows by user_id (since there's no user_id without auth).
+
+His original DB row sat there orphaned.
+
+#### Why this is partially expected
+
+Without HHM (Home Host Manager) persistent role assignment, "manager" is a per-session attribute set at session creation or first authenticated join. The current behavior — that you lose manager status if you fall to legacy mode — is consistent with how the system is designed to work pre-HHM. Mike noted: "if a manager/host 'leaves' then when they come back, they are not a manager — which probably makes sense as we don't have HHM roles working yet."
+
+#### What's NOT expected
+
+The silent fallback to legacy mode without prompting the user to re-authenticate. A signed-in user whose JWT expires shouldn't silently lose their identity — they should either:
+1. Be prompted to re-sign-in, OR
+2. Have their session refreshed via Supabase's refresh-token flow (which Supabase supports natively) before the JWT expires
+
+#### What's deferred
+
+Either of:
+- (a) Detect expired auth on tab visibility-change events. Prompt silent re-auth via Supabase's existing refresh-token flow if available. Reattach user to their original session_participants row by matching user_id in the active session.
+- (b) When auth refresh fails, show an explicit "Your session expired — please sign in again" UI instead of silently dropping to legacy mode.
+- (c) HHM roles (longer-term): persist manager designation across sessions for a host's home setup. Resolves the conceptual issue but doesn't address the broader auth-expiry UX gap.
+
+(a) is the technically cleanest near-term fix. (b) is the cheapest. (c) is part of a larger HHM track.
+
+#### When to pick this up
+
+After more pressing items. The visible impact is limited (only affects users whose JWT expires during inactivity), but it's a foot-gun for any user who steps away from a long session. Worth surfacing before Trivia integration ships, since Trivia adds more session-state context that could be similarly disrupted.
+
+#### Related observations
+
+- Same auth-loss likely affected Michael's Mac Chrome during the same break window. When Michael then joined a fresh session, he went through the legacy room-code form rather than the shell home Games tile path. That's why his join broadcast didn't propagate to Mike's iPhone — the legacy doJoin path on `games/player.html` may not fire `publishParticipantRoleChanged` on fresh insert (latent — see the games/player.html doJoin investigation note below).
+- The legacy-doJoin-no-publish observation is itself a candidate for its own DEFERRED entry, but couldn't be cleanly reproduced (when both devices were freshly authenticated via shell Games tile path, propagation worked). Filing it as a sub-note here so the observation isn't lost. If reproduced under controlled conditions, file as separate entry.
+
+---
+
 ## Migrated from PHASE1-NOTES.md
 
 The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captured here in summary form; the full original text lives in PHASE1-NOTES.md git history (commit `9296a50` or earlier). Future fill-outs should flesh these into the full entry format above when someone picks one up.
