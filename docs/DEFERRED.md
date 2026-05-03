@@ -2020,7 +2020,12 @@ First step of 3b prep. Blocks the active/audience cluster, which itself blocks 3
 **Deferred on:** 2026-05-02
 **Priority:** High — surfaces as visible UX confusion (joiner shows up in roster but isn't in the active player list at game-start)
 **Area:** Games — `rpc_session_join` + `games/player.html` `doJoin` + `rpc_session_start` (db/009)
-**Status:** Partially resolved 2026-05-02 in `754d0a8` (v2.104, non-manager fresh-join only — caller-side override on rpc_session_join). Fully resolved 2026-05-02 in v2.105 (same commit as this status update) — `db/018_session_start_active_default.sql` branches the manager-row insert in `rpc_session_start` on `p_app` ('games' → 'active'; 'karaoke' and other → 'audience'); `games/player.html doJoin` restructured to check-then-conditionally-join via `refreshSessionState`, eliminating the 23505 catch as the every-refresh path.
+**Status:** Fully resolved 2026-05-03. Three commits closed all three bypass paths:
+- `754d0a8` (v2.104, 2026-05-02): caller-side override on rpc_session_join in games/player.html doJoin (non-manager fresh-join)
+- `1a3a396` (v2.105, 2026-05-02): db/018_session_start_active_default.sql branched rpc_session_start's manager insert on p_app, AND restructured doJoin from join-then-handle-23505 to check-then-conditionally-join via refreshSessionState (manager path + rejoin/refresh preservation)
+- `8825a08` (cluster Commit 2.6, v2.101 index.html, 2026-05-03): branched both shell rpc_session_join sites on app + added publishParticipantRoleChanged after each successful join (shell rejoin bypass + manager-roster realtime propagation gap)
+
+Hardware-verified 2026-05-03 against test session DMZS4G + karaoke session U97XUQ. All 4 verification steps green per `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` addendum.
 
 #### Context
 
@@ -2373,6 +2378,59 @@ When shell-side rejoin UX is examined or when participant toggle (Commit 4 / v2.
 - `index.html:3138` (handleTvRemoteTileTap R4 catch) — same hardcode
 - `db/018_session_start_active_default.sql` — server-side analog already shipped for the rpc_session_start case
 - `docs/GAMES-CONTROL-MODEL.md` § 2.4.4 — spec scope
+
+---
+
+### Deferred: Tile-tap → next-screen latency has no loading/transition state
+
+**Deferred in:** cluster Commit 2.6 verification (2026-05-03)
+**Deferred on:** 2026-05-03
+**Priority:** Medium — affects every session-start interaction; not a regression but worsened slightly by v2.101's added `publishParticipantRoleChanged` await
+**Area:** Shell — `index.html` `handleHomeTileTap` and downstream paths (`handleTvRemoteTileTap`, `handleSameAppRejoin`)
+**Status:** Deferred — UX polish; design decision pending
+
+#### Context
+
+Reported by Mike during DMZS4G hardware verification on 2026-05-03. When tapping a tile (Karaoke or Games) on the shell home screen, the time between tap and the next screen appearing (the room-code-entry intermediate, or the lobby) feels like ~5 seconds with no visual indication anything is happening. Users will reasonably assume the tap didn't register and tap again, which can compound:
+
+- Extra RPC round trips
+- Possible 23505 races (`rpc_session_start` raising on the second tap if the first succeeded)
+- General confusion
+
+The latency is real and structural. Cumulative time includes:
+
+1. `rpc_session_start` round trip to Supabase (manager path) OR `rpc_session_join` round trip (`handleSameAppRejoin` path)
+2. Post-v2.101: additional `publishParticipantRoleChanged` round trip (now awaited before navigation)
+3. Page navigation
+4. `player.html` boot: shell auth init, `refreshSessionState` round trip, Agora SDK setup
+
+So Supabase has at least 2 round-trip floors here, plus Agora init. Real network/cold-cache instances of this could exceed 5 seconds.
+
+#### What's deferred
+
+A loading/transition state for the tap → next-screen window. Specific implementation TBD; possibilities:
+
+- **(a)** Disable the tile and show a spinner overlay between tap and navigation.
+- **(b)** Optimistic-navigate to a skeleton lobby that shows "loading session..." with a spinner, then hydrate real state when `refreshSessionState` returns.
+- **(c)** Show a brief modal/sheet ("Starting your Games session...") that dismisses on navigation.
+
+(b) is the most ambitious / best UX but also the most code surface. (a) is the cheapest mitigation and probably sufficient.
+
+**Secondary opportunity (smaller scope):** the `publishParticipantRoleChanged` calls added in v2.101 (`handleSameAppRejoin` + R4 catch) currently `await` the broadcast before navigating. They could be made fire-and-forget (no await) — the join is already server-side committed, the broadcast is just for realtime propagation. This would shave off one round-trip from the tap-to-navigate latency. Tradeoff: changes the (rare) failure ordering — currently a failed broadcast is logged via `console.error` before navigation; fire-and-forget would log after. Acceptable, since the user-facing impact is the same either way (manager's roster eventually updates via cold-path realtime).
+
+#### Options when picking up
+
+See above. Recommend (a) for minimum viable mitigation. (b) if a broader lobby UX refresh is happening at the same time. The fire-and-forget secondary opportunity is independent and can ship standalone.
+
+#### When to pick this up
+
+Naturally pairs with Commit 4 (toggle + roster) — that commit already changes the lobby UX surface; adding a tile-tap loading state could be the same touch. Or stand-alone polish commit any time the shell UX is being looked at.
+
+#### Related
+
+- `index.html` `handleHomeTileTap` (line ~2922), `handleTvRemoteTileTap` (line ~3075), `handleSameAppRejoin` (line 2974)
+- Commit `8825a08` — added the `publishParticipantRoleChanged` awaits that contributed marginal latency
+- Cluster Commit 4 (v2.106 games/player.html) — the natural pairing opportunity
 
 ---
 

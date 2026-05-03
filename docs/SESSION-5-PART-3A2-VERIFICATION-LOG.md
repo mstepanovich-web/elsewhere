@@ -145,9 +145,9 @@ If v2.105 verifies green on all four steps, proceed with **Commit 4 (v2.106)** o
 - Migration db/017 (participant self-flip RPC): ✅ shipped, applied to prod.
 - Migration db/018 (rpc_session_start branched manager default): ✅ shipped, applied to prod.
 - Commit 2 (default-role partial — non-manager fresh-join): ✅ shipped (v2.104).
-- Commit 2.5 (default-role full except shell rejoin — db/018 + doJoin restructure): ✅ shipped (v2.105). Hardware test session KMGGL8 verified manager path + doJoin restructure GREEN; surfaced shell rejoin bypass (Commit 2.6).
-- Commit 2.6 (shell rejoin bypass fix): ✅ shipped this commit (v2.101 index.html stamp). Branches role on app at both shell `rpc_session_join` sites + adds `publishParticipantRoleChanged` after each successful join.
-- Commit 4 (toggle UI + roster split, v2.106 games/player.html stamp): ⏳ pending Commit 2.6 verification (was labeled "Commit 3" before the v2.104→v2.105→Commit-2.6 chain renumbered the queue).
+- Commit 2.5 (default-role full except shell rejoin — db/018 + doJoin restructure): ✅ shipped (v2.105). Hardware test session KMGGL8 verified manager path + doJoin restructure GREEN; surfaced shell rejoin bypass (Commit 2.6). Re-verified (manager + refresh preservation) green at 2026-05-03 against DMZS4G as part of Commit 2.6 verification.
+- Commit 2.6 (shell rejoin bypass fix): ✅ shipped `8825a08` (v2.101 index.html), hardware-verified GREEN 2026-05-03 against DMZS4G + U97XUQ. All 4 verification steps passed.
+- Commit 4 (toggle UI + roster split, v2.106 games/player.html stamp): ⏳ unblocked. Commit 2.6 verification GREEN; foundation ready. Single commit: participant "I'm playing in this game" toggle UI per § 2.4.3 + lobby roster sectioning into PLAYING/WATCHING per § 2.4.5. Version bump v2.105 → v2.106 on games/player.html. See `docs/PROMPTS/active-audience-commit-3.md` for the prompt.
 
 ---
 
@@ -198,3 +198,19 @@ Same 4-step plan as v2.105's, re-run on Commit 2.6 deploy. Steps 1-2 are the new
    - Karaoke "Add to Queue" / promote flows still work as before.
 
 If Commit 2.6 verifies green on all four steps, proceed with **Commit 4 (v2.106 games/player.html stamp)** of the active/audience cluster: participant toggle UI + roster sectioning per § 2.4.3 + § 2.4.5.
+
+### Cluster Commit 2.6 verification — RESULTS (2026-05-03)
+
+**Test sessions:** DMZS4G (games) + U97XUQ (karaoke).
+**Test users:** Mike Stepanovich (manager, iPhone Safari) + michael stepanovich (non-manager, Mac Chrome on shell home → Games tile).
+
+All 4 verification steps green:
+
+1. **Manager path (regression smoke):** ✅ — Mike's row in DMZS4G = `(manager, active)`. db/018 still working post-v2.101 (no regression from index.html changes).
+2. **Non-manager fresh-join via shell home tile (THE BUG SURFACE):** ✅ — Michael's row in DMZS4G = `(none, active)`. Mike's iPhone roster showed Michael within 1-2s without manual refresh. Both prongs of Commit 2.6 working: Prong 1 (role branched on app at `handleSameAppRejoin`) AND Prong 2 (`publishParticipantRoleChanged` after successful join). The exact bug surface from KMGGL8 is now closed.
+3. **Refresh preservation:** ✅ — After Michael Cmd+Shift+R'd Chrome and re-tapped Join, his DMZS4G row was unchanged: same `joined_at` (12:49:33), still `active`, no new row inserted. doJoin branch (b) "already a participant — using existing row" preserved state correctly.
+4. **Karaoke regression check:** ✅ — Mike's row in U97XUQ = `(manager, audience)`. Karaoke schema-state semantics preserved per `docs/KARAOKE-CONTROL-MODEL.md` § 1 (HHU schema-state `'audience'` = "Available Singer not queued"). The app !== 'games' branch in db/018 + index.html Prong 1 worked correctly.
+
+**Net assessment:** active/audience cluster default-role thread fully closed across all three bypass paths (manager via db/018; non-manager fresh-join via doJoin caller-side; non-manager rejoin via shell-side branch + publish). Foundation ready for Commit 4 (toggle UI + roster sectioning, v2.106 games/player.html stamp).
+
+The DEFERRED entry "Default participation_role for self-join is 'audience' instead of 'active'" status was flipped to "Fully resolved 2026-05-03" in the same commit as this RESULTS section.
