@@ -2440,7 +2440,7 @@ Naturally pairs with Commit 4 (toggle + roster) — that commit already changes 
 **Deferred on:** 2026-05-03
 **Priority:** High — blocks complete multiplayer game cycles in Last Card. Manager can't naturally end a multiplayer game without forcing all players to manually exit. Surfaced during Test 6 of Commit 4 verification — could not verify "toggles re-enable on game end" because non-manager never returned to lobby.
 **Area:** Last Card game logic — game-end broadcast wiring in `games/player.html` (specific function unknown without investigation; somewhere in the Last Card section that handles the manager's "End Game" tap)
-**Status:** Deferred — investigation pending; high-priority pickup.
+**Status:** Resolved 2026-05-03 in commit `SHA-PLACEHOLDER` (v2.107 games/player.html). Two-line fix: (1) Broadcaster side: `managerEndGame` now sets `gameInProgress = false` before broadcasting, so any subsequent `request-state` response doesn't re-broadcast `phase:playing` and clobber the receiver's gameover transition. (2) Receiver side: `game-state` handler now early-returns if `gameInProgress` is false, so stale `game-state` messages can't undo a completed game-end transition. DEBUG log evidence (Mike's iPhone + Michael's Chrome captured 2026-05-03 around 18:51:14–25 UTC) confirmed the race: `game-over` arrived correctly, but Michael's tab-visibility recovery code triggered a `request-state`, which Mike's still-warm game state responded to with `phase:playing`, re-rendering Last Card on Michael's side. Both fixes close the race; together they harden against analogous game-lifecycle race conditions (game-over racing with player-action, etc.).
 
 #### Context
 

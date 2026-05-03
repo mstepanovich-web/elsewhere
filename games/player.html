@@ -789,7 +789,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.106</div>
+<div class="ver">v2.107</div>
 
 <script>
 'use strict';
@@ -1381,6 +1381,13 @@ function handleMessage(uid, data) {
 
   if (msg.type==='game-state') {
     log('game-state phase:'+(msg.state?.phase));
+    // Defensive: if a stale game-state arrives after we've already
+    // ended the game (e.g., delayed broadcast, or our own request-state
+    // crossing wires with the manager's game-over), ignore it. Without
+    // this gate, the receiver re-routes to screen-lastcard and undoes
+    // the screen-gameover transition. (Surfaced Commit 4 verification
+    // 2026-05-03; see DEFERRED entry "Last Card 'End Game' button...".)
+    if (!gameInProgress) return;
     gameState=msg.state;
     // If we're not on the game screen yet, navigate there
     const activeScreen = document.querySelector('.screen.active')?.id;
@@ -2236,7 +2243,13 @@ function managerSkip()   {
   }
 }
 function managerEndGame() {
-  // End game after a round — show scores and play again option
+  // End game after a round — clear local progress flag FIRST so any
+  // request-state response from this client doesn't re-broadcast a
+  // stale playing state (race surfaced during Commit 4 verification:
+  // non-manager's tab-visibility-change auto-fired request-state ~1s
+  // after game-over, and we responded with game-state phase:playing,
+  // which clobbered their screen-gameover transition).
+  gameInProgress = false;
   const scores = gameState?.scores || {};
   send({type:'game-over', scores});
   showGameOver(scores);
