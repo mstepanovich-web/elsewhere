@@ -145,5 +145,56 @@ If v2.105 verifies green on all four steps, proceed with **Commit 4 (v2.106)** o
 - Migration db/017 (participant self-flip RPC): ✅ shipped, applied to prod.
 - Migration db/018 (rpc_session_start branched manager default): ✅ shipped, applied to prod.
 - Commit 2 (default-role partial — non-manager fresh-join): ✅ shipped (v2.104).
-- Commit 2.5 (default-role full — db/018 + doJoin restructure): ✅ shipped this commit (v2.105), applied to prod.
-- Commit 4 (toggle UI + roster split, v2.106): ⏳ pending v2.105 verification (was labeled "Commit 3" before the v2.104→v2.105 partial-then-full split renumbered the queue).
+- Commit 2.5 (default-role full except shell rejoin — db/018 + doJoin restructure): ✅ shipped (v2.105). Hardware test session KMGGL8 verified manager path + doJoin restructure GREEN; surfaced shell rejoin bypass (Commit 2.6).
+- Commit 2.6 (shell rejoin bypass fix): ✅ shipped this commit (v2.101 index.html stamp). Branches role on app at both shell `rpc_session_join` sites + adds `publishParticipantRoleChanged` after each successful join.
+- Commit 4 (toggle UI + roster split, v2.106 games/player.html stamp): ⏳ pending Commit 2.6 verification (was labeled "Commit 3" before the v2.104→v2.105→Commit-2.6 chain renumbered the queue).
+
+---
+
+### Cluster Commit 2.6 — shell rejoin bypass fix (v2.101 index.html stamp)
+
+Hardware test session KMGGL8 on 2026-05-02 verified v2.105's first two prongs (db/018 + doJoin restructure) GREEN but surfaced a third bypass path that v2.105's scope didn't cover:
+
+**Observed in KMGGL8:**
+- Mike landed as `(manager, active)` ✓ (db/018 working — manager path verified)
+- Michael landed as `(none, audience)` ✗ (shell-route bypass)
+- Mike's iPhone roster did not show Michael until Mike manually reloaded ✗ (no publish from shell path)
+- After Mike's manual reload, Michael appeared in roster ✓ (so v2.105's render code is correct, not regressed)
+- Console log on Michael's Chrome confirmed doJoin hit branch (b) "already a participant (role=audience)" — the row was already inserted before player.html ran
+
+**Diagnosis (from read-only investigation 2026-05-02):**
+
+When a non-manager taps the Games tile on the shell home screen while a games session already exists for that TV, the dispatcher at `index.html:2922-2956` routes through `handleSameAppRejoin` (line 2974). That function called `rpc_session_join` with `p_participation_role: 'audience'` hardcoded — Michael's row got inserted as `'audience'` BEFORE player.html's doJoin ran. doJoin's `refreshSessionState` then found the existing row and correctly took branch (b) "already a participant — using existing row" (preserving the wrong audience role per design — branch (b) does not flip roles).
+
+Additionally, neither shell path (`handleSameAppRejoin` line 2974, `handleTvRemoteTileTap` R4 catch line 3138) called `publishParticipantRoleChanged` after the successful insert. Combined with branch (b)'s intentional no-publish (within-session refreshes shouldn't trigger redundant broadcasts), the manager's roster never received the realtime event — Mike's iPhone showed a stale roster.
+
+The DEFERRED entry "index.html shell rejoin paths hardcode 'audience' for games" filed earlier the same day labeled both shell paths "currently masked." That assessment was wrong for `handleSameAppRejoin` — it's the active failure mode for non-manager game-tile taps from the shell home screen, not latent. The R4 catch genuinely was latent (race-only) but is fixed in the same commit for consistency.
+
+**v2.101 (cluster Commit 2.6) ships two prongs in `index.html`:**
+
+- **Prong 1 — Branch role on app at both shell `rpc_session_join` sites.** `handleSameAppRejoin` (line 2974, the active failure mode) and `handleTvRemoteTileTap` R4 catch (line 3138, latent race-only path) both now pass `p_participation_role: app === 'games' ? 'active' : 'audience'`. The `app` variable is in scope at both sites (function parameter for handleSameAppRejoin; closure variable for the R4 catch). Karaoke continues to land at `'audience'` per `docs/KARAOKE-CONTROL-MODEL.md` § 1 schema-state semantics; games lands at `'active'` per `docs/GAMES-CONTROL-MODEL.md` § 2.4.4.
+- **Prong 2 — Publish `participant_role_changed` after each successful join.** Both shell paths now call `window.publishParticipantRoleChanged(device_key, { session_id })` (matching the existing minimal-payload convention used by all current call sites in games/player.html) before the navigation. Gated on `!joinErr` so the publish only fires on actual fresh insert — 23505 means already-a-participant and other clients already know about us, so no event is needed. broadcast() fall-back path (no reused channel — the shell doesn't hold a long-lived sub on `tv_device:<device_key>`). Failures swallowed with try/catch + console.error — the join is server-side committed, a failed broadcast just delays roster propagation until the next cold-path realtime fallback.
+
+**R4 catch refactor note:** Prong 2 required capturing the `rpc_session_join` error result to gate the publish. The original R4 code used `.catch(() => {})` which couldn't distinguish 23505 from genuine success. Replaced with the standard supabase-js destructure pattern (`const { error: r4JoinErr } = await window.sb.rpc(...)`). Functionally equivalent on the join itself (supabase-js returns errors via the `error` field, not promise rejection), but enables the publish gating.
+
+### Cluster Commit 2.6 verification plan
+
+Same 4-step plan as v2.105's, re-run on Commit 2.6 deploy. Steps 1-2 are the new tests (the bug surface); steps 3-4 are regression checks against v2.105's prior-verified behavior:
+
+1. **Manager path (regression smoke).** Mike taps Games tile on shell home screen. Verify:
+   - Mike's row in `session_participants` has `participation_role = 'active'` (db/018 branch — already verified GREEN at v2.105; re-run as smoke check that Commit 2.6's index.html changes didn't regress).
+   - Mike's player.html log shows: "already a participant (role=active) — using existing row" (doJoin branch (b)).
+2. **Non-manager fresh-join via shell home tile (THE BUG SURFACE).** Michael taps Games tile from shell home. Verify:
+   - Shell dispatch routes through `handleSameAppRejoin` (verifiable via console log if added; otherwise infer from path).
+   - Michael's row in DB has `participation_role = 'active'` (Commit 2.6 Prong 1 branch).
+   - Mike's iPhone roster shows Michael as a normal active participant within 1-2s WITHOUT a manual refresh (Commit 2.6 Prong 2 publish).
+   - Michael's player.html doJoin log shows: "already a participant (role=active) — using existing row" (branch (b) preserved the shell's correct insert).
+3. **Refresh preservation (regression).** With Mike + Michael both in lobby with role = `'active'`, refresh Michael's Chrome page. Verify:
+   - Michael's role stays `'active'` (not flipped to `'audience'` and not flipped back).
+   - Michael's log shows: "already a participant (role=active) — using existing row" (branch (b)).
+   - No `participant_role_changed` published from Michael's refresh (since nothing changed; doJoin branch (b) intentionally no-publish).
+4. **Karaoke regression check.** Mike taps Karaoke tile (after ending the games session). Verify:
+   - Mike's row in karaoke session has `participation_role = 'audience'` (per karaoke schema-state semantics — Available Singer not queued; Commit 2.6 Prong 1 correctly preserved this for app !== 'games').
+   - Karaoke "Add to Queue" / promote flows still work as before.
+
+If Commit 2.6 verifies green on all four steps, proceed with **Commit 4 (v2.106 games/player.html stamp)** of the active/audience cluster: participant toggle UI + roster sectioning per § 2.4.3 + § 2.4.5.

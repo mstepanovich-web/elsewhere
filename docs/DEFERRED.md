@@ -2337,9 +2337,9 @@ When manager-reclaim UX is exercised on hardware AND the games-side "manager lan
 
 **Deferred in:** Session 5 Part 3a.2 v2.105 diagnosis pass (2026-05-02)
 **Deferred on:** 2026-05-02
-**Priority:** Low — currently masked by v2.105's doJoin restructure (the shell call inserts 'audience'; doJoin then sees an existing row in branch (b) and preserves it; subsequent participant toggle UI in Commit 4 lets the user flip themselves to 'active'). Visible only at the brief moment between shell rejoin and toggle-up.
+**Priority:** Low — (was) currently masked by v2.105's doJoin restructure (the shell call inserts 'audience'; doJoin then sees an existing row in branch (b) and preserves it; subsequent participant toggle UI in Commit 4 lets the user flip themselves to 'active'). Visible only at the brief moment between shell rejoin and toggle-up.
 **Area:** Shell — `index.html` lines 2974 (handleSameAppRejoin) + 3138 (handleTvRemoteTileTap R4 catch)
-**Status:** Deferred — revisit when shell-side rejoin UX is examined
+**Status:** Resolved 2026-05-03 in cluster Commit 2.6 (this commit; v2.101 index.html stamp). Hardware test session KMGGL8 on 2026-05-02 invalidated the "currently masked" assessment — `handleSameAppRejoin` was the active failure mode for non-manager game-tile taps from the shell home screen, not latent. Non-manager tapping the Games tile while a session existed had Michael land as 'audience' AND Mike's roster never received a participant_role_changed broadcast. The R4 catch path (line 3138) genuinely was latent (race-only) but is fixed in the same commit for consistency. Two prongs in `index.html`: (1) branch role on app at both shell `rpc_session_join` sites (`p_participation_role: app === 'games' ? 'active' : 'audience'`); (2) add `publishParticipantRoleChanged` after each successful join (gated on `!joinErr` so 23505 already-a-participant doesn't trigger redundant broadcasts). See `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` addendum sub-section "Cluster Commit 2.6" for full diagnosis + verification plan.
 
 #### Context
 

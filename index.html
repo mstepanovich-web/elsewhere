@@ -1655,7 +1655,7 @@
     </div>
   </div>
 
-  <div class="ver">v2.100</div>
+  <div class="ver">v2.101</div>
 
   <script>
     // ── Wait for shell/auth.js module to initialize ──────────
@@ -2971,9 +2971,13 @@
     // state corrects on next realtime event or
     // enterHomeForTv refresh. Phase 1 tolerance.
     async function handleSameAppRejoin(session, app) {
+      // v2.101 (cluster Commit 2.6): branch role on app per
+      // docs/GAMES-CONTROL-MODEL.md § 2.4.4 — games lobby-state self-join
+      // defaults to 'active'; karaoke stays 'audience' per
+      // docs/KARAOKE-CONTROL-MODEL.md § 1 schema-state semantics.
       const { error: joinErr } = await window.sb.rpc('rpc_session_join', {
         p_session_id: session.id,
-        p_participation_role: 'audience',
+        p_participation_role: app === 'games' ? 'active' : 'audience',
       });
 
       if (joinErr && joinErr.code !== '23505') {
@@ -2993,6 +2997,23 @@
       const ctx = getHomeTvContext();
       if (ctx) {
         try { sessionStorage.setItem('elsewhere.active_tv.device_key', ctx.device_key); } catch (_) {}
+
+        // v2.101 (cluster Commit 2.6): publish participant_role_changed so
+        // the manager's roster reflects the new participant without manual
+        // refresh. Only fires on actual fresh insert (joinErr is null) —
+        // 23505 means already a participant, other clients already know
+        // about us, no event needed. Caller-side per shell/realtime.js
+        // doctrine. broadcast() fall-back path (no reused channel — shell
+        // doesn't hold a long-lived sub on tv_device:<device_key>).
+        if (!joinErr && window.publishParticipantRoleChanged) {
+          try {
+            await window.publishParticipantRoleChanged(ctx.device_key, {
+              session_id: session.id,
+            });
+          } catch (e) {
+            console.error('[elsewhere] participant_role_changed publish failed:', e);
+          }
+        }
       }
 
       // Navigate. Per FLAG-A: no &mgr=1 for games rejoin.
@@ -3133,14 +3154,33 @@
             // participants are not auto-managers. (DEFERRED "Games
             // deep-link auto-manager bug" covers the broader
             // games-manager-detection problem; this is one specific instance.)
-            // Best-effort join (idempotent — 23505 if already a participant;
-            // swallow either way).
-            await window.sb.rpc('rpc_session_join', {
+            // v2.101 (cluster Commit 2.6): branch role on app per
+            // docs/GAMES-CONTROL-MODEL.md § 2.4.4 — same fix as
+            // handleSameAppRejoin above. R4 catch is rare (race-only) but
+            // fixed in same commit for consistency. Capture joinErr via
+            // the standard supabase-js destructure pattern (replaces the
+            // earlier .catch() which couldn't distinguish 23505 from
+            // success — needed now to gate the publish below).
+            const { error: r4JoinErr } = await window.sb.rpc('rpc_session_join', {
               p_session_id: existing.id,
-              p_participation_role: 'audience',
-            }).catch(() => { /* already participant — fine */ });
+              p_participation_role: app === 'games' ? 'active' : 'audience',
+            });
 
             try { sessionStorage.setItem('elsewhere.active_tv.device_key', device_key); } catch (_) {}
+
+            // v2.101 (cluster Commit 2.6): publish participant_role_changed
+            // on actual fresh insert (r4JoinErr null). 23505 means already
+            // a participant — no event needed. Same gating as
+            // handleSameAppRejoin above.
+            if (!r4JoinErr && window.publishParticipantRoleChanged) {
+              try {
+                await window.publishParticipantRoleChanged(device_key, {
+                  session_id: existing.id,
+                });
+              } catch (e) {
+                console.error('[elsewhere] participant_role_changed publish failed:', e);
+              }
+            }
 
             if (app === 'karaoke') {
               location.href = 'karaoke/singer.html?code=' + encodeURIComponent(existing.room_code);
