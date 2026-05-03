@@ -2065,7 +2065,7 @@ After GAMES-CONTROL-MODEL.md spec amendment. Bundle with active/audience cluster
 **Deferred on:** 2026-05-02
 **Priority:** High — non-managers have no way to flip lobby state without exiting + rejoining
 **Area:** Games — `games/player.html` lobby UI (non-manager view) + new RPC migration
-**Status:** Deferred — needs new RPC + UI work
+**Status:** Resolved 2026-05-03 in commit `ae276f7` (cluster Commit 4, v2.106 games/player.html). Pattern 2 implementation: separate `<input id='participant-is-player'>` element rendered when `currentMyRow.control_role !== 'manager'`. Calls `rpc_session_set_my_participation_role` from db/017 (self-only RPC). Optimistic checkbox flip, then RPC, then publish gated on actual role change (mirrors v2.101 Prong 2 pattern). Error 55000 surfaces 'Room is full — remove a player first' toast and reverts. Hardware-verified GREEN 2026-05-03 against test sessions 8DSSXK + PQ6T3I (Tests 3 + 4 of Commit 4 verification plan: participant toggle off/on with realtime propagation to manager's iPhone, DB row correctly flips between active and audience).
 
 #### Context
 
@@ -2189,7 +2189,7 @@ After active/audience UX cluster — broader scope, benefits from fresh focus. M
 **Deferred on:** 2026-05-02
 **Priority:** Medium — surfaces as manager UX confusion at game-start ("do I have enough active players?")
 **Area:** Games — `games/player.html` `renderRoster`
-**Status:** Deferred — needs UI work
+**Status:** Resolved 2026-05-03 in commit `ae276f7` (cluster Commit 4, v2.106 games/player.html). renderRoster restructured to sort by joined_at and split into PLAYING (active) / WATCHING (audience) sections per § 2.4.5. Both sections always render even when count is zero. Audience rows get .audience CSS class (opacity .55) and .dot-dim dot color. Manager Remove button still appears on rows in either section. Hardware-verified GREEN 2026-05-03 against test sessions 8DSSXK + PQ6T3I (Tests 3 + 4: visual sectioning correctly reflects participation_role; Tests 1 + 2 + 5: PLAYING/WATCHING headers render with counts on both manager and non-manager views).
 
 #### Context
 
@@ -2541,6 +2541,34 @@ After more pressing items. The visible impact is limited (only affects users who
 
 - Same auth-loss likely affected Michael's Mac Chrome during the same break window. When Michael then joined a fresh session, he went through the legacy room-code form rather than the shell home Games tile path. That's why his join broadcast didn't propagate to Mike's iPhone — the legacy doJoin path on `games/player.html` may not fire `publishParticipantRoleChanged` on fresh insert (latent — see the games/player.html doJoin investigation note below).
 - The legacy-doJoin-no-publish observation is itself a candidate for its own DEFERRED entry, but couldn't be cleanly reproduced (when both devices were freshly authenticated via shell Games tile path, propagation worked). Filing it as a sub-note here so the observation isn't lost. If reproduced under controlled conditions, file as separate entry.
+
+---
+
+### Deferred: Trivia integration (Session 5 Part 3b): rewrite considered acceptable if active/audience integration would benefit
+
+**Deferred in:** Cluster Commit 4 closeout (2026-05-03)
+**Deferred on:** 2026-05-03
+**Priority:** Low — informational; affects scope decision when Trivia integration ships
+**Area:** Trivia game logic (`games/player.html`, `triviaGenerate` function and game-room rendering)
+**Status:** Open — informational note, no action required until 3b kickoff
+
+#### Context
+
+Mike noted during cluster closeout that he has not tested Trivia heavily. The existing implementation works but lacks battle-tested confidence equivalent to Last Card or Karaoke. When Session 5 Part 3b (Trivia integration with active/audience) is drafted, the default assumption that "modify-don't-rewrite" need not hold — if the integration would be cleaner via partial or full rewrite of Trivia's existing game logic, that's an acceptable approach.
+
+Per CLAUDE.md doctrine (line 140), `triviaGenerate` calls the Anthropic API directly from the manager's browser with no auth header. Any rewrite should preserve this constraint or explicitly redesign it. The Anthropic API call itself doesn't need to change — only the role-aware admission/control routing that Part 3b adds.
+
+#### When picking up
+
+Whoever drafts the Trivia 3b prompt should evaluate whether the existing Trivia code is worth carrying forward or whether a fresh implementation aligned with the now-shipped active/audience patterns (toggle, roster sectioning, lock-on-start, late-joiner choice screen per § 4.1) would be cleaner. Either path is acceptable.
+
+This DEFERRED entry is informational, not blocking — it just preserves Mike's permission that the Trivia work isn't constrained by preservation of existing implementation.
+
+#### Related
+
+- `docs/GAMES-CONTROL-MODEL.md` § 4.1 — Trivia spec (admission_mode `self_join`, late-joiner choice screen, manager controls Reveal/Next/Skip)
+- CLAUDE.md line 140 — doctrine on `triviaGenerate` Anthropic API direct-from-browser pattern
+- Cluster Commit 4 (`ae276f7`, v2.106 games/player.html) — the active/audience patterns Part 3b will integrate with
 
 ---
 

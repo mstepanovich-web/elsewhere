@@ -6,7 +6,7 @@
 >
 > Read top-to-bottom. Pointers to deeper docs are at the end.
 
-Last updated: 2026-05-03 (active/audience UX cluster mid-flight — spec + migrations + default-role fix + shell rejoin bypass fix shipped through cluster Commit 2.6 [v2.105 games + v2.101 index]; toggle UI + roster sectioning pending in cluster Commit 4 [v2.106 games])
+Last updated: 2026-05-03 (active/audience UX cluster fully closed — spec + migrations + default-role fix + shell rejoin bypass + toggle UI + roster sectioning + lock-on-start all shipped and hardware-verified through cluster Commit 4 [v2.106 games] plus adjacent Last Card game-end race fix [v2.107 games])
 
 ---
 
@@ -222,39 +222,41 @@ Don't put server-side dirs (`db/`, `supabase/`) into the iOS bundle — they're 
 
 ## Current state (May 2026)
 
-### Latest shipped: Active/audience UX cluster (mid-flight) + 3a.2 verification fix-forward
-- `games/player.html` at `v2.105` on `origin/main`
+### Latest shipped: Active/audience UX cluster (fully closed) + Last Card game-end race fix
+- `games/player.html` at `v2.107` on `origin/main`; `index.html` at `v2.101` (shell rejoin bypass fix)
 - 3a foundation chain (3a.1 plumbing → 3a.2 manager controls → 3a.2 hardware verification + fix-forward): see `docs/SESSION-5-PART-3-CLOSING-LOG.md` and `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md`
 - 3a.2 hardware-verified on iPhone Safari + laptop Chrome 2026-05-02: 4/6 gate items fully green; 2/6 partial for environmental + feature-gap reasons (not regressions)
 - Two 3a.2 fix-forward commits 2026-05-02:
   - `b5e1af2` (v2.102) — `publishSessionEnded` reused-channel pattern (BUG-10 redux)
   - `7dde17c` (v2.103) — `doJoin` publishes `participant_role_changed` (manager roster propagation on rejoin)
-- Active/audience UX cluster started 2026-05-02 (3 of 4 commits shipped):
+- Active/audience UX cluster (started 2026-05-02, fully closed 2026-05-03 — all 4 commits shipped + verified):
   - Spec amendment: `410ccc1` — GAMES-CONTROL-MODEL.md § 2.4 cluster (§ 2.4.1–§ 2.4.6 NEW: manager-bar buttons, manager toggle, participant toggle, default role at lobby join, manager visibility split, lock-on-start) + § 1 audience definition extended for lobby-state opt-out path
   - Migration db/017: `8c83b35` — `db/017_set_my_participation_role.sql` (self-only RPC for participant active↔audience flip); applied to prod at `b1a8e4a`
   - Default role fix (PARTIAL): `754d0a8` (v2.104) — `doJoin` caller-side override to `'active'` for non-manager fresh joins per § 2.4.4. Hardware verification 2026-05-02 revealed two bypass paths the partial fix didn't cover: (i) the manager path (`rpc_session_start` in db/009 hardcoded `'audience'` regardless of app); (ii) the rejoin/refresh path (doJoin's 23505 catch swallowed all already-a-participant cases without examining role).
   - Default role fix (FULL except shell rejoin path): v2.105 (2026-05-02) — completes § 2.4.4 implementation for the manager path and the games/player.html doJoin path. Migration `db/018_session_start_active_default.sql` branches `rpc_session_start`'s manager insert on `p_app` ('games' → 'active'; 'karaoke' and other → 'audience' preserving karaoke schema-state semantics per `docs/KARAOKE-CONTROL-MODEL.md` § 1). doJoin restructured from join-then-handle-23505 to check-then-conditionally-join via `refreshSessionState` — eliminates 23505 as the every-refresh path; preserves participant toggle state across refresh. Hardware test session KMGGL8 on 2026-05-02 verified the manager path AND doJoin restructure GREEN, but surfaced a third bypass: non-manager joining via the shell home-screen Games tile routes through `index.html` `handleSameAppRejoin` which hardcoded `'audience'` and didn't publish `participant_role_changed`. That bypass closed in cluster Commit 2.6 below.
-  - Shell rejoin bypass fix (cluster Commit 2.6): v2.101 (2026-05-03, index.html stamp) — closes the third bypass. Two prongs in `index.html`: (1) branch the role on `app` at both shell `rpc_session_join` call sites (`handleSameAppRejoin` line 2974, the active failure mode for non-manager game-tile taps; `handleTvRemoteTileTap` R4 catch line 3138, latent race-only path fixed for consistency); (2) add `publishParticipantRoleChanged` after each successful join so the manager's roster updates within 1-2s without manual refresh. games/player.html stays at v2.105 — its doJoin restructure was already correct; the shell-side publish makes the games/player.html doJoin branch (b) "already a participant — using existing row" the right behavior because the shell already propagated the join to other clients before player.html ran.
-  - **Pending Commit 4 (v2.106 games/player.html):** participant "I'm playing in this game" toggle UI (per § 2.4.3) + lobby roster sectioning into PLAYING (N) / WATCHING (M) headers (per § 2.4.5). Previously labeled "Commit 3" before the v2.104→v2.105→Commit-2.6 chain renumbered the queue.
-- Migrations tracker shipped 2026-05-02: `97f1e83` — `db/MIGRATIONS_APPLIED.md` checklist + CLAUDE.md doctrine ("a migration committed to repo is NOT shipped until applied to prod"). All 18 migrations listed; db/015 marked ❓ Verify pending pg_trigger audit; db/017 + db/018 both flipped to ✅ same-day after manual prod application.
+  - Shell rejoin bypass fix (cluster Commit 2.6): `8825a08` (v2.101 index.html stamp, 2026-05-03) — closes the third bypass. Two prongs in `index.html`: (1) branch the role on `app` at both shell `rpc_session_join` call sites; (2) add `publishParticipantRoleChanged` after each successful join so the manager's roster updates within 1-2s without manual refresh. Hardware-verified GREEN 2026-05-03 against DMZS4G + U97XUQ.
+  - Commit 4 (toggle UI + roster sectioning + lock-on-start): `ae276f7` (v2.106 games/player.html, 2026-05-03) — participant "I'm playing in this game" toggle UI (per § 2.4.3, calls `rpc_session_set_my_participation_role` from db/017) + lobby roster sectioning into PLAYING (N) / WATCHING (M) headers (per § 2.4.5) + lock-on-start wiring (per § 2.4.6, `applyToggleLockState()` called from renderRoster + goToGameRoom + watchFromLobby). All 6 verification tests GREEN against test sessions 8DSSXK / SU8RMJ / BVBZ39 / PQ6T3I / TBFJJH on 2026-05-03.
+- **Adjacent fix surfaced during Commit 4 verification:** Last Card game-end broadcast race — `6ce533b` (v2.107 games/player.html, 2026-05-03). Manager's End Game broadcast `game-over` correctly, but non-manager's tab-visibility-change recovery code fired `request-state` ~1s later, manager's still-warm `gameInProgress=true` state responded with `game-state phase:playing`, non-manager's game-state handler unconditionally re-rendered Last Card and clobbered the screen-gameover transition. Two-line fix: (1) `managerEndGame` sets `gameInProgress=false` before broadcasting; (2) `game-state` receiver early-returns when `gameInProgress` is false. Hardware-verified GREEN against TBFJJH rematch flow on 2026-05-03.
+- Migrations tracker shipped 2026-05-02: `97f1e83` — `db/MIGRATIONS_APPLIED.md` checklist + CLAUDE.md doctrine ("a migration committed to repo is NOT shipped until applied to prod"). All 18 migrations listed; db/015 verified ✅ 2026-05-03 (`07ff37d`); db/017 + db/018 both flipped to ✅ same-day after manual prod application.
 - `db/016_remove_participant.sql` applied to prod 2026-05-02 (manual application via Supabase SQL Editor mid 3a.2 verification)
 - iOS Capacitor bundle still at v2.99 (pre-3a.1) — sync deferred until next Capacitor-relevant work; Mobile Safari is the verification target per CLAUDE.md doctrine
 - See `docs/SESSION-5-PART-3-CLOSING-LOG.md`, `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md`, and `docs/GAMES-CONTROL-MODEL.md` § 2.4 for full details
 
-### Hardware verification status (mid-flight)
+### Hardware verification status
 - **v2.102 + v2.103 fix-forward** — verified green 2026-05-02 against fresh test environment.
 - **v2.104 default-role fix — superseded by v2.105.** Original v2.104 verification plan is moot.
-- **v2.105 default-role fix (full except shell rejoin) — partially verified.** Hardware test session KMGGL8 on 2026-05-02 confirmed the manager path GREEN (db/018 made Mike land as `'active'`) and the doJoin branch (b) preservation GREEN (refresh kept Mike's role intact). Surfaced the third bypass via the shell home-screen path — Michael landed as `'audience'` via `handleSameAppRejoin`, and Mike's roster didn't propagate. Diagnosis captured in verification log addendum.
-- **Cluster Commit 2.6 (v2.101 index.html stamp) — NOT YET VERIFIED.** Ships the shell rejoin bypass fix (Prong 1 + Prong 2 in `index.html`). See `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` addendum sub-section "Cluster Commit 2.6" for the re-run verification plan.
-- **Pending Commit 4 of cluster (v2.106 games/player.html stamp)** — toggle UI + roster sectioning. Not yet written; gated on Commit 2.6 verification.
+- **v2.105 default-role fix (full except shell rejoin) — partially verified at v2.105 (KMGGL8 surfaced third bypass), then re-verified GREEN 2026-05-03 (DMZS4G) as part of Cluster Commit 2.6's regression smoke.**
+- **Cluster Commit 2.6 (v2.101 index.html stamp) — verified GREEN 2026-05-03** against DMZS4G + U97XUQ. All 4 verification steps passed.
+- **Cluster Commit 4 (v2.106 games/player.html stamp) — verified GREEN 2026-05-03.** All 6 tests passed against 8DSSXK / SU8RMJ / BVBZ39 / PQ6T3I / TBFJJH (the post-rematch verification room used post-v2.107 deploy). Lock-on-start re-enable half required the v2.107 Last Card race fix to verify; once landed, the rematch flow returned both devices to lobby with toggles correctly enabled and original help text restored.
+- **Last Card game-end race fix (v2.107 games/player.html) — verified GREEN 2026-05-03** against TBFJJH rematch flow (Mike → Start New Game → End Game → Play Again Same Players → both devices return to lobby cleanly, no spontaneous re-render to Last Card).
 
 ### Active deferred items
 
-Active/audience UX cluster (mid-flight 2026-05-02; 3 of 4 commits shipped):
+Active/audience UX cluster (started 2026-05-02, fully closed 2026-05-03 — all entries resolved):
 - ~~GAMES-CONTROL-MODEL.md spec gap on lobby-state participation~~ — **Resolved 2026-05-02 in `410ccc1`** (§ 2.4 cluster amendment + § 1 audience extension).
-- ~~Default `participation_role` for self-join is `'audience'` instead of `'active'`~~ — **Partially resolved 2026-05-02 in `754d0a8` (v2.104, non-manager fresh-join only); fully resolved in v2.105 (this commit) — adds db/018 for manager path + doJoin restructure for rejoin/refresh path.** Hardware verification of v2.105 pending.
-- No participant-side "I'm playing in this game" toggle — db/017 RPC shipped (`8c83b35` + applied at `b1a8e4a`); UI ships in pending Commit 4 (v2.106).
-- Manager lobby view doesn't differentiate active vs audience — ships in pending Commit 4 (v2.106) (PLAYING/WATCHING roster sectioning per § 2.4.5).
+- ~~Default `participation_role` for self-join is `'audience'` instead of `'active'`~~ — **Resolved 2026-05-03** via the v2.104 → v2.105 → Cluster Commit 2.6 (`8825a08`, v2.101 index.html) chain; closeout commit `c77cc74`.
+- ~~No participant-side "I'm playing in this game" toggle~~ — **Resolved 2026-05-03 in `ae276f7`** (cluster Commit 4, v2.106 games/player.html).
+- ~~Manager lobby view doesn't differentiate active vs audience~~ — **Resolved 2026-05-03 in `ae276f7`** (cluster Commit 4, v2.106 games/player.html).
 
 Other 3a.2-era items (filed 2026-05-02):
 - ~~No tracking of which `db/*.sql` migrations have been applied to production~~ — **Resolved 2026-05-02 in `97f1e83`** (`db/MIGRATIONS_APPLIED.md` checklist + CLAUDE.md doctrine).
@@ -268,14 +270,10 @@ Carried from earlier sessions:
 - Custom confirm-modal styling (papercut from 2c.2 / 2c.3 / 2e.2 §4)
 - Pre-existing JS error at `singer.html:645` (`stat-w` element missing)
 
-### Up next: hardware-verify cluster Commit 2.6 + ship Commit 4 of active/audience cluster
-1. **Verify cluster Commit 2.6 (v2.101 index.html) on hardware.** Use a fresh session (new room code) and clean test users — Mike + Michael, both signed in. Expected:
-   - Mike taps Games tile from shell home → shell calls `rpc_session_start` → manager row inserted with `participation_role = 'active'` (per db/018 branch). Mike navigates to player.html → doJoin branch (b) "already a participant (role=active)". (This was already GREEN at v2.105; re-run as smoke check.)
-   - Michael taps Games tile from shell home → shell sees active session same app → routes to `handleSameAppRejoin` → `rpc_session_join` with `'active'` (per Commit 2.6 Prong 1) → Michael's row inserted as `'active'`. Shell publishes `participant_role_changed` (per Commit 2.6 Prong 2). Mike's iPhone roster reflects Michael within 1-2s WITHOUT manual refresh. Michael navigates to player.html → doJoin branch (b) "already a participant (role=active)" — preserved.
-   - Page refresh on either phone: doJoin runs again → branch (b) → log shows their existing role unchanged. No participant_role_changed published from doJoin (since nothing changed).
-   - Karaoke regression check: Mike taps Karaoke tile (after ending the games session). His row in karaoke session lands as `'audience'` (per karaoke schema-state semantics — Available Singer not queued). Karaoke flows still work as before.
-2. **Once Commit 2.6 verifies green, ship Commit 4 (v2.106 games/player.html stamp) — active/audience cluster final.** Per the prompt at `docs/PROMPTS/active-audience-commit-3.md`: participant-side "I'm playing in this game" toggle UI (uses `rpc_session_set_my_participation_role` from db/017 — already applied to prod) + lobby roster sectioning into PLAYING (N) / WATCHING (M) headers per § 2.4.5. Single commit, version bump v2.105 → v2.106 on games/player.html. Note the prompt's filename references "commit-3" — that label predates the v2.104→v2.105→Commit-2.6 chain renumbering; the prompt content itself is still accurate.
-3. **After cluster ships,** Session 5 Part 3b (Trivia integration per `docs/GAMES-CONTROL-MODEL.md` § 4.1) becomes unblocked. Per `docs/SESSION-5-PART-3-CLOSING-LOG.md` § "Up next": Trivia uses `self_join` admission, late-joiner choice screen (Active vs Audience), manager controls (Reveal/Next/Skip) routed through `control_role` check.
+### Up next: Session 5 Part 3b — Trivia integration
+Active/audience cluster is closed. Next track is Trivia integration per `docs/GAMES-CONTROL-MODEL.md` § 4.1:
+- Trivia uses `self_join` admission, late-joiner choice screen (Active vs Audience), manager controls (Reveal/Next/Skip) routed through `control_role` check.
+- See `docs/SESSION-5-PART-3-CLOSING-LOG.md` § "Up next" for the full plan.
 
 ---
 

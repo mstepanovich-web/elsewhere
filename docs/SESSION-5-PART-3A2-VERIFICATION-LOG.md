@@ -147,7 +147,7 @@ If v2.105 verifies green on all four steps, proceed with **Commit 4 (v2.106)** o
 - Commit 2 (default-role partial — non-manager fresh-join): ✅ shipped (v2.104).
 - Commit 2.5 (default-role full except shell rejoin — db/018 + doJoin restructure): ✅ shipped (v2.105). Hardware test session KMGGL8 verified manager path + doJoin restructure GREEN; surfaced shell rejoin bypass (Commit 2.6). Re-verified (manager + refresh preservation) green at 2026-05-03 against DMZS4G as part of Commit 2.6 verification.
 - Commit 2.6 (shell rejoin bypass fix): ✅ shipped `8825a08` (v2.101 index.html), hardware-verified GREEN 2026-05-03 against DMZS4G + U97XUQ. All 4 verification steps passed.
-- Commit 4 (toggle UI + roster split, v2.106 games/player.html stamp): ⏳ unblocked. Commit 2.6 verification GREEN; foundation ready. Single commit: participant "I'm playing in this game" toggle UI per § 2.4.3 + lobby roster sectioning into PLAYING/WATCHING per § 2.4.5. Version bump v2.105 → v2.106 on games/player.html. See `docs/PROMPTS/active-audience-commit-3.md` for the prompt.
+- Commit 4 (toggle UI + roster split, v2.106 games/player.html stamp): ✅ shipped `ae276f7` (v2.106 games/player.html), all 6 verification tests GREEN 2026-05-03 (final test confirmed post-v2.107 Last Card race fix). Cluster fully closed.
 
 ---
 
@@ -214,3 +214,33 @@ All 4 verification steps green:
 **Net assessment:** active/audience cluster default-role thread fully closed across all three bypass paths (manager via db/018; non-manager fresh-join via doJoin caller-side; non-manager rejoin via shell-side branch + publish). Foundation ready for Commit 4 (toggle UI + roster sectioning, v2.106 games/player.html stamp).
 
 The DEFERRED entry "Default participation_role for self-join is 'audience' instead of 'active'" status was flipped to "Fully resolved 2026-05-03" in the same commit as this RESULTS section.
+
+### Cluster Commit 4 verification — RESULTS (2026-05-03)
+
+**Test sessions:** 8DSSXK, SU8RMJ, BVBZ39, PQ6T3I, post-v2.107-deploy session, and TBFJJH (post-rematch verification).
+**Test users:** Mike Stepanovich (manager, iPhone Safari) + michael stepanovich (non-manager, Mac Chrome).
+**Outcome:** All 6 tests GREEN.
+
+1. **Manager regression smoke (Test 1):** ✅ Mike's row in 8DSSXK = `(manager, active)`. db/018 still working post-v2.106. PLAYING (1) / WATCHING (0) section headers rendering. v2.106 stamp confirmed.
+
+2. **Non-manager fresh-join via shell home tile (Test 2):** ✅ Michael's row = `(none, active)`. Mike's iPhone roster updated within 1-2s without manual refresh. Both v2.101 prongs continuing to work post-v2.106. Verified twice (8DSSXK and PQ6T3I).
+
+3. **Participant toggle OFF (Test 3):** ✅ Michael unchecked his "I'm playing" toggle. Optimistic flip immediate; DB row updated to `participation_role = 'audience'`; both views moved Michael from PLAYING (1) to WATCHING (1) within 1-2s. Audience styling applied (dimmed opacity, dot-dim).
+
+4. **Participant toggle ON (Test 4):** ✅ Reverse propagation worked cleanly. Michael back to PLAYING (2), full opacity, green dot. DB row back to `active`. No stale state.
+
+5. **Manager toggle OFF (Test 5):** ✅ Mike toggled himself off. Mike moved to WATCHING (1) on both devices, MANAGER badge preserved on his row in WATCHING section, full Manager UI controls (END SESSION, START NEW GAME, SWITCH GAME) still functional. Confirmed `participation_role` and `control_role` are independent dimensions per § 2.4.2 + § 2.4.5.
+
+6. **Lock-on-start (Test 6):** ✅ GREEN.
+   - **Disable-when-game-starts half:** un-observable in main flow per the mutation-site audit (commit `ae276f7`'s investigation found that start handlers navigate away from screen-game-room in the same tick `gameInProgress` flips true, so the toggle's disabled state is hidden by screen change rather than disabled state). Static-reviewed correct in code.
+   - **Re-enable-when-game-ends half:** initially blocked by Last Card game-end broadcast race surfaced during this test (manager's End Game broadcast arrived correctly on non-manager, but non-manager's tab-visibility-change recovery code triggered `request-state`, which manager's still-warm game state responded to with `phase:playing`, re-rendering Last Card and clobbering screen-gameover transition). Race resolved in commit `6ce533b` (v2.107). Re-enable half subsequently hardware-verified GREEN against post-rematch lobby (room TBFJJH): Mike → Start New Game → End Game → Play Again Same Players → both devices return to lobby; manager's "I'm playing" toggle enabled with help text "Your name appears first in the lobby" (NOT the locked text "Game in progress — use the game-specific controls to step out."). Lock correctly released by `applyToggleLockState()` called from `goToGameRoom()` during the rematch path.
+   - **Late-joiner edge case** (`screen-watching` → `screen-game-room` while `gameInProgress=true`): covered by `watchFromLobby()` wrapper added in Commit 4. Static-reviewed correct.
+
+**Net assessment:** Cluster Commit 4 fully verified. Active/audience cluster shipping complete and functional. Toggle UI (manager + participant), roster sectioning into PLAYING/WATCHING, and lock-on-start lifecycle all hardware-verified GREEN.
+
+**Adjacent issues surfaced during Commit 4 verification (filed separately):**
+- Last Card game-end broadcast race: resolved in commit `6ce533b` (v2.107) — see DEFERRED entry.
+- Tab suspension + Supabase auth expiry → legacy-mode rejoin: filed as DEFERRED entry (commit `eb01400`).
+- Tile-tap → next-screen latency: filed as DEFERRED entry (commit `c77cc74`).
+
+---
