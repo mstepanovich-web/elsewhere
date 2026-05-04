@@ -374,7 +374,6 @@
     <button class="mgr-btn"         id="mgr-reveal" onclick="managerReveal()" style="display:none">Reveal</button>
     <button class="mgr-btn"         id="mgr-next"   onclick="managerNext()"   style="display:none">Next →</button>
     <button class="mgr-btn"         id="mgr-skip"   onclick="managerSkip()"   style="display:none">Skip</button>
-    <button class="mgr-btn"                         onclick="goToLobby()">☰ Games</button>
     <button class="mgr-btn"    id="mgr-endgame"       onclick="managerEndGame()" style="display:none">End Game</button>
     <button class="mgr-btn"                         onclick="managerSwitchGame()">Switch Game</button>
     <button class="mgr-btn danger"                  onclick="managerEndSession()">End Session</button>
@@ -810,7 +809,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.112</div>
+<div class="ver">v2.113</div>
 
 <script>
 'use strict';
@@ -1626,6 +1625,10 @@ function selectGame(game) {
     if (premiumRow)  premiumRow.style.display = 'flex';
     if (premiumPill) premiumPill.classList.toggle('on', isPremiumTrivia());
     applyPremiumSubtitle();
+    // v2.113: reset stale status text from prior generation so the previous
+    // round's "✓ N questions ready! (premium)" doesn't linger across navigation.
+    const sta = document.getElementById('trivia-gen-status');
+    if (sta) sta.textContent = '';
   } else {
     if (premiumRow)  premiumRow.style.display = 'none';
   }
