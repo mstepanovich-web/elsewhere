@@ -2585,7 +2585,7 @@ Modify (Path B) wins on cost (~80–120 LOC of additive changes vs ~250 LOC for 
 
 1. **Lobby card subtitle dynamism** (`games/player.html` line 403). Currently hardcoded HTML: `<div class="game-desc">AI-generated questions · 2–20 players</div>`. Inaccurate when premium is OFF. Make this dynamic via JS init code or restructure the line into a JS-rendered element. The card is visible only briefly during game selection on the manager's lobby screen, so this is a low-impact polish item.
 
-2. **Usage indicator UI** ("you've used N/20 today"). Would let users see their daily premium quota approaching the limit rather than getting a surprise 429 on the 21st generation. Requires:
+2. **Usage indicator UI** ("you've used N/20 today"). Would let users see their daily premium quota approaching the limit rather than getting a surprise 429 on the 21st generation. **Partially mitigated 2026-05-04 in Commit C (v2.112)**: the new in-UI toggle's subtext "AI-generated, higher quality · 20/day limit" mentions the limit upfront, preempting the surprise. Full dynamic counter implementation still deferred. Requires (when picked up):
    - Uncommenting the optional read policy in `db/019_trivia_premium_usage.sql` (`create policy "users see their own usage" on public.trivia_premium_usage for select using (auth.uid() = user_id);`)
    - Apply the policy update via Supabase SQL Editor
    - Browser-side: add a `getRemainingPremiumQuota()` helper that queries `trivia_premium_usage` directly via supabase-js, returns `DAILY_LIMIT - count` or `DAILY_LIMIT` if no row
@@ -2596,6 +2596,8 @@ Modify (Path B) wins on cost (~80–120 LOC of additive changes vs ~250 LOC for 
    - Or: dropping the suffix and relying solely on the dynamic subtitle as the visual signal
 
 **When picking up**: most natural during a "Trivia UX polish" Session 5 sub-track.
+
+**Resolved in Commit C (v2.112, 2026-05-04)**: URL-param routing gap on iOS Safari. Hardware testing 2026-05-04 surfaced that the URL `?premium=1` mechanism shipped in Commit B (`7f1c99c`) is unreliable in practice — the query param gets stripped during session routing before `isPremiumTrivia()` ever runs. Resolved by the in-UI toggle on the Trivia info screen, which writes directly to localStorage (no URL round-trip). The URL backup path is preserved unchanged for compatibility with bookmarks / muscle memory.
 
 ---
 

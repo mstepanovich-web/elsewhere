@@ -89,6 +89,18 @@
     .camera-toggle::after { content: ''; position: absolute; width: 20px; height: 20px; border-radius: 50%; background: #fff; top: 3px; left: 3px; transition: transform 0.2s; }
     .camera-toggle.on::after { transform: translateX(18px); }
 
+    /* Premium row (Trivia info screen) — mirrors .camera-opt / .camera-toggle
+       layout exactly; gold instead of green for the .on state to match
+       Elsewhere's gold-as-active-affordance convention. */
+    .premium-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin: 12px 16px 0; border-radius: var(--radius-md); border: 1px solid var(--color-border-dim); background: var(--color-surface); cursor: pointer; }
+    .premium-row-text { flex: 1; }
+    .premium-row-label { font-size: var(--text-sm); color: var(--color-text); }
+    .premium-row-sub { font-size: var(--text-xs); color: var(--color-text-faint); margin-top: 2px; }
+    .premium-toggle { width: 44px; height: 26px; border-radius: 13px; background: var(--color-border); position: relative; transition: background 0.2s; flex-shrink: 0; }
+    .premium-toggle.on { background: var(--color-gold); }
+    .premium-toggle::after { content: ''; position: absolute; width: 20px; height: 20px; border-radius: 50%; background: #fff; top: 3px; left: 3px; transition: transform 0.2s; }
+    .premium-toggle.on::after { transform: translateX(18px); }
+
     /* Manager checkbox */
     .mgr-checkbox-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--color-border-dim); background: var(--color-surface); }
     .mgr-checkbox-row input { width: 20px; height: 20px; accent-color: var(--color-gold); cursor: pointer; flex-shrink: 0; }
@@ -428,6 +440,13 @@
         <div class="back-link" onclick="goToLobby()">← Games</div>
         <div class="page-title" id="info-title">Last Card</div>
         <div class="page-sub" style="margin-top:4px;" id="info-sub">Uno-compatible card game</div>
+      </div>
+      <div class="premium-row" id="premium-row" style="display:none;" onclick="togglePremium()">
+        <div class="premium-row-text">
+          <div class="premium-row-label">Premium Questions</div>
+          <div class="premium-row-sub">AI-generated, higher quality · 20/day limit</div>
+        </div>
+        <div class="premium-toggle" id="premium-toggle"></div>
       </div>
       <div id="info-desc" style="padding:14px 16px 0;font-size:var(--text-sm);color:var(--color-text-dim);line-height:1.7;"></div>
       <div id="info-rules" style="padding:8px 16px 0;"></div>
@@ -791,7 +810,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.111</div>
+<div class="ver">v2.112</div>
 
 <script>
 'use strict';
@@ -1597,12 +1616,18 @@ function selectGame(game) {
   document.getElementById('info-title').textContent=info.title;
   document.getElementById('info-sub').textContent=info.sub;
   document.getElementById('info-desc').textContent=info.desc;
-  // Phase 2: dynamic Trivia copy when premium is enabled (override default
-  // Community-flavored copy with AI-flavored copy). Premium flag detection
-  // via isPremiumTrivia() — URL param wins, falls through to localStorage.
-  if (game === 'trivia' && isPremiumTrivia()) {
-    document.getElementById('info-sub').textContent  = 'AI-generated questions';
-    document.getElementById('info-desc').textContent = 'AI-generated trivia across the category you choose. Answer on your phone before the timer runs out. Bonus points for speed and answer streaks.';
+  // Phase 2: Trivia premium UI — show toggle row, sync pill state from
+  // localStorage, apply dynamic subtitle. For non-Trivia games, hide the row.
+  // applyPremiumSubtitle() overwrites info-sub / info-desc when premium is on,
+  // OR restores the defaults set just above when premium is off.
+  const premiumRow = document.getElementById('premium-row');
+  const premiumPill = document.getElementById('premium-toggle');
+  if (game === 'trivia') {
+    if (premiumRow)  premiumRow.style.display = 'flex';
+    if (premiumPill) premiumPill.classList.toggle('on', isPremiumTrivia());
+    applyPremiumSubtitle();
+  } else {
+    if (premiumRow)  premiumRow.style.display = 'none';
   }
   document.getElementById('limit-val').textContent=playerLimit;
   document.getElementById('limit-range').textContent=info.min+' – '+info.max+' players';
@@ -2836,6 +2861,41 @@ function isPremiumTrivia() {
   }
   try { return localStorage.getItem('elsewhere-trivia-premium') === '1'; }
   catch (_) { return false; }
+}
+
+// In-UI toggle handler for the .premium-row on screen-game-info. Writes to
+// localStorage immediately, flips the pill's .on class, and re-applies the
+// dynamic subtitle so info-sub / info-desc update in real time. The URL
+// ?premium=1/0 mechanism in isPremiumTrivia remains as a backup activation
+// path; this handler is the primary path post-Commit C.
+function togglePremium() {
+  let currentlyOn = false;
+  try { currentlyOn = localStorage.getItem('elsewhere-trivia-premium') === '1'; }
+  catch (_) {}
+  const nextOn = !currentlyOn;
+  try {
+    if (nextOn) localStorage.setItem('elsewhere-trivia-premium', '1');
+    else localStorage.removeItem('elsewhere-trivia-premium');
+  } catch (_) {}
+  const pill = document.getElementById('premium-toggle');
+  if (pill) pill.classList.toggle('on', nextOn);
+  applyPremiumSubtitle();
+}
+
+// Extracted from selectGame's Commit-B inline override so togglePremium can
+// re-apply the subtitle in place when the user flips the toggle. Sets info-sub
+// and info-desc based on isPremiumTrivia() — premium-on uses AI-flavored copy,
+// premium-off restores the GAME_INFO.trivia defaults (Community-flavored).
+function applyPremiumSubtitle() {
+  if (currentGame !== 'trivia') return;
+  const info = GAME_INFO.trivia;
+  if (isPremiumTrivia()) {
+    document.getElementById('info-sub').textContent  = 'AI-generated questions';
+    document.getElementById('info-desc').textContent = 'AI-generated trivia across the category you choose. Answer on your phone before the timer runs out. Bonus points for speed and answer streaks.';
+  } else {
+    document.getElementById('info-sub').textContent  = info.sub;
+    document.getElementById('info-desc').textContent = info.desc;
+  }
 }
 
 const CATEGORIES=[
