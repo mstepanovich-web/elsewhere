@@ -2544,31 +2544,80 @@ After more pressing items. The visible impact is limited (only affects users who
 
 ---
 
-### Deferred: Trivia integration (Session 5 Part 3b): rewrite considered acceptable if active/audience integration would benefit
+### Deferred: Trivia integration (Session 5 Part 3b): modify-existing recommended per cluster-closeout audit
 
 **Deferred in:** Cluster Commit 4 closeout (2026-05-03)
 **Deferred on:** 2026-05-03
 **Priority:** Low — informational; affects scope decision when Trivia integration ships
 **Area:** Trivia game logic (`games/player.html`, `triviaGenerate` function and game-room rendering)
-**Status:** Open — informational note, no action required until 3b kickoff
+**Status:** Open — modify-existing approach recommended per audit; specific scope to be evaluated at 3b kickoff
 
 #### Context
 
 Mike noted during cluster closeout that he has not tested Trivia heavily. The existing implementation works but lacks battle-tested confidence equivalent to Last Card or Karaoke. When Session 5 Part 3b (Trivia integration with active/audience) is drafted, the default assumption that "modify-don't-rewrite" need not hold — if the integration would be cleaner via partial or full rewrite of Trivia's existing game logic, that's an acceptable approach.
 
+Cluster-closeout audit (read-only review of `games/player.html`, 2026-05-03) finds Trivia's existing implementation is ~200 LOC, single-responsibility-clean, and structurally aligned with § 4.1 spec. The active/audience integration is additive (new late-joiner choice screen + admission_mode dispatch + Skip Question manager control), not transformative. No tangle, no fundamental architecture mismatch. Static review surfaces no Last-Card-race-shape bugs in Trivia (its auto-end at `triviaNext` correctly sets `gameInProgress=false` before broadcasts).
+
+Modify (Path B) wins on cost (~80–120 LOC of additive changes vs ~250 LOC for full rewrite), risk (existing scoring/streak math is tuned and works), and quality preservation (Anthropic API integration, prompt structure, state machine, DOM layout all worth keeping verbatim). Confidence: Medium-High.
+
+The Anthropic model is two majors behind current Sonnet 4.6 (`claude-sonnet-4-20250514` at line 801) — worth refreshing during 3b work.
+
 Per CLAUDE.md doctrine (line 140), `triviaGenerate` calls the Anthropic API directly from the manager's browser with no auth header. Any rewrite should preserve this constraint or explicitly redesign it. The Anthropic API call itself doesn't need to change — only the role-aware admission/control routing that Part 3b adds.
 
 #### When picking up
 
-Whoever drafts the Trivia 3b prompt should evaluate whether the existing Trivia code is worth carrying forward or whether a fresh implementation aligned with the now-shipped active/audience patterns (toggle, roster sectioning, lock-on-start, late-joiner choice screen per § 4.1) would be cleaner. Either path is acceptable.
-
-This DEFERRED entry is informational, not blocking — it just preserves Mike's permission that the Trivia work isn't constrained by preservation of existing implementation.
+3b drafting should plan a Path B (modify) approach. New work scope: late-joiner choice screen (~40 LOC), admission_mode dispatch in `handleMessage`'s `game-state` receiver (~30 LOC), Skip Question manager-bar wiring (~20 LOC), polish. The Anthropic API call structure (line 2838+), score/streak math (`triviaReveal` line 2917+), and 4-option DOM layout are all worth preserving verbatim.
 
 #### Related
 
 - `docs/GAMES-CONTROL-MODEL.md` § 4.1 — Trivia spec (admission_mode `self_join`, late-joiner choice screen, manager controls Reveal/Next/Skip)
 - CLAUDE.md line 140 — doctrine on `triviaGenerate` Anthropic API direct-from-browser pattern
 - Cluster Commit 4 (`ae276f7`, v2.106 games/player.html) — the active/audience patterns Part 3b will integrate with
+
+---
+
+### Deferred: Euchre integration (Session 5 Part 3c): modify-existing recommended per cluster-closeout audit
+
+**Deferred in:** Cluster Commit 4 closeout audit (2026-05-03)
+**Deferred on:** 2026-05-03
+**Priority:** Low — informational; affects scope decision when Euchre integration ships
+**Area:** Euchre game logic (`games/player.html` lines 650+ DOM, ~2961-3599 functions)
+**Status:** Open — modify-existing approach recommended per audit; prerequisite Bug A + Bug B fix shipped 2026-05-03 in commit `SHA-PLACEHOLDER` (v2.108)
+
+#### Context
+
+Mike has never tested Euchre heavily — the implementation works in static review but lacks battle-tested confidence. Cluster-closeout audit (2026-05-03) finds Euchre is the largest game by far in `games/player.html` (~700 LOC, ~3.5x Trivia's footprint). The card-game engine itself (~300 LOC: deck building, trump/bower handling, suit-following rules, partnership scoring, bidding state machine) is correctness-critical and tedious to re-derive — left bower as trump, going-alone scoring, follow-suit edge cases all live there. Re-deriving from scratch is a multi-day effort with high subtle-bug risk. Modify (Path B) wins on cost (~200-300 LOC additive changes vs ~800-900 LOC full rewrite) and on correctness preservation. Confidence: Medium (the partnership-reassignment decision in § 3.3 spec is deferred; could push integration cost higher once that decision is made).
+
+#### Per § 3.3 spec gaps
+
+- `admission_mode: manager_approved_batch` — no concept in current code
+- `capacity: 4` strict — already enforced at start (`managerStartEuchre` rejects ≠ 4)
+- Late-joiner queueing — none; late joiners hit `screen-watching`
+- End Hand button — new manager control
+- Force Trump Call button — new manager control (spec says deferrable)
+- Hand-end seat-refill picker — significant new UI
+- Partnership reassignment on player swap — spec deferred decision; whatever direction, code doesn't support it
+- Mid-game role flips — teams + scores frozen at start; if active flips to audience mid-game, partnership breaks
+
+#### When picking up
+
+3c drafting should plan a Path B (modify) approach following the v2.108 prequel fix. New work scope: hand-end picker UI (~80 LOC), End Hand + Force Trump Call buttons (~50 LOC), admission/queue wiring (~50 LOC), late-joiner sit-out UI (~40 LOC). Preserve: full card-game engine (`euBuildDeck`, `euEffectiveSuit`, `euCardRank`, `euCanPlay`, `euShuffle`, `euBuildTeams`, `euTeamOf`, all `euApply*` mutators) — these are correctness-critical. Resolve § 3.3 partnership-reassignment decision before sizing the picker UI.
+
+#### Related
+
+- `docs/GAMES-CONTROL-MODEL.md` § 3.3 — Euchre spec
+- v2.108 prequel fix (commit `SHA-PLACEHOLDER`) — closes Bugs A + B in `euEndHand` auto-end path
+- Cluster Commit 4 (`ae276f7`) — active/audience patterns Part 3c will integrate with
+
+---
+
+### Deferred: Euchre auto-end path: gameInProgress flag not cleared, game-over not broadcast
+
+**Deferred in:** Cluster-closeout audit (2026-05-03)
+**Deferred on:** 2026-05-03
+**Priority:** High — non-managers stuck on screen-euchre indefinitely after auto-end; same race shape as today's Last Card v2.107 fix
+**Area:** Euchre game logic (`games/player.html` `euEndHand` function)
+**Status:** Resolved 2026-05-03 in commit `SHA-PLACEHOLDER` (v2.108 games/player.html). Two-line fix mirrors v2.107 pattern. (1) Bug A: `gameInProgress = false` set before broadcasts in auto-end branch, so any subsequent `request-state` response doesn't re-broadcast a stale playing state. (2) Bug B: `send({type:'game-over', scores: s.scores})` added inside the 3-second `setTimeout` before `showGameOver`, so non-managers receive the game-over transition signal on the auto-end path (the manual End Game path via `managerEndGame` was already correct per today's v2.107 fix). Verification: static review only; full hardware verification of Euchre auto-end deferred until Euchre exercised by 4 players (impractical with 2-device test setup). Bug shape and fix shape are identical to v2.107's Last Card race (which verified GREEN earlier today against TBFJJH rematch flow), so confidence is high by analogy.
 
 ---
 

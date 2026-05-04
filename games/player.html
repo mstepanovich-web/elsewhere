@@ -789,7 +789,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.107</div>
+<div class="ver">v2.108</div>
 
 <script>
 'use strict';
@@ -3535,6 +3535,11 @@ function euEndHand(s) {
 
   // Check for game end
   if (s.scores[1] >= 10 || s.scores[2] >= 10) {
+    // Bug A fix (mirrors v2.107 Last Card race): clear local progress flag
+    // FIRST so any request-state response from this client during the 3s
+    // celebration window doesn't re-broadcast a stale phase:playing state
+    // and clobber receivers' eventual screen-gameover transition.
+    gameInProgress = false;
     const winner = s.scores[1] >= 10 ? 1 : 2;
     s.phase = 'game-end';
     s.handMessage = '🏆 Team ' + winner + ' wins the game! ' + s.scores[1] + ' — ' + s.scores[2];
@@ -3543,6 +3548,13 @@ function euEndHand(s) {
     renderEuchre();
     // Trigger game over screen after a pause
     setTimeout(() => {
+      // Bug B fix: fire game-over BEFORE the manager's local screen
+      // transition. The manual End Game path (managerEndGame) already
+      // sends this message; the auto-end path was missing it, leaving
+      // non-managers stuck on screen-euchre indefinitely after a natural
+      // win. The 3s delay before this setTimeout preserves the existing
+      // last-trick celebration / score reveal UX.
+      send({type:'game-over', scores: s.scores});
       showGameOver(s.scores);
     }, 3000);
     return;
