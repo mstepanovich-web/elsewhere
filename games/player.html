@@ -202,13 +202,14 @@
     .trivia-opt:active { background: var(--color-gold-faint); }
     .trivia-opt.selected { border-color: var(--color-gold); background: var(--color-gold-faint); }
     .trivia-opt.correct  { border-color: var(--color-green); background: var(--color-green-faint); }
-    .trivia-opt.wrong    { opacity: .4; }
+    .trivia-opt.wrong    { border-color: var(--color-red); background: var(--color-red-faint); }
     .trivia-opt-letter { font-family: var(--font-mono); font-size: var(--text-md); font-weight: 500; color: var(--color-gold); min-width: 24px; }
     .trivia-opt-text { font-size: var(--text-sm); color: var(--color-text-dim); }
     .trivia-timer-bar  { height: 4px; background: var(--color-surface); border-radius: var(--radius-pill); overflow: hidden; }
     .trivia-timer-fill { height: 100%; background: var(--color-gold); border-radius: var(--radius-pill); transition: width 1s linear; }
     .trivia-status { font-size: var(--text-sm); color: var(--color-text-faint); text-align: center; }
     .trivia-status.correct { color: var(--color-green); }
+    .trivia-progress { color: var(--color-text-faint); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; font-family: var(--font-mono); }
     .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .cat-card { padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--color-border-dim); background: var(--color-surface); text-align: center; cursor: pointer; transition: all 0.2s; }
     .cat-card:active, .cat-card.selected { border-color: var(--color-gold); background: var(--color-gold-faint); }
@@ -636,6 +637,7 @@
       </div>
       <div class="trivia-game" id="trivia-game" style="display:none;">
         <div class="trivia-timer-bar"><div class="trivia-timer-fill" id="trivia-timer-fill" style="width:100%"></div></div>
+        <div class="trivia-progress" id="trivia-progress"></div>
         <div class="trivia-q-text" id="trivia-q-text">—</div>
         <div class="trivia-opts" id="trivia-opts"></div>
         <div class="trivia-status" id="trivia-status"></div>
@@ -789,7 +791,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.109</div>
+<div class="ver">v2.110</div>
 
 <script>
 'use strict';
@@ -872,6 +874,8 @@ let _playerRealtimeChannelDeviceKey = null;
 
 let gameState=null, myHand=[], selectedCard=null;
 let triviaCategory='general', triviaDiff='Medium', timerInterval=null;
+let _autoRevealTimer = null;
+let _nonMgrTimerInterval = null;
 
 // Layout detection
 const IS_IPAD  = window.innerWidth >= 768;
@@ -1404,6 +1408,12 @@ function handleMessage(uid, data) {
     if (currentGame==='trivia') {
       if (activeScreen !== 'screen-trivia') startTrivia(msg.state);
       else renderTrivia();
+      // Non-manager timer sync — re-sync the local countdown to the manager's
+      // authoritative timer on every broadcast, and stop on phase change.
+      if (currentMyRow?.control_role !== 'manager') {
+        if (msg.state?.phase === 'question') startNonManagerTimer();
+        else stopNonManagerTimer();
+      }
     }
     if (currentGame==='euchre') {
       if (activeScreen !== 'screen-euchre') startEuchre();
@@ -1510,6 +1520,7 @@ function handleMessage(uid, data) {
     if (!gameState.answers) gameState.answers={};
     gameState.answers[msg._name]={answer:msg.answer, timeRemaining:msg.timeRemaining||0};
     broadcastState();
+    maybeAutoReveal();
   }
 
   if (msg.type==='switch-game') { goToLobby(); }
@@ -2796,6 +2807,7 @@ function showPlayAgainNewPlayers() {
 }
 
 // ── TRIVIA ────────────────────────────────────────────────────
+const AUTO_REVEAL_DELAY_MS = 2000;
 const CATEGORIES=[
   {id:'general',  label:'General',     emoji:'🧠', otdbId:9},
   {id:'music',    label:'Music',       emoji:'🎵', otdbId:12},
@@ -2993,12 +3005,15 @@ function startTrivia(state) {
   }
   renderTrivia();
   if (isManager) startTriviaTimer();
+  else if (currentMyRow?.control_role !== 'manager') startNonManagerTimer();
 }
 
 function renderTrivia() {
   if (!gameState) return;
   const s=gameState, q=s.questions[s.currentQuestionIdx];
   if (!q) return;
+  const progressEl = document.getElementById('trivia-progress');
+  if (progressEl) progressEl.textContent = 'Question ' + (s.currentQuestionIdx + 1) + ' of ' + s.questions.length;
   document.getElementById('trivia-q-text').textContent=q.question;
   const myAns=s.answers?.[myName], reveal=s.phase==='reveal', letters=['A','B','C','D'];
   document.getElementById('trivia-opts').innerHTML=(q.options||[]).map((opt,i)=>{
@@ -3021,11 +3036,34 @@ function triviaAnswer(letter) {
   if (!gameState.answers) gameState.answers={};
   gameState.answers[myName]={answer:letter,timeRemaining:gameState.timer||0};
   send({type:'trivia-answer-received',answer:letter,timeRemaining:gameState.timer||0});
-  if (currentMyRow?.control_role === 'manager') broadcastState();
+  if (currentMyRow?.control_role === 'manager') {
+    broadcastState();
+    maybeAutoReveal();
+  }
   renderTrivia();
 }
 
+// Manager-side helper: when all players (filtered to those who were active at
+// game-start, i.e., gameState.players) have submitted, schedule an auto-reveal
+// after AUTO_REVEAL_DELAY_MS so the round doesn't sit on "Waiting for others".
+// Idempotent — clearTimeout debounces simultaneous-submission races and is
+// also cleared at the top of triviaReveal/triviaNext to cancel pending fires
+// when manual Reveal/Next is tapped first.
+function maybeAutoReveal() {
+  if (!gameState || gameState.phase !== 'question') return;
+  if (currentMyRow?.control_role !== 'manager') return;  // safety; only manager triggers reveal
+  const submitted = gameState.players.filter(p => gameState.answers?.[p]).length;
+  if (submitted >= gameState.players.length) {
+    clearTimeout(_autoRevealTimer);  // debounce against simultaneous-submission races
+    _autoRevealTimer = setTimeout(() => {
+      if (gameState?.phase === 'question') triviaReveal();
+    }, AUTO_REVEAL_DELAY_MS);
+  }
+}
+
 function triviaReveal() {
+  clearTimeout(_autoRevealTimer);
+  stopNonManagerTimer();
   if (!gameState) return;
   const s=JSON.parse(JSON.stringify(gameState)); s.phase='reveal';
   const q=s.questions[s.currentQuestionIdx];
@@ -3040,6 +3078,7 @@ function triviaReveal() {
 }
 
 function triviaNext() {
+  clearTimeout(_autoRevealTimer);
   if (!gameState) return;
   const s=JSON.parse(JSON.stringify(gameState));
   s.currentQuestionIdx++;
@@ -3052,6 +3091,35 @@ function triviaNext() {
   }
   s.phase='question'; s.answers={}; s.timer=s.timePerQuestion;
   gameState=s; broadcastState(); renderTrivia(); startTriviaTimer();
+}
+
+// Non-manager local timer countdown. The manager runs the authoritative
+// timer (startTriviaTimer below); non-managers used to see a frozen bar
+// because game-state broadcasts only fire on phase change / submissions.
+// This helper runs a local 1-second tick to animate the bar visually,
+// re-syncing to msg.state.timer on every game-state broadcast. Crucially,
+// non-managers do NOT fire triviaReveal at 0 — only the manager does.
+function stopNonManagerTimer() {
+  if (_nonMgrTimerInterval) {
+    clearInterval(_nonMgrTimerInterval);
+    _nonMgrTimerInterval = null;
+  }
+}
+
+function startNonManagerTimer() {
+  stopNonManagerTimer();
+  let localTimer = gameState?.timer || 0;
+  const total = gameState?.timePerQuestion || 20;
+  _nonMgrTimerInterval = setInterval(() => {
+    if (!gameState || gameState.phase !== 'question') {
+      stopNonManagerTimer();
+      return;
+    }
+    localTimer = Math.max(0, localTimer - 1);
+    const fill = document.getElementById('trivia-timer-fill');
+    if (fill) fill.style.width = (localTimer / total * 100) + '%';
+    if (localTimer <= 0) stopNonManagerTimer();
+  }, 1000);
 }
 
 function startTriviaTimer() {
