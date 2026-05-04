@@ -2582,7 +2582,7 @@ Per CLAUDE.md doctrine (line 140), `triviaGenerate` calls the Anthropic API dire
 **Deferred on:** 2026-05-03
 **Priority:** Low — informational; affects scope decision when Euchre integration ships
 **Area:** Euchre game logic (`games/player.html` lines 650+ DOM, ~2961-3599 functions)
-**Status:** Open — modify-existing approach recommended per audit; prerequisite Bug A + Bug B fix shipped 2026-05-03 in commit `SHA-PLACEHOLDER` (v2.108)
+**Status:** Open — modify-existing approach recommended per audit; prerequisite Bug A + Bug B fix shipped 2026-05-03 in commit `bc99f13` (v2.108)
 
 #### Context
 
@@ -2606,7 +2606,7 @@ Mike has never tested Euchre heavily — the implementation works in static revi
 #### Related
 
 - `docs/GAMES-CONTROL-MODEL.md` § 3.3 — Euchre spec
-- v2.108 prequel fix (commit `SHA-PLACEHOLDER`) — closes Bugs A + B in `euEndHand` auto-end path
+- v2.108 prequel fix (commit `bc99f13`) — closes Bugs A + B in `euEndHand` auto-end path
 - Cluster Commit 4 (`ae276f7`) — active/audience patterns Part 3c will integrate with
 
 ---
@@ -2617,7 +2617,7 @@ Mike has never tested Euchre heavily — the implementation works in static revi
 **Deferred on:** 2026-05-03
 **Priority:** High — non-managers stuck on screen-euchre indefinitely after auto-end; same race shape as today's Last Card v2.107 fix
 **Area:** Euchre game logic (`games/player.html` `euEndHand` function)
-**Status:** Resolved 2026-05-03 in commit `SHA-PLACEHOLDER` (v2.108 games/player.html). Two-line fix mirrors v2.107 pattern. (1) Bug A: `gameInProgress = false` set before broadcasts in auto-end branch, so any subsequent `request-state` response doesn't re-broadcast a stale playing state. (2) Bug B: `send({type:'game-over', scores: s.scores})` added inside the 3-second `setTimeout` before `showGameOver`, so non-managers receive the game-over transition signal on the auto-end path (the manual End Game path via `managerEndGame` was already correct per today's v2.107 fix). Verification: static review only; full hardware verification of Euchre auto-end deferred until Euchre exercised by 4 players (impractical with 2-device test setup). Bug shape and fix shape are identical to v2.107's Last Card race (which verified GREEN earlier today against TBFJJH rematch flow), so confidence is high by analogy.
+**Status:** Resolved 2026-05-03 in commit `bc99f13` (v2.108 games/player.html). Two-line fix mirrors v2.107 pattern. (1) Bug A: `gameInProgress = false` set before broadcasts in auto-end branch, so any subsequent `request-state` response doesn't re-broadcast a stale playing state. (2) Bug B: `send({type:'game-over', scores: s.scores})` added inside the 3-second `setTimeout` before `showGameOver`, so non-managers receive the game-over transition signal on the auto-end path (the manual End Game path via `managerEndGame` was already correct per today's v2.107 fix). Verification: static review only; full hardware verification of Euchre auto-end deferred until Euchre exercised by 4 players (impractical with 2-device test setup). Bug shape and fix shape are identical to v2.107's Last Card race (which verified GREEN earlier today against TBFJJH rematch flow), so confidence is high by analogy.
 
 ---
 
