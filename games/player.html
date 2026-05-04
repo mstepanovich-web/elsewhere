@@ -789,7 +789,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.108</div>
+<div class="ver">v2.109</div>
 
 <script>
 'use strict';
@@ -2797,11 +2797,17 @@ function showPlayAgainNewPlayers() {
 
 // ── TRIVIA ────────────────────────────────────────────────────
 const CATEGORIES=[
-  {id:'general',label:'General',emoji:'🧠'},{id:'music',label:'Music',emoji:'🎵'},
-  {id:'movies',label:'Movies',emoji:'🎬'},{id:'sports',label:'Sports',emoji:'⚽'},
-  {id:'science',label:'Science',emoji:'🔬'},{id:'history',label:'History',emoji:'📜'},
-  {id:'food',label:'Food',emoji:'🍕'},{id:'geography',label:'Geography',emoji:'🌍'},
-  {id:'pop',label:'Pop Culture',emoji:'⭐'},{id:'tech',label:'Tech',emoji:'💻'},
+  {id:'general',  label:'General',     emoji:'🧠', otdbId:9},
+  {id:'music',    label:'Music',       emoji:'🎵', otdbId:12},
+  {id:'movies',   label:'Movies',      emoji:'🎬', otdbId:11},
+  {id:'sports',   label:'Sports',      emoji:'⚽', otdbId:21},
+  {id:'science',  label:'Science',     emoji:'🔬', otdbId:17},
+  {id:'history',  label:'History',     emoji:'📜', otdbId:23},
+  {id:'art',      label:'Art',         emoji:'🎨', otdbId:25},   // was 'food' / 🍕 Food — no OpenTDB Food category
+  {id:'geography',label:'Geography',   emoji:'🌍', otdbId:22},
+  {id:'pop',      label:'Pop Culture', emoji:'⭐', otdbId:26},
+  {id:'tech',     label:'Tech',        emoji:'💻', otdbId:18},
+  {id:'anything', label:'Anything',    emoji:'🎲', otdbId:null}, // omits category param → OpenTDB returns from any
 ];
 
 function showTriviaSetup() {
@@ -2829,30 +2835,138 @@ function buildDiffRow() {
 function selectCat(id){triviaCategory=id;buildCatGrid();}
 function selectDiff(d){triviaDiff=d;buildDiffRow();}
 
+// PHASE 2 REFERENCE: previous Anthropic-API triviaGenerate body, preserved
+// for the premium-path Edge Function migration. Calls api.anthropic.com
+// directly from the browser with no auth header — 401s in production per
+// CLAUDE.md doctrine line 140. Phase 2 will lift this into a Supabase
+// Edge Function (forwards to Anthropic with a server-side key) and gate
+// it behind a manager-side easter-egg toggle.
+//
+// async function triviaGenerate() {
+//   const btn=document.getElementById('trivia-gen-btn');
+//   const sta=document.getElementById('trivia-gen-status');
+//   btn.disabled=true; sta.textContent='Generating questions...';
+//   const cat=CATEGORIES.find(c=>c.id===triviaCategory)||CATEGORIES[0];
+//   try {
+//     const resp=await fetch('https://api.anthropic.com/v1/messages',{
+//       method:'POST',headers:{'Content-Type':'application/json'},
+//       body:JSON.stringify({model:CLAUDE_MODEL,max_tokens:3000,messages:[{role:'user',content:
+//         `Generate 10 trivia questions. Category: ${cat.label}. Difficulty: ${triviaDiff}. Return ONLY valid JSON:\n{"questions":[{"id":"q1","question":"...?","options":["A) ...","B) ...","C) ...","D) ..."],"correct":"A","fun_fact":"..."}]}`
+//       }]})
+//     });
+//     if (!resp.ok) throw new Error('API '+resp.status);
+//     const data=await resp.json();
+//     const qs=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim()).questions;
+//     const players = currentParticipants
+//       .filter(p => p.participation_role === 'active' && !p.left_at)
+//       .map(p => p.display_name);
+//     gameState={phase:'waiting',players,questions:qs,currentQuestionIdx:0,timePerQuestion:20,timer:0,answers:{},
+//       scores:Object.fromEntries(players.map(p=>[p,0])),streak:Object.fromEntries(players.map(p=>[p,0])),category:cat.label};
+//     sta.textContent='✓ '+qs.length+' questions ready!';
+//     btn.disabled=false;
+//     document.getElementById('mgr-start').style.display='block';
+//   } catch(e) { sta.textContent='Error: '+e.message; btn.disabled=false; }
+// }
+
 async function triviaGenerate() {
-  const btn=document.getElementById('trivia-gen-btn');
-  const sta=document.getElementById('trivia-gen-status');
-  btn.disabled=true; sta.textContent='Generating questions...';
-  const cat=CATEGORIES.find(c=>c.id===triviaCategory)||CATEGORIES[0];
+  const btn = document.getElementById('trivia-gen-btn');
+  const sta = document.getElementById('trivia-gen-status');
+  btn.disabled = true;
+  sta.textContent = 'Loading questions...';
+
+  const cat = CATEGORIES.find(c => c.id === triviaCategory) || CATEGORIES[0];
+  const amount = 10;
+  const difficulty = (triviaDiff || 'Medium').toLowerCase();  // 'Easy'|'Medium'|'Hard' → lowercase
+
+  const params = new URLSearchParams({
+    amount: String(amount),
+    type: 'multiple',
+    difficulty,
+    encode: 'base64'
+  });
+  if (cat.otdbId !== null && cat.otdbId !== undefined) {
+    params.set('category', String(cat.otdbId));
+  }
+
   try {
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:CLAUDE_MODEL,max_tokens:3000,messages:[{role:'user',content:
-        `Generate 10 trivia questions. Category: ${cat.label}. Difficulty: ${triviaDiff}. Return ONLY valid JSON:\n{"questions":[{"id":"q1","question":"...?","options":["A) ...","B) ...","C) ...","D) ..."],"correct":"A","fun_fact":"..."}]}`
-      }]})
+    const resp = await fetch('https://opentdb.com/api.php?' + params.toString());
+    if (!resp.ok) throw new Error('OpenTDB HTTP ' + resp.status);
+    const data = await resp.json();
+
+    // OpenTDB response codes per https://opentdb.com/api_config.php :
+    // 0 = Success, 1 = No Results, 2 = Invalid Param, 3/4 = Token (n/a here), 5 = Rate Limit
+    if (data.response_code === 1) {
+      throw new Error('No questions for that combo — try a different category or difficulty');
+    }
+    if (data.response_code === 2) {
+      throw new Error('Invalid request — please report this');
+    }
+    if (data.response_code === 5) {
+      throw new Error('Rate limited — wait a few seconds and try again');
+    }
+    if (data.response_code !== 0) {
+      throw new Error('OpenTDB returned code ' + data.response_code);
+    }
+    if (!Array.isArray(data.results) || data.results.length === 0) {
+      throw new Error('No questions returned');
+    }
+
+    // Base64 → UTF-8 string. Uses TextDecoder for proper multi-byte handling.
+    // (atob alone treats output as Latin-1 and would mangle accented characters / em-dashes.)
+    const decode = (b64) => new TextDecoder().decode(
+      Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+    );
+
+    // Transform OpenTDB → existing gameState.questions shape.
+    // NOTE: options are NOT prefixed with "A) ", "B) ", etc. — the render layer at
+    // renderTrivia adds the letter visually as its own div (.trivia-opt-letter).
+    // Prefixing here would render duplicate letters ("A | A) Some answer").
+    const qs = data.results.map((r, i) => {
+      const correctText = decode(r.correct_answer);
+      const incorrectTexts = r.incorrect_answers.map(decode);
+      const allOptions = [correctText, ...incorrectTexts];
+      // Fisher-Yates shuffle so the correct answer isn't always position 0
+      for (let j = allOptions.length - 1; j > 0; j--) {
+        const k = Math.floor(Math.random() * (j + 1));
+        [allOptions[j], allOptions[k]] = [allOptions[k], allOptions[j]];
+      }
+      const correctIdx = allOptions.indexOf(correctText);
+      const correctLetter = ['A','B','C','D'][correctIdx];
+      return {
+        id:       'q' + (i + 1),
+        question: decode(r.question),
+        options:  allOptions,
+        correct:  correctLetter,
+        fun_fact: ''  // dead field; preserved for shape compatibility with Phase 2 Anthropic path
+      };
     });
-    if (!resp.ok) throw new Error('API '+resp.status);
-    const data=await resp.json();
-    const qs=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim()).questions;
+
+    // Build players list from active participants — same pattern as Last Card / Euchre starters.
     const players = currentParticipants
       .filter(p => p.participation_role === 'active' && !p.left_at)
       .map(p => p.display_name);
-    gameState={phase:'waiting',players,questions:qs,currentQuestionIdx:0,timePerQuestion:20,timer:0,answers:{},
-      scores:Object.fromEntries(players.map(p=>[p,0])),streak:Object.fromEntries(players.map(p=>[p,0])),category:cat.label};
-    sta.textContent='✓ '+qs.length+' questions ready!';
-    btn.disabled=false;
-    document.getElementById('mgr-start').style.display='block';
-  } catch(e) { sta.textContent='Error: '+e.message; btn.disabled=false; }
+
+    gameState = {
+      phase:              'waiting',
+      players:            players,
+      questions:          qs,
+      currentQuestionIdx: 0,
+      timePerQuestion:    20,
+      timer:              0,
+      answers:            {},
+      scores:             Object.fromEntries(players.map(p => [p, 0])),
+      streak:             Object.fromEntries(players.map(p => [p, 0])),
+      category:           cat.label
+    };
+
+    sta.textContent = '✓ ' + qs.length + ' questions ready!';
+    btn.disabled = false;
+    const startBtn = document.getElementById('mgr-start');
+    if (startBtn) startBtn.style.display = 'block';
+  } catch (e) {
+    sta.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+  }
 }
 
 function managerStartTrivia() {
