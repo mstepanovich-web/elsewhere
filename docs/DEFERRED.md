@@ -2550,7 +2550,7 @@ After more pressing items. The visible impact is limited (only affects users who
 **Deferred on:** 2026-05-03
 **Priority:** Low — informational; affects scope decision when Trivia integration ships
 **Area:** Trivia game logic (`games/player.html`, `triviaGenerate` function and game-room rendering)
-**Status:** Open — modify-existing approach recommended per audit; specific scope to be evaluated at 3b kickoff
+**Status:** Open — active/audience integration scope (late-joiner choice screen, admission_mode dispatch, Skip Question wiring) still pending. Anthropic-fragility sub-concerns ✅ resolved in Trivia Phase 2 (see updates throughout this entry, dated 2026-05-04).
 
 #### Context
 
@@ -2558,21 +2558,44 @@ Mike noted during cluster closeout that he has not tested Trivia heavily. The ex
 
 Cluster-closeout audit (read-only review of `games/player.html`, 2026-05-03) finds Trivia's existing implementation is ~200 LOC, single-responsibility-clean, and structurally aligned with § 4.1 spec. The active/audience integration is additive (new late-joiner choice screen + admission_mode dispatch + Skip Question manager control), not transformative. No tangle, no fundamental architecture mismatch. Static review surfaces no Last-Card-race-shape bugs in Trivia (its auto-end at `triviaNext` correctly sets `gameInProgress=false` before broadcasts).
 
-Modify (Path B) wins on cost (~80–120 LOC of additive changes vs ~250 LOC for full rewrite), risk (existing scoring/streak math is tuned and works), and quality preservation (Anthropic API integration, prompt structure, state machine, DOM layout all worth keeping verbatim). Confidence: Medium-High.
+Modify (Path B) wins on cost (~80–120 LOC of additive changes vs ~250 LOC for full rewrite), risk (existing scoring/streak math is tuned and works), and quality preservation (state machine, DOM layout, score/streak math all worth keeping verbatim). Confidence: Medium-High.
 
-The Anthropic model is two majors behind current Sonnet 4.6 (`claude-sonnet-4-20250514` at line 801) — worth refreshing during 3b work.
+**✅ Resolved 2026-05-04 in Trivia Phase 2 (Commits A `c4af15c` + B):** the Anthropic model has been bumped to `claude-sonnet-4-6` in the Edge Function (Phase 2 Commit A). The previous `claude-sonnet-4-20250514` (Sonnet 4, deprecated, retiring 2026-06-15) is no longer used by live code; it survives only inside the `// PHASE 2 REFERENCE` comment block in `games/player.html` lines 2857–2882.
 
-Per CLAUDE.md doctrine (line 140), `triviaGenerate` calls the Anthropic API directly from the manager's browser with no auth header. Any rewrite should preserve this constraint or explicitly redesign it. The Anthropic API call itself doesn't need to change — only the role-aware admission/control routing that Part 3b adds.
+**✅ Resolved 2026-05-04 in Trivia Phase 2 (Commits A `c4af15c` + B):** the original CLAUDE.md doctrine line 140 concern (browser calling api.anthropic.com with no auth header → 401 in production) is now stale. The live path goes through the `generate-trivia` Edge Function, which holds the server-side `ANTHROPIC_API_KEY` and adds the `x-api-key` header server-side. The browser-direct path is preserved as a `// PHASE 2 REFERENCE` comment block in `games/player.html` lines 2857–2882 — the "preserve verbatim" sentiment now refers to that comment block (lifted into the Edge Function's prompt structure with three small changes: no "A) " prefixes; correct field is A|B|C|D; drops dead `id` and `fun_fact` fields).
 
 #### When picking up
 
-3b drafting should plan a Path B (modify) approach. New work scope: late-joiner choice screen (~40 LOC), admission_mode dispatch in `handleMessage`'s `game-state` receiver (~30 LOC), Skip Question manager-bar wiring (~20 LOC), polish. The Anthropic API call structure (line 2838+), score/streak math (`triviaReveal` line 2917+), and 4-option DOM layout are all worth preserving verbatim.
+3b drafting should plan a Path B (modify) approach. New work scope is still all active/audience-integration: late-joiner choice screen (~40 LOC), admission_mode dispatch in `handleMessage`'s `game-state` receiver (~30 LOC), Skip Question manager-bar wiring (~20 LOC), polish. The score/streak math (`triviaReveal`) and 4-option DOM layout are worth preserving verbatim. The Anthropic API call structure now lives in the Edge Function (`supabase/functions/generate-trivia/index.ts`) — 3b doesn't need to touch it.
 
 #### Related
 
 - `docs/GAMES-CONTROL-MODEL.md` § 4.1 — Trivia spec (admission_mode `self_join`, late-joiner choice screen, manager controls Reveal/Next/Skip)
-- CLAUDE.md line 140 — doctrine on `triviaGenerate` Anthropic API direct-from-browser pattern
 - Cluster Commit 4 (`ae276f7`, v2.106 games/player.html) — the active/audience patterns Part 3b will integrate with
+- Trivia Phase 2 Commit A (`c4af15c`) — Edge Function + db/019 migration that resolved the Anthropic-401 fragility
+- Trivia Phase 2 Commit B (this commit's SHA, v2.111) — browser-side premium opt-in wiring
+
+---
+
+### Trivia premium polish (post-Phase 2)
+
+**Status**: 🟡 Deferred polish (low priority, post-Phase 2)
+**Filed**: 2026-05-04 (Phase 2 Commit B)
+**Context**: Three small items deferred from Phase 2's main commit to keep scope tight.
+
+1. **Lobby card subtitle dynamism** (`games/player.html` line 403). Currently hardcoded HTML: `<div class="game-desc">AI-generated questions · 2–20 players</div>`. Inaccurate when premium is OFF. Make this dynamic via JS init code or restructure the line into a JS-rendered element. The card is visible only briefly during game selection on the manager's lobby screen, so this is a low-impact polish item.
+
+2. **Usage indicator UI** ("you've used N/20 today"). Would let users see their daily premium quota approaching the limit rather than getting a surprise 429 on the 21st generation. Requires:
+   - Uncommenting the optional read policy in `db/019_trivia_premium_usage.sql` (`create policy "users see their own usage" on public.trivia_premium_usage for select using (auth.uid() = user_id);`)
+   - Apply the policy update via Supabase SQL Editor
+   - Browser-side: add a `getRemainingPremiumQuota()` helper that queries `trivia_premium_usage` directly via supabase-js, returns `DAILY_LIMIT - count` or `DAILY_LIMIT` if no row
+   - Display in the Trivia info screen near the subtitle: "5 premium generations remaining today" or similar
+
+3. **"(premium)" status text styling**. Currently appended to `'✓ N questions ready! (premium)'`. Workable but the inline format may feel cluttered. Consider:
+   - Replacing with a small badge / chip near the status text
+   - Or: dropping the suffix and relying solely on the dynamic subtitle as the visual signal
+
+**When picking up**: most natural during a "Trivia UX polish" Session 5 sub-track.
 
 ---
 

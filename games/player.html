@@ -791,7 +791,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.110</div>
+<div class="ver">v2.111</div>
 
 <script>
 'use strict';
@@ -811,8 +811,8 @@ const GAME_INFO = {
     min:2, max:8, default:6,
   },
   trivia: {
-    title:'Trivia Night', sub:'AI-generated questions',
-    desc:'AI-generated trivia across the category you choose. Answer on your phone before the timer runs out. Bonus points for speed and answer streaks.',
+    title:'Trivia Night', sub:'Community questions',
+    desc:'Trivia across the category you choose. Answer on your phone before the timer runs out. Bonus points for speed and answer streaks.',
     rules:['🧠 10 questions per round','⏱ 20 seconds per question','🎯 100pts base + time bonus + streak bonus','📊 Leaderboard after each answer'],
     min:2, max:20, default:10,
   },
@@ -1597,6 +1597,13 @@ function selectGame(game) {
   document.getElementById('info-title').textContent=info.title;
   document.getElementById('info-sub').textContent=info.sub;
   document.getElementById('info-desc').textContent=info.desc;
+  // Phase 2: dynamic Trivia copy when premium is enabled (override default
+  // Community-flavored copy with AI-flavored copy). Premium flag detection
+  // via isPremiumTrivia() — URL param wins, falls through to localStorage.
+  if (game === 'trivia' && isPremiumTrivia()) {
+    document.getElementById('info-sub').textContent  = 'AI-generated questions';
+    document.getElementById('info-desc').textContent = 'AI-generated trivia across the category you choose. Answer on your phone before the timer runs out. Bonus points for speed and answer streaks.';
+  }
   document.getElementById('limit-val').textContent=playerLimit;
   document.getElementById('limit-range').textContent=info.min+' – '+info.max+' players';
   document.getElementById('info-rules').innerHTML=info.rules.map(r=>`<div class="rule-row">${r}</div>`).join('');
@@ -2808,6 +2815,29 @@ function showPlayAgainNewPlayers() {
 
 // ── TRIVIA ────────────────────────────────────────────────────
 const AUTO_REVEAL_DELAY_MS = 2000;
+
+// Phase 2 premium detection. URL param ?premium=1 sets the localStorage flag
+// (sticky across sessions); ?premium=0 clears it. URL param wins on each page
+// load if present. Without URL param, falls through to the persisted localStorage
+// flag. Returns true only when premium intent is set; the actual Edge Function
+// call also requires the user to be signed in.
+function isPremiumTrivia() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('premium')) {
+    const v = params.get('premium');
+    if (v === '1' || v === 'true') {
+      try { localStorage.setItem('elsewhere-trivia-premium', '1'); } catch (_) {}
+      return true;
+    }
+    if (v === '0' || v === 'false') {
+      try { localStorage.removeItem('elsewhere-trivia-premium'); } catch (_) {}
+      return false;
+    }
+  }
+  try { return localStorage.getItem('elsewhere-trivia-premium') === '1'; }
+  catch (_) { return false; }
+}
+
 const CATEGORIES=[
   {id:'general',  label:'General',     emoji:'🧠', otdbId:9},
   {id:'music',    label:'Music',       emoji:'🎵', otdbId:12},
@@ -2880,15 +2910,12 @@ function selectDiff(d){triviaDiff=d;buildDiffRow();}
 //   } catch(e) { sta.textContent='Error: '+e.message; btn.disabled=false; }
 // }
 
-async function triviaGenerate() {
-  const btn = document.getElementById('trivia-gen-btn');
-  const sta = document.getElementById('trivia-gen-status');
-  btn.disabled = true;
-  sta.textContent = 'Loading questions...';
-
-  const cat = CATEGORIES.find(c => c.id === triviaCategory) || CATEGORIES[0];
-  const amount = 10;
-  const difficulty = (triviaDiff || 'Medium').toLowerCase();  // 'Easy'|'Medium'|'Hard' → lowercase
+// OpenTDB question fetcher + transformer. Extracted from the original
+// triviaGenerate (Phase 1 v2.109) so triviaGenerate can branch between this
+// (default / fallback) and the premium Edge Function path. Throws on any
+// HTTP / response_code / parse failure; caller decides how to surface.
+async function fetchOpenTdbQuestions(cat, diff, amount) {
+  const difficulty = (diff || 'Medium').toLowerCase();  // 'Easy'|'Medium'|'Hard' → lowercase
 
   const params = new URLSearchParams({
     amount: String(amount),
@@ -2900,85 +2927,142 @@ async function triviaGenerate() {
     params.set('category', String(cat.otdbId));
   }
 
-  try {
-    const resp = await fetch('https://opentdb.com/api.php?' + params.toString());
-    if (!resp.ok) throw new Error('OpenTDB HTTP ' + resp.status);
-    const data = await resp.json();
+  const resp = await fetch('https://opentdb.com/api.php?' + params.toString());
+  if (!resp.ok) throw new Error('OpenTDB HTTP ' + resp.status);
+  const data = await resp.json();
 
-    // OpenTDB response codes per https://opentdb.com/api_config.php :
-    // 0 = Success, 1 = No Results, 2 = Invalid Param, 3/4 = Token (n/a here), 5 = Rate Limit
-    if (data.response_code === 1) {
-      throw new Error('No questions for that combo — try a different category or difficulty');
-    }
-    if (data.response_code === 2) {
-      throw new Error('Invalid request — please report this');
-    }
-    if (data.response_code === 5) {
-      throw new Error('Rate limited — wait a few seconds and try again');
-    }
-    if (data.response_code !== 0) {
-      throw new Error('OpenTDB returned code ' + data.response_code);
-    }
-    if (!Array.isArray(data.results) || data.results.length === 0) {
-      throw new Error('No questions returned');
-    }
-
-    // Base64 → UTF-8 string. Uses TextDecoder for proper multi-byte handling.
-    // (atob alone treats output as Latin-1 and would mangle accented characters / em-dashes.)
-    const decode = (b64) => new TextDecoder().decode(
-      Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
-    );
-
-    // Transform OpenTDB → existing gameState.questions shape.
-    // NOTE: options are NOT prefixed with "A) ", "B) ", etc. — the render layer at
-    // renderTrivia adds the letter visually as its own div (.trivia-opt-letter).
-    // Prefixing here would render duplicate letters ("A | A) Some answer").
-    const qs = data.results.map((r, i) => {
-      const correctText = decode(r.correct_answer);
-      const incorrectTexts = r.incorrect_answers.map(decode);
-      const allOptions = [correctText, ...incorrectTexts];
-      // Fisher-Yates shuffle so the correct answer isn't always position 0
-      for (let j = allOptions.length - 1; j > 0; j--) {
-        const k = Math.floor(Math.random() * (j + 1));
-        [allOptions[j], allOptions[k]] = [allOptions[k], allOptions[j]];
-      }
-      const correctIdx = allOptions.indexOf(correctText);
-      const correctLetter = ['A','B','C','D'][correctIdx];
-      return {
-        id:       'q' + (i + 1),
-        question: decode(r.question),
-        options:  allOptions,
-        correct:  correctLetter,
-        fun_fact: ''  // dead field; preserved for shape compatibility with Phase 2 Anthropic path
-      };
-    });
-
-    // Build players list from active participants — same pattern as Last Card / Euchre starters.
-    const players = currentParticipants
-      .filter(p => p.participation_role === 'active' && !p.left_at)
-      .map(p => p.display_name);
-
-    gameState = {
-      phase:              'waiting',
-      players:            players,
-      questions:          qs,
-      currentQuestionIdx: 0,
-      timePerQuestion:    20,
-      timer:              0,
-      answers:            {},
-      scores:             Object.fromEntries(players.map(p => [p, 0])),
-      streak:             Object.fromEntries(players.map(p => [p, 0])),
-      category:           cat.label
-    };
-
-    sta.textContent = '✓ ' + qs.length + ' questions ready!';
-    btn.disabled = false;
-    const startBtn = document.getElementById('mgr-start');
-    if (startBtn) startBtn.style.display = 'block';
-  } catch (e) {
-    sta.textContent = 'Error: ' + e.message;
-    btn.disabled = false;
+  // OpenTDB response codes per https://opentdb.com/api_config.php :
+  // 0 = Success, 1 = No Results, 2 = Invalid Param, 3/4 = Token (n/a here), 5 = Rate Limit
+  if (data.response_code === 1) {
+    throw new Error('No questions for that combo — try a different category or difficulty');
   }
+  if (data.response_code === 2) {
+    throw new Error('Invalid request — please report this');
+  }
+  if (data.response_code === 5) {
+    throw new Error('Rate limited — wait a few seconds and try again');
+  }
+  if (data.response_code !== 0) {
+    throw new Error('OpenTDB returned code ' + data.response_code);
+  }
+  if (!Array.isArray(data.results) || data.results.length === 0) {
+    throw new Error('No questions returned');
+  }
+
+  // Base64 → UTF-8 string. Uses TextDecoder for proper multi-byte handling.
+  // (atob alone treats output as Latin-1 and would mangle accented characters / em-dashes.)
+  const decode = (b64) => new TextDecoder().decode(
+    Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+  );
+
+  // Transform OpenTDB → existing gameState.questions shape.
+  // NOTE: options are NOT prefixed with "A) ", "B) ", etc. — the render layer at
+  // renderTrivia adds the letter visually as its own div (.trivia-opt-letter).
+  // Prefixing here would render duplicate letters ("A | A) Some answer").
+  return data.results.map((r, i) => {
+    const correctText = decode(r.correct_answer);
+    const incorrectTexts = r.incorrect_answers.map(decode);
+    const allOptions = [correctText, ...incorrectTexts];
+    // Fisher-Yates shuffle so the correct answer isn't always position 0
+    for (let j = allOptions.length - 1; j > 0; j--) {
+      const k = Math.floor(Math.random() * (j + 1));
+      [allOptions[j], allOptions[k]] = [allOptions[k], allOptions[j]];
+    }
+    const correctIdx = allOptions.indexOf(correctText);
+    const correctLetter = ['A','B','C','D'][correctIdx];
+    return {
+      id:       'q' + (i + 1),
+      question: decode(r.question),
+      options:  allOptions,
+      correct:  correctLetter,
+      fun_fact: ''  // dead field; preserved for shape compatibility with Phase 2 Anthropic path
+    };
+  });
+}
+
+// Defensive validator for the premium Edge Function response. The function
+// (supabase/functions/generate-trivia) already filters malformed questions
+// server-side via isValidQuestion before responding, so a malformed shape
+// here would be surprising — but validating again makes future shape
+// mismatches loud rather than silently rendering as a broken round.
+// Returns the validated array; throws on missing or empty input.
+function transformPremiumQuestions(rawQuestions) {
+  if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
+    throw new Error('premium response missing questions array');
+  }
+  const valid = rawQuestions.filter(q =>
+    typeof q.question === 'string' &&
+    Array.isArray(q.options) && q.options.length === 4 &&
+    typeof q.correct === 'string' && ['A','B','C','D'].includes(q.correct)
+  );
+  if (valid.length === 0) {
+    throw new Error('premium response had no valid questions');
+  }
+  return valid;
+}
+
+async function triviaGenerate() {
+  const btn = document.getElementById('trivia-gen-btn');
+  const sta = document.getElementById('trivia-gen-status');
+  btn.disabled = true;
+  sta.textContent = 'Loading questions...';
+
+  const cat = CATEGORIES.find(c => c.id === triviaCategory) || CATEGORIES[0];
+
+  let qs = null;
+  let usedPremium = false;
+
+  // Premium attempt — gated on flag + signed-in. Not signed in falls through
+  // to OpenTDB silently (no toast — user wasn't necessarily aware of premium mode).
+  const me = window.elsewhere?.getCurrentUser?.();
+  if (isPremiumTrivia() && me?.id) {
+    try {
+      const { data, error } = await window.sb.functions.invoke('generate-trivia', {
+        body: { categoryLabel: cat.label, difficulty: triviaDiff, amount: 10 }
+      });
+      if (error) throw error;
+      qs = transformPremiumQuestions(data?.questions);
+      usedPremium = true;
+    } catch (e) {
+      console.warn('[trivia] premium failed, falling back to OpenTDB:', e?.message || e);
+      showToast('Premium unavailable, using free questions');
+      qs = null;  // explicit fall-through
+    }
+  }
+
+  // OpenTDB path — default if not premium, OR fallback if premium failed.
+  if (!qs) {
+    try {
+      qs = await fetchOpenTdbQuestions(cat, triviaDiff, 10);
+    } catch (e) {
+      sta.textContent = 'Error: ' + (e?.message || e);
+      btn.disabled = false;
+      return;
+    }
+  }
+
+  // Build players list from active participants — same pattern as Last Card / Euchre starters.
+  const players = currentParticipants
+    .filter(p => p.participation_role === 'active' && !p.left_at)
+    .map(p => p.display_name);
+
+  gameState = {
+    phase:              'waiting',
+    players:            players,
+    questions:          qs,
+    currentQuestionIdx: 0,
+    timePerQuestion:    20,
+    timer:              0,
+    answers:            {},
+    scores:             Object.fromEntries(players.map(p => [p, 0])),
+    streak:             Object.fromEntries(players.map(p => [p, 0])),
+    category:           cat.label
+  };
+
+  sta.textContent = '✓ ' + qs.length + ' questions ready' + (usedPremium ? ' (premium)' : '') + '!';
+  btn.disabled = false;
+  const startBtn = document.getElementById('mgr-start');
+  if (startBtn) startBtn.style.display = 'block';
 }
 
 function managerStartTrivia() {
