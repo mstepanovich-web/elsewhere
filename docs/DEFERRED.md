@@ -2573,7 +2573,7 @@ Modify (Path B) wins on cost (~80–120 LOC of additive changes vs ~250 LOC for 
 - `docs/GAMES-CONTROL-MODEL.md` § 4.1 — Trivia spec (admission_mode `self_join`, late-joiner choice screen, manager controls Reveal/Next/Skip)
 - Cluster Commit 4 (`ae276f7`, v2.106 games/player.html) — the active/audience patterns Part 3b will integrate with
 - Trivia Phase 2 Commit A (`c4af15c`) — Edge Function + db/019 migration that resolved the Anthropic-401 fragility
-- Trivia Phase 2 Commit B (this commit's SHA, v2.111) — browser-side premium opt-in wiring
+- Trivia Phase 2 Commit B (`7f1c99c`, v2.111) — browser-side premium opt-in wiring
 
 ---
 
