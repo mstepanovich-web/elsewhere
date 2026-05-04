@@ -6,7 +6,7 @@
 >
 > Read top-to-bottom. Pointers to deeper docs are at the end.
 
-Last updated: 2026-05-03 (active/audience UX cluster fully closed — spec + migrations + default-role fix + shell rejoin bypass + toggle UI + roster sectioning + lock-on-start all shipped and hardware-verified through cluster Commit 4 [v2.106 games] plus adjacent Last Card game-end race fix [v2.107 games])
+Last updated: 2026-05-04 (Trivia productionization + Trivia Phase 2 premium opt-in fully shipped — OpenTDB swap + polish [v2.108 → v2.110], generate-trivia Edge Function + db/019 migration deployed and cURL-verified, browser-side premium opt-in wiring [v2.111 → v2.113] with hidden URL easter-egg + in-UI toggle on Trivia info screen + Anthropic Sonnet 4.6 model bump. Trivia is now playable end-to-end for the first time)
 
 ---
 
@@ -222,58 +222,85 @@ Don't put server-side dirs (`db/`, `supabase/`) into the iOS bundle — they're 
 
 ## Current state (May 2026)
 
-### Latest shipped: Active/audience UX cluster (fully closed) + Last Card game-end race fix
-- `games/player.html` at `v2.107` on `origin/main`; `index.html` at `v2.101` (shell rejoin bypass fix)
-- 3a foundation chain (3a.1 plumbing → 3a.2 manager controls → 3a.2 hardware verification + fix-forward): see `docs/SESSION-5-PART-3-CLOSING-LOG.md` and `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md`
-- 3a.2 hardware-verified on iPhone Safari + laptop Chrome 2026-05-02: 4/6 gate items fully green; 2/6 partial for environmental + feature-gap reasons (not regressions)
-- Two 3a.2 fix-forward commits 2026-05-02:
-  - `b5e1af2` (v2.102) — `publishSessionEnded` reused-channel pattern (BUG-10 redux)
-  - `7dde17c` (v2.103) — `doJoin` publishes `participant_role_changed` (manager roster propagation on rejoin)
-- Active/audience UX cluster (started 2026-05-02, fully closed 2026-05-03 — all 4 commits shipped + verified):
-  - Spec amendment: `410ccc1` — GAMES-CONTROL-MODEL.md § 2.4 cluster (§ 2.4.1–§ 2.4.6 NEW: manager-bar buttons, manager toggle, participant toggle, default role at lobby join, manager visibility split, lock-on-start) + § 1 audience definition extended for lobby-state opt-out path
-  - Migration db/017: `8c83b35` — `db/017_set_my_participation_role.sql` (self-only RPC for participant active↔audience flip); applied to prod at `b1a8e4a`
-  - Default role fix (PARTIAL): `754d0a8` (v2.104) — `doJoin` caller-side override to `'active'` for non-manager fresh joins per § 2.4.4. Hardware verification 2026-05-02 revealed two bypass paths the partial fix didn't cover: (i) the manager path (`rpc_session_start` in db/009 hardcoded `'audience'` regardless of app); (ii) the rejoin/refresh path (doJoin's 23505 catch swallowed all already-a-participant cases without examining role).
-  - Default role fix (FULL except shell rejoin path): v2.105 (2026-05-02) — completes § 2.4.4 implementation for the manager path and the games/player.html doJoin path. Migration `db/018_session_start_active_default.sql` branches `rpc_session_start`'s manager insert on `p_app` ('games' → 'active'; 'karaoke' and other → 'audience' preserving karaoke schema-state semantics per `docs/KARAOKE-CONTROL-MODEL.md` § 1). doJoin restructured from join-then-handle-23505 to check-then-conditionally-join via `refreshSessionState` — eliminates 23505 as the every-refresh path; preserves participant toggle state across refresh. Hardware test session KMGGL8 on 2026-05-02 verified the manager path AND doJoin restructure GREEN, but surfaced a third bypass: non-manager joining via the shell home-screen Games tile routes through `index.html` `handleSameAppRejoin` which hardcoded `'audience'` and didn't publish `participant_role_changed`. That bypass closed in cluster Commit 2.6 below.
-  - Shell rejoin bypass fix (cluster Commit 2.6): `8825a08` (v2.101 index.html stamp, 2026-05-03) — closes the third bypass. Two prongs in `index.html`: (1) branch the role on `app` at both shell `rpc_session_join` call sites; (2) add `publishParticipantRoleChanged` after each successful join so the manager's roster updates within 1-2s without manual refresh. Hardware-verified GREEN 2026-05-03 against DMZS4G + U97XUQ.
-  - Commit 4 (toggle UI + roster sectioning + lock-on-start): `ae276f7` (v2.106 games/player.html, 2026-05-03) — participant "I'm playing in this game" toggle UI (per § 2.4.3, calls `rpc_session_set_my_participation_role` from db/017) + lobby roster sectioning into PLAYING (N) / WATCHING (M) headers (per § 2.4.5) + lock-on-start wiring (per § 2.4.6, `applyToggleLockState()` called from renderRoster + goToGameRoom + watchFromLobby). All 6 verification tests GREEN against test sessions 8DSSXK / SU8RMJ / BVBZ39 / PQ6T3I / TBFJJH on 2026-05-03.
-- **Adjacent fix surfaced during Commit 4 verification:** Last Card game-end broadcast race — `6ce533b` (v2.107 games/player.html, 2026-05-03). Manager's End Game broadcast `game-over` correctly, but non-manager's tab-visibility-change recovery code fired `request-state` ~1s later, manager's still-warm `gameInProgress=true` state responded with `game-state phase:playing`, non-manager's game-state handler unconditionally re-rendered Last Card and clobbered the screen-gameover transition. Two-line fix: (1) `managerEndGame` sets `gameInProgress=false` before broadcasting; (2) `game-state` receiver early-returns when `gameInProgress` is false. Hardware-verified GREEN against TBFJJH rematch flow on 2026-05-03.
-- Migrations tracker shipped 2026-05-02: `97f1e83` — `db/MIGRATIONS_APPLIED.md` checklist + CLAUDE.md doctrine ("a migration committed to repo is NOT shipped until applied to prod"). All 18 migrations listed; db/015 verified ✅ 2026-05-03 (`07ff37d`); db/017 + db/018 both flipped to ✅ same-day after manual prod application.
-- `db/016_remove_participant.sql` applied to prod 2026-05-02 (manual application via Supabase SQL Editor mid 3a.2 verification)
+### Latest shipped: Trivia productionization + Trivia Phase 2 premium opt-in (2026-05-04)
+- `games/player.html` at `v2.113` on `origin/main`; `index.html` at `v2.101` (unchanged from 2026-05-03)
+- Two tracks shipped today, six commits + Edge Function deploy + db/019 migration to prod:
+
+**Track 1 — Trivia productionization** (made Trivia actually playable for the first time):
+- `bc99f13` (v2.108) — Euchre auto-end Bugs A + B fix. Pre-existing race shape analogous to v2.107's Last Card race; surfaced by static audit. Manager-side `gameInProgress=false` set before broadcast in `euEndHand` auto-end branch + `send({type:'game-over', scores})` added inside the 3-second celebration `setTimeout`. Verification deferred (4-player Euchre setup impractical with 2 devices).
+- `046d374` (v2.109) — OpenTDB swap. Replaced broken Anthropic-direct `triviaGenerate` (401'd in production per CLAUDE.md doctrine line 140 — no auth header) with `https://opentdb.com/api.php` calls. CATEGORIES array gets `otdbId` field per entry; Food card relabeled to Art (no OpenTDB Food category); 11th "Anything" card added. Anthropic browser-direct path preserved as `// PHASE 2 REFERENCE` comment block (lines 2857–2882). Hardware-verified GREEN against TBFJJH (Movies+Easy, 10 questions, 863 vs 285 final scores) — first-ever working end-to-end Trivia round.
+- `4c3a612` (v2.110) — four polish fixes surfaced during the v2.109 verification round: auto-reveal grace period (2s after all submit, idempotent vs manual Reveal/Next via `clearTimeout(_autoRevealTimer)` at top of both); non-manager local timer countdown helper (`startNonManagerTimer`/`stopNonManagerTimer`, 1-second tick, syncs to manager broadcast); progress indicator "Question X of 10" via new `.trivia-progress` CSS class; wrong-answer styling (red border + red-faint background mirroring existing `.trivia-opt.correct` symmetry, repurposed `.trivia-opt.wrong` from `opacity: .4`). Hardware-verified GREEN.
+
+**Track 2 — Trivia Phase 2** (premium AI-generated questions via Anthropic):
+- `c4af15c` (Phase 2 Commit A, server-side only) — `supabase/functions/generate-trivia/index.ts` Edge Function (292 LOC) + `db/019_trivia_premium_usage.sql` migration. Trust boundary: Edge Function holds server-side `ANTHROPIC_API_KEY`, validates caller JWT via `supabase.auth.getUser`, enforces 20/user/UTC-day rate limit (composite PK `(user_id, day)`, RLS-enabled-no-policies for service-role-bypass-only access), calls Anthropic with Sonnet 4.6 (`claude-sonnet-4-6` per `https://platform.claude.com/docs/en/docs/about-claude/models/overview` 2026-05-04 — alias and API ID identical, no dated suffix exists). Filter pattern for malformed questions: drop bad ones, ship batch if ≥5 valid remain. **DEPLOY DOCTRINE: WITHOUT --no-verify-jwt flag** (opposite of send-push-notification's pattern; documented inline with explicit ✅/❌ block). cURL-verified GREEN post-deploy. Doubles as the Sonnet 4 deprecation bump (Sonnet 4 retiring 2026-06-15).
+- `8d70473` (docs) — db/019 row in `db/MIGRATIONS_APPLIED.md` flipped from ❓ to ✅ after manual SQL Editor application + three-query verification (table exists, RLS enabled, 0 policies).
+- `7f1c99c` (Phase 2 Commit B, v2.111) — browser-side premium opt-in wiring. URL-param easter-egg (`?premium=1` → localStorage `elsewhere-trivia-premium=1`, sticky; `?premium=0` clears) + `triviaGenerate` branching (premium path → `window.sb.functions.invoke('generate-trivia')` → `transformPremiumQuestions` defensive validator; on any error → `showToast('Premium unavailable, using free questions')` → silent OpenTDB fallback). Premium gating requires both `isPremiumTrivia()` true AND `getCurrentUser()?.id` non-null. Dynamic subtitle override in `selectGame` for premium-on. OpenTDB code extracted into `fetchOpenTdbQuestions(cat, diff, amount)` helper for reuse.
+- `8abbf6e` (docs) — DEFERRED.md SHA substitution for Phase 2 Commit B reference in the Trivia 3b entry.
+- `e97dc94` (v2.112) — Trivia premium UI toggle. Replaces URL `?premium=1` easter-egg as primary activation path (URL preserved as backup). Hardware testing surfaced that the URL param gets stripped during session routing on iOS Safari before `isPremiumTrivia()` runs. New in-UI toggle on the Trivia info screen (between info-sub and info-desc): `.premium-row` + `.premium-toggle` CSS mirrors the existing `.camera-opt` + `.camera-toggle` pattern with gold instead of green for `.on`. Label "Premium Questions" / subtext "AI-generated, higher quality · 20/day limit" — limit mention partially mitigates the surprise-429 concern from polish entry's item #2. `togglePremium` writes localStorage immediately, flips pill `.on` class, calls `applyPremiumSubtitle` (extracted from Commit B inline override) for in-place subtitle update. Static HTML with `display:none` initial; selectGame trivia branch sets `display:flex`, syncs pill state from localStorage, calls `applyPremiumSubtitle`.
+- `b068c2c` (v2.113) — two small polish fixes: (1) reset stale `trivia-gen-status` textContent on entry to Trivia info screen (was: stale "✓ 10 questions ready! (premium)" persisted across navigation); (2) removed redundant ☰ Games button from manager-bar — added at v2.49 (`ceff8cd`, 2026-04-15) during original Games-mode rewrite, never updated to match the proper End Session / Switch Game / Remove Player semantics introduced at v2.101 (`8825a08`, 2026-04-30). Footgun with no documented use case (no confirm, no broadcast, leaves manager and players out of sync). `goToLobby()` itself preserved (called from 6 other sites: back-link, doJoin routing, switch-game receive, managerSwitchGame, managerEndSession fallback, function definition).
+
+#### Resolved investigations from today (informational, no action required):
+- **Reveal feature** (manual override for v2.110 auto-reveal). Confirmed earns its place: handles cases where a player never submits (auto-reveal's all-submitted check won't fire) and where the manager wants to skip ahead before all submissions arrive. Reveal at v2.45 (`147fc9c`, 2026-04-15) plus auto-reveal at v2.110 (`4c3a612`, 2026-05-04) form the complete reveal lifecycle.
+- **Games vs Switch Game** distinction. ☰ Games removed in v2.113 as redundant pre-existing artifact (see commit `b068c2c` notes above). Switch Game retained as the proper "leave the current game" affordance.
+- **URL `?premium=1` routing gap on iOS Safari**. Resolved by in-UI toggle in v2.112 (`e97dc94`). Query param gets stripped during session routing before `isPremiumTrivia()` runs. URL backup path preserved unchanged for compatibility with bookmarks / muscle memory.
+
+### Recent shipped: Active/audience UX cluster (fully closed 2026-05-03)
+Historical context for yesterday's work; details preserved here for archaeological reference. The cluster shipped spec + migrations + default-role fix + shell rejoin bypass + toggle UI + roster sectioning + lock-on-start across cluster Commits 2 → 4 (v2.104 → v2.106 games/player.html + v2.101 index.html), plus adjacent Last Card game-end race fix (v2.107). All 6 verification tests GREEN against test sessions 8DSSXK / SU8RMJ / BVBZ39 / PQ6T3I / TBFJJH. Closeout at `4215387` (2026-05-03). Three pre-Trivia productionization fix-forwards: `b5e1af2` (v2.102, `publishSessionEnded` reused-channel BUG-10 redux), `7dde17c` (v2.103, `doJoin` `participant_role_changed` publish), and `6ce533b` (v2.107, Last Card game-end broadcast race). Spec amendment at `410ccc1` (GAMES-CONTROL-MODEL.md § 2.4 + § 1). Migrations: `db/017` (`8c83b35` + applied at `b1a8e4a`), `db/018` (with v2.105). See `docs/SESSION-5-PART-3-CLOSING-LOG.md` and `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` for full cluster details.
+
+### Other context
+- Migrations tracker shipped 2026-05-02 (`97f1e83`). All 19 migrations listed in `db/MIGRATIONS_APPLIED.md`; db/015 verified ✅ 2026-05-03; db/017, db/018, db/019 all flipped to ✅ same-day as application.
+- `db/016_remove_participant.sql` applied to prod 2026-05-02
+- `db/019_trivia_premium_usage.sql` applied to prod 2026-05-04 (`8d70473` flip commit)
 - iOS Capacitor bundle still at v2.99 (pre-3a.1) — sync deferred until next Capacitor-relevant work; Mobile Safari is the verification target per CLAUDE.md doctrine
-- See `docs/SESSION-5-PART-3-CLOSING-LOG.md`, `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md`, and `docs/GAMES-CONTROL-MODEL.md` § 2.4 for full details
+- One existing Edge Function deployed: `send-push-notification`. Trivia Phase 2 added a second: `generate-trivia`.
+- See `docs/SESSION-5-PART-3-CLOSING-LOG.md`, `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md`, and `docs/GAMES-CONTROL-MODEL.md` § 2.4 + § 4.1 for full details
 
 ### Hardware verification status
-- **v2.102 + v2.103 fix-forward** — verified green 2026-05-02 against fresh test environment.
-- **v2.104 default-role fix — superseded by v2.105.** Original v2.104 verification plan is moot.
-- **v2.105 default-role fix (full except shell rejoin) — partially verified at v2.105 (KMGGL8 surfaced third bypass), then re-verified GREEN 2026-05-03 (DMZS4G) as part of Cluster Commit 2.6's regression smoke.**
-- **Cluster Commit 2.6 (v2.101 index.html stamp) — verified GREEN 2026-05-03** against DMZS4G + U97XUQ. All 4 verification steps passed.
-- **Cluster Commit 4 (v2.106 games/player.html stamp) — verified GREEN 2026-05-03.** All 6 tests passed against 8DSSXK / SU8RMJ / BVBZ39 / PQ6T3I / TBFJJH (the post-rematch verification room used post-v2.107 deploy). Lock-on-start re-enable half required the v2.107 Last Card race fix to verify; once landed, the rematch flow returned both devices to lobby with toggles correctly enabled and original help text restored.
-- **Last Card game-end race fix (v2.107 games/player.html) — verified GREEN 2026-05-03** against TBFJJH rematch flow (Mike → Start New Game → End Game → Play Again Same Players → both devices return to lobby cleanly, no spontaneous re-render to Last Card).
+- **All 2026-05-04 commits verified GREEN** on iPhone Safari (Mike) + Mac Chrome (Michael):
+  - v2.109 (OpenTDB swap) — TBFJJH, Movies+Easy, 10 questions to completion
+  - v2.110 (Trivia polish) — verified all four polish fixes (auto-reveal, non-manager timer, progress indicator, wrong-answer styling)
+  - v2.111 (premium opt-in via URL) — partial: surfaced URL routing gap on iOS Safari, leading directly to v2.112
+  - v2.112 (premium UI toggle) — verified toggle works end-to-end (subtitle update, status text "(premium)" suffix, toggle state survives navigation)
+  - v2.113 (polish) — pending iPhone Safari hardware verification of stale-status reset + ☰ Games removal
+- **v2.108 (Euchre auto-end fix) — verification deferred.** 4-player Euchre setup impractical with 2 devices; bug shape and fix shape are exact analogs of the v2.107 Last Card race which verified GREEN, so confidence is high by analogy. See DEFERRED entry "Euchre auto-end path" (resolved status with the v2.108 SHA).
+- **All 2026-05-03 active/audience cluster commits** — verified GREEN earlier (see "Recent shipped" sub-section above for cluster verification record).
 
 ### Active deferred items
 
-Active/audience UX cluster (started 2026-05-02, fully closed 2026-05-03 — all entries resolved):
-- ~~GAMES-CONTROL-MODEL.md spec gap on lobby-state participation~~ — **Resolved 2026-05-02 in `410ccc1`** (§ 2.4 cluster amendment + § 1 audience extension).
-- ~~Default `participation_role` for self-join is `'audience'` instead of `'active'`~~ — **Resolved 2026-05-03** via the v2.104 → v2.105 → Cluster Commit 2.6 (`8825a08`, v2.101 index.html) chain; closeout commit `c77cc74`.
-- ~~No participant-side "I'm playing in this game" toggle~~ — **Resolved 2026-05-03 in `ae276f7`** (cluster Commit 4, v2.106 games/player.html).
-- ~~Manager lobby view doesn't differentiate active vs audience~~ — **Resolved 2026-05-03 in `ae276f7`** (cluster Commit 4, v2.106 games/player.html).
+Trivia Phase 2 polish (filed 2026-05-04 in Commit B, partially mitigated in v2.112):
+- **Lobby card subtitle dynamism** (`games/player.html` line 403). Hardcoded HTML "AI-generated questions · 2–20 players" inaccurate when premium is OFF. Visible only briefly during game selection; low-impact polish.
+- **Usage indicator UI** ("you've used N/20 today"). Would let users see daily premium quota approaching the limit instead of getting a surprise 429. Partially mitigated 2026-05-04 in v2.112 (toggle subtext mentions "20/day limit" upfront); full dynamic counter implementation still deferred. Requires uncommenting the read policy in db/019, applying it, plus a `getRemainingPremiumQuota()` helper.
+- **"(premium)" status text styling**. Inline format may feel cluttered; consider a small badge / chip near the status text, or dropping the suffix in favor of the dynamic subtitle as the sole signal.
 
-Other 3a.2-era items (filed 2026-05-02):
-- ~~No tracking of which `db/*.sql` migrations have been applied to production~~ — **Resolved 2026-05-02 in `97f1e83`** (`db/MIGRATIONS_APPLIED.md` checklist + CLAUDE.md doctrine).
-- TV2 doesn't recover active session on cold load (and doesn't navigate when phone starts game) — Games-side analog of existing 2e.2 entry; needs bootstrap query + broadcast delivery audit
-- Cosmetic: wrong log message on `session_ended` navigation path — diagnosability only, low priority
-- Latent: `karaoke/singer.html` doJoin missing `publishParticipantRoleChanged` — same gap fixed in games/player.html v2.103, mild symptom in karaoke
+URL-param routing gap on iOS Safari (filed + resolved 2026-05-04):
+- ~~URL `?premium=1` mechanism gets stripped during session routing before `isPremiumTrivia()` runs~~ — **Resolved 2026-05-04 in `e97dc94`** (v2.112) by in-UI toggle. URL backup path preserved.
+
+Trivia integration (Session 5 Part 3b) — pre-existing entry, status updated 2026-05-04:
+- Active/audience integration scope (late-joiner choice screen, admission_mode dispatch, Skip Question manager-bar wiring) still pending.
+- Anthropic-fragility sub-concerns ✅ resolved in Trivia Phase 2 (Edge Function + Sonnet 4.6 model bump). The "preserve Anthropic call verbatim" sentiment now refers to the `// PHASE 2 REFERENCE` comment block at games/player.html lines 2857–2882, not live code.
 
 Carried from earlier sessions:
+- TV2 doesn't recover active session on cold load (Games-side analog of existing 2e.2 entry; needs bootstrap query + broadcast delivery audit)
+- Cosmetic: wrong log message on `session_ended` navigation path (diagnosability only, low priority)
+- Latent: `karaoke/singer.html` doJoin missing `publishParticipantRoleChanged` (same gap fixed in games/player.html v2.103, mild symptom in karaoke)
 - Production APNs cert + entitlement flip (carried from 2e.0)
 - Failed-token cleanup on APNs 410 BadDeviceToken (carried from 2e.0)
 - Custom confirm-modal styling (papercut from 2c.2 / 2c.3 / 2e.2 §4)
 - Pre-existing JS error at `singer.html:645` (`stat-w` element missing)
+- **Working-tree artifacts**: empty 0-byte files `-H` and `-d` in repo root, persisted across the 2026-05-04 session. Likely from a malformed shell command (cURL flag-parsing mishap or earlier `git commit -m "$(cat <<EOF...)"` quote failure). Not in any commit; safe to `rm -- '-H' '-d'` when convenient.
 
-### Up next: Session 5 Part 3b — Trivia integration
-Active/audience cluster is closed. Next track is Trivia integration per `docs/GAMES-CONTROL-MODEL.md` § 4.1:
-- Trivia uses `self_join` admission, late-joiner choice screen (Active vs Audience), manager controls (Reveal/Next/Skip) routed through `control_role` check.
-- See `docs/SESSION-5-PART-3-CLOSING-LOG.md` § "Up next" for the full plan.
+Active/audience cluster (closed 2026-05-03, kept here for closure-trail):
+- ~~GAMES-CONTROL-MODEL.md spec gap on lobby-state participation~~ — **Resolved 2026-05-02 in `410ccc1`**.
+- ~~Default `participation_role` for self-join is `'audience'` instead of `'active'`~~ — **Resolved 2026-05-03** via the v2.104 → v2.105 → Cluster Commit 2.6 chain.
+- ~~No participant-side "I'm playing in this game" toggle~~ — **Resolved 2026-05-03 in `ae276f7`**.
+- ~~Manager lobby view doesn't differentiate active vs audience~~ — **Resolved 2026-05-03 in `ae276f7`**.
+- ~~No tracking of which `db/*.sql` migrations have been applied to production~~ — **Resolved 2026-05-02 in `97f1e83`**.
+
+### Up next
+Three tracks queued, no formal sequencing yet:
+1. **Premium UX differentiation** — ways for the premium path to actually feel different from OpenTDB beyond just "AI-generated". Custom categories (manager types a free-form theme like "obscure prog rock"), Wikipedia-aware questions (Anthropic with retrieval to current events), per-user personalization (Trivia tuned to past players' interests). Open design space; nothing committed. The current premium path returns OpenTDB-shaped questions with no inherent quality signal, so this is where the "premium" framing earns its keep.
+2. **Trivia 3b proper** — active/audience integration per `docs/GAMES-CONTROL-MODEL.md` § 4.1: late-joiner choice screen (Active vs Audience), admission_mode dispatch in `handleMessage`'s `game-state` receiver, Skip Question manager-bar wiring (currently absent — `mgr-skip` button exists but only fires for Last Card). Modify-existing path per the cluster-closeout audit. Score/streak math, 4-option DOM layout, OpenTDB+Anthropic fetch helpers all preserved verbatim.
+3. **Cleanup**: remove the working-tree `-H` and `-d` artifact files. One-line `rm`. Filed in deferred items above.
 
 ---
 
