@@ -2646,6 +2646,37 @@ Mike has never tested Euchre heavily — the implementation works in static revi
 
 ---
 
+### Session 5 closeout — iOS bundle sync from v2.99 to current
+
+**Priority:** Medium (Session 5 closeout step, not blocking but should land before Session 6 starts).
+
+**Status:** Deferred since Session 5 Part 3a.1 (~3 weeks of drift); needs single catch-up sync.
+
+#### What
+
+iOS Capacitor bundle at `~/Projects/elsewhere-app/` is at v2.99 (pre-3a.1). Mobile Safari has been the verification target throughout Session 5; native iOS app is ~3 weeks behind origin/main (currently at v2.113). Trigger: at Session 5 close, before Session 6 (SMS pre-invites) begins.
+
+#### Work
+
+1. Run the standard sync chain per CLAUDE.md "iOS Capacitor sync — session-closing ritual"
+2. Smoke-test all current functionality (Trivia premium toggle, Last Card race fix, manager controls) natively on the iOS device, not just in Mobile Safari
+3. Resolve any drift-attribution issues that surface (3 weeks of changes landing at once may surface unexpected behavior — bug shapes that have been live in the web bundle for weeks could appear "new" on the native iOS app)
+4. Note the iOS bundle is now caught up in the Session 5 closing log
+5. Going forward, the session-closing ritual prevents this drift from re-accumulating
+
+#### Why deferred
+
+No native iOS features were touched during Sessions 3a → 3b productionization → Phase 2; Mobile Safari was sufficient for all verification. The cost of catching up at Session 5 close is small (~30 minutes); the cost of doing it after every commit during the session would have been significant. The ritual formalized in CLAUDE.md (commit `3164524`) prevents future sessions from accumulating similar drift.
+
+#### Related
+
+- CLAUDE.md "iOS Capacitor sync — session-closing ritual" (canonical for the process)
+- `docs/SESSION-5-PART-3-CLOSING-LOG.md` "Capacitor app caveat" section (drift first noted)
+- `docs/SESSION-5-PART-3B-CLOSING-LOG.md` "Capacitor app caveat" section (drift continued)
+- Doctrine commit `3164524` — formalized the session-closing ritual that prevents future drift
+
+---
+
 ## Migrated from PHASE1-NOTES.md
 
 The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captured here in summary form; the full original text lives in PHASE1-NOTES.md git history (commit `9296a50` or earlier). Future fill-outs should flesh these into the full entry format above when someone picks one up.
