@@ -174,6 +174,7 @@ Things we don't re-litigate:
 - **Edge Function `send-push-notification` deploys MUST include `--no-verify-jwt`.** Without it, the Postgres trigger's bearer token gets rejected by Supabase's edge gateway. See 2e.2 log known issues for the full story.
 - **Vault secret `service_role_key`** is now a misnomer (it holds `PROMOTION_TRIGGER_SECRET`, not the service role JWT). Name kept for db/015 SQL backward compat.
 - **iOS bundle drift is acceptable mid-session.** Sync only when testing native concerns (push, plugins).
+- **iOS Capacitor sync at session close.** Any session that ships user-facing web bundle changes ends with `npx cap sync ios` + Xcode rebuild + install verification on a real iOS device. See CLAUDE.md "iOS Capacitor sync — session-closing ritual" for the full chain.
 - **TextEdit will mangle code files.** Always use a real editor (Cursor, VS Code, etc.) or `pbcopy` from terminal.
 - **Chat-display autolinks `.md`/`.ts`/`.sql` filenames** as `[name](http://name)` — purely visual, real filesystem is clean. Use `ls | cat` to verify if uncertain.
 

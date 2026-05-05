@@ -155,7 +155,7 @@ Phantom/aspirational venues don't stay in the JSON — if there's no `.jpg` in `
 
 - **`send-push-notification` Edge Function deploys MUST include `--no-verify-jwt`.** The Postgres trigger sends a non-JWT shared secret in the `Authorization: Bearer` header. Without `--no-verify-jwt`, Supabase's edge gateway rejects the call before it reaches function code with `UNAUTHORIZED_INVALID_JWT_FORMAT`. A vanilla `supabase functions deploy send-push-notification` will silently re-enable JWT verification at the gateway and break the trigger. This is a real footgun — consider a wrapper script (`scripts/deploy-push-fn.sh`) if/when you forget once. The shared secret design itself is in the function header comment and in `db/015`. (Locked 2e.2.)
 
-- **iOS bundle drift mid-session is acceptable.** The Capacitor app at `~/Projects/elsewhere-app/` bundles its own copy of the web files via `cap sync` from `~/Projects/elsewhere-app/www/`. That bundle is updated via rsync from the repo, then `npx cap sync ios`, then Xcode rebuild + install. Don't sync after every web edit — only when testing native concerns (push notifications, Capacitor plugins, fullscreen). Mobile Safari against GitHub Pages handles most iteration. End-of-session sync if a final on-device verification is needed.
+- **iOS bundle drift mid-session is acceptable.** The Capacitor app at `~/Projects/elsewhere-app/` bundles its own copy of the web files via `cap sync` from `~/Projects/elsewhere-app/www/`. That bundle is updated via rsync from the repo, then `npx cap sync ios`, then Xcode rebuild + install. Don't sync after every web edit — only when testing native concerns (push notifications, Capacitor plugins, fullscreen). Mobile Safari against GitHub Pages handles most iteration. End-of-session sync per the "iOS Capacitor sync — session-closing ritual" section below — required for any session that ships user-facing web bundle changes.
 
 - **Application UI sounds go in `sounds/ui/`.** Notifications, transitions, alerts. The root `sounds/` directory is for venue ambient (matched 1:1 with `venues/`). Don't bury app-level sounds inside per-app folders. (Convention locked 2e.2; first inhabitant is `sounds/ui/take-stage.mp3`.)
 
@@ -187,3 +187,17 @@ Before pushing the final commit of any session, work this checklist:
 The DEFERRED.md step (item 3) is the most likely to be skipped under time pressure. Treat it as non-optional. Items mentioned only in session logs are functionally lost — the session log is the trail, DEFERRED.md is the inbox. Items that don't make it to the inbox don't get worked on, even when you remember they exist; they just sit in your head as nagging unease that something is being dropped.
 
 If the user says "we're done" without working through this checklist, prompt them. The checklist is cheap (15 minutes for a productive session); skipping it is expensive (every future session pays for the gap).
+
+### iOS Capacitor sync — session-closing ritual
+
+Any session that ships user-facing web bundle changes ends with `npx cap sync ios` + Xcode rebuild + install verification on a real iOS device. iOS bundle drift is acceptable mid-session (Mobile Safari is the verification target during work) but unacceptable at session-close — drift compounds across sessions and makes attribution of issues harder when sync eventually happens.
+
+Standard sync chain at session close:
+
+1. `~/sync-app.sh` (rsync from `~/Downloads/elsewhere-repo` to `~/Projects/elsewhere-app/www/` with appropriate excludes)
+2. `npx cap sync ios` (copy to `ios/App/App/public/`)
+3. Xcode rebuild + install on a real iOS device
+4. Smoke-test the new functionality natively (not just Mobile Safari)
+5. Note the iOS bundle version in the session closing log
+
+Skip the ritual only when: (a) no user-facing web changes shipped (e.g., docs-only commits), or (b) the session explicitly defers iOS verification with a tracked DEFERRED entry naming the trigger for catch-up.
