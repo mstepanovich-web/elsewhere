@@ -273,10 +273,24 @@ Active/audience cluster (closed 2026-05-03, kept here for closure-trail):
 - ~~No tracking of which `db/*.sql` migrations have been applied to production~~ — **Resolved 2026-05-02 in `97f1e83`**.
 
 ### Up next
-Three tracks queued, no formal sequencing yet:
-1. **Premium UX differentiation** — ways for the premium path to actually feel different from OpenTDB beyond just "AI-generated". Custom categories (manager types a free-form theme like "obscure prog rock"), Wikipedia-aware questions (Anthropic with retrieval to current events), per-user personalization (Trivia tuned to past players' interests). Open design space; nothing committed. The current premium path returns OpenTDB-shaped questions with no inherent quality signal, so this is where the "premium" framing earns its keep.
-2. **Trivia 3b proper** — active/audience integration per `docs/GAMES-CONTROL-MODEL.md` § 4.1: late-joiner choice screen (Active vs Audience), admission_mode dispatch in `handleMessage`'s `game-state` receiver, Skip Question manager-bar wiring (currently absent — `mgr-skip` button exists but only fires for Last Card). Modify-existing path per the cluster-closeout audit. Score/streak math, 4-option DOM layout, OpenTDB+Anthropic fetch helpers all preserved verbatim.
-3. **Cleanup**: remove the working-tree `-H` and `-d` artifact files. One-line `rm`. Filed in deferred items above.
+
+Near-term (within Session 5 closing scope):
+1. **Trivia 3b proper** — active/audience integration per `docs/GAMES-CONTROL-MODEL.md` § 4.1: late-joiner choice screen (Active vs Audience), admission_mode dispatch in `handleMessage`'s `game-state` receiver, Skip Question manager-bar wiring (currently absent — `mgr-skip` button exists but only fires for Last Card). Modify-existing path per the cluster-closeout audit.
+2. **Last Card 3c + Euchre 3d** — completes Part 3 across all three games (per Session 5 plan).
+3. **Part 5 verification** — multi-user end-to-end testing of all Session 5 flows; requires 2+ test accounts.
+
+Medium-term (post-Session-5, hard-ordered):
+4. **Session 6** — SMS pre-invites for household onboarding (~1-2 hr; was Session 4.10.1)
+5. **Session 7** — Admin management UI (~2-3 hr; was Session 4.11)
+6. **Session 8** — Trivia premium UX differentiation
+7. **Session 9** — Audience.html unification (NHHU → HHU UI merge) (keystone)
+8. **Session 10** — Venues at platform level (cross-app service)
+9. **Session 11** — Audience-to-NHHU conversion path (user-acquisition funnel)
+10. **Session 12** — Wellness app implementation
+
+See `docs/ROADMAP.md` for each session's why, estimate, dependencies, and canonical doc references.
+
+Cleanup: remove the working-tree `-H` and `-d` artifact files. One-line `rm`. Filed in deferred items above.
 
 ---
 

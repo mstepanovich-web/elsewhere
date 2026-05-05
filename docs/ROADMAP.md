@@ -42,21 +42,76 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 
 ## Queued sessions
 
-> **Note on numbering:** Session numbers reflect topical relation to 4.10, not execution order. 4.10.2 and 4.10.3 shipped before 4.10.1. Session 5 is now in progress ahead of both 4.10.1 and 4.11 because its multi-user schema unblocks real multi-user apps. 4.10.1 (SMS pre-invites) and 4.11 (admin UI) remain queued behind Session 5.
+> **Note on numbering:** Sessions 6 → 12 are a clean integer sequence reflecting technical-first dependency ordering. Sessions 6 + 7 (formerly 4.10.1 + 4.11) renumbered 2026-05-04 to drop the 4.x topical prefix in favor of the post-Session-5 sequence. The legacy 4.x numbering is preserved in the "Completed sessions" section below for traceability against shipped work.
+>
+> Hard ordering Session 6 → 7 → 8 → 9 → 10 → 11 → 12: small wins first (SMS pre-invites, admin UI, Trivia premium UX), then keystone reworks (audience.html unification, cross-app venues), then user-acquisition + new app surfaces (NHHU conversion funnel, wellness app). Sessions 9 + 10 unblock Sessions 11 + 12.
 
-### Session 4.10.1 — Phone-based household pre-invites (SMS)
+### Session 6 — SMS pre-invites for household onboarding
 
-- **Why:** needed before scaling household onboarding past direct email invites
+- **Why:** Phone-based household pre-invites, needed before scaling household onboarding past direct email invites. (Was Session 4.10.1.)
 - **Estimated:** 1–2 hours
 - **Depends on:** nothing (orthogonal to Session 5)
-- **Reference:** `DEFERRED.md` → "Phone-based household pre-invites (SMS verification)"
+- **Reference:** `docs/DEFERRED.md` → "Phone-based household pre-invites (SMS verification)"
 
-### Session 4.11 — Admin management UI
+### Session 7 — Admin management UI
 
-- **Why:** 4.10 ships with no household admin UI beyond pre-invite. Member roster, demote/promote, scan-approval flow, pending invites inbox all need first-class UI surfaces.
+- **Why:** 4.10 ships with no household admin UI beyond pre-invite. Member roster, demote/promote, scan-approval flow, pending invites inbox all need first-class UI surfaces. (Was Session 4.11.)
 - **Estimated:** 2–3 hours
-- **Depends on:** 4.10 RPCs (already shipped — `rpc_approve_household_member`, `rpc_designate_admin`)
-- **Reference:** `DEFERRED.md` → "Scan-approval flow", "Pending Invitations inbox"
+- **Depends on:** 4.10 RPCs (already shipped — `rpc_approve_household_member`, `rpc_designate_admin`). Session 6 (SMS pre-invites) lands first.
+- **Reference:** `docs/DEFERRED.md` → "Scan-approval flow", "Pending Invitations inbox"
+
+### Session 8 — Trivia premium UX differentiation
+
+- **Why:** Trivia Phase 2 (shipped 2026-05-04) plumbs premium AI-generated questions but offers no functional advantage over OpenTDB beyond the "AI-generated" label. Premium needs to actually feel premium. Open design space — three candidate directions: (1) custom categories (manager types a free-form theme like "obscure prog rock"); (2) Wikipedia-aware questions (Anthropic with retrieval to current events); (3) per-user personalization (Trivia tuned to past players' interests).
+- **Estimated:** TBD pending design conversation.
+- **Depends on:** Nothing technically. Open design space; product conversation comes first.
+- **Reference:** `docs/DEFERRED.md` → "Trivia premium polish (post-Phase 2)" (the existing 3-item polish entry surfaces some prereqs but not the differentiation work itself; this entry should be added in a future commit if differentiation work crystallizes).
+
+### Session 9 — Audience.html unification (NHHU → HHU UI merge)
+
+- **Why:** Current parallel UI codebases (audience.html for NHHU, singer.html/index.html for HHU) compound complexity with every feature added. Post-Session-5 work to absorb audience.html into the HHU app as a parameterized NHHU view. Same UI fabric for both populations, conditional rendering hides TV-required features.
+- **Status:** Keystone for further platform work — until this lands, NHHU conversion funnel + games venues + wellness all fight against the audience-vs-singer split.
+- **Estimated:** TBD pending session planning. Substantial structural work.
+- **Existing precondition:** audience.html freeze in effect since Session 5 (no new features there; bug fixes only). See DEFERRED entry "Audience.html freeze".
+- **Depends on:** Session 5 closure. Sessions 6-8 don't strictly block this but are smaller and ship faster.
+- **References:**
+  - `docs/KARAOKE-CONTROL-MODEL.md` § 5.5 "Post-Session-5 — Audience.html migration into unified app" (canonical)
+  - `docs/PHONE-AND-TV-STATE-MODEL.md` line 419 (cross-reference)
+  - `docs/DEFERRED.md` "Migrate audience.html into unified app as parameterized NHHU view" (line 1436)
+  - `docs/DEFERRED.md` "Audience.html freeze" (line 1422, active constraint)
+
+### Session 10 — Venues at platform level (cross-app service)
+
+- **Why:** Venues are currently karaoke-only (`karaoke/stage.html` owns the 360° panorama renderer, `venues.json` schema, etc.). Elevating them to a platform-level cross-app service usable by Games (and future apps like wellness) is a documented post-Session-5 architectural rework.
+- **Estimated:** TBD pending session planning.
+- **Three-part work documented:**
+  1. Extract 360° panorama rendering from `karaoke/stage.html` into `shell/venue-renderer.js` (Three.js setup, texture loading, transition UX)
+  2. Games integration: each game's blockade image becomes a venue entry in `venues.json` with product tag 'games'; games pages consume the shared renderer
+  3. Phase 2 follow-up: DeepAR camera insertion for player presence in games
+- **Triggers** (per DEFERRED entry): either wellness app start, OR games visual parity priority. NOT urgent for Session 5; explicit "don't bundle with Session 5" guidance.
+- **Depends on:** Could run parallel with Session 9, but Session 9 first means Session 10 has cleaner UI fabric to build into.
+- **References:**
+  - `docs/DEFERRED.md` "Venues as cross-app service (games, wellness, future apps)" (line 846, canonical)
+  - `docs/DEFERRED.md` "Venues integration (post-Session-5)" parent cluster (line 897, six downstream items)
+
+### Session 11 — Audience-to-NHHU conversion path (user-acquisition funnel)
+
+- **Why:** Convert passive audience members into registered users. Phase 1 placeholder may ship in Session 5 (minimal Elsewhere home for NHHU returning from audience deep link, with "go back" + "explore Elsewhere" options). Full conversion funnel (sign-up, app downloads, game launchers) is post-Session-5.
+- **Status:** User-acquisition strategy. Sister item to Session 9 unification — listed in same § 5.4-5.5 vicinity but distinct scope (UX/funnel work vs. structural UI rework).
+- **Estimated:** TBD pending session planning.
+- **Depends on:** Session 9 (unification) lands first for best funnel quality — converted NHHUs should land in the unified app, not a separate codebase. Sessions 6 + 7 (SMS pre-invites + admin UI) are also soft prerequisites for funnel quality.
+- **References:**
+  - `docs/KARAOKE-CONTROL-MODEL.md` § 5.4 "Post-Session-5 — Audience-to-NHHU conversion path" (canonical)
+  - `docs/DEFERRED.md` "Audience-to-NHHU conversion path" (line 1408)
+
+### Session 12 — Wellness app implementation
+
+- **Why:** Wellness is a placeholder in the architecture today (no implementation). Adding it requires both the unified app (Session 9 — wellness needs the same UI fabric, otherwise becomes a third parallel codebase) and the platform-level venue service (Session 10 — wellness sessions need their own venue/environment system).
+- **Estimated:** TBD pending session planning.
+- **Depends on:** Session 9 (unification) AND Session 10 (cross-app venues). Without both, wellness becomes a third parallel UI codebase.
+- **References:**
+  - `docs/SESSION-5-PLAN.md` (wellness mentioned as future app; schema supports `app = 'wellness'` for future)
+  - `docs/DEFERRED.md` (no dedicated wellness entry yet; this Session 12 entry is the placeholder)
 
 ---
 
