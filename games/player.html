@@ -835,7 +835,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.114</div>
+<div class="ver">v2.115</div>
 
 <script>
 'use strict';
@@ -1450,6 +1450,13 @@ function handleMessage(uid, data) {
     // 2026-05-03; see DEFERRED entry "Last Card 'End Game' button...".)
     if (!gameInProgress) return;
     gameState=msg.state;
+    // 3b § 4.1: route non-manager audience late-joiners to an admission-
+    // mode-specific surface before falling through to per-game rendering.
+    // Returns 'navigated' when the helper has moved the caller off the
+    // current screen (today: screen-trivia-late-choice for Trivia self_join);
+    // 'fall-through' otherwise. 3c/3d extend the helper's branches without
+    // touching this call site.
+    if (handleAudienceGameStateArrival(msg) === 'navigated') return;
     // If we're not on the game screen yet, navigate there
     const activeScreen = document.querySelector('.screen.active')?.id;
     if (currentGame==='lastcard') {
@@ -1926,6 +1933,87 @@ async function joinTriviaAsAudience() {
   }
   _triviaLateChoiceMadeForGame = true;
   goToGameRoom();
+}
+
+// 3b § 4.1: admission-mode dispatcher for non-manager audience late-joiners
+// arriving mid-game. Invoked at the top of handleMessage's game-state receiver
+// branch. Returns 'navigated' when the caller has been routed to an
+// admission-mode-specific surface and the receiver should stop processing
+// the message; 'fall-through' otherwise (proceed to per-game rendering).
+//
+// Decision tree per docs/GAMES-CONTROL-MODEL.md § 4.1:
+//   1. control_role === 'manager'       → fall-through (manager always sees game)
+//   2. participation_role === 'active'  → fall-through (player always sees game)
+//   3. participation_role === 'audience' → branch on currentSession.admission_mode
+//        (a) 'self_join'              (Trivia)   → screen-trivia-late-choice
+//        (b) 'wait_for_next'          (LastCard) → STUB 3c, fall-through today
+//        (c) 'manager_approved_batch' (Euchre)   → STUB 3d, fall-through today
+//   4. currentMyRow null / legacy mode  → fall-through (preserve unsigned-in path)
+//
+// Forward-compat note: 3c rewrites only the wait_for_next branch body, 3d
+// rewrites only the manager_approved_batch branch body. The dispatch shape
+// stays put — no restructure required when 3c/3d ship.
+function handleAudienceGameStateArrival(msg) {
+  // (1)(2) Manager and active participants always see the game.
+  if (currentMyRow?.control_role === 'manager')        return 'fall-through';
+  if (currentMyRow?.participation_role === 'active')   return 'fall-through';
+  // (4) Legacy mode / unsigned-in — no session row to read admission_mode
+  //     from. Preserve today's behavior (per-game rendering).
+  if (!currentMyRow)                                   return 'fall-through';
+  // Anything not 'audience' at this point — defensive fall-through for
+  // future enum values or null role.
+  if (currentMyRow.participation_role !== 'audience')  return 'fall-through';
+
+  // (3) Audience — branch on admission_mode. Defensive fallback to
+  // 'self_join' if the sessions row hasn't fully loaded yet (refreshSessionState
+  // populates currentSession.admission_mode from db/018; if the row arrives
+  // out-of-order with the game-state broadcast, treat as self_join — the
+  // safer mode that always prompts).
+  const mode = currentSession?.admission_mode || 'self_join';
+
+  // (3a) self_join — Trivia § 3.1.
+  if (mode === 'self_join') {
+    // Don't fire on waiting-phase broadcasts (game hasn't started yet);
+    // those reach screen-game-room via existing rendering. The choice
+    // screen is meant for live mid-game arrivals only. Forward-defensive —
+    // managerStartTrivia flips phase to 'question' before broadcasting,
+    // so a 'waiting' phase here is rare in practice.
+    if (msg.state?.phase === 'waiting') return 'fall-through';
+    // One-shot: if the user already chose Active or Audience for this
+    // game, don't re-prompt on subsequent game-state arrivals.
+    if (_triviaLateChoiceMadeForGame) return 'fall-through';
+    // Populate the context line with live question + category, then
+    // navigate to the choice screen. Reads from msg.state directly so the
+    // copy reflects the most recent broadcast even before gameState is
+    // (or isn't) mutated by the caller.
+    const ctx = document.getElementById('trivia-late-choice-context');
+    if (ctx && msg.state) {
+      const total  = msg.state.questions?.length;
+      const idxOne = (msg.state.currentQuestionIdx ?? 0) + 1;
+      const cat    = msg.state.category || 'Trivia';
+      const prefix = total ? ('Question ' + idxOne + ' of ' + total + ' — ' + cat) : cat;
+      ctx.textContent = prefix + ". Jump in now (you'll score 0 for skipped questions) or watch from the lobby.";
+    }
+    goTo('screen-trivia-late-choice');
+    return 'navigated';
+  }
+
+  // (3b) wait_for_next — Last Card § 3.2. STUB FOR 3c. Today: fall-through
+  // so existing per-game rendering takes audience onto screen-lastcard.
+  // TODO-3c: per docs/GAMES-CONTROL-MODEL.md § 3.2, route Last Card audience
+  // to a "waiting for next round" surface with their queue position. Helper
+  // return value flips to 'navigated' once that surface exists.
+  if (mode === 'wait_for_next') return 'fall-through';
+
+  // (3c) manager_approved_batch — Euchre § 3.3. STUB FOR 3d. Today: fall-
+  // through. TODO-3d: per § 3.3, route Euchre audience to a "manager will
+  // admit you next hand" wait surface that listens for the batch-admit
+  // broadcast. Helper return value flips to 'navigated' once that surface
+  // exists.
+  if (mode === 'manager_approved_batch') return 'fall-through';
+
+  // Unknown admission_mode — defensive fall-through rather than block.
+  return 'fall-through';
 }
 
 // Lock-on-start (§ 2.4.6): both toggles disable while a specific game is in
