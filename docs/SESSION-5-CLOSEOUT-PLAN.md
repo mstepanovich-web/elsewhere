@@ -39,12 +39,15 @@ up cleanly once Session 5 is closed.
 
 ### Day 1 — v2.113 hardware verification + iOS Capacitor sync + start Trivia 3b proper
 
-**Status:** ⏳ Not started
+**Status:** 🟡 In progress (item 1 done; items 2 + 3 pending)
 
 **Morning:**
-1. iPhone Safari verification of v2.113 polish items (stale "(premium)"
-   status text reset on entry, ☰ Games button removal). Mark v2.113 ✅
-   GREEN in `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md`. ~5 min.
+1. ✅ Done 2026-05-13. iPhone Safari verification of v2.113 polish items
+   (stale "(premium)" status text reset on entry, ☰ Games button removal).
+   Marked v2.113 ✅ GREEN in `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md`
+   (commit `efabb48`). Verified 2026-05-13 on iPhone Safari. Surfaced
+   toggle-persistence question — filed as DEFERRED entry,
+   closed-as-wontfix for now (sticky behavior retained).
 2. iOS Capacitor sync catch-up: bundle v2.99 → v2.113. ~30 min. Reference
    DEFERRED entry "Session 5 closeout — iOS bundle sync from v2.99 to
    current". Done now while verification context is fresh; doing it later
