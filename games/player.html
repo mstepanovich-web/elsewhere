@@ -835,7 +835,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.115</div>
+<div class="ver">v2.116</div>
 
 <script>
 'use strict';
@@ -2502,6 +2502,17 @@ function managerNext()   { if(currentGame==='trivia') triviaNext();   }
 function managerSkip()   {
   if (currentGame==='lastcard' && gameState) {
     gameState=lcApplyDraw(gameState); broadcastState(); renderLastCard();
+    return;
+  }
+  // 3b § 3.1: Skip Question — advance to the next question without revealing
+  // the answer. No scoring happens here (scoring runs only inside triviaReveal,
+  // so a skipped question is implicitly 0pts for everyone). triviaNext is safe
+  // to call from 'question' phase — it bumps currentQuestionIdx, resets phase
+  // / answers / timer, and broadcasts. Phase guard prevents accidental use
+  // during 'reveal' phase (Next → handles that transition instead).
+  if (currentGame==='trivia' && gameState?.phase === 'question') {
+    triviaNext();
+    return;
   }
 }
 function managerEndGame() {
@@ -3360,19 +3371,44 @@ function startTrivia(state) {
   document.getElementById('trivia-game').style.display='flex';
   document.getElementById('trivia-waiting').style.display='none';
   if (isManager) {
-    document.getElementById('mgr-reveal').style.display='block';
-    document.getElementById('mgr-next').style.display='block';
+    // Static manager-bar setup — button text + onclick wired once. Visibility
+    // is owned by applyTriviaManagerButtonVisibility (called below + from
+    // renderTrivia) so mgr-skip toggles per phase automatically.
     document.getElementById('mgr-reveal').textContent='Reveal';
     document.getElementById('mgr-next').textContent='Next →';
     document.getElementById('mgr-next').onclick=triviaNext;
   }
+  // 3b § 3.1: apply manager-bar visibility (mgr-reveal / mgr-next / mgr-skip)
+  // before the first render so a manager landing mid-question sees all three.
+  applyTriviaManagerButtonVisibility();
   renderTrivia();
   if (isManager) startTriviaTimer();
   else if (currentMyRow?.control_role !== 'manager') startNonManagerTimer();
 }
 
+// 3b § 3.1: single source of truth for Trivia manager-bar button visibility.
+// Owns mgr-reveal, mgr-next, and mgr-skip. Reveal + Next are visible whenever
+// the caller is the manager (preserves today's always-on behavior). Skip is
+// additionally phase-gated to 'question' — during 'reveal' the manager uses
+// Next → to advance, not Skip. Called from startTrivia (initial setup) and
+// renderTrivia (every state-change render) so phase transitions update the
+// bar without separate callers needing to remember to flip Skip.
+function applyTriviaManagerButtonVisibility() {
+  const isManager = currentMyRow?.control_role === 'manager';
+  const phase     = gameState?.phase;
+  const reveal    = document.getElementById('mgr-reveal');
+  const next      = document.getElementById('mgr-next');
+  const skip      = document.getElementById('mgr-skip');
+  if (reveal) reveal.style.display = isManager ? 'block' : 'none';
+  if (next)   next.style.display   = isManager ? 'block' : 'none';
+  if (skip)   skip.style.display   = (isManager && phase === 'question') ? 'block' : 'none';
+}
+
 function renderTrivia() {
   if (!gameState) return;
+  // 3b § 3.1: re-apply manager-bar visibility on every render so mgr-skip
+  // toggles off when phase flips to 'reveal' and back on for 'question'.
+  applyTriviaManagerButtonVisibility();
   const s=gameState, q=s.questions[s.currentQuestionIdx];
   if (!q) return;
   const progressEl = document.getElementById('trivia-progress');
