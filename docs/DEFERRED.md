@@ -2650,7 +2650,7 @@ Mike has never tested Euchre heavily — the implementation works in static revi
 
 **Priority:** Medium (Session 5 closeout step, not blocking but should land before Session 6 starts).
 
-**Status:** Deferred since Session 5 Part 3a.1 (~3 weeks of drift); needs single catch-up sync.
+**Status:** Resolved 2026-05-13 in Day 1 item 2 of Session 5 closeout. Native smoke test green on iPhone; iOS bundle at v2.113/v2.101, Capacitor plugins clean on 8.x.
 
 #### What
 
