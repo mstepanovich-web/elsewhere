@@ -240,6 +240,7 @@
     /* ── LATE JOINER ── */
     #screen-watching { align-items: center; justify-content: center; gap: 16px; padding: 40px 24px; text-align: center; }
     #screen-trivia-late-choice { align-items: center; justify-content: center; gap: 16px; padding: 40px 24px; text-align: center; }
+    #screen-lastcard-queue     { align-items: center; justify-content: center; gap: 16px; padding: 40px 24px; text-align: center; }
 
     /* ── Version + log ── */
     .ver { position: fixed; bottom: calc(8px + env(safe-area-inset-bottom)); right: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--tracking-wider); color: var(--color-gold); z-index: 50; pointer-events: none; }
@@ -284,7 +285,8 @@
       #screen-game-room,
       #screen-gameover,
       #screen-watching,
-      #screen-trivia-late-choice { max-width: 640px; margin: 0 auto; width: 100%; }
+      #screen-trivia-late-choice,
+      #screen-lastcard-queue { max-width: 640px; margin: 0 auto; width: 100%; }
 
       #screen-join      { padding: 60px 40px; gap: 28px; }
       #screen-lobby     { padding: 40px 40px 48px; gap: 14px; }
@@ -293,6 +295,7 @@
       #screen-gameover  { padding: 60px 40px; gap: 28px; }
       #screen-watching  { padding: 60px 40px; gap: 24px; }
       #screen-trivia-late-choice { padding: 60px 40px; gap: 24px; }
+      #screen-lastcard-queue     { padding: 60px 40px; gap: 24px; }
 
       .join-field      { max-width: 380px; }
       .scores-list     { max-width: 420px; }
@@ -331,7 +334,8 @@
       #screen-game-room,
       #screen-gameover,
       #screen-watching,
-      #screen-trivia-late-choice { max-width: 720px; }
+      #screen-trivia-late-choice,
+      #screen-lastcard-queue { max-width: 720px; }
 
       #screen-join      { padding: 80px 48px; gap: 32px; }
       #screen-lobby     { padding: 56px 48px 64px; gap: 16px; }
@@ -340,6 +344,7 @@
       #screen-gameover  { padding: 80px 48px; gap: 32px; }
       #screen-watching  { padding: 80px 48px; gap: 28px; }
       #screen-trivia-late-choice { padding: 80px 48px; gap: 28px; }
+      #screen-lastcard-queue     { padding: 80px 48px; gap: 28px; }
 
       .join-field      { max-width: 420px; }
       .scores-list     { max-width: 480px; }
@@ -572,6 +577,14 @@
         <div id="room-waiting-msg-midgame" style="display:none;font-size:var(--text-sm);color:var(--color-text-faint);line-height:1.8;">
           <span id="room-waiting-game-name" style="color:var(--color-gold-dim);font-weight:500;">Trivia</span> in progress — you're watching this round
         </div>
+      </div>
+
+      <!-- 3c § 3.2: Rejoin Queue affordance — visible to mid-game audience
+           users when admission_mode is 'wait_for_next' (Last Card). Lets a
+           user who sat out (or otherwise landed in audience) step back into
+           the queue for the next round. Visibility owned by goToGameRoom. -->
+      <div id="room-rejoin-queue-wrap" style="display:none;max-width:280px;margin:14px auto 0;">
+        <button class="action-btn" onclick="rejoinLastCardQueue()">Rejoin Queue</button>
       </div>
 
       <!-- Manager: start button -->
@@ -810,6 +823,22 @@
       <button class="action-btn ghost" style="max-width:280px;" onclick="joinTriviaAsAudience()">Watch from Lobby</button>
     </div>
 
+    <!-- LAST CARD LATE JOINER — queue surface per § 3.2 / § 4.1. Dispatcher
+         (3c Commit 2) routes non-manager audience late-joiners here when
+         admission_mode is 'wait_for_next'. doJoin's cold-join branch is
+         retired for Last Card in Commit 2 in favor of this screen (matches
+         the Trivia 3b precedent for self_join). Single button — Sit Out —
+         flips to audience; staying queued is the default (no action needed).
+         Auto-promote at round-end lives in Commit 3. -->
+    <div id="screen-lastcard-queue" class="screen">
+      <div style="font-size:48px;">🃏</div>
+      <div class="page-title" style="font-size:32px;text-align:center;">Last Card Round in Progress</div>
+      <div id="lastcard-queue-position-context" style="font-size:var(--text-sm);color:var(--color-text-dim);text-align:center;line-height:1.7;max-width:280px;">
+        You're in line — joining at the next round.
+      </div>
+      <button class="action-btn ghost" style="max-width:280px;" onclick="joinLastCardAsAudience()">Sit Out (Watch from Lobby)</button>
+    </div>
+
   </div><!-- end screen-wrap -->
 </div><!-- end app -->
 
@@ -835,7 +864,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.116</div>
+<div class="ver">v2.117</div>
 
 <script>
 'use strict';
@@ -926,6 +955,14 @@ let _nonMgrTimerInterval = null;
 // game. Cleared on game-over / game-restart / switch-game so the next game
 // re-prompts. Read by the admission_mode dispatcher (3b Commit 2).
 let _triviaLateChoiceMadeForGame = false;
+
+// 3c § 3.2: one-shot flag for Last Card Sit Out choice. Once the user taps
+// Sit Out on screen-lastcard-queue (or otherwise transitions to audience
+// during a round), subsequent game-state arrivals don't re-prompt by
+// re-routing them to the queue screen. Cleared on game-over / game-restart /
+// switch-game. Distinct from the Trivia flag — the two games' admission
+// flows are independent. Read by the dispatcher (3c Commit 2).
+let _lastCardLateChoiceMadeForGame = false;
 
 // Layout detection
 const IS_IPAD  = window.innerWidth >= 768;
@@ -1488,6 +1525,7 @@ function handleMessage(uid, data) {
   if (msg.type==='game-over') {
     gameInProgress=false;
     _triviaLateChoiceMadeForGame = false;
+    _lastCardLateChoiceMadeForGame = false;
     showGameOver(msg.scores);
   }
 
@@ -1505,6 +1543,7 @@ function handleMessage(uid, data) {
   if (msg.type==='game-restart') {
     gameInProgress=false; gameState=null;
     _triviaLateChoiceMadeForGame = false;
+    _lastCardLateChoiceMadeForGame = false;
     currentGame = msg.game || currentGame;
     playerLimit = GAME_LIMITS[currentGame]?.default || 6;
     goToGameRoom();
@@ -1589,7 +1628,11 @@ function handleMessage(uid, data) {
     maybeAutoReveal();
   }
 
-  if (msg.type==='switch-game') { _triviaLateChoiceMadeForGame = false; goToLobby(); }
+  if (msg.type==='switch-game') {
+    _triviaLateChoiceMadeForGame   = false;
+    _lastCardLateChoiceMadeForGame = false;
+    goToLobby();
+  }
 }
 
 // Session 4.8: grace-period removal. A brief disconnect (iOS backgrounding
@@ -1742,6 +1785,12 @@ function goToGameRoom() {
   if (wmDefault) wmDefault.style.display = isMidGameAudience ? 'none' : 'block';
   if (wmMidgame) wmMidgame.style.display = isMidGameAudience ? 'block' : 'none';
   if (wmGname)   wmGname.textContent     = GAME_INFO[currentGame]?.title || 'The game';
+  // 3c § 3.2: Rejoin Queue button — visible only when the user is mid-game
+  // audience AND admission_mode is 'wait_for_next' (Last Card today). Lets
+  // them step back into the queue for the next round.
+  const showRejoinQueue = isMidGameAudience && currentSession?.admission_mode === 'wait_for_next';
+  const rejoinWrap = document.getElementById('room-rejoin-queue-wrap');
+  if (rejoinWrap) rejoinWrap.style.display = showRejoinQueue ? 'block' : 'none';
   // Sync participant checkbox to authoritative role on entry.
   const partCheckbox = document.getElementById('participant-is-player');
   if (partCheckbox) partCheckbox.checked = currentMyRow?.participation_role === 'active';
@@ -1933,6 +1982,155 @@ async function joinTriviaAsAudience() {
   }
   _triviaLateChoiceMadeForGame = true;
   goToGameRoom();
+}
+
+// 3c § 3.2: Last Card late-joiner handlers. Three entry points feed
+// screen-lastcard-queue: (i) the admission_mode dispatcher (3c Commit 2)
+// when a runtime game-state broadcast arrives for an audience user,
+// (ii) doJoin's cold-join branch when a phone scans the QR mid-round
+// (3c Commit 2 retires screen-watching for Last Card per § 4.1 Q3), and
+// (iii) the Rejoin Queue button on screen-game-room for users who sat
+// out and want back in. Section A (this commit) ships the handlers +
+// screen; the dispatcher / doJoin wiring is Section B (Commit 2).
+//
+// Self audience→queued must go through rpc_session_update_participant
+// (db/011) with p_user_id=self.id — the self-only RPC db/017
+// rpc_session_set_my_participation_role explicitly rejects 'queued'.
+// The cross-user RPC permits self-targeted calls (db/011:150-164).
+async function joinLastCardAsQueued() {
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!currentSession?.id || !user) {
+    // Legacy mode — no session row to flip. Navigate so the user sees
+    // an explanation; renderLastCardQueuePosition handles the no-row case.
+    _lastCardLateChoiceMadeForGame = true;
+    goTo('screen-lastcard-queue');
+    renderLastCardQueuePosition();
+    return;
+  }
+  const wasQueued = currentMyRow?.participation_role === 'queued';
+  if (!wasQueued) {
+    const { error } = await window.sb.rpc('rpc_session_update_participant', {
+      p_session_id:         currentSession.id,
+      p_user_id:            user.id,
+      p_participation_role: 'queued',
+    });
+    if (error) {
+      if (error.code === '55000') showToast('Queue is full.');
+      else { log('joinLastCardAsQueued FAILED: ' + error.message); showToast("Couldn't join the queue — try Sit Out"); }
+      return;
+    }
+    if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+      try {
+        await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
+          session_id: currentSession.id,
+        }, _playerRealtimeChannel);
+      } catch (_) {}
+    }
+    await refreshSessionState();
+  }
+  goTo('screen-lastcard-queue');
+  renderLastCardQueuePosition();
+}
+
+// Sit Out button on screen-lastcard-queue. Flips queued (or any non-
+// audience state) to audience via the self-only RPC (db/017 permits
+// audience), publishes participant_role_changed, refreshes, returns to
+// screen-game-room where the cluster's sectioned roster + mid-game
+// waiting message + Rejoin Queue button surface the audience state.
+async function joinLastCardAsAudience() {
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!currentSession?.id || !user) {
+    _lastCardLateChoiceMadeForGame = true;
+    goToGameRoom();
+    return;
+  }
+  const wasAudience = currentMyRow?.participation_role === 'audience';
+  if (!wasAudience) {
+    const { error } = await window.sb.rpc('rpc_session_set_my_participation_role', {
+      p_session_id: currentSession.id,
+      p_role:       'audience',
+    });
+    if (error) {
+      log('joinLastCardAsAudience FAILED: ' + error.message);
+      showToast("Couldn't switch to audience");
+      return;
+    }
+    if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+      try {
+        await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
+          session_id: currentSession.id,
+        }, _playerRealtimeChannel);
+      } catch (_) {}
+    }
+    await refreshSessionState();
+  }
+  _lastCardLateChoiceMadeForGame = true;
+  goToGameRoom();
+}
+
+// Rejoin Queue button on screen-game-room (audience state, wait_for_next
+// admission). Flips audience → queued via the cross-user RPC self-
+// targeted. Per § 1, rejoining puts the user at the back of the queue
+// (max+1 queue_position; handled inside the RPC at db/011:206-212).
+// Resets the one-shot flag so subsequent game-state broadcasts can
+// re-route them to the queue screen (they actively asked to rejoin).
+async function rejoinLastCardQueue() {
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!currentSession?.id || !user) return;
+  if (currentMyRow?.participation_role === 'queued') {
+    // Defensive — button shouldn't be visible in this state, but if it is,
+    // just navigate to the queue screen and re-render position.
+    goTo('screen-lastcard-queue');
+    renderLastCardQueuePosition();
+    return;
+  }
+  const { error } = await window.sb.rpc('rpc_session_update_participant', {
+    p_session_id:         currentSession.id,
+    p_user_id:            user.id,
+    p_participation_role: 'queued',
+  });
+  if (error) {
+    if (error.code === '55000') showToast('Queue is full.');
+    else { log('rejoinLastCardQueue FAILED: ' + error.message); showToast("Couldn't rejoin the queue"); }
+    return;
+  }
+  if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+    try {
+      await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
+        session_id: currentSession.id,
+      }, _playerRealtimeChannel);
+    } catch (_) {}
+  }
+  await refreshSessionState();
+  _lastCardLateChoiceMadeForGame = false;
+  goTo('screen-lastcard-queue');
+  renderLastCardQueuePosition();
+}
+
+// 3c § 3.2: render the user's queue position on screen-lastcard-queue.
+// Idempotent — safe to call from refreshSessionState (any role change)
+// and from join handlers. Returns early when the queue screen isn't
+// the active surface. Computes position client-side from currentParticipants
+// (queue_position is populated by rpc_session_get_participants per db/013).
+function renderLastCardQueuePosition() {
+  const activeScreen = document.querySelector('.screen.active')?.id;
+  if (activeScreen !== 'screen-lastcard-queue') return;
+  const ctx = document.getElementById('lastcard-queue-position-context');
+  if (!ctx) return;
+  const myQp = currentMyRow?.queue_position;
+  if (currentMyRow?.participation_role !== 'queued' || !myQp) {
+    // Edge: row state changed underneath (auto-promoted, sat out via
+    // another tab, etc.). Render graceful fallback; dispatcher / next
+    // refresh will re-route appropriately.
+    ctx.textContent = "Updating your spot in line…";
+    return;
+  }
+  // Count queued participants ahead in line (lower queue_position, still in).
+  const ahead = currentParticipants
+    .filter(p => p.participation_role === 'queued' && !p.left_at && p.queue_position && p.queue_position < myQp)
+    .length;
+  const position = ahead + 1;
+  ctx.textContent = "You're #" + position + ' in line — joining at the next round.';
 }
 
 // 3b § 4.1: admission-mode dispatcher for non-manager audience late-joiners
@@ -2184,6 +2382,9 @@ async function refreshSessionState() {
   // Roster + TV displays re-render with fresh data.
   renderRoster();
   renderTvDisplays();
+  // 3c § 3.2: if the user is currently on screen-lastcard-queue, re-render
+  // their queue-position text. Idempotent / no-op when off-screen.
+  renderLastCardQueuePosition();
 }
 
 // Reverse-lookup helper: find Agora uid bound to a given participant user_id.
