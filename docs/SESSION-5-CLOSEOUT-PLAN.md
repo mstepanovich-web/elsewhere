@@ -39,7 +39,7 @@ up cleanly once Session 5 is closed.
 
 ### Day 1 — v2.113 hardware verification + iOS Capacitor sync + start Trivia 3b proper
 
-**Status:** 🟡 In progress (item 1 done; items 2 + 3 pending)
+**Status:** 🟡 In progress (items 1 + 2 done; item 3 pending)
 
 **Morning:**
 1. ✅ Done 2026-05-13. iPhone Safari verification of v2.113 polish items
@@ -48,16 +48,17 @@ up cleanly once Session 5 is closed.
    (commit `efabb48`). Verified 2026-05-13 on iPhone Safari. Surfaced
    toggle-persistence question — filed as DEFERRED entry,
    closed-as-wontfix for now (sticky behavior retained).
-2. 🟡 In progress 2026-05-13. iOS Capacitor sync catch-up: bundle v2.99 →
-   v2.113. ~30 min. Reference DEFERRED entry "Session 5 closeout — iOS
-   bundle sync from v2.99 to current". Done now while verification context
-   is fresh; doing it later means compounding drift with every 3b/3c/3d
+2. ✅ Done 2026-05-13. iOS Capacitor sync catch-up: bundle v2.99 → v2.113.
+   ~30 min. Reference DEFERRED entry "Session 5 closeout — iOS bundle
+   sync from v2.99 to current". Done now while verification context is
+   fresh; doing it later means compounding drift with every 3b/3c/3d
    commit. rsync + cap sync complete 2026-05-13. v2.113/v2.101 confirmed
-   in `ios/App/App/public/`. Capacitor plugins clean on 8.x. Awaiting
-   Mike's Xcode rebuild + install + native smoke test (push notifications,
-   plugins, fullscreen). Hygiene findings filed as DEFERRED entry "iOS
-   bundle hygiene — `~/sync-app.sh` out of sync with CONTEXT.md doctrine"
-   (commit `d667acc`). Mark ✅ Done once native smoke test green.
+   in `ios/App/App/public/`. Capacitor plugins clean on 8.x. Hygiene
+   findings filed as DEFERRED entry "iOS bundle hygiene — `~/sync-app.sh`
+   out of sync with CONTEXT.md doctrine" (commit `d667acc`). Native smoke
+   test green 2026-05-13 on iPhone: app launch, sign-in, household home,
+   Games → Trivia navigation, v2.113 badge confirmed in iOS app. Five-step
+   smoke test all pass.
 
 **Afternoon:**
 3. Start Trivia 3b proper. Per `docs/GAMES-CONTROL-MODEL.md` § 4.1:
