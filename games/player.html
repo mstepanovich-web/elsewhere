@@ -239,6 +239,7 @@
 
     /* ── LATE JOINER ── */
     #screen-watching { align-items: center; justify-content: center; gap: 16px; padding: 40px 24px; text-align: center; }
+    #screen-trivia-late-choice { align-items: center; justify-content: center; gap: 16px; padding: 40px 24px; text-align: center; }
 
     /* ── Version + log ── */
     .ver { position: fixed; bottom: calc(8px + env(safe-area-inset-bottom)); right: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--tracking-wider); color: var(--color-gold); z-index: 50; pointer-events: none; }
@@ -282,7 +283,8 @@
       #screen-game-info,
       #screen-game-room,
       #screen-gameover,
-      #screen-watching { max-width: 640px; margin: 0 auto; width: 100%; }
+      #screen-watching,
+      #screen-trivia-late-choice { max-width: 640px; margin: 0 auto; width: 100%; }
 
       #screen-join      { padding: 60px 40px; gap: 28px; }
       #screen-lobby     { padding: 40px 40px 48px; gap: 14px; }
@@ -290,6 +292,7 @@
       #screen-game-room { padding: 36px 40px 48px; }
       #screen-gameover  { padding: 60px 40px; gap: 28px; }
       #screen-watching  { padding: 60px 40px; gap: 24px; }
+      #screen-trivia-late-choice { padding: 60px 40px; gap: 24px; }
 
       .join-field      { max-width: 380px; }
       .scores-list     { max-width: 420px; }
@@ -327,7 +330,8 @@
       #screen-game-info,
       #screen-game-room,
       #screen-gameover,
-      #screen-watching { max-width: 720px; }
+      #screen-watching,
+      #screen-trivia-late-choice { max-width: 720px; }
 
       #screen-join      { padding: 80px 48px; gap: 32px; }
       #screen-lobby     { padding: 56px 48px 64px; gap: 16px; }
@@ -335,6 +339,7 @@
       #screen-game-room { padding: 48px 48px 64px; }
       #screen-gameover  { padding: 80px 48px; gap: 32px; }
       #screen-watching  { padding: 80px 48px; gap: 28px; }
+      #screen-trivia-late-choice { padding: 80px 48px; gap: 28px; }
 
       .join-field      { max-width: 420px; }
       .scores-list     { max-width: 480px; }
@@ -556,10 +561,16 @@
         <button class="invite-btn" onclick="openAddTvModal()" style="width:100%;padding:11px 10px;">📺 Add TV display</button>
       </div>
 
-      <!-- Waiting message (non-manager) -->
+      <!-- Waiting message (non-manager). Two alternates: default ("waiting for
+           manager") and mid-game audience ("game in progress — you're watching
+           this round"). goToGameRoom swaps visibility based on gameInProgress
+           and participation_role per § 4.1. -->
       <div id="room-waiting-msg" style="display:none;padding:20px 0;text-align:center;">
-        <div style="font-size:var(--text-sm);color:var(--color-text-faint);line-height:1.8;">
+        <div id="room-waiting-msg-default" style="font-size:var(--text-sm);color:var(--color-text-faint);line-height:1.8;">
           Waiting for <span id="manager-name-display" style="color:var(--color-gold-dim);font-weight:500;">the manager</span> to start the game
+        </div>
+        <div id="room-waiting-msg-midgame" style="display:none;font-size:var(--text-sm);color:var(--color-text-faint);line-height:1.8;">
+          <span id="room-waiting-game-name" style="color:var(--color-gold-dim);font-weight:500;">Trivia</span> in progress — you're watching this round
         </div>
       </div>
 
@@ -784,6 +795,21 @@
       <button class="action-btn" style="max-width:280px;" onclick="watchFromLobby()">Watch from Lobby</button>
     </div>
 
+    <!-- TRIVIA LATE JOINER — choice screen per § 4.1 / § 3.1. Dispatcher (3b
+         Commit 2) lands non-manager late-joiners here when admission_mode is
+         self_join and they have not yet chosen Active or Audience this game.
+         doJoin's cold-join branch also routes Trivia late-joiners here in
+         place of the legacy screen-watching surface. -->
+    <div id="screen-trivia-late-choice" class="screen">
+      <div style="font-size:48px;">🎯</div>
+      <div class="page-title" style="font-size:32px;text-align:center;">Trivia in Progress</div>
+      <div id="trivia-late-choice-context" style="font-size:var(--text-sm);color:var(--color-text-dim);text-align:center;line-height:1.7;max-width:280px;">
+        A round is already underway. Jump in now (you'll score 0 for skipped questions) or watch from the lobby.
+      </div>
+      <button class="action-btn" style="max-width:280px;" onclick="joinTriviaAsActive()">Play Along</button>
+      <button class="action-btn ghost" style="max-width:280px;" onclick="joinTriviaAsAudience()">Watch from Lobby</button>
+    </div>
+
   </div><!-- end screen-wrap -->
 </div><!-- end app -->
 
@@ -809,7 +835,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.113</div>
+<div class="ver">v2.114</div>
 
 <script>
 'use strict';
@@ -894,6 +920,12 @@ let gameState=null, myHand=[], selectedCard=null;
 let triviaCategory='general', triviaDiff='Medium', timerInterval=null;
 let _autoRevealTimer = null;
 let _nonMgrTimerInterval = null;
+
+// 3b § 4.1: one-shot flag preventing the Trivia late-joiner choice screen
+// from re-firing once the user has chosen Active or Audience for the current
+// game. Cleared on game-over / game-restart / switch-game so the next game
+// re-prompts. Read by the admission_mode dispatcher (3b Commit 2).
+let _triviaLateChoiceMadeForGame = false;
 
 // Layout detection
 const IS_IPAD  = window.innerWidth >= 768;
@@ -1152,8 +1184,15 @@ async function doJoin() {
       if (urlGame) { currentGame=urlGame; playerLimit=GAME_LIMITS[urlGame]?.default||6; }
       if (urlMgrName) { const el=document.getElementById('manager-name-display'); if(el) el.textContent=urlMgrName; }
       if (gameInProgress) {
-        document.getElementById('watching-game-name').textContent = GAME_INFO[currentGame]?.title||currentGame;
-        goTo('screen-watching');
+        if (currentGame === 'trivia') {
+          // 3b § 4.1: Trivia cold late-join routes to the choice screen
+          // instead of the legacy screen-watching surface. Last Card / Euchre
+          // cold-join keep screen-watching until 3c/3d retire them.
+          goTo('screen-trivia-late-choice');
+        } else {
+          document.getElementById('watching-game-name').textContent = GAME_INFO[currentGame]?.title||currentGame;
+          goTo('screen-watching');
+        }
       } else {
         goToGameRoom();
       }
@@ -1441,6 +1480,7 @@ function handleMessage(uid, data) {
 
   if (msg.type==='game-over') {
     gameInProgress=false;
+    _triviaLateChoiceMadeForGame = false;
     showGameOver(msg.scores);
   }
 
@@ -1457,6 +1497,7 @@ function handleMessage(uid, data) {
 
   if (msg.type==='game-restart') {
     gameInProgress=false; gameState=null;
+    _triviaLateChoiceMadeForGame = false;
     currentGame = msg.game || currentGame;
     playerLimit = GAME_LIMITS[currentGame]?.default || 6;
     goToGameRoom();
@@ -1541,7 +1582,7 @@ function handleMessage(uid, data) {
     maybeAutoReveal();
   }
 
-  if (msg.type==='switch-game') { goToLobby(); }
+  if (msg.type==='switch-game') { _triviaLateChoiceMadeForGame = false; goToLobby(); }
 }
 
 // Session 4.8: grace-period removal. A brief disconnect (iOS backgrounding
@@ -1684,6 +1725,16 @@ function goToGameRoom() {
   document.getElementById('room-participant-section').style.display=showParticipantToggle?'block':'none';
   document.getElementById('room-waiting-msg').style.display=isManager?'none':'block';
   document.getElementById('room-start-section').style.display=isManager?'block':'none';
+  // 3b § 4.1: swap waiting-msg copy when a non-manager is audience mid-game.
+  // The default ("waiting for manager to start") is wrong for someone who has
+  // chosen to watch an in-progress round.
+  const isMidGameAudience = !!gameInProgress && currentMyRow?.participation_role === 'audience';
+  const wmDefault = document.getElementById('room-waiting-msg-default');
+  const wmMidgame = document.getElementById('room-waiting-msg-midgame');
+  const wmGname   = document.getElementById('room-waiting-game-name');
+  if (wmDefault) wmDefault.style.display = isMidGameAudience ? 'none' : 'block';
+  if (wmMidgame) wmMidgame.style.display = isMidGameAudience ? 'block' : 'none';
+  if (wmGname)   wmGname.textContent     = GAME_INFO[currentGame]?.title || 'The game';
   // Sync participant checkbox to authoritative role on entry.
   const partCheckbox = document.getElementById('participant-is-player');
   if (partCheckbox) partCheckbox.checked = currentMyRow?.participation_role === 'active';
@@ -1798,6 +1849,83 @@ async function togglePlayerAsParticipant(checked) {
     } catch (_) {}
   }
   await refreshSessionState();
+}
+
+// 3b § 4.1: late-joiner choice handlers. Fired from screen-trivia-late-choice
+// after the admission_mode dispatcher (3b Commit 2) — or doJoin's cold-join
+// branch — lands a non-manager on the choice screen.
+//
+// Play Along: ensure 'active' role and enter the game mid-question. Questions
+// already passed score 0 since scoring only happens at reveal time.
+//
+// Watch from Lobby: flip to 'audience' and return to screen-game-room, which
+// renders the sectioned roster (their name under WATCHING) plus the mid-game
+// waiting message swapped in by goToGameRoom.
+async function joinTriviaAsActive() {
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!currentSession?.id || !user) {
+    // Legacy mode — no session row to flip. Enter the game directly.
+    _triviaLateChoiceMadeForGame = true;
+    if (gameState) startTrivia(gameState);
+    return;
+  }
+  const wasInTargetRole = currentMyRow?.participation_role === 'active';
+  if (!wasInTargetRole) {
+    const { error } = await window.sb.rpc('rpc_session_set_my_participation_role', {
+      p_session_id: currentSession.id,
+      p_role:       'active',
+    });
+    if (error) {
+      // Trivia is unlimited per § 3.1; 55000 unreachable in practice but
+      // handled defensively. Other errors fall through to a graceful toast
+      // so the user can retry via Watch from Lobby.
+      if (error.code === '55000') showToast('Room is full.');
+      else { log('joinTriviaAsActive FAILED: ' + error.message); showToast("Couldn't join — try Watch from Lobby"); }
+      return;
+    }
+    if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+      try {
+        await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
+          session_id: currentSession.id,
+        }, _playerRealtimeChannel);
+      } catch (_) {}
+    }
+    await refreshSessionState();
+  }
+  _triviaLateChoiceMadeForGame = true;
+  if (gameState) startTrivia(gameState);
+  else goToGameRoom();
+}
+
+async function joinTriviaAsAudience() {
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!currentSession?.id || !user) {
+    _triviaLateChoiceMadeForGame = true;
+    goToGameRoom();
+    return;
+  }
+  const wasInTargetRole = currentMyRow?.participation_role === 'audience';
+  if (!wasInTargetRole) {
+    const { error } = await window.sb.rpc('rpc_session_set_my_participation_role', {
+      p_session_id: currentSession.id,
+      p_role:       'audience',
+    });
+    if (error) {
+      log('joinTriviaAsAudience FAILED: ' + error.message);
+      showToast("Couldn't switch to audience");
+      return;
+    }
+    if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+      try {
+        await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
+          session_id: currentSession.id,
+        }, _playerRealtimeChannel);
+      } catch (_) {}
+    }
+    await refreshSessionState();
+  }
+  _triviaLateChoiceMadeForGame = true;
+  goToGameRoom();
 }
 
 // Lock-on-start (§ 2.4.6): both toggles disable while a specific game is in
