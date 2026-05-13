@@ -2821,3 +2821,48 @@ Latent scope note (filed separately): same gap exists in `karaoke/singer.html` d
 - Commit `7dde17c` (v2.103) — the fix
 - DEFERRED entry "Latent — karaoke/singer.html doJoin missing publishParticipantRoleChanged" — companion scope
 - `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` — verification record
+
+---
+
+### Deferred: Redundant "← GAMES" back-arrow nav on games info screen
+
+**Deferred in:** Session 5 Part 3b — v2.113 hardware verification
+**Deferred on:** 2026-05-13
+**Priority:** Low — cosmetic / UX redundancy, not a functional bug
+**Area:** Games — `games/player.html` info-screen chrome
+**Status:** Deferred — needs investigation
+
+#### Context
+
+Surfaced 2026-05-13 during v2.113 hardware verification on iPhone Safari. On the Trivia info screen (`games/player.html`), there is a top-left back-arrow + "GAMES" label that navigates back to the Games lobby. This appears redundant with the SWITCH GAME button in the action bar directly above/below it. Both ostensibly do "leave the current game" — but the back-arrow is in-page chrome while SWITCH GAME is in the manager bar (and may also be visible to non-managers; needs check).
+
+No screenshot reference available; observation made live during verification.
+
+#### What's deferred
+
+Decision on whether to keep both affordances, remove one, or differentiate their purposes. Held pending investigation since the right fix depends on what each actually does at the control-flow level.
+
+#### Investigation needed
+
+1. Is the "← GAMES" back-arrow visible to non-managers, or only to the manager?
+2. Is the SWITCH GAME button visible to non-managers, or manager-only? (Manager-bar conventions imply manager-only, but worth confirming.)
+3. Do both actually navigate to the same place, or does one end the session for everyone while the other only navigates the local device?
+4. Check Last Card and Euchre info screens for the same pattern — likely the same template, so any fix should apply uniformly.
+
+#### Options when picking up
+
+- **(a)** Remove the back-arrow; keep SWITCH GAME as the canonical "leave game" affordance. Cleanest if SWITCH GAME is universally visible and does the right thing for both roles.
+- **(b)** Remove SWITCH GAME from the non-manager bar; keep the back-arrow as universal nav. Appropriate if SWITCH GAME is really a manager-only "end the session for everyone" control and the back-arrow is the local-only equivalent.
+- **(c)** Keep both if they serve different purposes (e.g., back-arrow = within-Games nav for the local device, SWITCH GAME = end this game's session entirely for everyone). In that case, the fix is labeling — disambiguate so users don't read them as duplicates.
+
+Resolution depends on the control flow each triggers.
+
+#### When to pick this up
+
+Bundle with **Trivia 3b proper** or **Last Card 3c** (any `games/player.html` work) since the info-screen template is shared across all three games. Don't ship as a standalone commit — fold into the next 3b/3c/3d pass.
+
+#### Related
+
+- `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md` — v2.113 verification context
+- `docs/SESSION-5-CLOSEOUT-PLAN.md` — Day 1 → Day 3 covers the 3b/3c/3d window
+- Prior similar redundancy resolved in v2.113: ☰ Games button removal (see `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md` "☰ Games button redundancy" section)
