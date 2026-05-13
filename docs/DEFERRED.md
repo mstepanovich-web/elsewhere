@@ -2914,3 +2914,46 @@ If revisiting, Option A is the cheapest fix (one line); Option C is the most def
 - `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md` — v2.113 verification record with the per-commit table green entry
 - `docs/SESSION-5-PART-3B-CLOSING-LOG.md` — Phase 2 Commit C/D forensic detail
 - `games/player.html:2852-2867` (`isPremiumTrivia`), `:2874-2886` (`togglePremium`), `:1624-1631` (selectGame trivia branch)
+
+---
+
+### Deferred: iOS bundle hygiene — `~/sync-app.sh` out of sync with CONTEXT.md doctrine
+
+**Deferred in:** Session 5 Closeout — Day 1 item 2 (iOS Capacitor sync catch-up)
+**Deferred on:** 2026-05-13
+**Priority:** Low — no functional impact; bundle bloat only (~412 KB / 0.3% of 122 MB bundle)
+**Area:** `~/sync-app.sh` + Capacitor iOS bundle hygiene
+**Status:** Deferred — fix when next touching the sync script
+
+#### Context
+
+Surfaced 2026-05-13 during Day 1 item 2 of `docs/SESSION-5-CLOSEOUT-PLAN.md` (iOS Capacitor sync catch-up, v2.99 → v2.113). The sync itself was functionally successful — `games/player.html` at `v2.113` and `index.html` at `v2.101` are correctly bundled in `ios/App/App/public/` and `cap sync ios` reported clean (3 Capacitor 8.x plugins, no warnings). The hygiene findings below were spotted while auditing the post-sync `www/` listing; they do not block native smoke test.
+
+#### Four findings (one shared root cause)
+
+All four trace back to `~/sync-app.sh` being out of sync with `docs/CONTEXT.md` doctrine. Specifically: (i) the script's `rsync` invocation uses `--delete` but not `--delete-excluded`, so files matching `*.md` that were synced into `www/` before the exclude was added are protected indefinitely; and (ii) the script's exclude list omits `supabase/` even though `docs/CONTEXT.md:211` says server-side dirs should not be bundled.
+
+**(a) Stale `.md` files at `www/` root (~80 KB).** Five files: `ARCHIVE-NOTES.md`, `CLAUDE.md`, `INFRA.md`, `NEXT-SESSION.md`, `PHASE1-NOTES.md`. The `--exclude='*.md'` at `~/sync-app.sh:44` prevents copying new `.md` files but does not delete already-present ones. Without `--delete-excluded`, these stay forever.
+
+**(b) Stale `www/docs/` directory (~240 KB, 8 leftover `.md` files).** Same root cause as (a): leftovers from a sync that ran before `--exclude='*.md'` was added. Files include `DEFERRED.md`, `INDEX.md`, `KARAOKE-CONTROL-MODEL.md`, `KARAOKE-FUNCTION-AUDIT.md`, `PART-E-VERIFICATION.md`, etc.
+
+**(c) `www/supabase/` shipping (~92 KB).** Violates `docs/CONTEXT.md:211` doctrine: *"Don't put server-side dirs (`db/`, `supabase/`) into the iOS bundle — they're not needed and add weight."* The script at `~/sync-app.sh:42` excludes `db/` but does NOT exclude `supabase/`. The directory contains `config.toml`, `functions/` (Edge Function JS for `send-push-notification` and `generate-trivia`), and a `.temp/` subdir. The script is out of sync with the doctrine.
+
+**(d) `www/wellness/` ships with 165-byte `README.md`.** Functionally harmless; flagged for completeness since `wellness/` is the documented "coming soon" placeholder app. Becomes a non-issue once Option 1 below lands (the README is the only file and the directory is intentional).
+
+#### Fix options
+
+- **Option 1 (minimal, recommended):** add `--exclude='supabase/'` and `--delete-excluded` to `~/sync-app.sh`. One-line addition to the exclude list + one flag on the `rsync` invocation. Addresses (a), (b), (c) immediately on next sync — `--delete-excluded` will clean the accumulated leftovers, and the new `supabase/` exclude will drop the server-side dir. (d) becomes harmless since the wellness/README.md is the only file and the directory is an intentional placeholder.
+- **Option 2 (one-shot cleanup + script fix):** `rm -rf` the accumulated leftovers manually (`www/{ARCHIVE-NOTES,CLAUDE,INFRA,NEXT-SESSION,PHASE1-NOTES}.md www/docs www/supabase`), then apply Option 1. Slightly faster steady state for the next sync since it won't have to delete; otherwise identical.
+
+#### When to pick this up
+
+Bundle with the next time `~/sync-app.sh` is edited, OR if iOS bundle size becomes a concern. Current bundle is 122 MB and the cruft is ~412 KB (0.3%) — invisible to users and no functional impact, so no rush.
+
+#### Related
+
+- `~/sync-app.sh:37-50` — the rsync invocation and exclude list (the doctrine artifact CLAUDE.md line 197 points at)
+- CLAUDE.md "iOS Capacitor sync — session-closing ritual" (line 191-203) — references the script
+- `docs/CONTEXT.md:211` — "Don't put server-side dirs (`db/`, `supabase/`) into the iOS bundle"
+- `docs/SESSION-5-CLOSEOUT-PLAN.md` Day 1 item 2 — the task that surfaced this
+- DEFERRED entry "Session 5 closeout — iOS bundle sync from v2.99 to current" — the parent task being closed by this sync
