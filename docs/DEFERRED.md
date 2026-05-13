@@ -2866,3 +2866,51 @@ Bundle with **Trivia 3b proper** or **Last Card 3c** (any `games/player.html` wo
 - `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md` — v2.113 verification context
 - `docs/SESSION-5-CLOSEOUT-PLAN.md` — Day 1 → Day 3 covers the 3b/3c/3d window
 - Prior similar redundancy resolved in v2.113: ☰ Games button removal (see `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md` "☰ Games button redundancy" section)
+
+---
+
+### Deferred: Premium toggle persistence across re-entry to Trivia info screen
+
+**Deferred in:** Session 5 Part 3b — v2.113 hardware verification
+**Deferred on:** 2026-05-13
+**Priority:** Low — closed-as-wontfix; rationale captured for future revisit
+**Area:** Games — `games/player.html` (`isPremiumTrivia` / `togglePremium` / `selectGame` trivia branch)
+**Status:** Resolved 2026-05-13 (wontfix) — sticky behavior retained as v2.112 design intent. Re-open if rate-limit accidental-burn becomes a real user-reported issue.
+
+#### Context
+
+Surfaced 2026-05-13 during v2.113 hardware verification on iPhone Safari (Mike). Mike's initial expectation was "toggle resets on entry to Trivia info screen"; v2.113 (`b068c2c`) only reset the status text ("✓ N questions ready! (premium)"), not the toggle state itself.
+
+Investigation confirmed the toggle state is intentionally sticky: `isPremiumTrivia()` reads from `localStorage.getItem('elsewhere-trivia-premium')`, and `selectGame('trivia')` re-renders the pill from that persisted source (`premiumPill.classList.toggle('on', isPremiumTrivia())` at `games/player.html:1626`). This is v2.112 Commit B → C design — the in-UI toggle (`togglePremium()` at `games/player.html:2874-2886`) writes directly to localStorage, with `?premium=1` / `?premium=0` URL params as a backup activation/clear path.
+
+The v2.113 polish item 1 was correctly scoped to "stale status text" per its commit message; the toggle-state observation is a **scope-mismatch finding**, not a regression in v2.113.
+
+#### Decision 2026-05-13
+
+**Option B — keep sticky behavior.** Three options were considered:
+
+- **Option A:** Reset on every `selectGame('trivia')` entry. Trades convenience for rate-limit safety. One-line fix (`localStorage.removeItem('elsewhere-trivia-premium')` inside the trivia branch).
+- **Option B (chosen):** Retain sticky localStorage behavior. No code change.
+- **Option C:** Session-scope persistence (swap `localStorage` → `sessionStorage` in both `isPremiumTrivia` and `togglePremium`). Survives in-app navigation, resets on tab close.
+
+#### Rationale for B
+
+Household-use case (one person enables premium for the night; everyone benefits from the AI-generated questions across multiple Trivia rounds) makes the sticky toggle the lower-friction choice. The 20/user/UTC-day rate limit is generous enough that accidental burn isn't a near-term concern — the user would have to play through 20+ premium rounds in a single day to notice. Conventional toggle UX also expects persistence; resetting feels surprising for a setting affordance.
+
+#### When to revisit
+
+Re-open this entry if:
+
+- A user reports surprise rate-limit exhaustion (e.g., "I generated questions a few times and now it's stuck on free tier"), or
+- The 20/user/UTC-day rate-limit cap tightens for cost reasons, making accidental burn more impactful, or
+- Premium-vs-free differentiation becomes material enough (Session 8 territory) that users care about deliberate per-round opt-in.
+
+If revisiting, Option A is the cheapest fix (one line); Option C is the most defensible if "tab-close clears the setting" matches refined UX intent.
+
+#### Related
+
+- Commit `b068c2c` (v2.113) — the status-text reset that established the scope mismatch
+- Commit `e97dc94` (v2.112) — the in-UI toggle + localStorage persistence design
+- `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md` — v2.113 verification record with the per-commit table green entry
+- `docs/SESSION-5-PART-3B-CLOSING-LOG.md` — Phase 2 Commit C/D forensic detail
+- `games/player.html:2852-2867` (`isPremiumTrivia`), `:2874-2886` (`togglePremium`), `:1624-1631` (selectGame trivia branch)
