@@ -864,7 +864,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.117</div>
+<div class="ver">v2.118</div>
 
 <script>
 'use strict';
@@ -1165,10 +1165,22 @@ async function doJoin() {
           //     prior toggle state and manager identity.
           log('Session: already a participant (role=' + currentMyRow.participation_role + ') — using existing row');
         } else {
-          // (c) Fresh join — insert with 'active' per § 2.4.4.
+          // (c) Fresh join — insert with 'active' per § 2.4.4, OR 'queued'
+          // if this is a Last Card cold-join during a mid-round per § 3.2.
+          // Self active→queued is forbidden by db/011 (only manager/host
+          // can promote/demote to/from active), so the role must be chosen
+          // at insert time rather than flipped after-the-fact.
+          // rpc_session_join (db/009) accepts 'queued' and auto-assigns
+          // queue_position = max+1 across non-left queued rows.
+          const wantsQueued = (
+            currentSession?.admission_mode === 'wait_for_next' &&
+            gameInProgress &&
+            currentGame === 'lastcard'
+          );
+          const joinRole = wantsQueued ? 'queued' : 'active';
           const { error: joinErr } = await window.sb.rpc('rpc_session_join', {
             p_session_id: currentSession.id,
-            p_participation_role: 'active',
+            p_participation_role: joinRole,
           });
           if (joinErr) {
             if (joinErr.code === '23505') {
@@ -1182,7 +1194,7 @@ async function doJoin() {
               throw joinErr;
             }
           } else {
-            log('Session: joined session ' + currentSession.id + ' as active');
+            log('Session: joined session ' + currentSession.id + ' as ' + joinRole);
             await refreshSessionState();
             // Publish participant_role_changed so other clients (notably the
             // manager) see the new participant without a manual refresh.
@@ -1223,10 +1235,19 @@ async function doJoin() {
       if (gameInProgress) {
         if (currentGame === 'trivia') {
           // 3b § 4.1: Trivia cold late-join routes to the choice screen
-          // instead of the legacy screen-watching surface. Last Card / Euchre
-          // cold-join keep screen-watching until 3c/3d retire them.
+          // instead of the legacy screen-watching surface.
           goTo('screen-trivia-late-choice');
+        } else if (currentGame === 'lastcard') {
+          // 3c § 3.2 / § 4.1: Last Card cold late-join lands on the queue
+          // screen. The rpc_session_join above already inserted the user
+          // as 'queued' (the wantsQueued branch). Position renders from
+          // currentMyRow.queue_position (populated by refreshSessionState's
+          // rpc_session_get_participants response per db/013).
+          goTo('screen-lastcard-queue');
+          renderLastCardQueuePosition();
         } else {
+          // Euchre fall-through — 3d retires this branch alongside its own
+          // late-joiner surface.
           document.getElementById('watching-game-name').textContent = GAME_INFO[currentGame]?.title||currentGame;
           goTo('screen-watching');
         }
@@ -2155,6 +2176,17 @@ function handleAudienceGameStateArrival(msg) {
   // (1)(2) Manager and active participants always see the game.
   if (currentMyRow?.control_role === 'manager')        return 'fall-through';
   if (currentMyRow?.participation_role === 'active')   return 'fall-through';
+  // (3c § 3.2) Queued participants — pinned to screen-lastcard-queue.
+  // Game-state arrivals re-render their position (idempotent); auto-
+  // promote to 'active' at round-end lives in Section C (Commit 3),
+  // until then queued users sit on the queue surface. Without this
+  // early-return the per-game renderer below would drag them onto
+  // screen-lastcard.
+  if (currentMyRow?.participation_role === 'queued') {
+    goTo('screen-lastcard-queue');
+    renderLastCardQueuePosition();
+    return 'navigated';
+  }
   // (4) Legacy mode / unsigned-in — no session row to read admission_mode
   //     from. Preserve today's behavior (per-game rendering).
   if (!currentMyRow)                                   return 'fall-through';
@@ -2196,12 +2228,40 @@ function handleAudienceGameStateArrival(msg) {
     return 'navigated';
   }
 
-  // (3b) wait_for_next — Last Card § 3.2. STUB FOR 3c. Today: fall-through
-  // so existing per-game rendering takes audience onto screen-lastcard.
-  // TODO-3c: per docs/GAMES-CONTROL-MODEL.md § 3.2, route Last Card audience
-  // to a "waiting for next round" surface with their queue position. Helper
-  // return value flips to 'navigated' once that surface exists.
-  if (mode === 'wait_for_next') return 'fall-through';
+  // (3b) wait_for_next — Last Card § 3.2. Audience users mid-round get
+  // auto-flipped to queued per § 3.2's "late-joiners get queued" rule —
+  // UNLESS they actively sat out (_lastCardLateChoiceMadeForGame), in
+  // which case respect that choice and just short-circuit the per-game
+  // renderer below.
+  //
+  // This branch is also the recovery path from a game-start drag:
+  // game-start (line 1472) doesn't go through the dispatcher and pulls
+  // any non-active user onto screen-lastcard. The first game-state to
+  // arrive after that drag hits this branch, the auto-flip fires, and
+  // joinLastCardAsQueued navigates the user onto screen-lastcard-queue.
+  //
+  // Cold-join late-arrivals are inserted as 'queued' directly by doJoin
+  // (the wantsQueued branch in rpc_session_join) and so hit the queued
+  // early-return above, not this branch.
+  if (mode === 'wait_for_next') {
+    // Don't fire on waiting-phase broadcasts (defensive; mirrors the
+    // Trivia self_join phase guard).
+    if (msg.state?.phase === 'waiting') return 'fall-through';
+    if (_lastCardLateChoiceMadeForGame) {
+      // User actively sat out — leave them as audience. Return 'navigated'
+      // to short-circuit the per-game renderer (would otherwise drag them
+      // to screen-lastcard). Their Rejoin Queue button on screen-game-room
+      // is the path back in.
+      return 'navigated';
+    }
+    // Auto-flip audience → queued. Fire-and-forget: the function does the
+    // RPC + publish + refresh + nav + render asynchronously. Dispatcher
+    // returns 'navigated' immediately to short-circuit fall-through;
+    // joinLastCardAsQueued navigates the user to screen-lastcard-queue
+    // within ~50-200ms when the RPC completes.
+    joinLastCardAsQueued();
+    return 'navigated';
+  }
 
   // (3c) manager_approved_batch — Euchre § 3.3. STUB FOR 3d. Today: fall-
   // through. TODO-3d: per § 3.3, route Euchre audience to a "manager will
