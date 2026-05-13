@@ -16,7 +16,7 @@
 
 ## Summary
 
-3b hardware verification ran intermixed with shipping rather than as a final gate — verify-after-each-commit pattern, with each verification round either confirming GREEN or surfacing a follow-up bug that shipped as the next commit. All 2026-05-04 commits verified GREEN on iPhone Safari (Mike, manager) + Mac Chrome (Michael, non-manager) EXCEPT v2.113 (PENDING — both polish items deferred to next session opening) and v2.108 (DEFERRED by analogy to v2.107 Last Card race fix — 4-player Euchre setup impractical with 2 devices).
+3b hardware verification ran intermixed with shipping rather than as a final gate — verify-after-each-commit pattern, with each verification round either confirming GREEN or surfacing a follow-up bug that shipped as the next commit. All 2026-05-04 commits verified GREEN on iPhone Safari (Mike, manager) + Mac Chrome (Michael, non-manager) EXCEPT v2.108 (DEFERRED by analogy to v2.107 Last Card race fix — 4-player Euchre setup impractical with 2 devices). v2.113 was PENDING at 2026-05-04 close; verified GREEN on 2026-05-13 (iPhone Safari, Mike) — see per-commit table row 7 and the toggle-persistence note below.
 
 This is the first session where Trivia ran end-to-end in production. Mike had previously never gotten a Trivia question to actually generate, since the Anthropic-direct `triviaGenerate` path 401'd in production every time per CLAUDE.md doctrine line 140. The v2.109 OpenTDB swap was the unblocker.
 
@@ -30,7 +30,7 @@ This is the first session where Trivia ran end-to-end in production. Mike had pr
 | 4 | `c4af15c` Phase 2 Commit A (Edge Function + db/019) | ✅ GREEN (cURL) | cURL-verified post-deploy with HTTP 200 + 10 valid Movies/Easy questions returned + rate-limit row incremented to count=1 in `trivia_premium_usage` table. Anthropic upstream call succeeded with `claude-sonnet-4-6` model. Function logs confirmed `[generate-trivia] user=<uuid> cat=Movies diff=Easy count=10 valid=10 usedToday=1`. |
 | 5 | `7f1c99c` (v2.111) Phase 2 Commit B browser premium opt-in | 🟡 PARTIAL | Surfaced URL-routing gap on iOS Safari: `?premium=1` query param gets stripped during session routing before `isPremiumTrivia()` runs. Toggling premium ON via URL appeared to work briefly but never persisted to the actual generation request. Led directly to v2.112 (in-UI toggle) as the resolution. URL backup path preserved in v2.112 for compatibility with bookmarks / muscle memory. |
 | 6 | `e97dc94` (v2.112) Trivia premium UI toggle | ✅ GREEN | Verified end-to-end: (a) toggle visible on Trivia info screen between subtitle and description; (b) tapping toggle flips subtitle in real-time between "AI-generated questions" and "Community questions"; (c) generate questions with toggle ON returns "(premium)" suffix in status text "✓ 10 questions ready! (premium)"; (d) toggle state survives navigation away from screen-game-info and back; (e) toggle hidden on Last Card and Euchre info screens. Both iPhone Safari + Mac Chrome behaved identically. |
-| 7 | `b068c2c` (v2.113) Polish | 🟡 PENDING | Both items pending iPhone Safari hardware verification at next session opening: (a) generate Trivia questions with premium toggle ON → tap Switch Game (confirm dialog) → return to Trivia tile → confirm status text is cleared (no stale "(premium)" suffix or "✓ 10 questions ready!"); (b) confirm ☰ Games button no longer appears on the manager bar; (c) confirm Switch Game still works as before (broadcasts switch-game to non-managers, asks for confirmation, transitions everyone to lobby). |
+| 7 | `b068c2c` (v2.113) Polish | ✅ GREEN | Verified 2026-05-13 on iPhone Safari (Mike). Both polish items confirmed: (a) stale "(premium)" status text reset on entry — default state confirmed on re-entry to Trivia info screen; (b) ☰ Games button removal — confirmed not present on Trivia info screen / manager bar. Verification also surfaced an out-of-scope toggle-persistence observation (the premium toggle itself stays ON across re-entry); investigation confirmed this is v2.112's intended sticky-localStorage design, not a regression. Filed as DEFERRED (closed-as-wontfix 2026-05-13). |
 
 ## Test environments
 
@@ -105,12 +105,13 @@ Function logs tailed via `supabase functions logs generate-trivia --project-ref 
 
 Trivia productionization + Trivia Phase 2 fully shipped. Trivia is now playable end-to-end for the first time with both default (OpenTDB) and premium (Anthropic Sonnet 4.6) paths.
 
-Two open verification items:
+One open verification item (v2.113 closed GREEN 2026-05-13 on iPhone Safari):
 
-1. **v2.113 hardware verification on iPhone Safari** — both items pending (stale-status reset + ☰ Games removal). Gate before any new Track per the closing log's "Next session entry point."
-2. **v2.108 Euchre auto-end fix** — formal hardware verification deferred indefinitely (4-player setup impractical). Confidence is high by analogy to v2.107's Last Card race fix; documented in DEFERRED entry "Euchre auto-end path" with the v2.108 SHA.
+1. **v2.108 Euchre auto-end fix** — formal hardware verification deferred indefinitely (4-player setup impractical). Confidence is high by analogy to v2.107's Last Card race fix; documented in DEFERRED entry "Euchre auto-end path" with the v2.108 SHA.
 
-Neither blocks day-to-day Trivia playability. Mike can run unlimited Trivia rounds today against either path with full confidence in v2.109 / v2.110 / v2.112's GREEN verification.
+Toggle-persistence observation surfaced 2026-05-13 during v2.113 verification: the premium toggle stays ON across re-entry to the Trivia info screen. Investigation confirmed this is v2.112's intended sticky-localStorage design (`isPremiumTrivia()` reads from `elsewhere-trivia-premium` key; v2.113's reset was scoped to the status TEXT, not the toggle state). Filed as DEFERRED entry "Premium toggle persistence" closed-as-wontfix 2026-05-13 pending user-feedback signal.
+
+Neither item blocks day-to-day Trivia playability. Mike can run unlimited Trivia rounds today against either path with full confidence in v2.109 / v2.110 / v2.112 / v2.113's GREEN verification.
 
 ## Operational note
 
