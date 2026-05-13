@@ -8,16 +8,9 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 
 **Session 5 — Universal session + participants + queue model**
 - **Status:** Part 1 complete. Part 2 complete (2a-2e shipped; 2f deferred to consolidation per audience.html no-investment doctrine, closeout `1d481b4`). Part 3a shipped (3a.1 plumbing + 3a.2 manager controls). Part 3b productionization + Phase 2 shipped (v2.108 → v2.113, Edge Function + db/019, 2026-05-04). 3b proper (active/audience integration) + 3c/3d (Last Card + Euchre integration) + Parts 4-5 pending.
-- **What's left in Session 5 (in order):**
-  1. **v2.113 hardware verification** — gate before any new track. iPhone Safari verification of stale "(premium)" status text reset on entry + ☰ Games button removal. ~5 minutes. Reference: `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md`.
-  2. **iOS Capacitor sync catch-up** — sync iOS bundle from v2.99 to current (~3 weeks of drift). ~30 minutes. Reference: DEFERRED entry "Session 5 closeout — iOS bundle sync from v2.99 to current".
-  3. **Trivia 3b proper** — active/audience integration per `docs/GAMES-CONTROL-MODEL.md` § 4.1: late-joiner choice screen (Active vs Audience), admission_mode dispatch in `handleMessage`'s `game-state` receiver, Skip Question manager-bar wiring (`mgr-skip` button currently only fires for Last Card). Modify-existing path per the cluster-closeout audit; ~80-120 LOC additive. Score/streak math, 4-option DOM layout, OpenTDB+Anthropic fetch helpers all preserved verbatim. Reference: `docs/GAMES-CONTROL-MODEL.md` § 4.1.
-  4. **Last Card 3c** — same active/audience integration scope as Trivia 3b, applied to Last Card. Reference: `docs/GAMES-CONTROL-MODEL.md` § 4.1.
-  5. **Euchre 3d** — same scope as Last Card 3c, applied to Euchre. Reference: `docs/GAMES-CONTROL-MODEL.md` § 4.1.
-  6. **Part 4 — Proximity polish** (substantially absorbed into 2c per `docs/PHONE-AND-TV-STATE-MODEL.md`). Remaining: animation polish, copy refinement, edge cases (recovery from incorrect answer, multi-TV proximity reset). May collapse entirely into 2c with no new commits.
-  7. **Part 5 — Multi-user end-to-end verification.** Eight verification flows requiring 2+ test accounts: multi-user karaoke (queue ordering, manager approves, host override mid-song), multi-user game (Trivia self-join), manager transfer, orphaned session reclaim, household admin force-reclaim, proximity gate, cross-app isolation, regression check (all 4.10.2 + 4.10.3 flows still work). New verification doc to be created at `docs/SESSION-5-VERIFICATION.md`. Reference: `docs/SESSION-5-PLAN.md` Part 5.
+- **What's left in Session 5:** See `docs/SESSION-5-CLOSEOUT-PLAN.md` for the per-day execution plan, locked decisions, and cross-session continuity guidance.
 - **Estimated remaining:** 8-12 hours across 3-4 sessions. Part 3 ~6-9 hr remaining (3b/3c/3d per `docs/GAMES-CONTROL-MODEL.md` § 4.1). Part 4 ~0-1 hr (substantially absorbed into 2c). Part 5 ~2-3 hr verification with 2+ test accounts.
-- **References:** `docs/SESSION-5-PLAN.md`, `docs/SESSION-5-PART-2-BREAKDOWN.md`, `docs/SESSION-5-PART-2-CLOSING-LOG.md`, `docs/SESSION-5-PART-3-AUDIT.md`, `docs/SESSION-5-PART-3-CLOSING-LOG.md`, `docs/SESSION-5-PART-3B-CLOSING-LOG.md`, `docs/GAMES-CONTROL-MODEL.md`
+- **References:** `docs/SESSION-5-CLOSEOUT-PLAN.md`, `docs/SESSION-5-PLAN.md`, `docs/SESSION-5-PART-2-BREAKDOWN.md`, `docs/SESSION-5-PART-2-CLOSING-LOG.md`, `docs/SESSION-5-PART-3-AUDIT.md`, `docs/SESSION-5-PART-3-CLOSING-LOG.md`, `docs/SESSION-5-PART-3B-CLOSING-LOG.md`, `docs/GAMES-CONTROL-MODEL.md`
 
 ### Commits shipped in Session 5
 
