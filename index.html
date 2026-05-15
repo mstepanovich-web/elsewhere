@@ -3097,9 +3097,13 @@
     // defaults for Session 5 Part 2b; game-engine-specific manifests (trivia,
     // last-card, euchre) land in Part 3. Adding a new app is a data change
     // here, not a logic change in handleTvRemoteTileTap.
+    //
+    // admission_mode + capacity intentionally NULL — stamped per-game
+    // at game-start via rpc_session_set_admission_mode. See
+    // docs/ADMISSION-MODEL-V2.md § 2.4.
     const APP_MANIFEST = {
-      karaoke: { admission_mode: 'manager_approved_single', capacity: 1,    ask_proximity: true,  turn_completion: 'app_declared' },
-      games:   { admission_mode: 'self_join',               capacity: null, ask_proximity: false, turn_completion: 'app_declared' },
+      karaoke: { admission_mode: null, capacity: null, ask_proximity: true,  turn_completion: 'app_declared' },
+      games:   { admission_mode: null, capacity: null, ask_proximity: false, turn_completion: 'app_declared' },
     };
 
     // Phone follows the TV into the app as the launching user's role

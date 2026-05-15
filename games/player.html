@@ -876,6 +876,52 @@ const BASE_URL      = 'https://mstepanovich-web.github.io/elsewhere';
 const CLAUDE_MODEL  = 'claude-sonnet-4-20250514';
 const GAME_LIMITS   = { lastcard:{min:2,max:8,default:6}, trivia:{min:2,max:20,default:10}, euchre:{min:4,max:4,default:4} };
 
+// Per-game properties stamped onto sessions.admission_mode at
+// game-start via rpc_session_set_admission_mode. capacity is
+// separate (see GAME_LIMITS + playerLimit). leave_impact and
+// pause_behavior are reserved for W8 (Pause/Leave UI) — not
+// yet read by client code. See docs/ADMISSION-MODEL-V2.md § 6.
+const GAME_MANIFEST = {
+  trivia: {
+    admission_mode:  'open',
+    leave_impact:    'no_impact',
+    pause_behavior:  'pause_not_applicable',
+  },
+  lastcard: {
+    admission_mode:  'gated',
+    leave_impact:    'no_impact',
+    pause_behavior:  'pause_skips_turn',
+  },
+  euchre: {
+    admission_mode:  'gated',
+    leave_impact:    'terminates_game',
+    pause_behavior:  'pause_freezes_game',
+  },
+};
+
+// W2 § 10: stamp admission_mode + capacity onto sessions at game-start.
+// Manager-only RPC; non-manager calls fail at the server with 42501 and
+// log via console.error (game-start proceeds either way — the stamp is
+// supplementary, not load-bearing for the round itself).
+async function stampAdmissionMode(game) {
+  const m = GAME_MANIFEST[game];
+  if (!m) return;
+  if (!currentSession?.id || !window.sb) return; // legacy mode no-op
+  const cap = (game === 'lastcard') ? playerLimit
+            : (game === 'euchre')   ? 4
+            : null; // trivia: unlimited
+  const { error } = await window.sb.rpc('rpc_session_set_admission_mode', {
+    p_session_id:     currentSession.id,
+    p_admission_mode: m.admission_mode,
+    p_capacity:       cap,
+  });
+  if (error) {
+    console.error('[stampAdmissionMode]', game, error);
+    // Don't throw — game-start should proceed; the admission_mode
+    // stamping is supplementary. Log and continue.
+  }
+}
+
 const GAME_INFO = {
   lastcard: {
     title:'Last Card', sub:'Uno-compatible card game',
@@ -2789,8 +2835,18 @@ function managerEndGame() {
   showGameOver(scores);
 }
 
-function managerSwitchGame() {
+async function managerSwitchGame() {
   if (!confirm('Switch to a different game?')) return;
+  // W2 § 10: clear admission_mode so the next Start Game can re-stamp.
+  // Legacy mode (no session row) skips the RPC — Switch Game still works.
+  if (currentSession?.id && window.sb) {
+    const { error } = await window.sb.rpc('rpc_session_set_admission_mode', {
+      p_session_id:     currentSession.id,
+      p_admission_mode: null,
+      p_capacity:       null,
+    });
+    if (error) console.error('[managerSwitchGame] clear admission_mode', error);
+  }
   send({type:'switch-game'}); gameInProgress=false; goToLobby();
 }
 
@@ -2871,7 +2927,7 @@ function shuffle(a) {
   return b;
 }
 
-function managerStartLastCard() {
+async function managerStartLastCard() {
   // Active players = participants whose participation_role is 'active'.
   // Manager's own role is also 'active' iff they've checked "I'm playing".
   const playerNames = currentParticipants
@@ -2879,6 +2935,10 @@ function managerStartLastCard() {
     .map(p => p.display_name);
   log('Starting Last Card with: '+playerNames.join(', '));
   if (playerNames.length<2) { showToast('Need at least 2 players ('+playerNames.length+' in lobby)'); return; }
+
+  // W2 § 10: stamp admission_mode='gated' + capacity=playerLimit before
+  // broadcasting game-start. Supplementary; failures logged, not thrown.
+  await stampAdmissionMode('lastcard');
 
   const deck=shuffle(buildDeck());
   const hands={};
@@ -3616,8 +3676,11 @@ async function triviaGenerate() {
   if (startBtn) startBtn.style.display = 'block';
 }
 
-function managerStartTrivia() {
+async function managerStartTrivia() {
   if (!gameState?.questions) { showToast('Generate questions first'); return; }
+  // W2 § 10: stamp admission_mode='open' + capacity=null before
+  // broadcasting game-start. Supplementary; failures logged, not thrown.
+  await stampAdmissionMode('trivia');
   const s=JSON.parse(JSON.stringify(gameState));
   s.phase='question'; s.timer=s.timePerQuestion;
   gameState=s; gameInProgress=true;
@@ -3868,11 +3931,15 @@ function euTeamOf(playerName, teams) {
   return null;
 }
 
-function managerStartEuchre() {
+async function managerStartEuchre() {
   const playerNames = currentParticipants
     .filter(p => p.participation_role === 'active' && !p.left_at)
     .map(p => p.display_name);
   if (playerNames.length !== 4) { showToast('Euchre requires exactly 4 players'); return; }
+
+  // W2 § 10: stamp admission_mode='gated' + capacity=4 before
+  // broadcasting game-start. Supplementary; failures logged, not thrown.
+  await stampAdmissionMode('euchre');
 
   const deck = euShuffle(euBuildDeck());
   const hands = {};
