@@ -156,6 +156,25 @@ Stop ≠ End Turn semantics, idle-state venue tour, and song-end
 rotation. That generalization is out of scope here and would be a
 separate spec.
 
+### 2.7 What this design does NOT change in the schema
+
+The following schema elements are touched by neither this design
+nor the planned implementation work items W1-W10:
+
+- `participation_role` enum values themselves — preserved as
+  `active`, `audience`, `queued` (see § 3 reconciliation).
+- `queue_position` column on `session_participants` — retained for
+  karaoke's continued use. Games code under W3-W10 stops reading or
+  writing it.
+- `pre_selections` jsonb column on `session_participants` —
+  karaoke-only, untouched.
+- All karaoke-specific RPCs (`rpc_karaoke_*`) — untouched.
+- All shell-level concerns in `index.html` outside `APP_MANIFEST`
+  — untouched.
+
+This list exists to make the karaoke carve-out (§ 2.6) concrete at
+the schema level.
+
 ---
 
 ## 3. The three-role model
@@ -163,8 +182,8 @@ separate spec.
 The `participation_role` enum preserves three existing values —
 **active**, **queued**, **audience** — and refines their semantics
 to match the two-mode admission model. No rename of enum values is
-required; the W1 migration adds `wanting_since` and drops
-`queue_position`, but the enum stays as-is.
+required; the W1 migration adds `wanting_since` and leaves the
+enum as-is.
 
 ### 3.1 active
 
@@ -224,8 +243,13 @@ non-playing surface; the only difference between them is intent
 (queued = wants to play, audience = wants to watch) and ordering
 (queued ordered by `wanting_since`, audience unordered).
 
-`queue_position` is no longer used; ordering is by `wanting_since`
-instead. The column is dropped in W1.
+For Games sessions, ordering moves from `queue_position` to
+`wanting_since`. The `queue_position` column itself is retained in
+the schema because karaoke's `rpc_karaoke_song_ended` and related
+RPCs depend on it. The column is unused by Games under this design
+but kept available for karaoke. A future unification of karaoke
+into this framework would be the trigger for dropping
+`queue_position` entirely; that's out of scope here.
 
 ### 3.6 Schema migration required
 
@@ -234,9 +258,6 @@ at implementation time) is required to:
 
 - Add `wanting_since timestamp with time zone` column on
   `session_participants`, nullable.
-- Drop `queue_position` column.
-- Drop the partial unique index that referenced `queue_position`
-  (defined in `db/008:127-128`).
 - Update the `sessions.admission_mode` CHECK constraint and NOT
   NULL constraint per § 2.5: relax to allow NULL, restrict
   values to `'open'`, `'gated'` (transition any existing rows
@@ -754,9 +775,6 @@ implementation time):
 
 - Add `wanting_since timestamp with time zone` column on
   `session_participants`, nullable.
-- Drop `queue_position` column.
-- Drop the partial unique index that referenced `queue_position`
-  (defined in `db/008:127-128`).
 - Update the `sessions.admission_mode` CHECK constraint and NOT
   NULL constraint per § 2.5: relax to allow NULL, restrict values
   to `'open'`, `'gated'` (transition any existing rows with old
@@ -767,7 +785,10 @@ implementation time):
   during drafting.
 
 No `participation_role` enum rename; the existing values
-(`active`, `queued`, `audience`) are preserved.
+(`active`, `queued`, `audience`) are preserved. `queue_position`
+column and its partial unique index are intentionally retained —
+karaoke RPCs depend on them. Games code under W3-W10 stops using
+`queue_position` but does not drop it.
 
 ### W2 — Per-game manifest + game-start admission stamping
 
