@@ -1033,9 +1033,11 @@ documented in earlier diagnostics:
 
 These remain known issues; the new model resolves them collectively
 once implemented. No partial implementation of this design is
-intended — W1 (schema rename) in particular is a coordinated
-single-deploy because it touches every consumer of the
-`participation_role` enum.
+intended — W1 in particular is small in scope (additive schema
+changes plus a backfill) and does not require coordinated client
+deploy — the existing `participation_role` values and
+`queue_position` column are retained, so existing client code
+continues to work unchanged after W1 applies.
 
 ---
 
