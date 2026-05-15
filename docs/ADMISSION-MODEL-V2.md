@@ -47,7 +47,7 @@ have been latent in the model:
   without first refactoring this function.
 
 The simplification adopted: **two admission modes (open, gated),
-three explicit role states (playing, wanting, watching), per-game
+three explicit role states (active, queued, audience), per-game
 manifest stamped at game-start, Games-only scope.** Karaoke is
 explicitly carved out and remains on its current hardcoded flow;
 unifying it into this framework is future work.
@@ -62,14 +62,14 @@ admission-mode-specific late-joiner surfaces into a single
 ## 2. The two-mode model
 
 Games sessions run in one of two admission modes. The mode determines
-how new participants enter the playing set and how between-round
+how new participants enter the active set and how between-round
 transitions resolve.
 
 ### 2.1 open
 
-Anyone in the session can join as playing immediately. Late-joiners
-flow into the playing state on join. Users may toggle themselves to
-watching at any time; they may toggle back to wanting or playing
+Anyone in the session can join as active immediately. Late-joiners
+flow into the active state on join. Users may toggle themselves to
+audience at any time; they may toggle back to queued or active
 freely (subject to whether the game is mid-round).
 
 No manager approval is required at any point. No capacity limit.
@@ -77,8 +77,8 @@ Trivia is the only `open` game today.
 
 ### 2.2 gated
 
-The manager controls who plays. Late-joiners default to wanting in
-the game-room. The playing set changes only between rounds, via the
+The manager controls who plays. Late-joiners default to queued in
+the game-room. The active set changes only between rounds, via the
 manager-driven Select Players flow (see § 5).
 
 Capacity applies. Last Card and Euchre are `gated`.
@@ -146,7 +146,7 @@ backed by `rpc_karaoke_song_ended` (`db/013`). The schema value
 `manager_approved_single` is documentation only.
 
 This design does not touch karaoke. The model parameters (open/gated,
-playing/wanting/watching) are not applied to karaoke surfaces. The
+active/queued/audience) are not applied to karaoke surfaces. The
 karaoke spec at `docs/KARAOKE-CONTROL-MODEL.md` remains the
 authoritative reference for karaoke admission.
 
@@ -160,59 +160,48 @@ separate spec.
 
 ## 3. The three-role model
 
-The `participation_role` enum is updated to express three explicit
-states: **playing**, **wanting**, **watching**. The existing
-`active` and `audience` values are renamed. The `queued` value is
-dropped.
+The `participation_role` enum preserves three existing values —
+**active**, **queued**, **audience** — and refines their semantics
+to match the two-mode admission model. No rename of enum values is
+required; the W1 migration adds `wanting_since` and drops
+`queue_position`, but the enum stays as-is.
 
-### 3.1 playing
+### 3.1 active
 
 The user is in the current round. Receives game-state broadcasts.
 Has a hand / question view / bidding UI as appropriate. Their name
 appears in `s.players` (the game-state players list).
 
-Renames from `participation_role='active'`. The schema enum value
-becomes `'playing'`.
+### 3.2 queued
 
-### 3.2 wanting
+The user wants to play but is not in the current round. This is
+the default for late-joiners in gated games who haven't expressed
+a preference, and for previous-round players who keep Play Again
+checked on the score screen (see § 5.1). For open games,
+late-joiners default directly to active; queued is used only in
+gated games as the canonical "between rounds, in line for the
+next one" state.
 
-The user wants to play but is not in the current round. New role
-state. This is the default for:
+### 3.3 audience
 
-- Late-joiners in any Games session (open or gated) who haven't
-  expressed a preference.
-- Previous-round players who keep Play Again checked on the score
-  screen (see § 5.1).
+The user is opted into audience-only status — wants to watch, not
+play. Sticky: once in audience, they stay across game-end
+transitions unless they explicitly toggle into queued (or active
+in `open` games).
 
-For `open` games, the wanting state is transient — late-joiners are
-immediately presented with playing as the default and transition
-through wanting only at the moment of join.
-
-For `gated` games, wanting is the canonical "between rounds, in line
-for the next one" state, replacing the previous `queued` role.
-
-### 3.3 watching
-
-The user is explicitly watching only. Sticky — watchers stay
-watchers across game-end transitions unless they explicitly toggle
-into wanting (or playing in `open` games).
-
-Renames from `participation_role='audience'`. The schema enum value
-becomes `'watching'`.
-
-Watchers see `screen-game-room` with the active-round watching copy
+Watchers see `screen-game-room` with the active-round audience copy
 (see § 4). They do not see live game state. The QR-code spectator
 path remains the separate product story per `docs/GAMES-CONTROL-MODEL.md`
 § 2.9.
 
-### 3.4 Queue ordering for wanting users
+### 3.4 Queue ordering for queued users
 
 A new column `session_participants.wanting_since` (timestamp) records
-the moment a user entered the wanting state. The wanting list is
+the moment a user entered the queued state. The queued list is
 ordered by `wanting_since` ascending — oldest first at the top.
 
 Concrete example: a user who joined the session 30 minutes ago
-without playing yet outranks a user who just finished Round 1 and
+without playing a round yet outranks a user who just finished Round 1 and
 opted in to Round 2 via Play Again.
 
 Manager has full discretion in the Select Players flow (§ 5.2);
@@ -220,63 +209,50 @@ ordering is a hint, not a hard rule. A manager may skip the
 top-of-list user if they have a reason (the user just stepped away,
 the manager wants to balance team composition, etc.).
 
-### 3.5 What "queued" was
+### 3.5 How queued's semantics change
 
-Before this design, `'queued'` was a Last Card-specific state for
-users waiting between rounds. Queue position was tracked in
-`session_participants.queue_position`. The dispatcher pinned queued
-users to `screen-lastcard-queue` and auto-promoted them via Section
-C's planned (but unshipped) flow.
+Before this design, `'queued'` was a Last Card-specific state
+tracked via `session_participants.queue_position` and pinned to
+`screen-lastcard-queue`. The dispatcher auto-promoted queued users
+via Section C's planned (unshipped) flow.
 
-In the new model, those users are **wanting** — same as anyone else
-not currently playing but wanting to. The queue-vs-audience
-distinction collapses. `queue_position` is no longer used; ordering
-is by `wanting_since` instead.
+Under this design, `'queued'` is the canonical "wants to play,
+waiting for next round" state for all gated games. The
+queue-vs-audience distinction in the previous model collapses:
+queued users and audience users share `screen-game-room` as their
+non-playing surface; the only difference between them is intent
+(queued = wants to play, audience = wants to watch) and ordering
+(queued ordered by `wanting_since`, audience unordered).
 
-This collapse is what enables a single non-playing surface
-(`screen-game-room`) for all three games. There is no Last Card
-queue screen, no Trivia choice screen — there's the game-room with
-playing / wanting / watching sections, and the per-game active
-screens.
+`queue_position` is no longer used; ordering is by `wanting_since`
+instead. The column is dropped in W1.
 
 ### 3.6 Schema migration required
 
 A new migration (file `db/0XX_role_model_v2.sql`, number determined
 at implementation time) is required to:
 
-- Rename `participation_role` enum values: `active` → `playing`,
-  `audience` → `watching`.
-- Drop the `queued` enum value entirely. Pre-migration rows with
-  `queued` must be transitioned (likely to `wanting`) as part of
-  the migration script.
 - Add `wanting_since timestamp with time zone` column on
   `session_participants`, nullable.
-- Drop `queue_position` column (now unused).
-- Update the partial unique index that gated on `queue_position`
+- Drop `queue_position` column.
+- Drop the partial unique index that referenced `queue_position`
   (defined in `db/008:127-128`).
-- Optionally update CHECK constraints on `sessions.admission_mode`
-  per § 2.5.
+- Update the `sessions.admission_mode` CHECK constraint and NOT
+  NULL constraint per § 2.5: relax to allow NULL, restrict
+  values to `'open'`, `'gated'` (transition any existing rows
+  with old values).
 
 The migration also requires coordinated updates to every RPC that
-references the old enum values: `rpc_session_join`,
-`rpc_session_update_participant`, `rpc_session_set_my_participation_role`,
-`rpc_session_remove_participant`, `rpc_session_get_participants`,
-`rpc_karaoke_song_ended` (if it references the enum by name), and
-any others surfaced during migration drafting.
-
-Karaoke-side: `rpc_karaoke_song_ended` does an `active → audience`
-flip and `queued → active` promotion. Under the rename, these
-become `playing → watching` and (since `queued` is gone) the
-promotion source changes. Karaoke's queue-position-based ordering
-needs to switch to `wanting_since` ordering OR keep its own
-side-table OR the migration script preserves karaoke's queueing
-under a different name. Resolution: out of scope here — karaoke
-migration handling is part of the migration's implementation
-planning.
+references the `sessions.admission_mode` value as a string
+literal — the four old values (`'self_join'`, `'wait_for_next'`,
+`'manager_approved_single'`, `'manager_approved_batch'`) collapse
+to the two new values (`'open'`, `'gated'`). The specific RPC
+surfaced by the diagnostic is `rpc_session_self_promote_from_queue`
+in `db/011:378`; others may surface during migration drafting.
 
 ---
 
-## 4. Game-room is the single non-playing surface
+## 4. Game-room is the single shared surface
 
 `screen-game-room` hosts all three role populations during all
 session states. The dedicated late-joiner surfaces introduced in
@@ -284,17 +260,17 @@ Trivia 3b and Last Card 3c are retired.
 
 ### 4.1 The three sections of `screen-game-room`
 
-- **Playing (lobby state only):** Users in the playing state during
+- **Active (lobby state only):** Users in the active state during
   the lobby window — before the round starts. Once the round starts,
-  playing users navigate to the per-game active screen
+  active users navigate to the per-game active screen
   (`screen-trivia` / `screen-lastcard` / `screen-euchre`) and are
   not on `screen-game-room` anymore.
-- **Wanting:** Ordered list by `wanting_since` ascending. Visible
+- **Queued:** Ordered list by `wanting_since` ascending. Visible
   to all users in the session (including the user themselves if
-  they're wanting). The manager's Select Players view (§ 5.2)
+  they're queued). The manager's Select Players view (§ 5.2)
   presents this list with checkboxes; non-managers see it
   read-only.
-- **Watching:** Separate section, no specific ordering. Visible to
+- **Audience:** Separate section, no specific ordering. Visible to
   all users. Watchers stay here through the entire session unless
   they explicitly transition.
 
@@ -306,22 +282,22 @@ from the `<style>` block, and their referenced handler functions
 are deleted or replaced:
 
 - `screen-lastcard-queue` (added in Last Card 3c Section A, commit
-  `6bec79c`) — superseded by the wanting section of game-room.
+  `6bec79c`) — superseded by the queued section of game-room.
 - `screen-trivia-late-choice` (added in Trivia 3b Section A, commit
-  `c8317da`) — superseded by default wanting-on-join + the explicit
+  `c8317da`) — superseded by default queued-on-join + the explicit
   participation toggle on game-room.
 - `screen-watching` (legacy, present since before Session 5) — kept
   only until Euchre 3d work retires its cold-join dependency, then
   deleted alongside that work.
 
-### 4.3 Active-round behavior for wanting and watching
+### 4.3 Active-round behavior for queued and audience
 
-When a round is in progress (`gameInProgress = true`), wanting and
-watching users on `screen-game-room` see a static "Round in progress"
+When a round is in progress (`gameInProgress = true`), queued and
+audience users on `screen-game-room` see a static "Round in progress"
 header at the top of the screen plus the three sections (with
-themselves listed in wanting or watching). They do not see live
+themselves listed in queued or audience). They do not see live
 game state — no questions, no cards, no bidding. The active-round
-view is reserved for users in the playing state.
+view is reserved for users in the active state.
 
 Spectator-of-live-state remains a separate product story; per
 `docs/GAMES-CONTROL-MODEL.md` § 2.9, the intended path is a QR
@@ -334,8 +310,8 @@ That spectator surface is not specified here.
 When a round ends and the game-over event broadcasts, all users
 return to `screen-game-room` (or `screen-gameover` if the
 implementation chooses a separate end-of-round screen; see § 5.1).
-Playing users from the just-ended round have their role flipped per
-§ 5.1; wanting and watching users see their role unchanged.
+Active users from the just-ended round have their role flipped per
+§ 5.1; queued and audience users see their role unchanged.
 
 For `gated` games, the manager-only Select Players affordance
 surfaces here (or on `screen-gameover`; see OQ4, § 11).
@@ -346,7 +322,7 @@ surfaces here (or on `screen-gameover`; see OQ4, § 11).
 
 This section defines the between-rounds flow for `gated` games. Open
 games (Trivia) do not use this flow — late-joiners and previous-round
-players in Trivia can self-toggle into playing freely.
+players in Trivia can self-toggle into active or audience freely.
 
 ### 5.1 Score screen
 
@@ -357,22 +333,22 @@ just-ended round plus a per-user Play Again checkbox.
 **Play Again checkbox semantics:**
 
 - Defaulted ON for previous-round players (those who finished in
-  the playing state).
+  the active state).
 - Not shown for watchers — watchers are not candidates for the
   next round; their role is sticky.
-- Wanting users (who weren't in the just-ended round) see the
+- Queued users (who weren't in the just-ended round) see the
   checkbox in their default-on state. Their wanting_since is
   unchanged.
 
 **State transitions on Play Again interaction:**
 
 When a previous-round player keeps Play Again checked:
-- Role flips from `playing` to `wanting`.
+- Role flips from `active` to `queued`.
 - `wanting_since` set to `now()`.
-- They join the wanting queue at the bottom (latest wanting_since).
+- They join the queue at the bottom (latest wanting_since).
 
 When a previous-round player unchecks Play Again:
-- Role flips from `playing` to `watching`.
+- Role flips from `active` to `audience`.
 - `wanting_since` is null (watchers don't have one).
 
 The timing of the role flip — at score-screen close, at game-end
@@ -383,7 +359,7 @@ not mandate the timing; implementation chooses.
 
 Manager-only affordance on `screen-game-room` after the round ends.
 The recommended placement is `screen-game-room` (so the manager
-sees the wanting list in context with the watching list and the
+sees the queued list in context with the audience list and the
 just-ended scores); `screen-gameover` is the alternative. OQ4
 captures the choice.
 
@@ -394,43 +370,43 @@ responses are settled.
 
 **Surface layout when tapped:**
 
-The wanting list renders with checkboxes, ordered by `wanting_since`
+The queued list renders with checkboxes, ordered by `wanting_since`
 ascending (oldest first). For Last Card, the playerLimit (capacity)
 is shown alongside as context.
 
 **Affordances:**
 
-- **Per-user checkbox:** Toggle a wanting user into the next-round
+- **Per-user checkbox:** Toggle a queued user into the next-round
   selection set. Checking is up to capacity; once capacity is
   reached, additional checkboxes are disabled with a "Capacity
   reached" hint.
-- **Select All:** Selects all wanting users up to capacity. If the
-  wanting count exceeds capacity, Select All still selects all and
+- **Select All:** Selects all queued users up to capacity. If the
+  queued count exceeds capacity, Select All still selects all and
   surfaces a capacity-adjustment prompt: "Capacity is X — increase
   to Y to include everyone?" The manager can confirm (capacity
   bumps to the new value, applies to this game's session row, and
-  the selection set includes all wanting users) or trim selection
+  the selection set includes all queued users) or trim selection
   manually back down to current capacity. The capacity-adjustment
   prompt UX (modal, inline, auto-adjust) is OQ5.
 - **Start Next Round:** Applies the selection. Fires
   `rpc_session_update_participant` per selected user (or a batch
-  RPC; OQ8) to flip their role from `wanting` to `playing`.
-  Unselected wanting users stay wanting (see § 5.3). Broadcast
+  RPC; OQ8) to flip their role from `queued` to `active`.
+  Unselected queued users stay queued (see § 5.3). Broadcast
   `game-start` (or per-game equivalent) follows; selected users
   navigate to the per-game active screen.
 - **Cancel:** Returns to game-room with no role changes.
 
-### 5.3 What happens to unselected wanting users
+### 5.3 What happens to unselected queued users
 
-They stay wanting. Their `wanting_since` is unchanged — they do not
+They stay queued. Their `wanting_since` is unchanged — they do not
 get re-stamped just because a round happened. They remain at the
-top of the wanting list (assuming they were among the oldest) for
+top of the queued list (assuming they were among the oldest) for
 the next round-end's Select Players flow.
 
 This is what "they move up in the order" means in practice — they
 were already near the top of the list by virtue of being older
-wanters, and they stay there. They do not regress in the queue
-because they weren't picked.
+queued entries, and they stay there. They do not regress in the
+queue because they weren't picked.
 
 ### 5.4 No auto-promote
 
@@ -487,7 +463,7 @@ keyed by game id) defines per-game properties:
 
 | Value | Semantics |
 |---|---|
-| `'no_impact'` | Notify other players ("[name] left"); game continues without the user. Their `playing` row flips per § 7.2. |
+| `'no_impact'` | Notify other players ("[name] left"); game continues without the user. Their `active` row flips per § 7.2. |
 | `'terminates_game'` | Notify other players; game ends for everyone. Broadcast `game-over` with reason `'user_left'`. The user's row flips per § 7.2. |
 
 ### 6.5 `pause_behavior` values
@@ -517,7 +493,7 @@ surfaces conditionally based on the per-game manifest.
 ### 7.1 Pause (active game surfaces)
 
 A button on `screen-lastcard` / `screen-euchre` / `screen-trivia`,
-visible to playing users only. The button is hidden entirely when
+visible to active users only. The button is hidden entirely when
 the game's `pause_behavior` is `'pause_not_applicable'` (Trivia
 today).
 
@@ -531,7 +507,7 @@ today).
 - When the turn would be the paused user's, the round logic
   auto-advances past them (similar to existing Skip action,
   scoped to the paused user).
-- The paused user remains in `playing` role; their turn resumes
+- The paused user remains in `active` role; their turn resumes
   naturally on their next turn after they unpause.
 - Unpause: tap the same button (now labeled Unpause / Resume).
 
@@ -550,7 +526,7 @@ today).
 ### 7.2 Leave (active game surfaces)
 
 A button on `screen-lastcard` / `screen-euchre` / `screen-trivia`,
-visible to all playing users. The button is always available
+visible to all active users. The button is always available
 regardless of `leave_impact`.
 
 **On tap, a confirmation dialog appears with copy branched on
@@ -566,10 +542,10 @@ regardless of `leave_impact`.
 
 Update the user's row. Schema choice (deferred to implementation,
 see OQ in § 11 covered by W9): either set `left_at = now()` (audit
-trail preserved) or flip `participation_role` to `'watching'`. The
+trail preserved) or flip `participation_role` to `'audience'`. The
 doc notes a preference for `left_at = now()` because it preserves
 the audit trail and matches the existing Remove Player semantics
-in `db/016`. Either way, the user is no longer playing.
+in `db/016`. Either way, the user is no longer active.
 
 **For `'terminates_game'` games:**
 
@@ -648,7 +624,7 @@ These remain unchanged under the new model:
 ### 8.3 Manager affordances NOT introduced
 
 This design does not introduce a generic "move user from
-audience/watching to wanting/playing" affordance. Manager
+audience/audience to queued/active" affordance. Manager
 intervention on other users' role state remains scoped to:
 Remove Player (force-remove) and Select Players (gated games,
 between rounds only). The manager does not have a "force-promote"
@@ -665,12 +641,18 @@ in a follow-up commit after this design is approved.
 
 ### 9.1 § 2.4 (active/audience cluster)
 
-**Update.** The active/audience binary is replaced with the
-playing/wanting/watching triad. Default role on join differs by
-admission mode: open games default late-joiners to `playing`
-immediately (no manager step); gated games default late-joiners
-to `wanting` in the game-room. Watchers in both modes are users
-who explicitly toggle into watching.
+**Update.** The active/audience binary is expanded to a clearer
+three-role model using existing schema values: active (in the
+current round), queued (wants to play, waiting), audience
+(explicitly watching only). The previous design's vocabulary
+trap (where 'audience' meant both schema-state and surface-label)
+is resolved by treating queued as the canonical "waiting to
+play" state for gated games, separate from audience. Default
+role on join differs by admission mode: open games default
+late-joiners to `active` immediately (no manager step); gated
+games default late-joiners to `queued` in the game-room.
+Audience members in both modes are users who explicitly toggle
+into watching.
 
 ### 9.2 § 2.8 (admission modes and capacity)
 
@@ -689,8 +671,8 @@ time. Per-game capacity values are documented in this design's § 6.
 **Update.** `admission_mode: 'self_join'` → `admission_mode: 'open'`.
 
 The late-joiner choice screen (Trivia 3b Section A) is removed.
-Late-joiners default to playing on join; users may toggle into
-watching via the existing participation toggle on `screen-game-room`.
+Late-joiners default to active on join; users may toggle into
+audience via the existing participation toggle on `screen-game-room`.
 
 The dispatcher's Trivia-specific branch (Trivia 3b Section B)
 collapses into the two-mode dispatcher. The Skip Question wiring
@@ -702,7 +684,7 @@ admission logic.
 **Update.** `admission_mode: 'wait_for_next'` → `admission_mode: 'gated'`.
 
 The queue surface (`screen-lastcard-queue`, Last Card 3c Section A)
-is removed. Wanting users live in the wanting section of
+is removed. Queued users live in the queued section of
 `screen-game-room`, ordered by `wanting_since`.
 
 Section C of Last Card 3c (auto-promote + manager picker UI) is
@@ -742,8 +724,8 @@ same RPC and semantics.
 ### 9.8 § 2.9 (Audience role + TV-experience-via-QR)
 
 **No change to the QR spectator path itself.** The audience role
-semantics rename from `'audience'` to `'watching'` per § 3.3.
-The QR spectator view remains the intended path for live spectator
+semantics are preserved as they exist in the schema today. The QR
+spectator view remains the intended path for live spectator
 experience and is unaffected by this design.
 
 ### 9.9 Cross-references
@@ -770,21 +752,22 @@ to be created when implementation begins.
 New migration `db/0XX_role_model_v2.sql` (number determined at
 implementation time):
 
-- Rename `participation_role` enum values: `active` → `playing`,
-  `audience` → `watching`.
-- Drop `queued` enum value (transition existing rows to `wanting`).
-- Add `wanting` enum value.
-- Add `wanting_since` timestamp column on `session_participants`.
+- Add `wanting_since timestamp with time zone` column on
+  `session_participants`, nullable.
 - Drop `queue_position` column.
-- Drop the partial unique index that referenced `queue_position`.
-- Relax (or extend) the `sessions.admission_mode` CHECK constraint
-  per § 2.5.
-- Update referenced RPCs to use new enum values: `rpc_session_join`,
-  `rpc_session_update_participant`, `rpc_session_set_my_participation_role`,
-  `rpc_session_remove_participant`, `rpc_session_get_participants`,
-  `rpc_karaoke_song_ended`, and any others surfaced during drafting.
-- Karaoke-side migration handling (queue source rename or
-  side-table) is part of this work item.
+- Drop the partial unique index that referenced `queue_position`
+  (defined in `db/008:127-128`).
+- Update the `sessions.admission_mode` CHECK constraint and NOT
+  NULL constraint per § 2.5: relax to allow NULL, restrict values
+  to `'open'`, `'gated'` (transition any existing rows with old
+  values).
+- Update referenced RPCs to use the two new admission_mode string
+  literals: `rpc_session_self_promote_from_queue` in `db/011:378`
+  is the specific RPC surfaced by diagnostics; others may surface
+  during drafting.
+
+No `participation_role` enum rename; the existing values
+(`active`, `queued`, `audience`) are preserved.
 
 ### W2 — Per-game manifest + game-start admission stamping
 
@@ -819,10 +802,10 @@ In `games/player.html`:
 
 In `games/player.html`:
 
-- Add wanting and watching sections to `screen-game-room`'s
+- Add queued and audience sections to `screen-game-room`'s
   roster rendering (`renderRoster` update).
-- Order wanting section by `wanting_since` ascending.
-- Active-round watching copy at the top of game-room ("Round in
+- Order queued section by `wanting_since` ascending.
+- Active-round audience copy at the top of game-room ("Round in
   progress" or equivalent) when `gameInProgress = true`.
 
 ### W5 — Score screen Play Again
@@ -842,7 +825,7 @@ In `games/player.html`:
 
 - New "Select Players for Next [game]" button on `screen-game-room`
   (or `screen-gameover` per OQ4), manager-only, gated games only.
-- Surface with wanting list + checkboxes ordered by
+- Surface with queued list + checkboxes ordered by
   `wanting_since`.
 - Select All affordance with capacity-adjustment prompt for
   overflow.
@@ -854,7 +837,7 @@ In `games/player.html`:
 In `games/player.html`:
 
 - Drop the `s.players` freeze pattern.
-- Re-read `currentParticipants` filtered to `playing` role at
+- Re-read `currentParticipants` filtered to `active` role at
   every round-start.
 - Integrate with the Select Players output (W6) so the selected
   set becomes the new round's `s.players`.
@@ -864,10 +847,10 @@ In `games/player.html`:
 In `games/player.html`:
 
 - Pause button on `screen-lastcard` / `screen-euchre`, visible
-  to playing users when the game's `pause_behavior` is not
+  to active users when the game's `pause_behavior` is not
   `'pause_not_applicable'`. Behavior branches per § 7.1.
 - Leave button on `screen-lastcard` / `screen-euchre` /
-  `screen-trivia`, visible to playing users. Confirmation
+  `screen-trivia`, visible to active users. Confirmation
   dialog with copy branched per `leave_impact` per § 7.2.
 - For `'pause_skips_turn'`: integrate paused state with turn
   advancement (Last Card).
@@ -941,11 +924,11 @@ manager sees the full session roster context). UX call.
 When Select All exceeds capacity, is the prompt a modal, an
 inline banner, or auto-adjustment with notification? UX call.
 
-### OQ6 — Sticky watching status across sessions
+### OQ6 — Sticky audience status across sessions
 
-If user A is watching in Session 1 and Session 1 ends, what's
+If user A is audience in Session 1 and Session 1 ends, what's
 their default status in Session 2 (a new session in the same
-household)? Probably `wanting` (fresh session, fresh defaults),
+household)? Probably `queued` (fresh session, fresh defaults),
 but worth confirming explicitly.
 
 ### OQ7 — `leave_impact='terminates_game'` UX during game-end
@@ -957,7 +940,7 @@ does the remaining players' screen show "Game terminated by
 ### OQ8 — Select Players batch role-update mechanism
 
 Single RPC call with a list of user_ids and the target role
-('playing'), or per-row loop with the existing
+('active'), or per-row loop with the existing
 `rpc_session_update_participant`? The loop pattern is simpler;
 the batch RPC reduces realtime traffic (one publish vs N publishes).
 Implementation choice.
