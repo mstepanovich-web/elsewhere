@@ -121,6 +121,11 @@
     .player-row.ready { border-color: var(--color-green); }
     .player-row.invited { opacity: .6; border-style: dashed; }
     .player-row.audience { opacity: .55; }
+    /* W4: queued (wanting) users render in the Playing section but visually
+       distinguished from active players via dimming + a "Waiting" subtitle. */
+    .player-row.waiting { opacity: .6; }
+    .player-row.waiting .p-name { color: var(--color-text-dim); }
+    .p-waiting-label { font-size: 10px; letter-spacing: .1em; color: var(--color-text-faint); text-transform: uppercase; margin-left: 4px; }
     .p-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .dot-green { background: var(--color-green); box-shadow: 0 0 6px var(--color-green); }
     .dot-gold  { background: var(--color-gold); box-shadow: 0 0 6px var(--color-gold); }
@@ -1753,9 +1758,11 @@ function goToGameRoom() {
   if (wmDefault) wmDefault.style.display = isMidGameAudience ? 'none' : 'block';
   if (wmMidgame) wmMidgame.style.display = isMidGameAudience ? 'block' : 'none';
   if (wmGname)   wmGname.textContent     = GAME_INFO[currentGame]?.title || 'The game';
-  // Sync participant checkbox to authoritative role on entry.
+  // Sync participant checkbox to authoritative role on entry. Under W4,
+  // both 'active' and 'queued' mean "wants to play" → checked; only
+  // 'audience' is unchecked.
   const partCheckbox = document.getElementById('participant-is-player');
-  if (partCheckbox) partCheckbox.checked = currentMyRow?.participation_role === 'active';
+  if (partCheckbox) partCheckbox.checked = currentMyRow?.participation_role !== 'audience';
   // Announce game to others
   if (isManager) send({type:'game-selected', game:currentGame});
   renderRoster(); renderInvited(); renderTvDisplays();
@@ -1783,9 +1790,22 @@ function changeLimit(delta) {
   send({type:'limit-changed', limit:playerLimit});
 }
 
-// recomputeQueue retired in 3a.1: lobby treats every participant as active.
-// Per-game queueing semantics (over-capacity arrivals → queue) lands in
-// 3b/3c/3d alongside per-game admission_mode.
+// W4 § 10: shared helper to compute the target participation_role from the
+// checkbox state + round state + admission mode. Single source of truth
+// for the "I want to play" / "Watch" toggle semantics across both
+// toggleManagerAsPlayer and togglePlayerAsParticipant.
+//
+//   - Unchecked: always 'audience' (user opted to watch).
+//   - Checked + lobby (no game running): 'active' (join the next round).
+//   - Checked + mid-round + gated admission: 'queued' (wait for next round).
+//   - Checked + mid-round + open admission (or NULL/unknown): 'active'
+//     (jump straight in — Trivia-style).
+function computeTargetRole(checked, gameInProgress, admissionMode) {
+  if (!checked) return 'audience';
+  if (!gameInProgress) return 'active';
+  if (admissionMode === 'gated') return 'queued';
+  return 'active';
+}
 
 async function toggleManagerAsPlayer(checked) {
   const checkbox = document.getElementById('mgr-is-player');
@@ -1795,9 +1815,17 @@ async function toggleManagerAsPlayer(checked) {
     return;
   }
 
-  const targetRole = checked ? 'active' : 'audience';
+  // W4 § 10: target role derived from round state + admission mode.
+  const targetRole = computeTargetRole(
+    checked,
+    gameInProgress,
+    currentSession?.admission_mode
+  );
   const wasInTargetRole = currentMyRow?.participation_role === targetRole;
 
+  // rpc_session_update_participant (db/011 + db/022) accepts all three role
+  // targets for self-targeted calls; wanting_since is written automatically
+  // on transitions to/from 'queued' by db/022's CREATE OR REPLACE.
   const { error } = await window.sb.rpc('rpc_session_update_participant', {
     p_session_id:         currentSession.id,
     p_user_id:            user.id,
@@ -1806,13 +1834,14 @@ async function toggleManagerAsPlayer(checked) {
 
   if (error) {
     if (error.code === '55000') {
-      showToast('Room is full — remove a player first.');
+      showToast('Game is at capacity.');
     } else {
       log('toggleManagerAsPlayer FAILED: ' + error.message + ' (code=' + (error.code || 'none') + ')');
-      showToast("Couldn't change your status");
+      showToast("Couldn't update your participation");
     }
-    // Revert checkbox to authoritative state.
-    if (checkbox) checkbox.checked = currentMyRow?.participation_role === 'active';
+    // Revert checkbox to authoritative state: checked iff currently playing
+    // (active OR queued — both mean "wants to play"); unchecked iff audience.
+    if (checkbox) checkbox.checked = currentMyRow?.participation_role !== 'audience';
     return;
   }
 
@@ -1830,7 +1859,11 @@ async function toggleManagerAsPlayer(checked) {
 }
 
 // Participant counterpart to toggleManagerAsPlayer (§ 2.4.3). Non-managers
-// flip their own participation_role via the self-only RPC from db/017.
+// flip their own participation_role per the W4 computeTargetRole rules.
+// RPC dispatch branches on target role: 'queued' goes through
+// rpc_session_update_participant (self-targeted, db/011 + db/022 writes
+// wanting_since); 'active' and 'audience' go through the self-only
+// rpc_session_set_my_participation_role (db/017 explicitly rejects 'queued').
 async function togglePlayerAsParticipant(checked) {
   const checkbox = document.getElementById('participant-is-player');
   const user = window.elsewhere?.getCurrentUser?.();
@@ -1839,22 +1872,43 @@ async function togglePlayerAsParticipant(checked) {
     return;
   }
 
-  const targetRole = checked ? 'active' : 'audience';
+  // W4 § 10: target role derived from round state + admission mode.
+  const targetRole = computeTargetRole(
+    checked,
+    gameInProgress,
+    currentSession?.admission_mode
+  );
   const wasInTargetRole = currentMyRow?.participation_role === targetRole;
 
-  const { error } = await window.sb.rpc('rpc_session_set_my_participation_role', {
-    p_session_id: currentSession.id,
-    p_role:       targetRole,
-  });
+  let rpcName, rpcArgs;
+  if (targetRole === 'queued') {
+    rpcName = 'rpc_session_update_participant';
+    rpcArgs = {
+      p_session_id:         currentSession.id,
+      p_user_id:            user.id,
+      p_participation_role: 'queued',
+    };
+  } else {
+    // 'active' or 'audience' — use the self-only RPC.
+    rpcName = 'rpc_session_set_my_participation_role';
+    rpcArgs = {
+      p_session_id: currentSession.id,
+      p_role:       targetRole,
+    };
+  }
+
+  const { error } = await window.sb.rpc(rpcName, rpcArgs);
 
   if (error) {
     if (error.code === '55000') {
-      showToast('Room is full — remove a player first.');
+      showToast('Game is at capacity.');
     } else {
       log('togglePlayerAsParticipant FAILED: ' + error.message + ' (code=' + (error.code || 'none') + ')');
-      showToast("Couldn't change your status");
+      showToast("Couldn't update your participation");
     }
-    if (checkbox) checkbox.checked = currentMyRow?.participation_role === 'active';
+    // Revert checkbox to authoritative state: checked iff currently playing
+    // (active OR queued — both mean "wants to play"); unchecked iff audience.
+    if (checkbox) checkbox.checked = currentMyRow?.participation_role !== 'audience';
     return;
   }
 
@@ -1917,20 +1971,41 @@ function handleAudienceGameStateArrival(msg) {
   return 'navigated';
 }
 
-// Lock-on-start (§ 2.4.6): both toggles disable while a specific game is in
-// progress. Help text swaps to explanatory copy. Called from renderRoster()
-// and goToGameRoom() so any state-change path that re-renders also re-applies.
+// W4 § 10: keep the "I'm playing" toggle ENABLED at all times — round
+// state no longer locks it. The system auto-decides the target role on
+// each tap via computeTargetRole; the help text describes what will
+// happen based on the current round state + admission mode.
+//
+// Pre-W4 this function disabled the toggle mid-round, forcing users
+// through legacy late-joiner surfaces. Those surfaces are retired in W3;
+// the toggle is now the single canonical opt-in/opt-out affordance.
+//
+// Called from renderRoster() and goToGameRoom() so any state-change
+// path that re-renders also re-applies the help-text wording.
 function applyToggleLockState() {
-  const locked     = !!gameInProgress;
-  const mgrToggle  = document.getElementById('mgr-is-player');
-  const partToggle = document.getElementById('participant-is-player');
-  const mgrHelp    = document.getElementById('mgr-toggle-help');
-  const partHelp   = document.getElementById('participant-toggle-help');
-  if (mgrToggle)  mgrToggle.disabled  = locked;
-  if (partToggle) partToggle.disabled = locked;
-  const lockedText = 'Game in progress — use the game-specific controls to step out.';
-  if (mgrHelp)  mgrHelp.textContent  = locked ? lockedText : 'Your name appears first in the lobby';
-  if (partHelp) partHelp.textContent = locked ? lockedText : 'Uncheck to watch instead';
+  const mgrCheckbox  = document.getElementById('mgr-is-player');
+  const partCheckbox = document.getElementById('participant-is-player');
+  const mgrHelp      = document.getElementById('mgr-toggle-help');
+  const partHelp     = document.getElementById('participant-toggle-help');
+
+  // Always enabled under W4.
+  if (mgrCheckbox)  mgrCheckbox.disabled  = false;
+  if (partCheckbox) partCheckbox.disabled = false;
+
+  // Help text varies by round state + admission mode.
+  const mode = currentSession?.admission_mode;
+  let helpText;
+  if (!gameInProgress) {
+    helpText = 'Uncheck to watch instead';
+  } else if (mode === 'gated') {
+    helpText = 'Check to join the next round';
+  } else {
+    // 'open' or NULL/unknown — toggling jumps you straight in.
+    helpText = 'Check to join now';
+  }
+
+  if (mgrHelp)  mgrHelp.textContent  = helpText;
+  if (partHelp) partHelp.textContent = helpText;
 }
 
 // 3a.2 § 2.5: manager soft-removes another participant. Sets target's left_at.
@@ -2077,11 +2152,13 @@ async function refreshSessionState() {
   // Apply UI gates that depend on currentMyRow.
   applyManagerBarVisibility();
   // Sync both toggles to authoritative role (whichever is currently visible).
+  // Under W4, both 'active' and 'queued' mean "wants to play" → checked;
+  // only 'audience' is unchecked.
   const mgrCheckbox  = document.getElementById('mgr-is-player');
   const partCheckbox = document.getElementById('participant-is-player');
-  const isActive     = currentMyRow?.participation_role === 'active';
-  if (mgrCheckbox)  mgrCheckbox.checked  = isActive;
-  if (partCheckbox) partCheckbox.checked = isActive;
+  const isPlaying    = currentMyRow?.participation_role !== 'audience';
+  if (mgrCheckbox)  mgrCheckbox.checked  = isPlaying;
+  if (partCheckbox) partCheckbox.checked = isPlaying;
   // Roster + TV displays re-render with fresh data.
   renderRoster();
   renderTvDisplays();
@@ -2215,20 +2292,35 @@ function renderInvited() {
 }
 
 function renderRoster() {
-  // Source: currentParticipants, sectioned by participation_role per § 2.4.5.
-  // PLAYING (active) on top, WATCHING (audience) below — both render even when
-  // empty. Camera state via uidToUserId reverse → cameraState. Manager sees a
+  // Source: currentParticipants, sectioned per W4 § 4.1:
+  //   Playing section  = participation_role IN ('active', 'queued')
+  //                      active first (by joined_at), then queued (wanting)
+  //                      by wanting_since ASC. Queued users render dimmed
+  //                      with a "Waiting" label.
+  //   Watching section = participation_role === 'audience'.
+  // Camera state via uidToUserId reverse → cameraState. Manager sees a
   // Remove button per row (except their own) on either section.
   const myUserId   = currentMyRow?.user_id || null;
   const iAmManager = currentMyRow?.control_role === 'manager';
   const active     = currentParticipants.filter(p => !p.left_at);
-  // Sort by joined_at to keep section ordering stable across renders.
-  const byJoinedAt = (a, b) => (a.joined_at || '').localeCompare(b.joined_at || '');
-  const playing    = active.filter(p => p.participation_role !== 'audience').sort(byJoinedAt);
-  const watching   = active.filter(p => p.participation_role === 'audience').sort(byJoinedAt);
 
-  const badge=document.getElementById('room-badge-count');
-  if (badge) badge.textContent=active.length+' / '+playerLimit;
+  const byJoinedAt     = (a, b) => (a.joined_at || '').localeCompare(b.joined_at || '');
+  const byWantingSince = (a, b) => (a.wanting_since || '').localeCompare(b.wanting_since || '');
+
+  const activePlayers = active
+    .filter(p => p.participation_role === 'active')
+    .sort(byJoinedAt);
+  const queuedPlayers = active
+    .filter(p => p.participation_role === 'queued')
+    .sort(byWantingSince);
+  const watching = active
+    .filter(p => p.participation_role === 'audience')
+    .sort(byJoinedAt);
+
+  const playingTotal = activePlayers.length + queuedPlayers.length;
+
+  const badge = document.getElementById('room-badge-count');
+  if (badge) badge.textContent = active.length + ' / ' + playerLimit;
 
   function renderRow(p, sectionRole) {
     const isMe        = p.user_id === myUserId;
@@ -2240,36 +2332,53 @@ function renderRoster() {
     const removeBtn   = (iAmManager && !isMe)
       ? `<button class="p-remove-btn" onclick="handleRemovePlayer('${userIdEnc}')" title="Remove from session" style="margin-left:auto;background:transparent;border:1px solid var(--color-border-dim);color:var(--color-text-faint);font-size:11px;padding:2px 8px;border-radius:var(--radius-sm);cursor:pointer;">Remove</button>`
       : '';
-    const dotClass = sectionRole === 'audience' ? 'dot-dim' : (isMe ? 'dot-gold' : 'dot-green');
-    const rowClass = `player-row ${isMe?'me':''} ${sectionRole==='audience'?'audience':''}`.trim();
+    // sectionRole drives visual treatment:
+    //   'active'   → full color (gold dot for self, green for others)
+    //   'queued'   → dimmed dot + "Waiting" label
+    //   'audience' → dimmed dot, no extra label
+    const dotClass = (sectionRole === 'audience' || sectionRole === 'queued')
+      ? 'dot-dim'
+      : (isMe ? 'dot-gold' : 'dot-green');
+    const rowClass = `player-row ${isMe ? 'me' : ''} ${sectionRole === 'audience' ? 'audience' : ''} ${sectionRole === 'queued' ? 'waiting' : ''}`.trim();
+    const waitingLabel = sectionRole === 'queued'
+      ? `<div class="p-waiting-label">Waiting</div>`
+      : '';
     return `
     <div class="${rowClass}">
       <div class="p-dot ${dotClass}"></div>
-      <div class="p-name ${isMe?'me':''}">${p.display_name}</div>
-      ${hasCamera?'<span style="font-size:12px;">📷</span>':''}
-      ${isManager?'<div class="p-badge badge-mgr">Manager</div>':''}
-      ${isMe&&!isManager?'<div class="p-badge badge-you">You</div>':''}
+      <div class="p-name ${isMe ? 'me' : ''}">${p.display_name}</div>
+      ${waitingLabel}
+      ${hasCamera ? '<span style="font-size:12px;">📷</span>' : ''}
+      ${isManager ? '<div class="p-badge badge-mgr">Manager</div>' : ''}
+      ${isMe && !isManager ? '<div class="p-badge badge-you">You</div>' : ''}
       ${removeBtn}
     </div>`;
   }
 
-  const playingHtml  = playing.map(p => renderRow(p, 'active')).join('');
+  const activeHtml   = activePlayers.map(p => renderRow(p, 'active')).join('');
+  const queuedHtml   = queuedPlayers.map(p => renderRow(p, 'queued')).join('');
   const watchingHtml = watching.map(p => renderRow(p, 'audience')).join('');
 
+  // Playing section renders active rows above queued rows in a single
+  // list. The "Playing (N)" header counts both — they're all in the
+  // playing population, just at different sub-states.
   document.getElementById('lobby-roster').innerHTML = `
-    <div class="section-label">Playing (${playing.length})</div>
-    <div class="player-list">${playingHtml}</div>
+    <div class="section-label">Playing (${playingTotal})</div>
+    <div class="player-list">${activeHtml}${queuedHtml}</div>
     <div class="section-label" style="margin-top:14px;">Watching (${watching.length})</div>
     <div class="player-list">${watchingHtml}</div>
   `;
 
-  // Queue section: empty in 3a.2 (queueing semantics deferred per § 4.1).
-  const ql=document.getElementById('queue-label');
-  const qe=document.getElementById('lobby-queue');
-  if (ql) ql.style.display='none';
-  if (qe) qe.innerHTML='';
+  // Hide the pre-W4 dormant #queue-label/#lobby-queue placeholder pair
+  // (lines 535-536). The new Playing section absorbs both active and
+  // queued users; the placeholder is no longer used. DOM removal is a
+  // follow-up cleanup.
+  const ql = document.getElementById('queue-label');
+  const qe = document.getElementById('lobby-queue');
+  if (ql) ql.style.display = 'none';
+  if (qe) qe.innerHTML = '';
 
-  // Lock-on-start (§ 2.4.6) — recompute after roster updates.
+  // W4 toggle help-text refresh — recompute after roster updates.
   applyToggleLockState();
 }
 
