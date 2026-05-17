@@ -2957,3 +2957,105 @@ Bundle with the next time `~/sync-app.sh` is edited, OR if iOS bundle size becom
 - `docs/CONTEXT.md:211` — "Don't put server-side dirs (`db/`, `supabase/`) into the iOS bundle"
 - `docs/SESSION-5-CLOSEOUT-PLAN.md` Day 1 item 2 — the task that surfaced this
 - DEFERRED entry "Session 5 closeout — iOS bundle sync from v2.99 to current" — the parent task being closed by this sync
+
+---
+
+### Manager roster doesn't auto-update on new joiner
+
+Reproduced v2.119 hardware test 2026-05-15.
+
+Symptom: When a non-manager player joins an existing session
+(e.g. via room code from same household), the new player's row
+does NOT appear in the manager's Playing roster automatically.
+The non-manager player sees themselves AND the manager
+correctly. The manager has to navigate away from
+screen-game-room and back to refresh the roster, after which
+the new row appears.
+
+Expected: Manager roster updates in realtime when participant
+rows are inserted.
+
+Suspected cause: refreshSessionState (rpc_session_get_participants)
+isn't being triggered on the manager side when other devices
+publish participant_role_changed or similar realtime events.
+Either the realtime subscription isn't watching the right
+channel/event, or refreshSessionState isn't being called on
+every relevant message.
+
+Severity: Medium. Doesn't block gameplay (manager can always
+navigate away and back, or the roster refreshes naturally on
+next state change like game start). User-visible but workaround
+exists.
+
+---
+
+### Authenticated late-joiner has no path to existing session
+
+Reproduced v2.119 hardware test 2026-05-15. Diagnosed via in-
+app LOG: refreshSessionState returns "no active session for
+room_code XXX — legacy mode" for the cross-household user,
+which means the sessions row is invisible to them at the
+database layer (suspected RLS policy scoping sessions to
+household membership).
+
+Scenario: Steve (authenticated, NOT in Mike's household) tries
+to join Mike's running Last Card session.
+
+Symptoms across all entry attempts:
+1. Home page UI offers no "Join a Game" affordance — only
+   "Karaoke" / "Games" / "Wellness" tiles
+2. Clicking Games tile → "Games needs a TV + phone" modal
+   (dead-end, no enter-room-code option)
+3. Direct URL share (player.html?room=QQFTK3) → Steve lands on
+   screen-game-room with Playing (0) / Watching (0), no toggle,
+   no session data, no error message
+4. In-app LOG confirms the session row was not returned by
+   refreshSessionState → user dropped into legacy mode
+
+Root cause (hypothesized): RLS policy on sessions table scopes
+visibility to household members. The cross-household auth'd
+user is treated identically to a fully unauthenticated user
+from the client's perspective — both get the "no active
+session" path.
+
+Important nuance: This is database-level access control, not
+just a missing UI affordance. Even adding a "Join Game" button
++ room-code input on the home page would not fix this — the
+authenticated user fundamentally cannot see the session row.
+
+Possible fix paths (all future product work):
+- Make sessions table publicly readable by room_code (treating
+  room_code as a shareable secret — like Google Doc share
+  links)
+- Add an explicit invite/grant flow that adds non-household
+  users as session participants
+- Add a "guest mode" for sessions that bypasses household
+  scoping
+- Decision needed: is cross-household join intentionally
+  forbidden today, or is this a side effect we want to relax?
+
+Severity: Medium-High. Blocks the "friend joins game from
+afar" use case entirely for authenticated users.
+
+---
+
+### "Games needs a TV + phone" modal is misleading
+
+Reproduced v2.119 hardware test 2026-05-15.
+
+Symptom: Clicking the Games tile on the home page surfaces a
+modal: "Games needs a TV + phone. Open tv2.html on your TV or
+big screen, then scan the Games QR with your phone to join."
+
+This is false. Games supports a phone-only ("NO TV") mode —
+the mode toggle exists in player.html at the top of the
+active game screen, and games render usably on phone alone.
+
+Suggested fix:
+- Update modal copy to reflect optional TV
+- OR add a "Continue without TV" option to the modal
+- OR remove the modal entirely if phone-only is fully
+  supported
+
+Severity: Low-Medium. Doesn't block usage but tells users
+something incorrect about product requirements.
