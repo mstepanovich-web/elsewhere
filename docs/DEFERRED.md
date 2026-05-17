@@ -3011,6 +3011,11 @@ Symptoms across all entry attempts:
    no session data, no error message
 4. In-app LOG confirms the session row was not returned by
    refreshSessionState → user dropped into legacy mode
+5. Invite flow attempt also fails: when Mike (manager) sends an
+   invite to Steve (cross-household) and Steve follows the
+   invite link, Steve lands on the same Playing (0) / Watching (0)
+   unpopulated game-room state. The invite mechanism does NOT
+   bypass the RLS / DB-layer block.
 
 Root cause (hypothesized): RLS policy on sessions table scopes
 visibility to household members. The cross-household auth'd
@@ -3018,10 +3023,13 @@ user is treated identically to a fully unauthenticated user
 from the client's perspective — both get the "no active
 session" path.
 
-Important nuance: This is database-level access control, not
-just a missing UI affordance. Even adding a "Join Game" button
-+ room-code input on the home page would not fix this — the
-authenticated user fundamentally cannot see the session row.
+Important nuance: This is database-level access control that
+even the existing invite flow does NOT bypass. The block is
+total — no client-side path (home page UI, direct URL share, or
+manager-initiated invite) grants a cross-household authenticated
+user visibility of the session. Any fix must touch the database
+layer (RLS policy on sessions table, or a session_invites
+granting mechanism that adds a row the user CAN see).
 
 Possible fix paths (all future product work):
 - Make sessions table publicly readable by room_code (treating
