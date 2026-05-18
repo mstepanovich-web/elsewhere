@@ -898,7 +898,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.123</div>
+<div class="ver">v2.124</div>
 
 <script>
 'use strict';
@@ -3084,6 +3084,13 @@ async function managerStartLastCard() {
 function startLastCard() {
   const isManager = currentMyRow?.control_role === 'manager';
   goTo('screen-lastcard');
+  // W8a regression fix: setupLastCardLayout (retired in W8a) used to
+  // add .visible to these two strips, overriding their CSS-default
+  // display:none. Without it both collapse to hidden, breaking
+  // gameplay. Always-visible per W8a's MODE-toggle retirement —
+  // TV-OFF's content is the canonical always-on layout.
+  document.getElementById('lc-top-strip').classList.add('visible');
+  document.getElementById('lc-others-strip').classList.add('visible');
   applyGameActionsVisibility();
   if (isManager) {
     document.getElementById('mgr-skip').style.display='block';
