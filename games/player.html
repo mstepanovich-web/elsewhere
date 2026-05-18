@@ -240,6 +240,11 @@
     .score-pos { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-faint); min-width: 28px; }
     .score-name { flex: 1; font-size: var(--text-sm); color: var(--color-text-dim); }
     .score-pts { font-family: var(--font-mono); font-size: var(--text-md); color: var(--color-gold); font-weight: 500; }
+    /* W5: per-row Play Again UI on screen-gameover. Self gets an
+       interactive checkbox; others get a read-only indicator. */
+    .play-again-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--color-gold); }
+    .play-again-toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--color-gold); cursor: pointer; }
+    .play-again-indicator { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-faint); }
     .play-again-btns { display: flex; gap: 10px; width: 100%; max-width: 300px; }
 
     /* ── LATE JOINER ── */
@@ -1923,6 +1928,68 @@ async function togglePlayerAsParticipant(checked) {
   await refreshSessionState();
 }
 
+// W5 § 10: score-screen "Play Again" toggle handler. Fired by the
+// per-row checkbox in showGameOver's rendered scores-list. Behaves
+// like the lobby toggle: gameInProgress is false at score-screen
+// time, so computeTargetRole returns 'active' for checked / 'audience'
+// for unchecked regardless of admission_mode. RPC dispatch matches
+// W4's togglePlayerAsParticipant pattern (queued via cross-user RPC,
+// active/audience via self-only RPC) — defensive since the queued
+// branch is unreachable at score-screen time. Other players' indicators
+// do NOT update in realtime (option B per W5 spec); they reflect the
+// state captured at showGameOver render time.
+async function togglePlayAgain(checked) {
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!currentSession?.id || !user) return;
+
+  const targetRole = computeTargetRole(
+    checked,
+    false,  // gameInProgress is false at score-screen time
+    currentSession?.admission_mode
+  );
+
+  if (currentMyRow?.participation_role === targetRole) return;
+
+  let rpcName, rpcArgs;
+  if (targetRole === 'queued') {
+    // Defensive — gameInProgress=false above means computeTargetRole
+    // never returns 'queued' here. Branch preserved for consistency
+    // with togglePlayerAsParticipant in case the call site changes.
+    rpcName = 'rpc_session_update_participant';
+    rpcArgs = {
+      p_session_id:         currentSession.id,
+      p_user_id:            user.id,
+      p_participation_role: 'queued',
+    };
+  } else {
+    rpcName = 'rpc_session_set_my_participation_role';
+    rpcArgs = {
+      p_session_id: currentSession.id,
+      p_role:       targetRole,
+    };
+  }
+
+  const { error } = await window.sb.rpc(rpcName, rpcArgs);
+  if (error) {
+    log('togglePlayAgain FAILED: ' + error.message + ' (code=' + (error.code || 'none') + ')');
+    showToast("Couldn't update your status for next round");
+    // Revert checkbox to authoritative state.
+    const cb = document.getElementById('play-again-checkbox-self');
+    if (cb) cb.checked = currentMyRow?.participation_role !== 'audience';
+    return;
+  }
+
+  if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+    try {
+      await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
+        session_id: currentSession.id,
+      }, _playerRealtimeChannel);
+    } catch (_) {}
+  }
+
+  await refreshSessionState();
+}
+
 // W3 admission_model_v2 § 10: dispatcher for non-manager audience and queued
 // late-joiners arriving mid-game. Invoked at the top of handleMessage's
 // game-state receiver branch. Returns 'navigated' when the caller has been
@@ -3011,6 +3078,23 @@ function reshuffleDeck(s){const t=s.discardPile.pop();s.drawPile=shuffle(s.disca
 function cardPts(c){if(['J','Q','K','A','10'].includes(c.value))return 10;if(c.value.startsWith('W'))return 20;return parseInt(c.value)||0;}
 
 // ── GAME OVER ─────────────────────────────────────────────────
+// W5 § 10: score screen renders each player row with a per-row Play
+// Again UI. Self gets an interactive checkbox; other players get a
+// read-only indicator of their current participation state. The
+// legacy ask/respond/results flow (play-again-manager,
+// play-again-player, play-again-results) is hidden — the per-row
+// checkbox + immediate role flip supersede it. play-again-sameteam
+// (Start New Game button, manager-only) is preserved as the start
+// path; showPlayAgainSameTeam reads currentParticipants and includes
+// everyone whose participation_role is 'active' (= every checked-box
+// user under W5).
+//
+// Default checkbox state: participation_role !== 'audience'. Treats
+// 'active' and 'queued' both as "wants to play". Note: queued users
+// at score-screen time stay queued unless they re-toggle; under W5
+// they would be excluded from showPlayAgainSameTeam's active filter.
+// Acceptable for v1 (W6 manager-mediated selection handles this); the
+// edge case is documented but not normalized here.
 function showGameOver(scores) {
   const isManager = currentMyRow?.control_role === 'manager';
   goTo('screen-gameover');
@@ -3018,16 +3102,32 @@ function showGameOver(scores) {
   const medals=['🥇','🥈','🥉','4th','5th','6th','7th','8th'];
   document.getElementById('gameover-title').textContent='Game Over';
   document.getElementById('gameover-sub').textContent='Final Scores';
-  document.getElementById('scores-list').innerHTML=sorted.map(([n,s],i)=>`
-    <div class="score-row ${n===myName?'p-name me':''}">
+  document.getElementById('scores-list').innerHTML=sorted.map(([n,s],i)=>{
+    const isMe = n === myName;
+    const p = currentParticipants.find(pp => pp.display_name === n);
+    const initialChecked = !!(p && p.participation_role !== 'audience');
+    const playAgainEl = isMe
+      ? `<label class="play-again-toggle">
+           <input type="checkbox" id="play-again-checkbox-self"
+                  ${initialChecked ? 'checked' : ''}
+                  onchange="togglePlayAgain(this.checked)">
+           <span>Play Again</span>
+         </label>`
+      : `<div class="play-again-indicator">${initialChecked ? '✓ Playing again' : 'Watching'}</div>`;
+    return `
+    <div class="score-row ${isMe?'p-name me':''}">
       <div class="score-pos">${medals[i]||i+1}</div>
       <div class="score-name">${n}</div>
       <div class="score-pts">${s} pts</div>
-    </div>`).join('');
-  document.getElementById('play-again-manager').style.display=isManager?'block':'none';
-  document.getElementById('play-again-sameteam').style.display=isManager?'block':'none';
-  document.getElementById('play-again-player').style.display=isManager?'none':'block';
+      ${playAgainEl}
+    </div>`;
+  }).join('');
+  // Hide legacy ask/respond/results blocks (superseded by per-row UI).
+  document.getElementById('play-again-manager').style.display='none';
+  document.getElementById('play-again-player').style.display='none';
   document.getElementById('play-again-results').style.display='none';
+  // Show the manager's Start New Game block (play-again-sameteam).
+  document.getElementById('play-again-sameteam').style.display=isManager?'flex':'none';
   playAgainResponses={};
 }
 
