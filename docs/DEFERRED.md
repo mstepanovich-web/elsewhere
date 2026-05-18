@@ -2999,7 +2999,8 @@ database layer (suspected RLS policy scoping sessions to
 household membership).
 
 Scenario: Steve (authenticated, NOT in Mike's household) tries
-to join Mike's running Last Card session.
+to join Mike's Last Card session. Behavior is identical whether
+the session is in lobby state (no game started) or mid-game.
 
 Symptoms across all entry attempts:
 1. Home page UI offers no "Join a Game" affordance — only
