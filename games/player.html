@@ -300,6 +300,17 @@
     .add-tv-modal { display: none; position: fixed; inset: 0; z-index: 600; background: rgba(4,2,6,.85); backdrop-filter: blur(6px); align-items: center; justify-content: center; padding: 20px; }
     .add-tv-modal.open { display: flex; }
     .add-tv-modal-inner { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: 24px 20px; max-width: 360px; width: 100%; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.6); max-height: calc(100vh - 40px); overflow-y: auto; }
+
+    /* ── W8c-4: Euchre Game Paused modal ─────────────────────────
+       Full-viewport overlay when gameState.paused === true. Clones
+       .add-tv-modal's shape. Renders on every active client (manager
+       + non-managers). Single Resume button — pauser, manager, or
+       anyone can tap to resume. */
+    .game-paused-modal { display: none; position: fixed; inset: 0; z-index: 600; background: rgba(4,2,6,.85); backdrop-filter: blur(6px); align-items: center; justify-content: center; padding: 20px; }
+    .game-paused-modal.visible { display: flex; }
+    .game-paused-modal-inner { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: 32px 24px; max-width: 360px; width: 100%; display: flex; flex-direction: column; gap: 16px; align-items: center; box-shadow: 0 20px 60px rgba(0,0,0,.6); text-align: center; }
+    .game-paused-modal-title { font-family: var(--font-display); font-size: var(--text-xl); color: var(--color-gold); font-weight: 500; }
+    .game-paused-modal-sub   { font-size: var(--text-sm); color: var(--color-text-dim); }
     .add-tv-title { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 300; color: var(--color-text); text-align: center; letter-spacing: var(--tracking-wide); }
     .add-tv-sub   { font-size: var(--text-xs); color: var(--color-text-faint); text-align: center; line-height: 1.45; }
     .add-tv-qr-box { background: #fff; padding: 10px; border-radius: var(--radius-md); align-self: center; line-height: 0; }
@@ -914,7 +925,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.130</div>
+<div class="ver">v2.131</div>
 
 <script>
 'use strict';
@@ -1658,6 +1669,28 @@ function handleMessage(uid, data) {
   if (msg.type==='player-action' && currentMyRow?.control_role === 'manager') {
     log('player-action from '+msg._name+': '+msg.action);
     if (!gameState) return;
+
+    // W8c-4: Pause toggle — bypasses the turn-validation gate
+    // below since any active player can pause regardless of whose
+    // turn it is. applyPauseToggle mutates per-game state; we then
+    // broadcast + re-render.
+    if (msg.action === 'pause') {
+      applyPauseToggle(msg._name);
+      broadcastState();
+      if (currentGame === 'lastcard') renderLastCard();
+      else if (currentGame === 'euchre') renderEuchre();
+      return;
+    }
+
+    // W8c-4: Euchre pause defense — when game is paused, all play
+    // actions are silently dropped even if they arrive from a peer
+    // that hasn't received the latest broadcast yet. The pause
+    // toggle above bypasses this (intentional).
+    if (gameState.paused) {
+      log('Ignoring action — game paused');
+      return;
+    }
+
     // Verify it's actually this player's turn
     const expectedPlayer = gameState.players[gameState.currentPlayerIdx];
     if (expectedPlayer !== msg._name) {
@@ -2275,6 +2308,25 @@ function applyGameActionsVisibility() {
   sx('pb-leave-btn', showLeave);
   sx('pb-cam-btn',   showCam);
   // pb-addtv-btn stays unconditionally visible — no toggle.
+
+  // W8c-4: Pause button label reflects self-pause state. Last Card:
+  // myName in gameState.pausedPlayers. Euchre: gameState.paused &&
+  // pausedBy === myName. When self-paused, label is "▶ Resume"; else
+  // "⏸ Pause". Manager-resume-of-someone-else: the modal's Resume
+  // button (Euchre) handles that, this label only reflects own state.
+  if (showPause) {
+    const pauseBtn = document.getElementById('pb-pause-btn');
+    if (pauseBtn) {
+      const behavior = manifest.pause_behavior;
+      let selfPaused = false;
+      if (behavior === 'pause_skips_turn') {
+        selfPaused = (gameState?.pausedPlayers || []).includes(myName);
+      } else if (behavior === 'pause_freezes_game') {
+        selfPaused = !!gameState?.paused && gameState?.pausedBy === myName;
+      }
+      pauseBtn.textContent = selfPaused ? '▶ Resume' : '⏸ Pause';
+    }
+  }
 }
 
 // W8c-3: manager bar per-button context. The bar itself is whole-
@@ -2334,12 +2386,76 @@ function applyManagerBarContext() {
   sx('mgr-start', false);
 }
 
-// W8 § 7: Pause button stub. Real behavior lands in Commit C
-// (gameState.pausedPlayers + per-game pause_behavior branching).
+// W8c-4: Pause toggle. Per-game branching on pause_behavior:
+//
+//   • pause_skips_turn (Last Card): toggle myName in
+//     gameState.pausedPlayers. If self was current player, run
+//     advance(s) immediately to skip past us.
+//
+//   • pause_freezes_game (Euchre): toggle gameState.paused +
+//     gameState.pausedBy. Modal overlay renders on all clients;
+//     play handlers reject input while paused.
+//
+//   • pause_not_applicable (Trivia): unreachable — the Pause
+//     button is hidden via applyGameActionsVisibility.
+//
+// Manager-direct: mutate gameState + broadcastState (same pattern
+// as Euchre's euApplyXxx). Non-manager: send player-action 'pause'
+// → manager applies → broadcasts. Toggle semantics — single 'pause'
+// action; the receiver checks current state to decide direction.
+//
+// applyGameActionsVisibility re-runs after the local mutation so
+// the Pause button label flips (Pause ↔ Resume) immediately.
 function onPauseTap() {
-  const behavior = GAME_MANIFEST[currentGame]?.pause_behavior || 'unknown';
-  log('Pause tapped (game=' + currentGame + ' pause_behavior=' + behavior + ')');
-  showToast('Pause coming soon');
+  if (!gameState) return;
+  const behavior = GAME_MANIFEST[currentGame]?.pause_behavior;
+  if (behavior === 'pause_not_applicable') return;
+
+  if (currentMyRow?.control_role === 'manager') {
+    applyPauseToggle(myName);
+    broadcastState();
+    if (currentGame === 'lastcard') renderLastCard();
+    else if (currentGame === 'euchre') renderEuchre();
+  } else {
+    send({ type: 'player-action', action: 'pause' });
+    // Optimistic UI refresh of button label happens on the
+    // broadcast-receive path; no local mutation needed for
+    // non-manager.
+  }
+  applyGameActionsVisibility();
+}
+
+// W8c-4: pure mutation helper. Toggles the appropriate per-game
+// pause state for the given playerName. Manager-only — non-manager
+// goes through send('pause') → manager's player-action receiver →
+// this helper. Last Card: also runs advance() if the pauser was
+// the current player AND just paused (skip immediate). On unpause,
+// no advance — they re-enter rotation naturally on the next
+// advance() call from a play action.
+function applyPauseToggle(playerName) {
+  if (!gameState) return;
+  const behavior = GAME_MANIFEST[currentGame]?.pause_behavior;
+  if (behavior === 'pause_skips_turn') {
+    if (!gameState.pausedPlayers) gameState.pausedPlayers = [];
+    const idx = gameState.pausedPlayers.indexOf(playerName);
+    if (idx >= 0) {
+      gameState.pausedPlayers.splice(idx, 1);
+    } else {
+      gameState.pausedPlayers.push(playerName);
+      // Immediate skip if pauser is current player.
+      if (gameState.players[gameState.currentPlayerIdx] === playerName) {
+        advance(gameState);
+      }
+    }
+  } else if (behavior === 'pause_freezes_game') {
+    if (gameState.paused) {
+      gameState.paused   = false;
+      gameState.pausedBy = null;
+    } else {
+      gameState.paused   = true;
+      gameState.pausedBy = playerName;
+    }
+  }
 }
 
 // W8b § 7: Leave button handler. Per-game branching on leave_impact:
@@ -3260,6 +3376,17 @@ function managerEndGame() {
   // after game-over, and we responded with game-state phase:playing,
   // which clobbered their screen-gameover transition).
   gameInProgress = false;
+  // W8c-4: clear pause state before transitioning to game-over so
+  // the Game Paused modal doesn't accidentally render through
+  // screen-gameover. Modal-visibility gate on screen also protects;
+  // this is belt-and-suspenders.
+  if (gameState) {
+    gameState.paused = false;
+    gameState.pausedBy = null;
+    if (gameState.pausedPlayers) gameState.pausedPlayers = [];
+  }
+  const pausedModal = document.getElementById('game-paused-modal');
+  if (pausedModal) pausedModal.classList.remove('visible');
   const scores = gameState?.scores || {};
   send({type:'game-over', scores});
   showGameOver(scores);
@@ -3384,6 +3511,7 @@ async function managerStartLastCard() {
     currentColor:top.color, currentValue:top.value,
     currentPlayerIdx:0, direction:1, pendingDraw:0,
     lastCard:{}, scores:Object.fromEntries(playerNames.map(n=>[n,0])), log:[],
+    pausedPlayers: [], // W8c-4: pause_skips_turn manifest semantics
   };
   myHand=[...(gameState.hands[myName]||[])];
   gameInProgress=true;
@@ -3419,6 +3547,11 @@ function renderLastCard() {
   // W8c-1: player count chip in #lc-top-strip status row.
   const lcCountChip = document.getElementById('lc-count-chip');
   if (lcCountChip) lcCountChip.textContent = s.players.length + ' playing';
+
+  // W8c-4: refresh Pause button label — on every render, peers
+  // receiving a broadcast that changed pausedPlayers need their
+  // own #pb-pause-btn label updated to match.
+  applyGameActionsVisibility();
 
   // Top card
   const top=s.discardPile[s.discardPile.length-1];
@@ -3690,7 +3823,21 @@ function lcDeclareLastCard() {
   }
 }
 
-function advance(s){s.currentPlayerIdx=(s.currentPlayerIdx+s.direction+s.players.length)%s.players.length;}
+// W8c-4: advance with skip-paused. Loops past any player whose name
+// is in s.pausedPlayers, mirroring the Euchre alone-skip pattern but
+// extended to multiple paused players + all-paused fallback. If every
+// player is paused, currentPlayerIdx lands on the last-checked paused
+// player after N iterations; the next play attempt by that (paused)
+// current player is no-op-d at the turn-validation gate. Manager
+// retains End Game as the recovery affordance per the W8 spec.
+function advance(s) {
+  const N = s.players.length;
+  const paused = new Set(s.pausedPlayers || []);
+  for (let i = 0; i < N; i++) {
+    s.currentPlayerIdx = (s.currentPlayerIdx + s.direction + N) % N;
+    if (!paused.has(s.players[s.currentPlayerIdx])) return;
+  }
+}
 function reshuffleDeck(s){const t=s.discardPile.pop();s.drawPile=shuffle(s.discardPile);s.discardPile=[t];}
 function cardPts(c){if(['J','Q','K','A','10'].includes(c.value))return 10;if(c.value.startsWith('W'))return 20;return parseInt(c.value)||0;}
 
@@ -4414,6 +4561,8 @@ async function managerStartEuchre() {
     tricksWon: { 1:0, 2:0 },
     scores: gameState?.scores || { 1:0, 2:0 }, // preserve across rounds
     log: [],
+    paused: false,    // W8c-4: pause_freezes_game manifest semantics
+    pausedBy: null,   // display_name of pauser; modal renders "Paused by X"
   };
   myHand = [...(gameState.hands[myName]||[])];
   gameInProgress = true;
@@ -4443,6 +4592,17 @@ function renderEuchre() {
   // W8c-1: player count chip in #eu-turn-bar (alongside turn label).
   const euCountChip = document.getElementById('eu-count-chip');
   if (euCountChip) euCountChip.textContent = s.players.length + ' playing';
+
+  // W8c-4: Game Paused modal visibility — Euchre is pause_freezes_game.
+  // Modal toggles on s.paused; populates 'Paused by [name]' subline.
+  const pausedModal = document.getElementById('game-paused-modal');
+  if (pausedModal) {
+    pausedModal.classList.toggle('visible', !!s.paused);
+    const pausedBy = document.getElementById('game-paused-by');
+    if (pausedBy) pausedBy.textContent = s.pausedBy || '—';
+  }
+  // W8c-4: refresh Pause button label on broadcast-receive renders.
+  applyGameActionsVisibility();
 
   // Scores
   document.getElementById('eu-score-1').textContent = s.scores[1] || 0;
@@ -4671,28 +4831,37 @@ function euRenderOthers() {
 }
 
 // ── Player actions (bidding) ──────────────────────────────────
+// W8c-4: Euchre play handlers gate on gameState.paused. Pause is
+// pause_freezes_game per manifest — any player action is dropped
+// while modal is up. Manager player-action receiver has a parallel
+// gate for stale peer messages.
 function euBidPass() {
+  if (gameState?.paused) { showToast('Game paused'); return; }
   if (currentMyRow?.control_role === 'manager') euApplyBidPass(myName);
   else send({ type:'player-action', action:'eu-bid-pass' });
 }
 
 function euOrderUp(alone) {
+  if (gameState?.paused) { showToast('Game paused'); return; }
   if (currentMyRow?.control_role === 'manager') euApplyOrderUp(myName, alone);
   else send({ type:'player-action', action:'eu-order-up', alone });
 }
 
 function euCallSuit(suit) {
+  if (gameState?.paused) { showToast('Game paused'); return; }
   const alone = document.getElementById('eu-alone-check')?.checked || false;
   if (currentMyRow?.control_role === 'manager') euApplyCallSuit(myName, suit, alone);
   else send({ type:'player-action', action:'eu-call-suit', suit, alone });
 }
 
 function euDealerDiscard(card) {
+  if (gameState?.paused) { showToast('Game paused'); return; }
   if (currentMyRow?.control_role === 'manager') euApplyDealerDiscard(myName, card);
   else send({ type:'player-action', action:'eu-dealer-discard', card });
 }
 
 function euPlayCard() {
+  if (gameState?.paused) { showToast('Game paused'); return; }
   if (!euSelectedCard) return;
   const card = euSelectedCard;
   euHideSelectedPreview();
@@ -5197,6 +5366,20 @@ if (!wireBackToElsewhereVisibility()) {
 }
 
 </script>
+
+<!-- W8c-4: Euchre Game Paused modal. Whole-viewport overlay shown
+     when gameState.paused === true AND activeScreen === 'screen-euchre'.
+     Visibility toggled by renderEuchre via .visible class. Single
+     Resume button — any client (pauser, manager, or any other player)
+     can tap to resume. Mirrors .add-tv-modal's full-viewport pattern. -->
+<div id="game-paused-modal" class="game-paused-modal">
+  <div class="game-paused-modal-inner">
+    <div style="font-size:48px;">⏸</div>
+    <div class="game-paused-modal-title">Game Paused</div>
+    <div class="game-paused-modal-sub">Paused by <span id="game-paused-by">—</span></div>
+    <button class="action-btn" onclick="onPauseTap()">▶ Resume</button>
+  </div>
+</div>
 
 <!-- Add TV display modal (Session 4.8) -->
 <div id="add-tv-modal" class="add-tv-modal" onclick="maybeCloseAddTvModal(event)">
