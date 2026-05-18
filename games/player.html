@@ -866,7 +866,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.121</div>
+<div class="ver">v2.122</div>
 
 <script>
 'use strict';
@@ -3084,11 +3084,6 @@ function renderLastCard() {
       turnEl.textContent = isMyWin ? '🎉 You win!' : '🎉 '+winnerName+' wins!';
       turnEl.className = 'lc-turn-label mine';
     }
-    if (currentMyRow?.control_role === 'manager') {
-      document.getElementById('mgr-next').style.display='block';
-      document.getElementById('mgr-next').textContent='Next Round →';
-      document.getElementById('mgr-next').onclick=managerNextRound;
-    }
   }
 
   // Render hands
@@ -3305,20 +3300,6 @@ function lcDeclareLastCard() {
   } else {
     send({type:'player-action', action:'declare-last-card'});
   }
-}
-
-function managerNextRound() {
-  const s=JSON.parse(JSON.stringify(gameState));
-  const deck=shuffle(buildDeck()); const hands={};
-  s.players.forEach(n=>{hands[n]=[];});
-  let idx=0;
-  for(let c=0;c<7;c++) for(const n of s.players) hands[n].push(deck[idx++]);
-  let top; while(true){top=deck[idx++];if(!top.value.startsWith('W'))break;}
-  gameState={...s,phase:'playing',hands,drawPile:deck.slice(idx),discardPile:[top],
-    currentColor:top.color,currentValue:top.value,currentPlayerIdx:0,direction:1,pendingDraw:0,lastCard:{},winner:null};
-  myHand=[...gameState.hands[myName]];
-  document.getElementById('mgr-next').style.display='none';
-  broadcastState(); renderLastCard(); // broadcastState uses compressState internally
 }
 
 function advance(s){s.currentPlayerIdx=(s.currentPlayerIdx+s.direction+s.players.length)%s.players.length;}
