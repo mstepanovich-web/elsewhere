@@ -150,8 +150,27 @@
     .game-actions-bar .actions-right { display: flex; gap: 6px; margin-left: auto; }
     .game-action-btn { padding: 4px 10px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; flex-shrink: 0; font-family: var(--font-ui); }
 
+    /* ── In-game player count chip (W8c-1) ───────────────────────
+       Shared visual across all three game screens. Renders inside
+       #lc-top-strip's status row (LC), #eu-turn-bar (Eu), and the
+       new #trivia-status-strip (Trivia). Updated by per-game
+       renderers from gameState.players.length. */
+    .game-count-chip { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-faint); padding: 3px 8px; border: 1px solid var(--color-border-dim); border-radius: var(--radius-pill); white-space: nowrap; flex-shrink: 0; }
+
+    /* ── Trivia status strip (W8c-1) ─────────────────────────────
+       Analog of #lc-top-strip's role for Trivia. Holds the player
+       count chip. Hidden during setup phase, shown when the active
+       game phase fires ('question'/'reveal'). */
+    #trivia-status-strip { padding: 8px 14px; border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; background: var(--color-bg); display: none; align-items: center; justify-content: flex-end; }
+    #trivia-status-strip.visible { display: flex; }
+
     /* ── LAST CARD GAME ── */
     #screen-lastcard { padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); overflow: hidden; position: fixed; inset: 0; flex-direction: column; }
+
+    /* W8c-1: status row at top of #lc-top-strip. Holds turn label,
+       draw-pending indicator (when active), and player count chip.
+       Lives ABOVE the existing discard area (.lc-top-row). */
+    .lc-status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 
     /* Phone-only mode — full layout */
     #lc-top-strip { display: none; flex-direction: column; gap: 8px; padding: 10px 14px; background: var(--color-surface); border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; }
@@ -625,8 +644,9 @@
            applyGameActionsVisibility() per role + GAME_MANIFEST. -->
       <div class="game-actions-bar" id="lc-actions-bar">
         <div class="actions-left">
-          <button class="game-action-btn" id="lc-pause-btn" onclick="onPauseTap()" style="display:none;">⏸ Pause</button>
-          <button class="game-action-btn" id="lc-leave-btn" onclick="onLeaveTap()" style="display:none;">Leave</button>
+          <button class="game-action-btn" id="lc-pause-btn"   onclick="onPauseTap()"     style="display:none;">⏸ Pause</button>
+          <button class="game-action-btn" id="lc-leave-btn"   onclick="onLeaveTap()"     style="display:none;">Leave</button>
+          <button class="game-action-btn" id="lc-endgame-btn" onclick="managerEndGame()" style="display:none;">End Game</button>
         </div>
         <div class="actions-right">
           <button class="game-action-btn" id="lc-cam-btn"   onclick="toggleGameCamera()" style="display:none;">📷 Cam</button>
@@ -634,15 +654,19 @@
         </div>
       </div>
 
-      <!-- Turn indicator — always visible, independent of TV mode -->
-      <div id="lc-turn-bar" style="padding:6px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--color-border-dim);flex-shrink:0;gap:8px;">
-        <div class="lc-turn-label" id="lc-turn-sm" style="display:block;flex:1;">—</div>
-        <div id="lc-pending-sm" style="display:none;font-size:var(--text-xs);color:var(--color-red);letter-spacing:.1em;">Draw pending!</div>
-        <button id="lc-endgame-btn" onclick="managerEndGame()" style="display:none;padding:4px 10px;border-radius:var(--radius-pill);border:1px solid var(--color-border);background:var(--color-gold-ghost);color:var(--color-gold-bright);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;flex-shrink:0;">End Game</button>
-      </div>
-
-      <!-- Discard + draw pile strip — always visible -->
+      <!-- W8c-1: #lc-top-strip restructured as two-row layout.
+           Row 1 (.lc-status-row): turn label + draw-pending indicator
+           (when active) + player count chip. Row 2 (.lc-top-row,
+           preserved verbatim from prior structure): discard card +
+           COLOR + DRAW PILE. The retired #lc-turn-bar's turn label
+           and pending indicator moved here; End Game moved to
+           #lc-actions-bar. -->
       <div id="lc-top-strip">
+        <div class="lc-status-row">
+          <div class="lc-turn-label" id="lc-turn-sm" style="flex:1;">—</div>
+          <div id="lc-pending-sm" style="display:none;font-size:var(--text-xs);color:var(--color-red);letter-spacing:.1em;">Draw pending!</div>
+          <div class="game-count-chip" id="lc-count-chip">— playing</div>
+        </div>
         <div class="lc-top-row">
           <div class="lc-discard-area">
             <div class="lc-card-sm" id="lc-top-card-sm">—</div>
@@ -700,12 +724,18 @@
            pause_not_applicable); Leave is non-manager only. -->
       <div class="game-actions-bar" id="trivia-actions-bar">
         <div class="actions-left">
-          <button class="game-action-btn" id="trivia-leave-btn" onclick="onLeaveTap()" style="display:none;">Leave</button>
+          <button class="game-action-btn" id="trivia-leave-btn"   onclick="onLeaveTap()"     style="display:none;">Leave</button>
+          <button class="game-action-btn" id="trivia-endgame-btn" onclick="managerEndGame()" style="display:none;">End Game</button>
         </div>
         <div class="actions-right">
           <button class="game-action-btn" id="trivia-cam-btn"   onclick="toggleGameCamera()" style="display:none;">📷 Cam</button>
           <button class="game-action-btn" id="trivia-addtv-btn" onclick="openAddTvModal()">📺 Add TV</button>
         </div>
+      </div>
+      <!-- W8c-1: Trivia status strip. Player count chip; hidden
+           during setup, shown when phase fires (question/reveal). -->
+      <div id="trivia-status-strip">
+        <div class="game-count-chip" id="trivia-count-chip">— playing</div>
       </div>
       <div class="trivia-setup" id="trivia-setup" style="display:none;">
         <div class="page-title" style="font-size:28px;">Trivia Setup</div>
@@ -735,18 +765,19 @@
            Cam + Add TV right-anchored. Same shape as Last Card. -->
       <div class="game-actions-bar" id="eu-actions-bar">
         <div class="actions-left">
-          <button class="game-action-btn" id="eu-pause-btn" onclick="onPauseTap()" style="display:none;">⏸ Pause</button>
-          <button class="game-action-btn" id="eu-leave-btn" onclick="onLeaveTap()" style="display:none;">Leave</button>
+          <button class="game-action-btn" id="eu-pause-btn"   onclick="onPauseTap()"     style="display:none;">⏸ Pause</button>
+          <button class="game-action-btn" id="eu-leave-btn"   onclick="onLeaveTap()"     style="display:none;">Leave</button>
+          <button class="game-action-btn" id="eu-endgame-btn" onclick="managerEndGame()" style="display:none;">End Game</button>
         </div>
         <div class="actions-right">
           <button class="game-action-btn" id="eu-cam-btn"   onclick="toggleGameCamera()" style="display:none;">📷 Cam</button>
           <button class="game-action-btn" id="eu-addtv-btn" onclick="openAddTvModal()">📺 Add TV</button>
         </div>
       </div>
-      <!-- Turn / End Game bar -->
+      <!-- Turn / player count bar — Euchre's dealer/trump info container. -->
       <div id="eu-turn-bar" style="padding:6px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--color-border-dim);flex-shrink:0;gap:8px;">
         <div class="lc-turn-label" id="eu-turn-label" style="flex:1;">—</div>
-        <button id="eu-endgame-btn" onclick="managerEndGame()" style="display:none;padding:4px 10px;border-radius:var(--radius-pill);border:1px solid var(--color-border);background:var(--color-gold-ghost);color:var(--color-gold-bright);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;flex-shrink:0;">End Game</button>
+        <div class="game-count-chip" id="eu-count-chip">— playing</div>
       </div>
 
       <!-- Score bar -->
@@ -898,7 +929,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.125</div>
+<div class="ver">v2.126</div>
 
 <script>
 'use strict';
@@ -1596,6 +1627,14 @@ function handleMessage(uid, data) {
     showGameOver(msg.scores, msg.reason, msg._name);
   }
 
+  // W8c-1: leaver name notification. Fires for no_impact games only —
+  // terminates_game's game-over reason subline already notifies the
+  // room. Agora doesn't echo to sender, so the leaver doesn't toast
+  // themselves.
+  if (msg.type==='participant-left') {
+    showToast((msg._name || 'A player') + ' left');
+  }
+
   if (msg.type==='ask-play-again') {
     document.getElementById('play-again-player').style.display='block';
     document.getElementById('play-again-prompt').textContent = (msg._name||'Manager')+' wants to play again — are you in?';
@@ -2191,21 +2230,29 @@ function applyGameActionsVisibility() {
   const isManager    = currentMyRow?.control_role === 'manager';
   const isActive     = currentMyRow?.participation_role === 'active';
   const pauseEnabled = manifest.pause_behavior !== 'pause_not_applicable';
-  const showPause = isActive && pauseEnabled;
-  const showLeave = !isManager;
-  const showCam   = isActive;
+  const showPause   = isActive && pauseEnabled;
+  const showLeave   = !isManager;
+  // W8c-1: End Game lives in the action row alongside Pause/Leave.
+  // Mutually exclusive with Leave by construction (manager XOR non-
+  // manager). Same left-anchored slot — manager sees End Game; non-
+  // manager sees Leave.
+  const showEndGame = isManager;
+  const showCam     = isActive;
   const sx = (id, visible) => {
     const el = document.getElementById(id);
     if (el) el.style.display = visible ? 'inline-block' : 'none';
   };
-  sx('lc-pause-btn',     showPause);
-  sx('lc-leave-btn',     showLeave);
-  sx('lc-cam-btn',       showCam);
-  sx('eu-pause-btn',     showPause);
-  sx('eu-leave-btn',     showLeave);
-  sx('eu-cam-btn',       showCam);
-  sx('trivia-leave-btn', showLeave);
-  sx('trivia-cam-btn',   showCam);
+  sx('lc-pause-btn',       showPause);
+  sx('lc-leave-btn',       showLeave);
+  sx('lc-endgame-btn',     showEndGame);
+  sx('lc-cam-btn',         showCam);
+  sx('eu-pause-btn',       showPause);
+  sx('eu-leave-btn',       showLeave);
+  sx('eu-endgame-btn',     showEndGame);
+  sx('eu-cam-btn',         showCam);
+  sx('trivia-leave-btn',   showLeave);
+  sx('trivia-endgame-btn', showEndGame);
+  sx('trivia-cam-btn',     showCam);
   // *-addtv-btn buttons stay unconditionally visible — no toggle.
 }
 
@@ -2291,6 +2338,12 @@ async function onLeaveTap() {
   }
 
   // no_impact branch — soft leave.
+  // W8c-1: broadcast participant-left so remaining clients toast
+  // "[name] left". send() auto-appends _name=myName. Agora doesn't
+  // echo to sender, so the leaver doesn't see their own toast.
+  // terminates_game branch skips this — the game-over reason
+  // subline already notifies remaining clients.
+  send({ type: 'participant-left' });
   const { error } = await window.sb.rpc('rpc_session_set_my_participation_role', {
     p_session_id: currentSession.id,
     p_role:       'audience',
@@ -3271,8 +3324,9 @@ function startLastCard() {
   if (isManager) {
     document.getElementById('mgr-skip').style.display='block';
     document.getElementById('mgr-endgame').style.display='block';
-    const lcBtn = document.getElementById('lc-endgame-btn');
-    if (lcBtn) lcBtn.style.display='block';
+    // W8c-1: #lc-endgame-btn visibility now owned by
+    // applyGameActionsVisibility above. Old manual display='block'
+    // removed alongside the button's relocation into #lc-actions-bar.
   }
   renderLastCard();
 }
@@ -3282,6 +3336,10 @@ function renderLastCard() {
   const s=gameState;
   const myTurn=s.players[s.currentPlayerIdx]===myName;
   if (s.hands[myName]) myHand=[...s.hands[myName]];
+
+  // W8c-1: player count chip in #lc-top-strip status row.
+  const lcCountChip = document.getElementById('lc-count-chip');
+  if (lcCountChip) lcCountChip.textContent = s.players.length + ' playing';
 
   // Top card
   const top=s.discardPile[s.discardPile.length-1];
@@ -4031,6 +4089,17 @@ function renderTrivia() {
   applyTriviaManagerButtonVisibility();
   const s=gameState, q=s.questions[s.currentQuestionIdx];
   if (!q) return;
+
+  // W8c-1: player count chip + status strip visibility gate.
+  // Strip hidden during 'waiting' (setup) phase; shown during
+  // 'question'/'reveal' active play.
+  const trivCountChip = document.getElementById('trivia-count-chip');
+  if (trivCountChip) trivCountChip.textContent = s.players.length + ' playing';
+  const trivStrip = document.getElementById('trivia-status-strip');
+  if (trivStrip) {
+    const activePhase = s.phase === 'question' || s.phase === 'reveal';
+    trivStrip.classList.toggle('visible', activePhase);
+  }
   const progressEl = document.getElementById('trivia-progress');
   if (progressEl) progressEl.textContent = 'Question ' + (s.currentQuestionIdx + 1) + ' of ' + s.questions.length;
   document.getElementById('trivia-q-text').textContent=q.question;
@@ -4292,14 +4361,18 @@ function euCompressState(state) {
 
 function startEuchre() {
   goTo('screen-euchre');
+  // W8c-1: #eu-endgame-btn visibility owned by applyGameActionsVisibility.
   applyGameActionsVisibility();
-  if (currentMyRow?.control_role === 'manager') document.getElementById('eu-endgame-btn').style.display = 'block';
   renderEuchre();
 }
 
 function renderEuchre() {
   if (!gameState) return;
   const s = gameState;
+
+  // W8c-1: player count chip in #eu-turn-bar (alongside turn label).
+  const euCountChip = document.getElementById('eu-count-chip');
+  if (euCountChip) euCountChip.textContent = s.players.length + ' playing';
 
   // Scores
   document.getElementById('eu-score-1').textContent = s.scores[1] || 0;
