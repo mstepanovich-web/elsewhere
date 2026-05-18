@@ -2989,62 +2989,76 @@ exists.
 
 ---
 
-### Authenticated late-joiner has no path to existing session
+### Cross-household and unauthenticated users have no path to existing sessions
 
-Reproduced v2.119 hardware test 2026-05-15. Diagnosed via in-
-app LOG: refreshSessionState returns "no active session for
-room_code XXX — legacy mode" for the cross-household user,
-which means the sessions row is invisible to them at the
-database layer (suspected RLS policy scoping sessions to
-household membership).
+**Deferred in:** v2.119 hardware test (2026-05-15)
+**Deferred on:** 2026-05-15 (scope broadened 2026-05-18 after code-reading confirmed three populations + invite-flow share the same path)
+**Priority:** Medium-High — blocks "friend joins game from afar" entirely for authenticated cross-household users; also leaves unauthenticated users at a silent dead-end with no diagnostic
+**Area:** Database layer — RLS on `public.sessions` (db/008:262-268) + `refreshSessionState` (games/player.html:2201-2288); affects shell home tile dispatch, direct URL share, and invite flow indistinguishably
+**Status:** Open — blocker for W6 hardware verification (see "W6 hardware verification" entry below); fix requires a product/schema decision
 
-Scenario: Steve (authenticated, NOT in Mike's household) tries
-to join Mike's Last Card session. Behavior is identical whether
-the session is in lobby state (no game started) or mid-game.
+#### Context
 
-Symptoms across all entry attempts:
-1. Home page UI offers no "Join a Game" affordance — only
-   "Karaoke" / "Games" / "Wellness" tiles
-2. Clicking Games tile → "Games needs a TV + phone" modal
-   (dead-end, no enter-room-code option)
-3. Direct URL share (player.html?room=QQFTK3) → Steve lands on
-   screen-game-room with Playing (0) / Watching (0), no toggle,
-   no session data, no error message
-4. In-app LOG confirms the session row was not returned by
-   refreshSessionState → user dropped into legacy mode
-5. Invite flow attempt also fails: when Mike (manager) sends an
-   invite to Steve (cross-household) and Steve follows the
-   invite link, Steve lands on the same Playing (0) / Watching (0)
-   unpopulated game-room state. The invite mechanism does NOT
-   bypass the RLS / DB-layer block.
+Three populations fail to reach an existing game session through the current code paths. All three converge on the SAME code path under the surface; different bail-out lines, identical observable UX (`screen-game-room` showing Playing (0) / Watching (0), no toggle, no session data, no error message — silent drop into "legacy mode").
 
-Root cause (hypothesized): RLS policy on sessions table scopes
-visibility to household members. The cross-household auth'd
-user is treated identically to a fully unauthenticated user
-from the client's perspective — both get the "no active
-session" path.
+**Failure breakdown by population:**
 
-Important nuance: This is database-level access control that
-even the existing invite flow does NOT bypass. The block is
-total — no client-side path (home page UI, direct URL share, or
-manager-initiated invite) grants a cross-household authenticated
-user visibility of the session. Any fix must touch the database
-layer (RLS policy on sessions table, or a session_invites
-granting mechanism that adds a row the user CAN see).
+| Population | Bails at | Reason |
+|---|---|---|
+| Unauthenticated user | `refreshSessionState` games/player.html:2202-2206 (`if (!user)`) | "not signed in — legacy mode" log line. `sessions` SELECT never runs. |
+| Authenticated cross-household | `refreshSessionState` games/player.html:2235-2238 (`if (!session)`) | RLS-blocked SELECT on `public.sessions` (db/008:262-268). Row returned as `null`. |
+| Invite-link recipient (any auth state) | Same line as their underlying population | Invite-link is a URL generator, not a separate code path. See "Invite flow" below. |
 
-Possible fix paths (all future product work):
-- Make sessions table publicly readable by room_code (treating
-  room_code as a shareable secret — like Google Doc share
-  links)
-- Add an explicit invite/grant flow that adds non-household
-  users as session participants
-- Add a "guest mode" for sessions that bypasses household
-  scoping
-- Decision needed: is cross-household join intentionally
-  forbidden today, or is this a side effect we want to relax?
+Originally reproduced via in-app LOG with cross-household auth'd user Steve trying to join manager Mike's Last Card session. Identical behavior whether session is in lobby or mid-game. Scope confirmed broader on 2026-05-18 via static code-reading.
 
-Severity: Medium-High. Blocks the "friend joins game from
-afar" use case entirely for authenticated users.
+**Working baseline (inverse — the populations that succeed):**
+
+The `public.sessions` RLS policy (db/008:262-268) grants SELECT when EITHER:
+- `is_session_participant(id)` returns true → existing participant (already inserted in `session_participants`)
+- `is_tv_household_member(tv_device_id)` returns true → same-household HHU member
+
+Either match → SELECT returns the row → `rpc_session_join` (games/player.html:1217) runs → user lands in `currentParticipants` with their assigned role. Same-household auth'd HHU members (joining for the first time) take this path; existing participants returning to a session also take this path. **Cross-household auth'd users and unauthenticated users do not match either predicate.**
+
+**Invite flow is not a separate code path.** The manager's `📤 Share Link` / `📋 Copy Link` buttons on `screen-game-room` (games/player.html:524-525) call `shareInvite()` / `copyInviteFor()` which both call `getInviteLink()` (games/player.html:2585-2587). That helper returns:
+
+    ${BASE_URL}/games/player.html?room=${roomCode}&game=${currentGame}&mgrname=${encodeURIComponent(myName)}
+
+Same URL shape as direct sharing, with two cosmetic params (`game`, `mgrname`). No token, no grant, no signed link, no separate RPC. The recipient's client hits `doJoin()` → `refreshSessionState` and bails at whichever line matches their auth state.
+
+`invitedNames[]` (games/player.html:959) is purely client-side UI state: the manager sees "Bob (invited but not yet joined)" rows in the local roster so they don't re-invite. The invitation does not grant Bob any database access. When Bob clicks the link, his client never references the invitation.
+
+#### What's deferred
+
+A real fix that lets the three populations above reach the session through SOME path. Any fix must touch the database layer — every client-side path currently runs into the same RLS bail or "not signed in" bail.
+
+**The invite flow does not require separate filing.** Static review (2026-05-18) verified the invite flow shares the underlying join path with direct-URL share and home-page-UI entry; any DB-layer fix that unblocks cross-household join also unblocks the invite-link recipient automatically. Future-Claude: do not re-investigate the invite flow as a separate problem — it is a URL generator + local UX notification, nothing more.
+
+#### Options when picking up
+
+1. **Relax `sessions` RLS** — make sessions table SELECT-able by anyone presenting the room_code (treating room_code as a shareable secret, Google-Doc-style). Lowest implementation cost. Globalizes session visibility — any auth'd user who guesses or brute-forces a room_code can see the session exists. Pair with shortened TTL or rotating codes to mitigate.
+2. **SECURITY DEFINER `rpc_session_lookup_by_room_code`** — bypasses RLS for the join attempt itself. Returns the session ID only; subsequent `rpc_session_join` inserts a participant row, after which `is_session_participant` makes follow-up SELECTs work normally. Medium implementation cost. Keeps the sessions table's RLS scope unchanged for direct queries.
+3. **Tokenized invite link** — add a `session_invites` table; `getInviteLink()` generates a signed/random token; recipient calls `rpc_session_join_by_invite(token)` which validates the token + inserts the participant. Highest implementation cost. Allows controlled cross-household reach without globalizing session visibility — most user-acquisition-friendly direction since the manager retains gate-keeping authority over who can reach the session. Implementation decision deferred; not prescriptive at this point.
+
+#### When to pick this up
+
+Product decision needed before resolution: is cross-household join intentionally forbidden today, or is this a side-effect we want to relax? Once the direction is set, the three options above are the available shapes.
+
+Two natural pickup triggers:
+- When the cross-household / friend-of-manager user-acquisition flow becomes a product priority.
+- Session 5 Part 5 multi-user verification (per ROADMAP) — that session needs a 4+-device test setup, which currently requires all devices to be in the same household. A fix here unlocks Part 5 hardware testing of multi-device sessions, transitively unblocking the W6 hardware-verification deferral.
+
+Severity: Medium-High. Blocks the "friend joins game from afar" use case entirely for authenticated cross-household users; for unauthenticated users it produces a silent dead-end with no diagnostic, which is a UX foot-gun even if the use case itself is lower priority.
+
+#### Related
+
+- v2.119 hardware test (2026-05-15) — original reproduction in 2-device 2-household setup
+- Code reading 2026-05-18 — confirmed unauth + invite-flow share the path; expanded scope from auth'd-only to three-population
+- DEFERRED entry "Manager roster doesn't auto-update on new joiner" — separate filing, different root cause (realtime subscription gap on the manager side)
+- DEFERRED entry "Games needs a TV + phone modal is misleading" — separate filing (false copy), but masks this entry in practice for unauth users tapping the Games tile on desktop
+- DEFERRED entry "W6 hardware verification — over-capacity / multi-Playing scenarios" — blocked by this entry
+- `db/008:262-268` — the RLS policy on `public.sessions` under review
+- `games/player.html:2201-2288` — `refreshSessionState` (the function that bails)
+- `games/player.html:2585-2587` — `getInviteLink` (the URL generator)
 
 ---
 
@@ -3068,3 +3082,65 @@ Suggested fix:
 
 Severity: Low-Medium. Doesn't block usage but tells users
 something incorrect about product requirements.
+
+---
+
+### Deferred: W6 hardware verification — over-capacity / multi-Playing scenarios
+
+**Deferred in:** Session 5 admission_model_v2 W6 ship (2026-05-18)
+**Deferred on:** 2026-05-18
+**Priority:** Medium — static review GREEN; partial hardware verification GREEN on 2-device setup; scenarios requiring 4+ Playing users blocked by existing join-flow bugs
+**Area:** Games — `games/player.html` W6 selection mode + per-game capacity/min checks
+**Status:** Deferred-by-analogy — pattern mirrors v2.108 Euchre auto-end (4-player setup impractical with 2-device test setup)
+
+#### Context
+
+W6 shipped 2026-05-18 (commit `cef155c`, v2.121). Static review against ADMISSION-MODEL-V2 § 10 W6 + locked decisions verified the code matches spec across all branches (Euchre min===max collapse, Last Card playerLimit honor, open-mode floor check before gated shortcircuit, capacity hard guard with no auto-unselect, score-screen Play Again split between manager button vs non-manager prominent checkbox).
+
+Hardware verification on 2-device setup (Mike iPhone Safari manager + Michael Mac Chrome non-manager) covers:
+
+- ✓ GREEN: score screen non-manager checkbox flips role via W5 handler
+- ✓ GREEN: score screen manager button routes to game-room, no role change
+- ✓ GREEN: Trivia floor (0-1 Playing) → toast + refuse
+- ✓ GREEN: Trivia fast-start (≥2 Playing) → no selection mode, immediate start
+- ✓ GREEN: Last Card floor (1 Playing) → toast + refuse
+- ✓ GREEN (partial): Last Card fast-start at 2 Playing → starts. Cannot exercise the queued→active auto-promotion sub-path (`ensureAllPlayingActive`) without 3+ users where some are queued.
+
+Hardware verification blocked on cases requiring 4+ Playing users:
+
+- ✗ BLOCKED: Last Card over-capacity (7+ Playing) → enters selection mode inline on game-room
+- ✗ BLOCKED: Last Card +/- live capacity (manager moves +/- to 7, has 8 Playing → selection caps at 7 not 6)
+- ✗ BLOCKED: Euchre 3-Playing floor → toast + refuse
+- ✗ BLOCKED: Euchre exact-fit (4 Playing) → fast-start
+- ✗ BLOCKED: Euchre over-capacity (5+ Playing) → selection mode requires exactly 4 selected
+- ✗ BLOCKED: goToGameRoom resets _selectionMode state on re-entry
+- ✗ BLOCKED: confirmSelectionMode floor toast ("Euchre needs 4 players selected") when manager confirms with <min selected
+
+Root cause of the device-count limit: three filed DEFERRED entries from earlier in this session prevent reliable multi-device session join:
+
+1. "Manager roster doesn't auto-update on new joiner" — same-household joiner shows on their own screen but not on manager's until manager navigates away and back. Realtime subscription gap.
+2. "Cross-household and unauthenticated users have no path to existing sessions" — covers three populations (auth'd cross-household, unauthenticated, invite-link recipients regardless of auth state). All three converge on the same code path; all leave the user in an unpopulated game-room with no roster, no toggle, no error. DB-layer block on `public.sessions` SELECT.
+3. "Games needs a TV + phone modal is misleading" — false copy on Games tile prevents direct phone-only join.
+
+#### What's deferred
+
+Hardware verification of the 7 blocked cases above. Static-review pass confirms the code path is correct in each case; runtime verification awaits a 4+-device test setup OR resolution of the three join-flow blockers.
+
+#### When to pick this up
+
+Two pickup triggers:
+
+- **(a)** When the three join-flow blocker DEFERRED entries are resolved (either: realtime fix for roster auto-update + RLS policy revision for cross-household join + misleading-modal copy fix). At that point a 4+-device session can be assembled and the blocked cases verified directly.
+- **(b)** Session 5 Part 5 multi-user verification per ROADMAP — that session's scope already includes assembling a multi-device test setup for end-to-end flows. W6 verification bundles cleanly into Part 5's verification matrix.
+
+Whichever comes first. If neither has triggered by the time W7-W10 ship, surface W6 verification status in the W10 cleanup closeout as a known gap before declaring admission_model_v2 complete.
+
+#### Related
+
+- Commit `cef155c` (v2.121) — W6 ship
+- DEFERRED entry "Manager roster doesn't auto-update on new joiner" — blocker (1)
+- DEFERRED entry "Cross-household and unauthenticated users have no path to existing sessions" — blocker (2)
+- DEFERRED entry "Games needs a TV + phone modal is misleading" — blocker (3)
+- v2.108 (commit `bc99f13`) — pattern source for "deferred-by-analogy" hardware verification
+- `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md` — prior verification log capturing the v2.108 deferral pattern
+- `docs/ADMISSION-MODEL-V2.md` § 10 W6 — spec the W6 work was verified against
