@@ -140,12 +140,18 @@
     .p-video-thumb { width: 36px; height: 27px; border-radius: 4px; object-fit: cover; transform: scaleX(-1); flex-shrink: 0; display: none; }
     .p-video-thumb.visible { display: block; }
 
+    /* ── In-game action bar (W8 § 7) ──────────────────────────────
+       Unified top affordance row on every game screen. Left group:
+       Pause + Leave. Right group: Cam + Add TV. Empty flex space
+       between. Replaces the (Last-Card-only) MODE: TV ON / NO TV
+       toggle that was retired in W8. */
+    .game-actions-bar { display: flex; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; background: var(--color-bg); }
+    .game-actions-bar .actions-left  { display: flex; gap: 6px; }
+    .game-actions-bar .actions-right { display: flex; gap: 6px; margin-left: auto; }
+    .game-action-btn { padding: 4px 10px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; flex-shrink: 0; font-family: var(--font-ui); }
+
     /* ── LAST CARD GAME ── */
     #screen-lastcard { padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); overflow: hidden; position: fixed; inset: 0; flex-direction: column; }
-
-    /* TV mode — hand only */
-    .lc-tv-status { padding: 8px 16px; font-size: var(--text-sm); color: var(--color-text-faint); text-align: center; border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; background: var(--color-bg); }
-    .lc-tv-status.your-turn { color: var(--color-gold); font-weight: 500; }
 
     /* Phone-only mode — full layout */
     #lc-top-strip { display: none; flex-direction: column; gap: 8px; padding: 10px 14px; background: var(--color-surface); border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; }
@@ -614,13 +620,18 @@
 
     <!-- LAST CARD GAME -->
     <div id="screen-lastcard" class="screen">
-      <!-- TV mode: thin status bar -->
-      <div class="lc-tv-status" id="lc-tv-status" style="display:none;">Waiting...</div>
-      <!-- TV mode toggle -->
-      <div id="lc-mode-toggle" style="display:flex;align-items:center;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border-dim);flex-shrink:0;background:var(--color-bg);">
-        <span style="font-size:var(--text-xs);color:var(--color-text-faint);letter-spacing:.1em;text-transform:uppercase;">Mode:</span>
-        <div id="lc-tv-btn" onclick="setTVMode(true)" style="padding:4px 12px;border-radius:var(--radius-pill);border:1px solid var(--color-border);font-size:var(--text-xs);cursor:pointer;letter-spacing:.08em;text-transform:uppercase;">📺 TV On</div>
-        <div id="lc-notv-btn" onclick="setTVMode(false)" style="padding:4px 12px;border-radius:var(--radius-pill);border:1px solid var(--color-gold);background:var(--color-gold-faint);font-size:var(--text-xs);cursor:pointer;letter-spacing:.08em;text-transform:uppercase;">📱 No TV</div>
+      <!-- W8 § 7: per-game action row. Pause + Leave left-anchored;
+           Cam + Add TV right-anchored. Visibility wired by
+           applyGameActionsVisibility() per role + GAME_MANIFEST. -->
+      <div class="game-actions-bar" id="lc-actions-bar">
+        <div class="actions-left">
+          <button class="game-action-btn" id="lc-pause-btn" onclick="onPauseTap()" style="display:none;">⏸ Pause</button>
+          <button class="game-action-btn" id="lc-leave-btn" onclick="onLeaveTap()" style="display:none;">Leave</button>
+        </div>
+        <div class="actions-right">
+          <button class="game-action-btn" id="lc-cam-btn"   onclick="toggleGameCamera()" style="display:none;">📷 Cam</button>
+          <button class="game-action-btn" id="lc-addtv-btn" onclick="openAddTvModal()">📺 Add TV</button>
+        </div>
       </div>
 
       <!-- Turn indicator — always visible, independent of TV mode -->
@@ -628,7 +639,6 @@
         <div class="lc-turn-label" id="lc-turn-sm" style="display:block;flex:1;">—</div>
         <div id="lc-pending-sm" style="display:none;font-size:var(--text-xs);color:var(--color-red);letter-spacing:.1em;">Draw pending!</div>
         <button id="lc-endgame-btn" onclick="managerEndGame()" style="display:none;padding:4px 10px;border-radius:var(--radius-pill);border:1px solid var(--color-border);background:var(--color-gold-ghost);color:var(--color-gold-bright);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;flex-shrink:0;">End Game</button>
-        <button id="lc-cam-toggle" onclick="toggleGameCamera()" style="padding:4px 10px;border-radius:var(--radius-pill);border:1px solid var(--color-border);background:var(--color-gold-ghost);color:var(--color-gold-bright);font-size:10px;letter-spacing:.08em;cursor:pointer;flex-shrink:0;">📷 Cam</button>
       </div>
 
       <!-- Discard + draw pile strip — always visible -->
@@ -686,6 +696,17 @@
 
     <!-- TRIVIA -->
     <div id="screen-trivia" class="screen">
+      <!-- W8 § 7: per-game action row. Trivia has no Pause (manifest:
+           pause_not_applicable); Leave is non-manager only. -->
+      <div class="game-actions-bar" id="trivia-actions-bar">
+        <div class="actions-left">
+          <button class="game-action-btn" id="trivia-leave-btn" onclick="onLeaveTap()" style="display:none;">Leave</button>
+        </div>
+        <div class="actions-right">
+          <button class="game-action-btn" id="trivia-cam-btn"   onclick="toggleGameCamera()" style="display:none;">📷 Cam</button>
+          <button class="game-action-btn" id="trivia-addtv-btn" onclick="openAddTvModal()">📺 Add TV</button>
+        </div>
+      </div>
       <div class="trivia-setup" id="trivia-setup" style="display:none;">
         <div class="page-title" style="font-size:28px;">Trivia Setup</div>
         <div class="join-label">Category</div>
@@ -710,11 +731,22 @@
 
     <!-- EUCHRE -->
     <div id="screen-euchre" class="screen" style="flex-direction:column;padding:0;overflow:hidden;">
-      <!-- Top status bar -->
+      <!-- W8 § 7: per-game action row. Pause + Leave left-anchored;
+           Cam + Add TV right-anchored. Same shape as Last Card. -->
+      <div class="game-actions-bar" id="eu-actions-bar">
+        <div class="actions-left">
+          <button class="game-action-btn" id="eu-pause-btn" onclick="onPauseTap()" style="display:none;">⏸ Pause</button>
+          <button class="game-action-btn" id="eu-leave-btn" onclick="onLeaveTap()" style="display:none;">Leave</button>
+        </div>
+        <div class="actions-right">
+          <button class="game-action-btn" id="eu-cam-btn"   onclick="toggleGameCamera()" style="display:none;">📷 Cam</button>
+          <button class="game-action-btn" id="eu-addtv-btn" onclick="openAddTvModal()">📺 Add TV</button>
+        </div>
+      </div>
+      <!-- Turn / End Game bar -->
       <div id="eu-turn-bar" style="padding:6px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--color-border-dim);flex-shrink:0;gap:8px;">
         <div class="lc-turn-label" id="eu-turn-label" style="flex:1;">—</div>
         <button id="eu-endgame-btn" onclick="managerEndGame()" style="display:none;padding:4px 10px;border-radius:var(--radius-pill);border:1px solid var(--color-border);background:var(--color-gold-ghost);color:var(--color-gold-bright);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;flex-shrink:0;">End Game</button>
-        <button id="eu-cam-toggle" onclick="toggleGameCamera()" style="padding:4px 10px;border-radius:var(--radius-pill);border:1px solid var(--color-border);background:var(--color-gold-ghost);color:var(--color-gold-bright);font-size:10px;letter-spacing:.08em;cursor:pointer;flex-shrink:0;">📷 Cam</button>
       </div>
 
       <!-- Score bar -->
@@ -866,7 +898,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.122</div>
+<div class="ver">v2.123</div>
 
 <script>
 'use strict';
@@ -1258,7 +1290,6 @@ async function doJoin() {
     // null and we fall through to the non-manager branch (game-room or
     // screen-watching depending on gameInProgress).
     const isManagerOnJoin = currentMyRow?.control_role === 'manager';
-    userTVMode = isManagerOnJoin;  // pre-3a default: managers see TV-on layout
     if (isManagerOnJoin) {
       currentGame = urlGame || 'lastcard';
       goToLobby();
@@ -2131,6 +2162,73 @@ function applyToggleLockState() {
   if (partHelp) partHelp.textContent = helpText;
 }
 
+// W8 § 7: per-game in-game action row visibility. Single source of
+// truth for Pause / Leave / Cam / Add TV button visibility across
+// screen-lastcard, screen-trivia, screen-euchre.
+//
+// Visibility rules:
+//   • Pause  : participation_role === 'active'
+//              AND manifest.pause_behavior !== 'pause_not_applicable'
+//   • Leave  : control_role !== 'manager' (hidden from manager;
+//              manager uses End Game / End Session per existing
+//              patterns). Visible to non-manager regardless of
+//              participation_role — queued and audience can leave.
+//   • Cam    : participation_role === 'active' (matches existing
+//              Cam semantics; relocated from #lc-turn-bar /
+//              #eu-turn-bar into the new affordance row).
+//   • Add TV : unconditional. Forward-looking — anyone in session
+//              including queued and audience can pair a TV.
+//
+// Called from startLastCard / startTrivia / startEuchre on entry,
+// and from refreshSessionState so mid-game role changes re-evaluate
+// visibility without a screen change.
+function applyGameActionsVisibility() {
+  const manifest = GAME_MANIFEST[currentGame];
+  if (!manifest) return;
+  const isManager    = currentMyRow?.control_role === 'manager';
+  const isActive     = currentMyRow?.participation_role === 'active';
+  const pauseEnabled = manifest.pause_behavior !== 'pause_not_applicable';
+  const showPause = isActive && pauseEnabled;
+  const showLeave = !isManager;
+  const showCam   = isActive;
+  const sx = (id, visible) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = visible ? 'inline-block' : 'none';
+  };
+  sx('lc-pause-btn',     showPause);
+  sx('lc-leave-btn',     showLeave);
+  sx('lc-cam-btn',       showCam);
+  sx('eu-pause-btn',     showPause);
+  sx('eu-leave-btn',     showLeave);
+  sx('eu-cam-btn',       showCam);
+  sx('trivia-leave-btn', showLeave);
+  sx('trivia-cam-btn',   showCam);
+  // *-addtv-btn buttons stay unconditionally visible — no toggle.
+}
+
+// W8 § 7: Pause button stub. Real behavior lands in Commit C
+// (gameState.pausedPlayers + per-game pause_behavior branching).
+function onPauseTap() {
+  const behavior = GAME_MANIFEST[currentGame]?.pause_behavior || 'unknown';
+  log('Pause tapped (game=' + currentGame + ' pause_behavior=' + behavior + ')');
+  showToast('Pause coming soon');
+}
+
+// W8 § 7: Leave button stub. Confirm copy branches on leave_impact
+// per ADMISSION-MODEL-V2 § 7.2 — "the game" (not "the session") so
+// the wording reflects stepping out of the round while remaining in
+// the session. Real behavior (rpc_session_leave + game-over with
+// reason='user_left' for terminates_game) lands in Commit B.
+function onLeaveTap() {
+  const impact = GAME_MANIFEST[currentGame]?.leave_impact || 'unknown';
+  const copy = impact === 'terminates_game'
+    ? 'Leave the game? This will end the game for everyone.'
+    : 'Leave the game? Others will continue.';
+  if (!confirm(copy)) return;
+  log('Leave confirmed (game=' + currentGame + ' leave_impact=' + impact + ')');
+  showToast('Leave coming soon');
+}
+
 // 3a.2 § 2.5: manager soft-removes another participant. Sets target's left_at.
 // Mirrors singer.html handleQueueRemoveTap (line 2852) — confirm prompt, RPC,
 // caller-side realtime publish, BUG-13 self-refresh.
@@ -2282,6 +2380,10 @@ async function refreshSessionState() {
   const isPlaying    = currentMyRow?.participation_role !== 'audience';
   if (mgrCheckbox)  mgrCheckbox.checked  = isPlaying;
   if (partCheckbox) partCheckbox.checked = isPlaying;
+  // W8 § 7: re-evaluate in-game action row visibility — mid-game
+  // role changes (queued→active promotion, audience→queued opt-in)
+  // may toggle Pause/Cam without a screen change.
+  applyGameActionsVisibility();
   // Roster + TV displays re-render with fresh data.
   renderRoster();
   renderTvDisplays();
@@ -2982,7 +3084,7 @@ async function managerStartLastCard() {
 function startLastCard() {
   const isManager = currentMyRow?.control_role === 'manager';
   goTo('screen-lastcard');
-  setTVMode(userTVMode); // init button styles + layout
+  applyGameActionsVisibility();
   if (isManager) {
     document.getElementById('mgr-skip').style.display='block';
     document.getElementById('mgr-endgame').style.display='block';
@@ -2990,32 +3092,6 @@ function startLastCard() {
     if (lcBtn) lcBtn.style.display='block';
   }
   renderLastCard();
-}
-
-let userTVMode = false; // set properly after join based on isManager
-
-function setTVMode(on) {
-  userTVMode = on;
-  const tvBtn   = document.getElementById('lc-tv-btn');
-  const notvBtn = document.getElementById('lc-notv-btn');
-  const activeStyle  = 'padding:4px 12px;border-radius:var(--radius-pill);font-size:var(--text-xs);cursor:pointer;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--color-gold);background:var(--color-gold-faint);color:var(--color-gold);';
-  const inactiveStyle= 'padding:4px 12px;border-radius:var(--radius-pill);font-size:var(--text-xs);cursor:pointer;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--color-border);background:transparent;color:var(--color-text-faint);';
-  if (tvBtn)   tvBtn.style.cssText   = on  ? activeStyle : inactiveStyle;
-  if (notvBtn) notvBtn.style.cssText = !on ? activeStyle : inactiveStyle;
-  setupLastCardLayout();
-  renderLastCard();
-}
-
-function setupLastCardLayout() {
-  // TV mode = user toggled TV On
-  // No TV mode = user toggled No TV (default)
-  document.getElementById('lc-tv-status').style.display   = userTVMode ? 'block' : 'none';
-  document.getElementById('lc-top-strip').classList.toggle('visible', true);    // always show discard + draw pile
-  document.getElementById('lc-others-strip').classList.toggle('visible', true); // always show others
-  document.getElementById('lc-ipad-wrap').classList.toggle('visible', false);
-  document.getElementById('lc-phone-hand-wrap').style.display = 'flex';
-
-  log('layout: tvMode='+userTVMode);
 }
 
 function renderLastCard() {
@@ -3047,14 +3123,6 @@ function renderLastCard() {
   if (pend) {
     pend.style.display=s.pendingDraw>0?'block':'none';
     pend.textContent='Draw '+s.pendingDraw+' pending!';
-  }
-
-  // TV status bar
-  const tvs=document.getElementById('lc-tv-status');
-  if (tvs) {
-    if (s.phase==='round-end') { tvs.textContent=(s.winner===myName?'🎉 You win!':s.winner+' wins!'); tvs.className='lc-tv-status'; }
-    else if (myTurn) { tvs.textContent=s.pendingDraw>0?'Draw '+s.pendingDraw+' or stack!':'Your turn!'; tvs.className='lc-tv-status your-turn'; }
-    else { tvs.textContent=(s.players[s.currentPlayerIdx]||'?')+"'s turn"; tvs.className='lc-tv-status'; }
   }
 
   // iPad card
@@ -3731,6 +3799,7 @@ function startTrivia(state) {
   document.getElementById('trivia-setup').style.display='none';
   document.getElementById('trivia-game').style.display='flex';
   document.getElementById('trivia-waiting').style.display='none';
+  applyGameActionsVisibility();
   if (isManager) {
     // Static manager-bar setup — button text + onclick wired once. Visibility
     // is owned by applyTriviaManagerButtonVisibility (called below + from
@@ -4033,6 +4102,7 @@ function euCompressState(state) {
 
 function startEuchre() {
   goTo('screen-euchre');
+  applyGameActionsVisibility();
   if (currentMyRow?.control_role === 'manager') document.getElementById('eu-endgame-btn').style.display = 'block';
   renderEuchre();
 }
