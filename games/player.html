@@ -140,14 +140,16 @@
     .p-video-thumb { width: 36px; height: 27px; border-radius: 4px; object-fit: cover; transform: scaleX(-1); flex-shrink: 0; display: none; }
     .p-video-thumb.visible { display: block; }
 
-    /* ── In-game action bar (W8 § 7) ──────────────────────────────
-       Unified top affordance row on every game screen. Left group:
-       Pause + Leave. Right group: Cam + Add TV. Empty flex space
-       between. Replaces the (Last-Card-only) MODE: TV ON / NO TV
-       toggle that was retired in W8. */
-    .game-actions-bar { display: flex; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; background: var(--color-bg); }
-    .game-actions-bar .actions-left  { display: flex; gap: 6px; }
-    .game-actions-bar .actions-right { display: flex; gap: 6px; margin-left: auto; }
+    /* ── Player bar singleton (W8c-3) ────────────────────────────
+       App-level singleton mirroring #manager-bar's pattern. Pause +
+       Leave left-anchored, Cam + Add TV right-anchored. Whole-bar
+       visibility toggled by applyPlayerBarVisibility on screen
+       change. Replaces three per-game #lc-actions-bar /
+       #trivia-actions-bar / #eu-actions-bar copies from W8a/c-1. */
+    #player-bar { display: none; flex-direction: row; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; background: var(--color-bg); }
+    #player-bar.visible { display: flex; }
+    #player-bar .actions-left  { display: flex; gap: 6px; }
+    #player-bar .actions-right { display: flex; gap: 6px; margin-left: auto; }
     .game-action-btn { padding: 4px 10px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; flex-shrink: 0; font-family: var(--font-ui); }
 
     /* ── In-game player count chip (W8c-1) ───────────────────────
@@ -419,13 +421,28 @@
 
   <div id="manager-bar">
     <span class="mgr-label">★ Manager</span>
-    <button class="mgr-btn primary" id="mgr-start"  onclick="managerStart()"  style="display:none">▶ Start</button>
-    <button class="mgr-btn"         id="mgr-reveal" onclick="managerReveal()" style="display:none">Reveal</button>
-    <button class="mgr-btn"         id="mgr-next"   onclick="managerNext()"   style="display:none">Next →</button>
-    <button class="mgr-btn"         id="mgr-skip"   onclick="managerSkip()"   style="display:none">Skip</button>
-    <button class="mgr-btn"    id="mgr-endgame"       onclick="managerEndGame()" style="display:none">End Game</button>
-    <button class="mgr-btn"                         onclick="managerSwitchGame()">Switch Game</button>
-    <button class="mgr-btn danger"                  onclick="managerEndSession()">End Session</button>
+    <button class="mgr-btn primary" id="mgr-start"      onclick="managerStart()"       style="display:none">▶ Start</button>
+    <button class="mgr-btn"         id="mgr-reveal"     onclick="managerReveal()"      style="display:none">Reveal</button>
+    <button class="mgr-btn"         id="mgr-next"       onclick="managerNext()"        style="display:none">Next →</button>
+    <button class="mgr-btn"         id="mgr-skip"       onclick="managerSkip()"        style="display:none">Skip</button>
+    <button class="mgr-btn"         id="mgr-endgame"    onclick="managerEndGame()"     style="display:none">End Game</button>
+    <button class="mgr-btn"         id="mgr-switch"     onclick="managerSwitchGame()"  style="display:none">Switch Game</button>
+    <button class="mgr-btn danger"  id="mgr-endsession" onclick="managerEndSession()"  style="display:none">End Session</button>
+  </div>
+
+  <!-- W8c-3: Player bar singleton. Mirrors #manager-bar's app-level
+       singleton pattern. Whole-bar visibility toggled by
+       applyPlayerBarVisibility() per active screen. Per-button
+       visibility per role + manifest via applyGameActionsVisibility. -->
+  <div id="player-bar">
+    <div class="actions-left">
+      <button class="game-action-btn" id="pb-pause-btn" onclick="onPauseTap()"        style="display:none;">⏸ Pause</button>
+      <button class="game-action-btn" id="pb-leave-btn" onclick="onLeaveTap()"        style="display:none;">Leave</button>
+    </div>
+    <div class="actions-right">
+      <button class="game-action-btn" id="pb-cam-btn"   onclick="toggleGameCamera()"  style="display:none;">📷 Cam</button>
+      <button class="game-action-btn" id="pb-addtv-btn" onclick="openAddTvModal()">📺 Add TV</button>
+    </div>
   </div>
 
   <div id="screen-wrap">
@@ -600,10 +617,9 @@
         <div class="player-list" id="tv-displays-list"></div>
       </div>
 
-      <!-- Add TV display — all roles. Opens QR+URL modal. -->
-      <div style="margin-top:12px;">
-        <button class="invite-btn" onclick="openAddTvModal()" style="width:100%;padding:11px 10px;">📺 Add TV display</button>
-      </div>
+      <!-- W8c-3: bottom-of-game-room Add TV button removed.
+           Player bar singleton (#player-bar) provides Add TV in the
+           consistent upper-right slot on screen-game-room post-W8c-3. -->
 
       <!-- Waiting message (non-manager). Two alternates: default ("waiting for
            manager") and mid-game audience ("game in progress — you're watching
@@ -624,7 +640,7 @@
            start immediately; gated-over-capacity enters selection mode
            (swaps in #selection-mode-actions below). -->
       <div id="room-start-section" style="display:none;padding:20px 0 32px;">
-        <button class="action-btn" onclick="onManagerStartClick()">▶ Start New Game</button>
+        <button class="action-btn" onclick="onManagerStartClick()">▶ Setup Game</button>
         <div style="margin-top:6px;text-align:center;font-size:var(--text-xs);color:var(--color-text-faint);">Starts for all players in the lobby</div>
       </div>
       <!-- W6: selection-mode action pair. Shown in place of
@@ -639,20 +655,10 @@
 
     <!-- LAST CARD GAME -->
     <div id="screen-lastcard" class="screen">
-      <!-- W8 § 7: per-game action row. Pause + Leave left-anchored;
-           Cam + Add TV right-anchored. Visibility wired by
-           applyGameActionsVisibility() per role + GAME_MANIFEST. -->
-      <div class="game-actions-bar" id="lc-actions-bar">
-        <div class="actions-left">
-          <button class="game-action-btn" id="lc-pause-btn"   onclick="onPauseTap()"     style="display:none;">⏸ Pause</button>
-          <button class="game-action-btn" id="lc-leave-btn"   onclick="onLeaveTap()"     style="display:none;">Leave</button>
-          <button class="game-action-btn" id="lc-endgame-btn" onclick="managerEndGame()" style="display:none;">End Game</button>
-        </div>
-        <div class="actions-right">
-          <button class="game-action-btn" id="lc-cam-btn"   onclick="toggleGameCamera()" style="display:none;">📷 Cam</button>
-          <button class="game-action-btn" id="lc-addtv-btn" onclick="openAddTvModal()">📺 Add TV</button>
-        </div>
-      </div>
+      <!-- W8c-3: per-game action row retired. Player bar singleton
+           (#player-bar) at app level provides Pause/Leave/Cam/Add TV
+           on screen-lastcard. End Game lives in the manager bar
+           singleton (#manager-bar). -->
 
       <!-- W8c-1: #lc-top-strip restructured as two-row layout.
            Row 1 (.lc-status-row): turn label + draw-pending indicator
@@ -720,18 +726,10 @@
 
     <!-- TRIVIA -->
     <div id="screen-trivia" class="screen">
-      <!-- W8 § 7: per-game action row. Trivia has no Pause (manifest:
-           pause_not_applicable); Leave is non-manager only. -->
-      <div class="game-actions-bar" id="trivia-actions-bar">
-        <div class="actions-left">
-          <button class="game-action-btn" id="trivia-leave-btn"   onclick="onLeaveTap()"     style="display:none;">Leave</button>
-          <button class="game-action-btn" id="trivia-endgame-btn" onclick="managerEndGame()" style="display:none;">End Game</button>
-        </div>
-        <div class="actions-right">
-          <button class="game-action-btn" id="trivia-cam-btn"   onclick="toggleGameCamera()" style="display:none;">📷 Cam</button>
-          <button class="game-action-btn" id="trivia-addtv-btn" onclick="openAddTvModal()">📺 Add TV</button>
-        </div>
-      </div>
+      <!-- W8c-3: per-game action row retired. Player bar singleton
+           (#player-bar) covers screen-trivia. Trivia is
+           pause_not_applicable per GAME_MANIFEST so the Pause button
+           stays hidden via applyGameActionsVisibility. -->
       <!-- W8c-1: Trivia status strip. Player count chip; hidden
            during setup, shown when phase fires (question/reveal). -->
       <div id="trivia-status-strip">
@@ -761,19 +759,9 @@
 
     <!-- EUCHRE -->
     <div id="screen-euchre" class="screen" style="flex-direction:column;padding:0;overflow:hidden;">
-      <!-- W8 § 7: per-game action row. Pause + Leave left-anchored;
-           Cam + Add TV right-anchored. Same shape as Last Card. -->
-      <div class="game-actions-bar" id="eu-actions-bar">
-        <div class="actions-left">
-          <button class="game-action-btn" id="eu-pause-btn"   onclick="onPauseTap()"     style="display:none;">⏸ Pause</button>
-          <button class="game-action-btn" id="eu-leave-btn"   onclick="onLeaveTap()"     style="display:none;">Leave</button>
-          <button class="game-action-btn" id="eu-endgame-btn" onclick="managerEndGame()" style="display:none;">End Game</button>
-        </div>
-        <div class="actions-right">
-          <button class="game-action-btn" id="eu-cam-btn"   onclick="toggleGameCamera()" style="display:none;">📷 Cam</button>
-          <button class="game-action-btn" id="eu-addtv-btn" onclick="openAddTvModal()">📺 Add TV</button>
-        </div>
-      </div>
+      <!-- W8c-3: per-game action row retired. Player bar singleton
+           (#player-bar) covers screen-euchre. End Game lives in the
+           manager bar singleton. -->
       <!-- Turn / player count bar — Euchre's dealer/trump info container. -->
       <div id="eu-turn-bar" style="padding:6px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--color-border-dim);flex-shrink:0;gap:8px;">
         <div class="lc-turn-label" id="eu-turn-label" style="flex:1;">—</div>
@@ -929,7 +917,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.127</div>
+<div class="ver">v2.128</div>
 
 <script>
 'use strict';
@@ -1596,10 +1584,9 @@ function handleMessage(uid, data) {
     if (currentGame==='lastcard') {
       if (activeScreen !== 'screen-lastcard') startLastCard();
       else {
-        if (currentMyRow?.control_role === 'manager') {
-          const eg = document.getElementById('mgr-endgame');
-          if (eg) eg.style.display='block';
-        }
+        // W8c-3: mgr-endgame visibility owned by applyManagerBarContext
+        // (called via renderLastCard? no — directly here for mid-game state arrivals).
+        applyManagerBarContext();
         renderLastCard();
       }
     }
@@ -1784,18 +1771,20 @@ function clearCameraStateForUid(uid) {
 }
 
 // ── Screen management ─────────────────────────────────────────
+// W8c-3: every screen change refreshes both control bars. The
+// per-button hide loop that used to reset mgr-start/mgr-reveal/
+// mgr-next/mgr-skip on every goTo is retired — applyManagerBarContext
+// now owns all manager-bar per-button visibility, and the per-screen
+// activeScreen read inside it makes the reset implicit.
 function goTo(id) {
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  ['mgr-start','mgr-reveal','mgr-next','mgr-skip'].forEach(b=>{
-    document.getElementById(b).style.display='none';
-  });
+  applyManagerBarContext();
+  applyGameActionsVisibility();
 }
 
-function goToLobby()     {
+function goToLobby() {
   goTo('screen-lobby');
-  const eg = document.getElementById('mgr-endgame');
-  if (eg) eg.style.display='none';
 }
 
 function selectGame(game) {
@@ -2226,42 +2215,102 @@ function applyToggleLockState() {
 // Called from startLastCard / startTrivia / startEuchre on entry,
 // and from refreshSessionState so mid-game role changes re-evaluate
 // visibility without a screen change.
+// W8c-3: player bar visibility + per-button refresh, singleton.
+// Two visibility levels:
+//   1. Whole-bar: shown on game-room, gameover, and the three active
+//      game screens. Hidden on screen-join, screen-lobby (game picker),
+//      and screen-game-info (no session anchor yet). Toggle via the
+//      .visible class on #player-bar — mirrors #manager-bar's pattern.
+//   2. Per-button: existing W8a/c-1/c-2 rules, now applied to the four
+//      singleton buttons #pb-pause-btn / #pb-leave-btn / #pb-cam-btn /
+//      #pb-addtv-btn instead of 12 per-game copies.
+//
+// End Game is no longer in the player bar — it lives in the manager
+// bar singleton (#mgr-endgame) per W8c-3 layout invariant. Player
+// bar contains only player-as-self actions.
 function applyGameActionsVisibility() {
+  // Whole-bar visibility — only on the five screens where player
+  // actions make sense.
+  const playerBar     = document.getElementById('player-bar');
+  const activeScreen  = document.querySelector('.screen.active')?.id;
+  const playerBarShows = [
+    'screen-game-room', 'screen-lastcard', 'screen-trivia',
+    'screen-euchre',    'screen-gameover'
+  ].includes(activeScreen);
+  if (playerBar) playerBar.classList.toggle('visible', playerBarShows);
+  if (!playerBarShows) return;  // per-button state irrelevant when bar is hidden
+
+  // Per-button visibility.
   const manifest = GAME_MANIFEST[currentGame];
   if (!manifest) return;
   const isManager    = currentMyRow?.control_role === 'manager';
   const isActive     = currentMyRow?.participation_role === 'active';
   const pauseEnabled = manifest.pause_behavior !== 'pause_not_applicable';
-  const showPause   = isActive && pauseEnabled;
-  const showLeave   = !isManager;
-  // W8c-1: End Game lives in the action row alongside Pause/Leave.
-  // Mutually exclusive with Leave by construction (manager XOR non-
-  // manager). Same left-anchored slot — manager sees End Game; non-
-  // manager sees Leave.
-  // W8c-2: gameInProgress gate — hides End Game during Trivia Setup
-  // phase (and any other pre-game manager visit to an active-game
-  // screen). Without it, manager taps End Game during setup and
-  // broadcasts game-over with empty scores. Last Card / Euchre
-  // unaffected — their active-game entry sets gameInProgress=true
-  // before applyGameActionsVisibility re-evaluates visibility.
-  const showEndGame = isManager && gameInProgress;
-  const showCam     = isActive;
+  const showPause = isActive && pauseEnabled && gameInProgress;
+  const showLeave = !isManager;
+  const showCam   = isActive;
   const sx = (id, visible) => {
     const el = document.getElementById(id);
     if (el) el.style.display = visible ? 'inline-block' : 'none';
   };
-  sx('lc-pause-btn',       showPause);
-  sx('lc-leave-btn',       showLeave);
-  sx('lc-endgame-btn',     showEndGame);
-  sx('lc-cam-btn',         showCam);
-  sx('eu-pause-btn',       showPause);
-  sx('eu-leave-btn',       showLeave);
-  sx('eu-endgame-btn',     showEndGame);
-  sx('eu-cam-btn',         showCam);
-  sx('trivia-leave-btn',   showLeave);
-  sx('trivia-endgame-btn', showEndGame);
-  sx('trivia-cam-btn',     showCam);
-  // *-addtv-btn buttons stay unconditionally visible — no toggle.
+  sx('pb-pause-btn', showPause);
+  sx('pb-leave-btn', showLeave);
+  sx('pb-cam-btn',   showCam);
+  // pb-addtv-btn stays unconditionally visible — no toggle.
+}
+
+// W8c-3: manager bar per-button context. The bar itself is whole-
+// shown via applyManagerBarVisibility (gates on isManager). This
+// function selects WHICH buttons render based on active screen +
+// game state, per the locked W8c-3 invariant:
+//
+//   Game Info / Game Room / Game Over / Lobby:
+//     * MANAGER + [Switch Game] [End Session]
+//   Active Last Card / Euchre:
+//     * MANAGER + [End Game]
+//   Active Trivia:
+//     * MANAGER + [Reveal] [Next →] [Skip] [End Game]
+//
+// Switch Game + End Session HIDE during active play (interpretation a
+// of W8c-3 spec). End Game HIDES outside active play (including on
+// Game Over — which fixes the W8a/c-1 persistence bug). Reveal /
+// Next / Skip remain Trivia-active only, with Skip phase-gated to
+// 'question' (preserving applyTriviaManagerButtonVisibility's
+// behavior, now folded in here). Skip ALSO visible on active Last
+// Card per existing managerSkip dispatcher behavior.
+//
+// mgr-start is dead UI post-W8c-2 — left at display:none always.
+function applyManagerBarContext() {
+  const isManager = currentMyRow?.control_role === 'manager';
+  if (!isManager) return;  // whole bar hidden by applyManagerBarVisibility
+
+  const activeScreen   = document.querySelector('.screen.active')?.id;
+  const inActiveGame   = gameInProgress && (
+    activeScreen === 'screen-lastcard' ||
+    activeScreen === 'screen-trivia'   ||
+    activeScreen === 'screen-euchre'
+  );
+  const isLastCardActive = inActiveGame && currentGame === 'lastcard';
+  const isTriviaActive   = inActiveGame && currentGame === 'trivia';
+  const triviaPhase      = gameState?.phase;
+
+  const sx = (id, visible) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = visible ? 'block' : 'none';
+  };
+
+  // Active-only buttons.
+  sx('mgr-reveal',  isTriviaActive);
+  sx('mgr-next',    isTriviaActive);
+  sx('mgr-skip',    isLastCardActive || (isTriviaActive && triviaPhase === 'question'));
+  sx('mgr-endgame', inActiveGame);
+
+  // Non-active-only buttons (Switch Game / End Session hide during play).
+  sx('mgr-switch',     !inActiveGame);
+  sx('mgr-endsession', !inActiveGame);
+
+  // mgr-start: dead UI post-W8c-2, force hidden defensively.
+  sx('mgr-start', false);
 }
 
 // W8 § 7: Pause button stub. Real behavior lands in Commit C
@@ -3335,13 +3384,11 @@ function startLastCard() {
   document.getElementById('lc-top-strip').classList.add('visible');
   document.getElementById('lc-others-strip').classList.add('visible');
   applyGameActionsVisibility();
-  if (isManager) {
-    document.getElementById('mgr-skip').style.display='block';
-    document.getElementById('mgr-endgame').style.display='block';
-    // W8c-1: #lc-endgame-btn visibility now owned by
-    // applyGameActionsVisibility above. Old manual display='block'
-    // removed alongside the button's relocation into #lc-actions-bar.
-  }
+  // W8c-3: mgr-skip + mgr-endgame visibility now owned by
+  // applyManagerBarContext, fired via goTo() above. The manual
+  // display='block' assignments retired (block-leaked onto Game Over
+  // pre-W8c-3 because nothing reset them).
+  applyManagerBarContext();
   renderLastCard();
 }
 
@@ -4068,44 +4115,30 @@ function startTrivia(state) {
   document.getElementById('trivia-waiting').style.display='none';
   applyGameActionsVisibility();
   if (isManager) {
-    // Static manager-bar setup — button text + onclick wired once. Visibility
-    // is owned by applyTriviaManagerButtonVisibility (called below + from
-    // renderTrivia) so mgr-skip toggles per phase automatically.
+    // Static manager-bar setup — button text + onclick wired once.
+    // W8c-3: visibility owned by applyManagerBarContext, called via
+    // goTo() above and again from renderTrivia on phase changes.
     document.getElementById('mgr-reveal').textContent='Reveal';
     document.getElementById('mgr-next').textContent='Next →';
     document.getElementById('mgr-next').onclick=triviaNext;
   }
-  // 3b § 3.1: apply manager-bar visibility (mgr-reveal / mgr-next / mgr-skip)
-  // before the first render so a manager landing mid-question sees all three.
-  applyTriviaManagerButtonVisibility();
+  applyManagerBarContext();
   renderTrivia();
   if (isManager) startTriviaTimer();
   else if (currentMyRow?.control_role !== 'manager') startNonManagerTimer();
 }
 
-// 3b § 3.1: single source of truth for Trivia manager-bar button visibility.
-// Owns mgr-reveal, mgr-next, and mgr-skip. Reveal + Next are visible whenever
-// the caller is the manager (preserves today's always-on behavior). Skip is
-// additionally phase-gated to 'question' — during 'reveal' the manager uses
-// Next → to advance, not Skip. Called from startTrivia (initial setup) and
-// renderTrivia (every state-change render) so phase transitions update the
-// bar without separate callers needing to remember to flip Skip.
-function applyTriviaManagerButtonVisibility() {
-  const isManager = currentMyRow?.control_role === 'manager';
-  const phase     = gameState?.phase;
-  const reveal    = document.getElementById('mgr-reveal');
-  const next      = document.getElementById('mgr-next');
-  const skip      = document.getElementById('mgr-skip');
-  if (reveal) reveal.style.display = isManager ? 'block' : 'none';
-  if (next)   next.style.display   = isManager ? 'block' : 'none';
-  if (skip)   skip.style.display   = (isManager && phase === 'question') ? 'block' : 'none';
-}
-
+// W8c-3: applyTriviaManagerButtonVisibility retired — folded into
+// applyManagerBarContext, which owns mgr-reveal/mgr-next/mgr-skip
+// + mgr-endgame + mgr-switch/mgr-endsession visibility across all
+// screens. Trivia phase-gated Skip visibility preserved (active +
+// phase === 'question'). Skip remains dispatched by managerSkip().
 function renderTrivia() {
   if (!gameState) return;
-  // 3b § 3.1: re-apply manager-bar visibility on every render so mgr-skip
+  // W8c-3: re-apply manager-bar visibility on every render so mgr-skip
   // toggles off when phase flips to 'reveal' and back on for 'question'.
-  applyTriviaManagerButtonVisibility();
+  // applyManagerBarContext handles Skip's question-phase gate.
+  applyManagerBarContext();
   const s=gameState, q=s.questions[s.currentQuestionIdx];
   if (!q) return;
 
