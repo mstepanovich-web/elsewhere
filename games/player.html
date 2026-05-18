@@ -240,12 +240,26 @@
     .score-pos { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-faint); min-width: 28px; }
     .score-name { flex: 1; font-size: var(--text-sm); color: var(--color-text-dim); }
     .score-pts { font-family: var(--font-mono); font-size: var(--text-md); color: var(--color-gold); font-weight: 500; }
-    /* W5: per-row Play Again UI on screen-gameover. Self gets an
-       interactive checkbox; others get a read-only indicator. */
+    /* W5/W6: score-screen Play Again affordances. The W5 inline per-row
+       toggle/indicator classes (.play-again-toggle, .play-again-indicator)
+       are retained for any legacy callers but no longer rendered by
+       showGameOver under W6 — the prominent below-list affordance
+       (.mgr-checkbox-row reused for non-manager; .action-btn for manager)
+       supersedes them. */
     .play-again-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--color-gold); }
     .play-again-toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--color-gold); cursor: pointer; }
     .play-again-indicator { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-faint); }
     .play-again-btns { display: flex; gap: 10px; width: 100%; max-width: 300px; }
+
+    /* W6: selection-mode tap-to-toggle for Playing-section rows on screen-
+       game-room. Manager-only, active during the over-capacity Start flow.
+       Unselected rows dim to 0.5 opacity; the checkbox visual reflects
+       _selectedUserIds membership. The whole row is the tap target — the
+       checkbox is non-interactive (pointer-events:none) so clicks bubble
+       up to the row's onclick handler. */
+    .player-row.selectable { cursor: pointer; transition: opacity 0.15s; }
+    .player-row.selectable.unselected { opacity: 0.5; }
+    .p-select-checkbox { width: 16px; height: 16px; accent-color: var(--color-gold); pointer-events: none; flex-shrink: 0; }
 
     /* ── LATE JOINER ── */
     #screen-watching { align-items: center; justify-content: center; gap: 16px; padding: 40px 24px; text-align: center; }
@@ -579,10 +593,22 @@
         </div>
       </div>
 
-      <!-- Manager: start button -->
+      <!-- Manager: start button. W6 wraps managerStart() in
+           onManagerStartClick() to branch on admission_mode + Playing
+           count vs capacity. Open games (or gated-at-or-under-capacity)
+           start immediately; gated-over-capacity enters selection mode
+           (swaps in #selection-mode-actions below). -->
       <div id="room-start-section" style="display:none;padding:20px 0 32px;">
-        <button class="action-btn" onclick="managerStart()">▶ Start New Game</button>
+        <button class="action-btn" onclick="onManagerStartClick()">▶ Start New Game</button>
         <div style="margin-top:6px;text-align:center;font-size:var(--text-xs);color:var(--color-text-faint);">Starts for all players in the lobby</div>
+      </div>
+      <!-- W6: selection-mode action pair. Shown in place of
+           #room-start-section when the manager has entered selection
+           mode (gated game over capacity). Reset on Cancel, Start
+           success, or re-entry to game-room via goToGameRoom. -->
+      <div id="selection-mode-actions" style="display:none;padding:20px 0 32px;flex-direction:column;gap:10px;">
+        <button class="action-btn" onclick="confirmSelectionMode()">▶ Start (<span id="selection-count">0</span> players)</button>
+        <button class="action-btn ghost" onclick="cancelSelectionMode()">Cancel</button>
       </div>
     </div>
 
@@ -766,10 +792,25 @@
         <div style="font-size:var(--text-sm);color:var(--color-text-dim);margin-bottom:14px;">Ask everyone to play again?</div>
         <button class="action-btn" onclick="managerAskPlayAgain()">Ask Play Again →</button>
       </div>
-      <!-- Manager play again options -->
-      <div id="play-again-sameteam" style="display:none;flex-direction:column;gap:8px;width:100%;max-width:300px;">
-        <button class="action-btn" onclick="showPlayAgainSameTeam()">▶ Play Again — Same Players</button>
-        <button class="action-btn ghost" onclick="showPlayAgainNewPlayers()">New Game — New Players</button>
+      <!-- W6: Manager Play Again button (single, replaces legacy two-button
+           Same Players / New Players pair). Routes to screen-game-room
+           where the W6 Start button handles capacity/selection branching. -->
+      <div id="play-again-sameteam" style="display:none;width:100%;max-width:300px;">
+        <button class="action-btn" onclick="managerPlayAgain()">Play Again</button>
+      </div>
+
+      <!-- W6: Non-manager prominent Play Again checkbox. Pre-checked at
+           score-screen render time (unchecked iff currently 'audience').
+           togglePlayAgain handler unchanged from W5 — id preserved so the
+           revert path on RPC error still works. -->
+      <div id="play-again-self" style="display:none;width:100%;max-width:300px;">
+        <label class="mgr-checkbox-row" style="cursor:pointer;">
+          <input type="checkbox" id="play-again-checkbox-self" checked onchange="togglePlayAgain(this.checked)">
+          <div>
+            <div style="font-size:var(--text-sm);color:var(--color-text);">Play Again</div>
+            <div style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:2px;">Uncheck to skip the next round</div>
+          </div>
+        </label>
       </div>
 
       <!-- Players see yes/no -->
@@ -825,7 +866,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.120</div>
+<div class="ver">v2.121</div>
 
 <script>
 'use strict';
@@ -922,6 +963,14 @@ let invitedNames=[];   // names of people invited but not yet joined
 const pendingRemovals = new Map();
 let gameInProgress=false;
 let playAgainResponses={};
+
+// W6 § 10: manager selection-mode state for screen-game-room. Set
+// only when the manager taps Start on a gated game with Playing count
+// > capacity. Reset on Cancel, Start success, or re-entry to game-room
+// via goToGameRoom. renderRoster reads these to decorate Playing rows
+// with a tap-to-toggle affordance for the manager only.
+let _selectionMode    = false;
+let _selectedUserIds  = new Set();
 
 // 3a.1: Session 5 module state. Mirrors karaoke/singer.html (lines 642-650).
 // Source of truth for session-level identity (who's in, what role each plays).
@@ -1753,6 +1802,13 @@ function goToGameRoom() {
   document.getElementById('room-participant-section').style.display=showParticipantToggle?'block':'none';
   document.getElementById('room-waiting-msg').style.display=isManager?'none':'block';
   document.getElementById('room-start-section').style.display=isManager?'block':'none';
+  // W6: clear any leftover selection-mode state on (re-)entry. The
+  // selection-mode-actions block always starts hidden; selection state
+  // is reset so a fresh Start tap re-evaluates capacity from scratch.
+  _selectionMode   = false;
+  _selectedUserIds = new Set();
+  const selActions = document.getElementById('selection-mode-actions');
+  if (selActions) selActions.style.display = 'none';
   // 3b § 4.1: swap waiting-msg copy when a non-manager is audience mid-game.
   // The default ("waiting for manager to start") is wrong for someone who has
   // chosen to watch an in-progress round.
@@ -2396,7 +2452,14 @@ function renderRoster() {
     const cam         = uid ? cameraState[uid] : null;
     const hasCamera   = !!cam?.hasCamera;
     const userIdEnc   = encodeURIComponent(p.user_id);
-    const removeBtn   = (iAmManager && !isMe)
+    // W6 selection mode: Playing-section rows become tap-to-toggle
+    // affordances for the manager. Watching rows render unchanged.
+    const inSelectionMode = _selectionMode && iAmManager
+                          && (sectionRole === 'active' || sectionRole === 'queued');
+    const isSelected      = inSelectionMode && _selectedUserIds.has(p.user_id);
+    // Hide Remove buttons while selecting — keeps the row tap target
+    // unambiguous (and Remove is the wrong action mid-selection anyway).
+    const removeBtn   = (iAmManager && !isMe && !inSelectionMode)
       ? `<button class="p-remove-btn" onclick="handleRemovePlayer('${userIdEnc}')" title="Remove from session" style="margin-left:auto;background:transparent;border:1px solid var(--color-border-dim);color:var(--color-text-faint);font-size:11px;padding:2px 8px;border-radius:var(--radius-sm);cursor:pointer;">Remove</button>`
       : '';
     // sectionRole drives visual treatment:
@@ -2406,12 +2469,18 @@ function renderRoster() {
     const dotClass = (sectionRole === 'audience' || sectionRole === 'queued')
       ? 'dot-dim'
       : (isMe ? 'dot-gold' : 'dot-green');
-    const rowClass = `player-row ${isMe ? 'me' : ''} ${sectionRole === 'audience' ? 'audience' : ''} ${sectionRole === 'queued' ? 'waiting' : ''}`.trim();
+    const selectClass  = inSelectionMode ? (isSelected ? 'selectable' : 'selectable unselected') : '';
+    const rowClass     = `player-row ${isMe ? 'me' : ''} ${sectionRole === 'audience' ? 'audience' : ''} ${sectionRole === 'queued' ? 'waiting' : ''} ${selectClass}`.replace(/\s+/g, ' ').trim();
+    const rowOnclick   = inSelectionMode ? ` onclick="togglePlayingRowSelection('${userIdEnc}')"` : '';
+    const selectBox    = inSelectionMode
+      ? `<input type="checkbox" class="p-select-checkbox" ${isSelected ? 'checked' : ''} tabindex="-1">`
+      : '';
     const waitingLabel = sectionRole === 'queued'
       ? `<div class="p-waiting-label">Waiting</div>`
       : '';
     return `
-    <div class="${rowClass}">
+    <div class="${rowClass}"${rowOnclick}>
+      ${selectBox}
       <div class="p-dot ${dotClass}"></div>
       <div class="p-name ${isMe ? 'me' : ''}">${p.display_name}</div>
       ${waitingLabel}
@@ -2569,6 +2638,185 @@ function showToast(msg) {
 }
 
 // ── Manager controls ──────────────────────────────────────────
+//
+// W6 § 10: Start-button wrapper. Branches on admission_mode + Playing
+// count vs capacity:
+//   • admission_mode !== 'gated' (open / NULL) → start immediately.
+//   • admission_mode === 'gated' AND Playing count ≤ capacity →
+//     ensure all Playing-section users are 'active' (queued → active
+//     promotion), then start. RPC capacity check (errcode 55000) is
+//     defensively safe: playing.length ≤ capacity guarantees the
+//     active-side fits.
+//   • admission_mode === 'gated' AND Playing count > capacity →
+//     enter selection mode. Manager picks which Playing-section users
+//     play this round; unchecked Playing users flip to 'queued'.
+//
+// Approach B per § 10: managerStart() / managerStartLastCard /
+// managerStartTrivia / managerStartEuchre signatures untouched. They
+// still read currentParticipants filtered to 'active'. The role flips
+// happen BEFORE managerStart() runs, so by the time the per-game
+// handler reads currentParticipants, the active set already matches
+// the manager's selection.
+async function onManagerStartClick() {
+  const admissionMode = currentSession?.admission_mode;
+  const playing = currentParticipants.filter(p =>
+    !p.left_at && (p.participation_role === 'active' || p.participation_role === 'queued')
+  );
+  // Capacity is the manager's live +/- limit, not GAME_LIMITS.default.
+  // For games where the manager can raise the lobby limit (Last Card
+  // default=6 / max=8), their lobby choice is honored. For Euchre
+  // (min===max===4) playerLimit is effectively locked at 4 by changeLimit's
+  // Math.max/min clamp, so reading it here is equivalent to reading .max.
+  const capacity   = playerLimit;
+  const minPlayers = GAME_LIMITS[currentGame]?.min || 2;
+  const gameName   = GAME_INFO[currentGame]?.title || currentGame;
+
+  // Per-game minimum floor. Applies to BOTH open and gated games — no
+  // mode should start under-populated. Refuses to start; no selection
+  // mode entry. Manager stays on game-room with a clear toast.
+  if (playing.length < minPlayers) {
+    showToast(gameName + ' needs at least ' + minPlayers + ' players');
+    return;
+  }
+
+  // Open admission (or unknown) → start immediately. No role flips needed.
+  if (admissionMode !== 'gated') {
+    return managerStart();
+  }
+
+  // Gated game, Playing fits within capacity → promote any queued to
+  // active so the per-game start handler sees the right set, then start.
+  if (playing.length <= capacity) {
+    await ensureAllPlayingActive(playing);
+    return managerStart();
+  }
+
+  // Gated game over capacity → enter selection mode. Pre-select first
+  // N rows by Playing-section render order (already sorted by
+  // renderRoster: active by joined_at then queued by wanting_since).
+  enterSelectionMode(playing, capacity);
+}
+
+// W6: pre-Start helper for gated games at-or-under capacity. Promotes
+// any queued users in the Playing section to 'active' so the per-game
+// start handler (which filters currentParticipants by 'active') sees
+// everyone the manager intends to start with. Failures are logged but
+// not thrown — Start proceeds with whoever flipped successfully.
+async function ensureAllPlayingActive(playing) {
+  const queued = playing.filter(p => p.participation_role === 'queued');
+  if (queued.length === 0) return;
+  for (const p of queued) {
+    const { error } = await window.sb.rpc('rpc_session_update_participant', {
+      p_session_id:         currentSession.id,
+      p_user_id:            p.user_id,
+      p_participation_role: 'active',
+    });
+    if (error) {
+      log('ensureAllPlayingActive: failed to flip ' + p.display_name +
+          ' → active: ' + error.message + ' (code=' + (error.code || 'none') + ')');
+    }
+  }
+  await refreshSessionState();
+}
+
+// W6: enter selection mode. Pre-select first N Playing-section users
+// (already in correct order from renderRoster sort). Swap the Start
+// New Game block for the selection-mode action pair. renderRoster
+// reads _selectionMode to apply tap-to-toggle affordance on Playing
+// rows for the manager only.
+function enterSelectionMode(playing, capacity) {
+  _selectionMode    = true;
+  _selectedUserIds  = new Set(playing.slice(0, capacity).map(p => p.user_id));
+  document.getElementById('room-start-section').style.display     = 'none';
+  document.getElementById('selection-mode-actions').style.display = 'flex';
+  document.getElementById('selection-count').textContent          = _selectedUserIds.size;
+  renderRoster();
+}
+
+// W6: cancel selection. No role changes; just exit the mode and
+// restore the original Start button.
+function cancelSelectionMode() {
+  _selectionMode   = false;
+  _selectedUserIds = new Set();
+  document.getElementById('room-start-section').style.display     = 'block';
+  document.getElementById('selection-mode-actions').style.display = 'none';
+  renderRoster();
+}
+
+// W6: row tap handler for selection-mode. Toggles membership in
+// _selectedUserIds. Hard capacity guard — adding a row that would
+// push size above capacity is rejected with a toast (no auto-unselect).
+function togglePlayingRowSelection(userIdEncoded) {
+  if (!_selectionMode) return;
+  const userId   = decodeURIComponent(userIdEncoded);
+  // Capacity matches onManagerStartClick — manager's live +/- limit.
+  const capacity = playerLimit;
+  const gameName = GAME_INFO[currentGame]?.title || currentGame;
+  if (_selectedUserIds.has(userId)) {
+    _selectedUserIds.delete(userId);
+  } else {
+    if (_selectedUserIds.size >= capacity) {
+      showToast(gameName + ' supports ' + capacity + ' players max. Uncheck someone first.');
+      return;
+    }
+    _selectedUserIds.add(userId);
+  }
+  document.getElementById('selection-count').textContent = _selectedUserIds.size;
+  renderRoster();
+}
+
+// W6: confirm selection. For each Playing-section user:
+//   • In _selectedUserIds but NOT currently 'active' → flip to 'active'.
+//   • NOT in _selectedUserIds but NOT currently 'queued' → flip to 'queued'.
+// Apply flips sequentially. Halt on first error and remain in selection
+// mode so the manager can retry. On success, exit selection mode and
+// hand off to managerStart() which reads currentParticipants filtered
+// to 'active' as today.
+async function confirmSelectionMode() {
+  if (!_selectionMode) return;
+  // Per-game minimum check. For Euchre (min===max===4) the capacity
+  // ceiling enforced in togglePlayingRowSelection already prevents
+  // > 4 selections; this < min check enforces the floor (exactly 4
+  // required). For Last Card (min=2) this just ensures ≥ 2 selected.
+  const minPlayers = GAME_LIMITS[currentGame]?.min || 2;
+  const gameName   = GAME_INFO[currentGame]?.title || currentGame;
+  if (_selectedUserIds.size < minPlayers) {
+    showToast(gameName + ' needs ' + minPlayers + ' players selected');
+    return;
+  }
+  const playing = currentParticipants.filter(p =>
+    !p.left_at && (p.participation_role === 'active' || p.participation_role === 'queued')
+  );
+  const flips = [];
+  for (const p of playing) {
+    const wantActive = _selectedUserIds.has(p.user_id);
+    if (wantActive && p.participation_role !== 'active') {
+      flips.push({ user_id: p.user_id, role: 'active',  name: p.display_name });
+    } else if (!wantActive && p.participation_role !== 'queued') {
+      flips.push({ user_id: p.user_id, role: 'queued',  name: p.display_name });
+    }
+  }
+  for (const f of flips) {
+    const { error } = await window.sb.rpc('rpc_session_update_participant', {
+      p_session_id:         currentSession.id,
+      p_user_id:            f.user_id,
+      p_participation_role: f.role,
+    });
+    if (error) {
+      log('confirmSelectionMode: failed to flip ' + f.name + ' → ' + f.role +
+          ': ' + error.message + ' (code=' + (error.code || 'none') + ')');
+      showToast("Couldn't update " + f.name + ' — try again');
+      return;  // stay in selection mode
+    }
+  }
+  await refreshSessionState();
+  _selectionMode   = false;
+  _selectedUserIds = new Set();
+  document.getElementById('room-start-section').style.display     = 'block';
+  document.getElementById('selection-mode-actions').style.display = 'none';
+  managerStart();
+}
+
 function managerStart() {
   if (currentGame==='lastcard') managerStartLastCard();
   if (currentGame==='trivia')   managerStartTrivia();
@@ -3078,23 +3326,25 @@ function reshuffleDeck(s){const t=s.discardPile.pop();s.drawPile=shuffle(s.disca
 function cardPts(c){if(['J','Q','K','A','10'].includes(c.value))return 10;if(c.value.startsWith('W'))return 20;return parseInt(c.value)||0;}
 
 // ── GAME OVER ─────────────────────────────────────────────────
-// W5 § 10: score screen renders each player row with a per-row Play
-// Again UI. Self gets an interactive checkbox; other players get a
-// read-only indicator of their current participation state. The
-// legacy ask/respond/results flow (play-again-manager,
-// play-again-player, play-again-results) is hidden — the per-row
-// checkbox + immediate role flip supersede it. play-again-sameteam
-// (Start New Game button, manager-only) is preserved as the start
-// path; showPlayAgainSameTeam reads currentParticipants and includes
-// everyone whose participation_role is 'active' (= every checked-box
-// user under W5).
+// W6 § 10: score screen renders a clean ranked scores list with a
+// single Play Again affordance BELOW the list. Manager sees an orange
+// action button (managerPlayAgain → navigates to game-room). Non-
+// manager sees a prominent pre-checked checkbox (togglePlayAgain →
+// flips role via the W5 handler). The W5 per-row inline checkbox /
+// indicator is gone — replaced by these prominent below-list controls.
 //
-// Default checkbox state: participation_role !== 'audience'. Treats
-// 'active' and 'queued' both as "wants to play". Note: queued users
-// at score-screen time stay queued unless they re-toggle; under W5
-// they would be excluded from showPlayAgainSameTeam's active filter.
-// Acceptable for v1 (W6 manager-mediated selection handles this); the
-// edge case is documented but not normalized here.
+// Legacy ask/respond/results blocks (play-again-manager,
+// play-again-player, play-again-results) stay hidden — dead but not
+// deleted, full deletion deferred to W10 cleanup. Likewise
+// showPlayAgainSameTeam / showPlayAgainNewPlayers /
+// managerStartFromGameOver / managerAskPlayAgain / respondPlayAgain /
+// renderPlayAgainResults are dead-but-retained.
+//
+// Default non-manager checkbox state: participation_role !== 'audience'.
+// Treats 'active' and 'queued' both as "wants to play". Queued users at
+// score-screen time stay queued unless they re-toggle (the manager's
+// Play Again button leads to game-room where the W6 Start flow handles
+// gated capacity selection).
 function showGameOver(scores) {
   const isManager = currentMyRow?.control_role === 'manager';
   goTo('screen-gameover');
@@ -3104,31 +3354,34 @@ function showGameOver(scores) {
   document.getElementById('gameover-sub').textContent='Final Scores';
   document.getElementById('scores-list').innerHTML=sorted.map(([n,s],i)=>{
     const isMe = n === myName;
-    const p = currentParticipants.find(pp => pp.display_name === n);
-    const initialChecked = !!(p && p.participation_role !== 'audience');
-    const playAgainEl = isMe
-      ? `<label class="play-again-toggle">
-           <input type="checkbox" id="play-again-checkbox-self"
-                  ${initialChecked ? 'checked' : ''}
-                  onchange="togglePlayAgain(this.checked)">
-           <span>Play Again</span>
-         </label>`
-      : `<div class="play-again-indicator">${initialChecked ? '✓ Playing again' : 'Watching'}</div>`;
     return `
     <div class="score-row ${isMe?'p-name me':''}">
       <div class="score-pos">${medals[i]||i+1}</div>
       <div class="score-name">${n}</div>
       <div class="score-pts">${s} pts</div>
-      ${playAgainEl}
     </div>`;
   }).join('');
-  // Hide legacy ask/respond/results blocks (superseded by per-row UI).
+  // Hide legacy ask/respond/results blocks (W5 — still superseded).
   document.getElementById('play-again-manager').style.display='none';
   document.getElementById('play-again-player').style.display='none';
   document.getElementById('play-again-results').style.display='none';
-  // Show the manager's Start New Game block (play-again-sameteam).
-  document.getElementById('play-again-sameteam').style.display=isManager?'flex':'none';
+  // W6: manager sees orange button; non-manager sees prominent checkbox.
+  document.getElementById('play-again-sameteam').style.display=isManager?'block':'none';
+  document.getElementById('play-again-self').style.display=isManager?'none':'block';
+  // Sync the non-manager prominent checkbox to authoritative role state
+  // (active OR queued → checked, audience → unchecked).
+  const cb = document.getElementById('play-again-checkbox-self');
+  if (cb) cb.checked = currentMyRow?.participation_role !== 'audience';
   playAgainResponses={};
+}
+
+// W6: manager's score-screen Play Again button handler. No role
+// changes here — manager's role stays as-is. Just navigates to
+// screen-game-room; the W6 Start button (onManagerStartClick)
+// handles the capacity-vs-Playing branching from there.
+function managerPlayAgain() {
+  gameInProgress=false; gameState=null;
+  goToGameRoom();
 }
 
 function managerAskPlayAgain() {
