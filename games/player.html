@@ -24,7 +24,7 @@
     #manager-bar { display: none; flex-direction: row; gap: 8px; padding: 8px 14px; background: var(--color-gold-ghost); border-bottom: 1px solid var(--color-border-dim); flex-shrink: 0; flex-wrap: wrap; align-items: center; }
     #manager-bar.visible { display: flex; }
     .mgr-label { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-gold); font-family: var(--font-mono); }
-    .mgr-btn { padding: 6px 14px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; cursor: pointer; transition: all var(--transition-fast); }
+    .mgr-btn { padding: 6px 14px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-faint); color: var(--color-gold-bright); font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; cursor: pointer; transition: all var(--transition-fast); }
     .mgr-btn:active { background: var(--color-gold-faint); }
     .mgr-btn.primary { background: var(--color-gold-dim); color: var(--color-bg); border-color: var(--color-gold); font-weight: 600; }
     .mgr-btn.danger  { border-color: rgba(232,25,44,.3); color: var(--color-red); }
@@ -150,7 +150,7 @@
     #player-bar.visible { display: flex; }
     #player-bar .actions-left  { display: flex; gap: 6px; }
     #player-bar .actions-right { display: flex; gap: 6px; margin-left: auto; }
-    .game-action-btn { padding: 4px 10px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-ghost); color: var(--color-gold-bright); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; flex-shrink: 0; font-family: var(--font-ui); }
+    .game-action-btn { padding: 4px 10px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); background: var(--color-gold-faint); color: var(--color-gold-bright); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; flex-shrink: 0; font-family: var(--font-ui); }
 
     /* ── In-game player count chip (W8c-1) ───────────────────────
        Shared visual across all three game screens. Renders inside
@@ -190,7 +190,7 @@
     .lc-pile-val { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-dim); }
     .lc-turn-label { font-size: var(--text-xs); letter-spacing: var(--tracking-wider); text-transform: uppercase; text-align: right; }
     .lc-turn-label.mine { color: var(--color-gold); }
-    .lc-turn-label.other { color: var(--color-text-faint); }
+    .lc-turn-label.other { color: var(--color-text-dim); }
 
     /* Other players strip */
     #lc-others-strip { display: none; flex-direction: row; gap: 8px; padding: 8px 14px; overflow-x: auto; flex-shrink: 0; border-bottom: 1px solid var(--color-border-dim); -webkit-overflow-scrolling: touch; }
@@ -539,16 +539,12 @@
       </div>
       <div class="page-sub" id="room-code-sub">Room ——</div>
 
-      <!-- Camera opt-in (all players) -->
-      <div class="section-label">Camera</div>
-      <div class="camera-opt" onclick="toggleCamera()">
-        <video class="camera-preview-small" id="camera-preview-small" autoplay muted playsinline></video>
-        <div class="camera-opt-text">
-          <div class="camera-opt-label">Share your camera</div>
-          <div class="camera-opt-sub">Others see you during the game</div>
-        </div>
-        <div class="camera-toggle" id="camera-toggle"></div>
-      </div>
+      <!-- W8c-3-fix: Game Room camera Settings widget removed.
+           Cam now lives in the player bar singleton (#pb-cam-btn,
+           upper right) which renders on Game Room post-W8c-3.
+           Removes the duplicate affordance. toggleCamera() updated
+           with defensive null checks for the now-absent
+           #camera-toggle and #camera-preview-small elements. -->
 
       <!-- Manager only: I'm playing + invite -->
       <div id="room-manager-section" style="display:none;">
@@ -640,7 +636,7 @@
            start immediately; gated-over-capacity enters selection mode
            (swaps in #selection-mode-actions below). -->
       <div id="room-start-section" style="display:none;padding:20px 0 32px;">
-        <button class="action-btn" onclick="onManagerStartClick()">▶ Setup Game</button>
+        <button class="action-btn" id="room-start-btn" onclick="onManagerStartClick()">▶ Setup Game</button>
         <div style="margin-top:6px;text-align:center;font-size:var(--text-xs);color:var(--color-text-faint);">Starts for all players in the lobby</div>
       </div>
       <!-- W6: selection-mode action pair. Shown in place of
@@ -736,6 +732,7 @@
         <div class="game-count-chip" id="trivia-count-chip">— playing</div>
       </div>
       <div class="trivia-setup" id="trivia-setup" style="display:none;">
+        <div class="back-link" onclick="goToGameRoom()">← Game Room</div>
         <div class="page-title" style="font-size:28px;">Trivia Setup</div>
         <div class="join-label">Category</div>
         <div class="cat-grid" id="cat-grid"></div>
@@ -917,7 +914,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.128</div>
+<div class="ver">v2.129</div>
 
 <script>
 'use strict';
@@ -1343,27 +1340,37 @@ async function toggleGameCamera() {
 }
 
 async function toggleCamera() {
+  // W8c-3-fix: defensive null checks for #camera-toggle and
+  // #camera-preview-small — both removed from Game Room. The Cam
+  // button in the player bar (#pb-cam-btn) calls toggleGameCamera
+  // → toggleCamera. The legacy DOM elements may be absent.
   if (cameraOn) {
     if (videoTrack) { videoTrack.stop(); videoTrack.close(); videoTrack=null; }
     if (agoraClient) await agoraClient.unpublish().catch(()=>{});
     cameraOn = false;
-    document.getElementById('camera-toggle').classList.remove('on');
-    document.getElementById('camera-preview-small').classList.remove('visible');
+    const tog = document.getElementById('camera-toggle');
+    if (tog) tog.classList.remove('on');
     const smallPrev = document.getElementById('camera-preview-small');
-    smallPrev.srcObject = null;
+    if (smallPrev) {
+      smallPrev.classList.remove('visible');
+      smallPrev.srcObject = null;
+    }
     send({type:'camera-off'});
     updateLobbyCamera(myUid, false);
     log('camera off');
   } else {
     try {
       videoTrack = await AgoraRTC.createCameraVideoTrack({ facingMode:'user' });
-      // Show small preview
+      // Show small preview if the legacy element exists.
       const smallPrev = document.getElementById('camera-preview-small');
-      videoTrack.play(smallPrev);
-      smallPrev.classList.add('visible');
+      if (smallPrev) {
+        videoTrack.play(smallPrev);
+        smallPrev.classList.add('visible');
+      }
       await agoraClient.publish([videoTrack]);
       cameraOn = true;
-      document.getElementById('camera-toggle').classList.add('on');
+      const tog = document.getElementById('camera-toggle');
+      if (tog) tog.classList.add('on');
       send({type:'camera-on'});
       updateLobbyCamera(myUid, true);
       log('camera on');
@@ -1864,6 +1871,17 @@ function goToGameRoom() {
   document.getElementById('room-participant-section').style.display=showParticipantToggle?'block':'none';
   document.getElementById('room-waiting-msg').style.display=isManager?'none':'block';
   document.getElementById('room-start-section').style.display=isManager?'block':'none';
+  // W8c-3-fix: per-game Start button text. Trivia routes via setup
+  // screen (config category/difficulty before play); Last Card and
+  // Euchre go directly into the game. Wording reflects the
+  // destination: "Setup Game →" for Trivia, "Start Game →" for the
+  // others. onclick stays onManagerStartClick which handles routing.
+  const startBtn = document.getElementById('room-start-btn');
+  if (startBtn) {
+    startBtn.textContent = currentGame === 'trivia'
+      ? '▶ Setup Game →'
+      : '▶ Start Game →';
+  }
   // W6: clear any leftover selection-mode state on (re-)entry. The
   // selection-mode-actions block always starts hidden; selection state
   // is reset so a fresh Start tap re-evaluates capacity from scratch.
@@ -2302,7 +2320,10 @@ function applyManagerBarContext() {
   // Active-only buttons.
   sx('mgr-reveal',  isTriviaActive);
   sx('mgr-next',    isTriviaActive);
-  sx('mgr-skip',    isLastCardActive || (isTriviaActive && triviaPhase === 'question'));
+  // W8c-3-fix: Skip gated to Last Card only. Trivia branch retired
+  // in managerSkip (it duplicated managerNext). Skip serves stuck-
+  // current-player recovery on Last Card via lcApplyDraw.
+  sx('mgr-skip',    isLastCardActive);
   sx('mgr-endgame', inActiveGame);
 
   // Non-active-only buttons (Switch Game / End Session hide during play).
@@ -3219,18 +3240,15 @@ function managerStart() {
 function managerReveal() { if(currentGame==='trivia') triviaReveal(); }
 function managerNext()   { if(currentGame==='trivia') triviaNext();   }
 function managerSkip()   {
+  // W8c-3-fix: Trivia branch retired. Investigation surfaced that
+  // managerSkip on Trivia called triviaNext — identical to
+  // managerNext on Trivia. Two manager-bar buttons doing the same
+  // thing is bad UX. Skip now serves Last Card only (stuck-current-
+  // player recovery via lcApplyDraw — unique purpose, no duplicate
+  // affordance). applyManagerBarContext gates Skip visibility to
+  // isLastCardActive only.
   if (currentGame==='lastcard' && gameState) {
     gameState=lcApplyDraw(gameState); broadcastState(); renderLastCard();
-    return;
-  }
-  // 3b § 3.1: Skip Question — advance to the next question without revealing
-  // the answer. No scoring happens here (scoring runs only inside triviaReveal,
-  // so a skipped question is implicitly 0pts for everyone). triviaNext is safe
-  // to call from 'question' phase — it bumps currentQuestionIdx, resets phase
-  // / answers / timer, and broadcasts. Phase guard prevents accidental use
-  // during 'reveal' phase (Next → handles that transition instead).
-  if (currentGame==='trivia' && gameState?.phase === 'question') {
-    triviaNext();
     return;
   }
 }
