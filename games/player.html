@@ -743,7 +743,7 @@
         <div class="cat-grid" id="cat-grid"></div>
         <div class="join-label" style="margin-top:8px;">Difficulty</div>
         <div style="display:flex;gap:8px;" id="diff-row"></div>
-        <button class="action-btn" id="trivia-gen-btn" onclick="triviaGenerate()">Generate Questions →</button>
+        <button class="action-btn" id="trivia-gen-btn" onclick="triviaGenerate()">Start Game →</button>
         <div id="trivia-gen-status" style="font-size:var(--text-xs);color:var(--color-text-faint);text-align:center;min-height:18px;"></div>
       </div>
       <div class="trivia-game" id="trivia-game" style="display:none;">
@@ -929,7 +929,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.126</div>
+<div class="ver">v2.127</div>
 
 <script>
 'use strict';
@@ -1901,9 +1901,11 @@ function goToGameRoom() {
   if (isManager) send({type:'game-selected', game:currentGame});
   renderRoster(); renderInvited(); renderTvDisplays();
   goTo('screen-game-room');
-  if (isManager && currentGame==='trivia') setTimeout(()=>showTriviaSetup(),200);
-  // Apply manager-bar visibility (post-3a-1 the bar is gated on currentMyRow,
-  // not the legacy isManager boolean). Idempotent.
+  // W8c-2: Trivia previously auto-redirected from game-room to
+  // setup via setTimeout(showTriviaSetup, 200). Removed — manager
+  // now stays on game-room until tapping Start, which routes to
+  // showTriviaSetup via onManagerStartClick. Aligns Trivia with
+  // Last Card / Euchre flow.
   applyManagerBarVisibility();
   // Lock-on-start (§ 2.4.6) — re-evaluate when entering the room.
   applyToggleLockState();
@@ -2236,7 +2238,13 @@ function applyGameActionsVisibility() {
   // Mutually exclusive with Leave by construction (manager XOR non-
   // manager). Same left-anchored slot — manager sees End Game; non-
   // manager sees Leave.
-  const showEndGame = isManager;
+  // W8c-2: gameInProgress gate — hides End Game during Trivia Setup
+  // phase (and any other pre-game manager visit to an active-game
+  // screen). Without it, manager taps End Game during setup and
+  // broadcasts game-over with empty scores. Last Card / Euchre
+  // unaffected — their active-game entry sets gameInProgress=true
+  // before applyGameActionsVisibility re-evaluates visibility.
+  const showEndGame = isManager && gameInProgress;
   const showCam     = isActive;
   const sx = (id, visible) => {
     const el = document.getElementById(id);
@@ -3009,6 +3017,12 @@ async function onManagerStartClick() {
     showToast(gameName + ' needs at least ' + minPlayers + ' players');
     return;
   }
+
+  // W8c-2: Trivia routes to setup before starting. Manager configures
+  // category + difficulty on the Trivia Setup screen, then taps
+  // "Start Game" (= triviaGenerate, which auto-runs managerStartTrivia
+  // on success). Last Card / Euchre fall through to managerStart() below.
+  if (currentGame === 'trivia') return showTriviaSetup();
 
   // Open admission (or unknown) → start immediately. No role flips needed.
   if (admissionMode !== 'gated') {
@@ -3821,6 +3835,9 @@ function showTriviaSetup() {
   document.getElementById('trivia-setup').style.display='flex';
   document.getElementById('trivia-game').style.display='none';
   document.getElementById('trivia-waiting').style.display='none';
+  // W8c-2: re-evaluate action row visibility on setup entry so the
+  // End Game button hides (gameInProgress=false during setup).
+  applyGameActionsVisibility();
   buildCatGrid(); buildDiffRow();
 }
 
@@ -4025,8 +4042,10 @@ async function triviaGenerate() {
 
   sta.textContent = '✓ ' + qs.length + ' questions ready' + (usedPremium ? ' (premium)' : '') + '!';
   btn.disabled = false;
-  const startBtn = document.getElementById('mgr-start');
-  if (startBtn) startBtn.style.display = 'block';
+  // W8c-2: skip the #mgr-start intermediate button — questions are
+  // ready, start the game directly. managerStartTrivia self-gates on
+  // gameState.questions presence (set above), so this is safe.
+  managerStartTrivia();
 }
 
 async function managerStartTrivia() {
