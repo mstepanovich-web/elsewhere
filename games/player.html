@@ -898,7 +898,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.124</div>
+<div class="ver">v2.125</div>
 
 <script>
 'use strict';
@@ -1590,7 +1590,10 @@ function handleMessage(uid, data) {
 
   if (msg.type==='game-over') {
     gameInProgress=false;
-    showGameOver(msg.scores);
+    // W8b: pass through reason + leaver's display_name (auto-appended
+    // as msg._name by send(); see line 1399). showGameOver renders a
+    // termination subline when reason === 'user_left'.
+    showGameOver(msg.scores, msg.reason, msg._name);
   }
 
   if (msg.type==='ask-play-again') {
@@ -2214,19 +2217,99 @@ function onPauseTap() {
   showToast('Pause coming soon');
 }
 
-// W8 § 7: Leave button stub. Confirm copy branches on leave_impact
-// per ADMISSION-MODEL-V2 § 7.2 — "the game" (not "the session") so
-// the wording reflects stepping out of the round while remaining in
-// the session. Real behavior (rpc_session_leave + game-over with
-// reason='user_left' for terminates_game) lands in Commit B.
-function onLeaveTap() {
+// W8b § 7: Leave button handler. Per-game branching on leave_impact:
+//
+//   • no_impact (Trivia, Last Card) — soft leave. Flip own role to
+//     'audience' via rpc_session_set_my_participation_role and stay
+//     in the session. handleAudienceGameStateArrival routes the
+//     leaver to screen-game-room with "you're watching this round"
+//     copy. Manager's pruneAbsentPlayersFromGameState (triggered by
+//     the realtime publish below) drops the leaver from
+//     gameState.players and re-broadcasts so remaining clients keep
+//     playing without them. Leaver can toggle "I'm playing" back on
+//     for the next round via existing W4 controls.
+//
+//   • terminates_game (Euchre) — hard leave. Broadcast game-over
+//     with reason='user_left' BEFORE the RPC so all remote clients
+//     receive the termination reason and transition to gameover.
+//     Then rpc_session_leave sets left_at for a clean session exit.
+//     Leaver's own client triggers showGameOver locally (Agora
+//     doesn't echo own sends). 2s after the broadcast, leaver
+//     navigates to Elsewhere shell — matches the existing
+//     removed-by-manager timing pattern.
+//
+// Manager-leave is hidden from UI per locked W8 decisions — the
+// rpc_session_leave 42501 raise on manager-with-others-active is
+// unreachable. Future "manager-leave-with-role-transfer" is filed
+// as DEFERRED.
+async function onLeaveTap() {
   const impact = GAME_MANIFEST[currentGame]?.leave_impact || 'unknown';
   const copy = impact === 'terminates_game'
     ? 'Leave the game? This will end the game for everyone.'
     : 'Leave the game? Others will continue.';
   if (!confirm(copy)) return;
-  log('Leave confirmed (game=' + currentGame + ' leave_impact=' + impact + ')');
-  showToast('Leave coming soon');
+
+  if (!currentSession?.id || !window.sb) {
+    log('onLeaveTap: no session / no supabase — legacy-mode handleBackToElsewhere');
+    handleBackToElsewhere();
+    return;
+  }
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!user) {
+    log('onLeaveTap: not signed in — legacy-mode handleBackToElsewhere');
+    handleBackToElsewhere();
+    return;
+  }
+
+  if (impact === 'terminates_game') {
+    // Broadcast game-over BEFORE the RPC so remote clients render the
+    // termination reason. send() appends _name=myName so the receiver
+    // can pass leaverName to showGameOver without extra payload field.
+    const scores = gameState?.scores || {};
+    gameInProgress = false;
+    send({ type: 'game-over', scores, reason: 'user_left' });
+    showGameOver(scores, 'user_left', myName);
+
+    const { error } = await window.sb.rpc('rpc_session_leave', {
+      p_session_id: currentSession.id,
+    });
+    if (error) {
+      log('onLeaveTap (terminates_game) rpc_session_leave FAILED: ' +
+          error.message + ' (code=' + (error.code || 'none') + ')');
+      // UX is already past the point of return — the game-over
+      // broadcast went out. Best-effort log only; no toast.
+    }
+    if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+      try {
+        await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
+          session_id: currentSession.id,
+        }, _playerRealtimeChannel);
+      } catch (_) {}
+    }
+    setTimeout(() => handleBackToElsewhere(), 2000);
+    return;
+  }
+
+  // no_impact branch — soft leave.
+  const { error } = await window.sb.rpc('rpc_session_set_my_participation_role', {
+    p_session_id: currentSession.id,
+    p_role:       'audience',
+  });
+  if (error) {
+    log('onLeaveTap (no_impact) RPC FAILED: ' + error.message +
+        ' (code=' + (error.code || 'none') + ')');
+    showToast("Couldn't leave the game — try again");
+    return;
+  }
+  if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+    try {
+      await window.publishParticipantRoleChanged(_playerRealtimeChannelDeviceKey, {
+        session_id: currentSession.id,
+      }, _playerRealtimeChannel);
+    } catch (_) {}
+  }
+  await refreshSessionState();
+  goToGameRoom();
 }
 
 // 3a.2 § 2.5: manager soft-removes another participant. Sets target's left_at.
@@ -2273,6 +2356,94 @@ async function handleRemovePlayer(user_id_encoded) {
 
   // BUG-13: refresh own UI (self:false on broadcasts).
   await refreshSessionState();
+}
+
+// W8b § 7: manager-side reconciliation of gameState.players against
+// the authoritative active-participant list. Triggered by the
+// participant_role_changed realtime event (which fires for any role
+// change, including soft leaves under onLeaveTap's no_impact branch,
+// hard leaves via rpc_session_leave, manager removals, and ordinary
+// audience↔active toggles).
+//
+// Invariant: gameState.players should contain only names whose
+// session_participants row is currently participation_role='active'
+// and left_at IS NULL. Names violating that invariant get spliced
+// out, with per-game state cleanup and turn-index recovery.
+//
+// Manager-only — only the manager can mutate gameState and re-
+// broadcast. Non-manager calls are no-ops. Also no-ops when no game
+// is in progress (lobby state has no gameState.players to prune).
+//
+// For terminates_game games (Euchre): in practice this helper never
+// fires meaningfully because the leaver's own onLeaveTap branch
+// broadcasts game-over BEFORE the role flip lands, ending the game.
+// The defensive cleanup remains in case a future code path triggers
+// it (e.g. manager removing a player during a Euchre round).
+//
+// Edge case: if every player ends up gone (e.g. mass-leave race),
+// the helper logs + returns without broadcasting a degenerate state.
+// Manager retains End Game button for manual recovery.
+function pruneAbsentPlayersFromGameState() {
+  if (currentMyRow?.control_role !== 'manager') return;
+  if (!gameInProgress || !gameState || !gameState.players) return;
+
+  const activeNames = new Set(
+    currentParticipants
+      .filter(p => p.participation_role === 'active' && !p.left_at)
+      .map(p => p.display_name)
+  );
+
+  const leaverIndices = [];
+  gameState.players.forEach((name, idx) => {
+    if (!activeNames.has(name)) leaverIndices.push(idx);
+  });
+  if (leaverIndices.length === 0) return;
+
+  log('pruneAbsentPlayersFromGameState: pruning ' + leaverIndices.length +
+      ' player(s) from gameState.players (' +
+      leaverIndices.map(i => gameState.players[i]).join(', ') + ')');
+
+  // Snapshot for turn-index recovery — saved BEFORE splice so the
+  // old name + old index are still meaningful.
+  const oldCurrentName = gameState.players[gameState.currentPlayerIdx];
+  const oldCurrentIdx  = gameState.currentPlayerIdx;
+
+  // Per-game per-player state cleanup. Keys are name-indexed across
+  // all three games; defensive deletes are no-ops on absent keys.
+  leaverIndices.forEach(idx => {
+    const name = gameState.players[idx];
+    if (gameState.hands)    delete gameState.hands[name];
+    if (gameState.scores)   delete gameState.scores[name];
+    if (gameState.answers)  delete gameState.answers[name];
+    if (gameState.streak)   delete gameState.streak[name];
+    if (gameState.lastCard) delete gameState.lastCard[name];
+  });
+
+  // Splice in reverse-index order so earlier indices stay valid.
+  for (let i = leaverIndices.length - 1; i >= 0; i--) {
+    gameState.players.splice(leaverIndices[i], 1);
+  }
+
+  if (gameState.players.length === 0) {
+    log('pruneAbsentPlayersFromGameState: all players gone — manager must End Game');
+    return;
+  }
+
+  // Recompute currentPlayerIdx. If old current player still exists,
+  // point at their new index. Otherwise (leaver was current player),
+  // oldCurrentIdx % newLength naturally lands on the player who was
+  // immediately after — splice already shifted them into that slot.
+  const newIdx = gameState.players.indexOf(oldCurrentName);
+  if (newIdx >= 0) {
+    gameState.currentPlayerIdx = newIdx;
+  } else {
+    gameState.currentPlayerIdx = oldCurrentIdx % gameState.players.length;
+  }
+
+  broadcastState();
+  if (currentGame === 'lastcard') renderLastCard();
+  else if (currentGame === 'trivia') renderTrivia();
+  else if (currentGame === 'euchre') renderEuchre();
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -2427,6 +2598,11 @@ async function startPlayerRealtimeSub(device_key) {
         showToast("You've been removed from this session");
         setTimeout(() => handleBackToElsewhere(), 2000);
       }
+      // W8b: prune any players from gameState.players whose role just
+      // changed away from 'active' (Leave under no_impact games flips
+      // them to 'audience'; manager Remove sets left_at). Helper self-
+      // gates on manager + gameInProgress.
+      pruneAbsentPlayersFromGameState();
     });
     channel.on('broadcast', { event: 'queue_updated' }, () => refreshSessionState());
     channel.on('broadcast', { event: 'session_ended' }, () => {
@@ -3401,13 +3577,20 @@ function cardPts(c){if(['J','Q','K','A','10'].includes(c.value))return 10;if(c.v
 // score-screen time stay queued unless they re-toggle (the manager's
 // Play Again button leads to game-room where the W6 Start flow handles
 // gated capacity selection).
-function showGameOver(scores) {
+function showGameOver(scores, reason, leaverName) {
   const isManager = currentMyRow?.control_role === 'manager';
   goTo('screen-gameover');
   const sorted=Object.entries(scores||{}).sort((a,b)=>b[1]-a[1]);
   const medals=['🥇','🥈','🥉','4th','5th','6th','7th','8th'];
   document.getElementById('gameover-title').textContent='Game Over';
-  document.getElementById('gameover-sub').textContent='Final Scores';
+  // W8b § 7.2: subline reflects termination reason. user_left fires
+  // for terminates_game Leave (Euchre); shows leaver's display_name.
+  // Default ('Final Scores') for natural game-end / End Game taps /
+  // any legacy caller that omits the new params.
+  document.getElementById('gameover-sub').textContent =
+    (reason === 'user_left' && leaverName)
+      ? 'Game ended — ' + leaverName + ' left'
+      : 'Final Scores';
   document.getElementById('scores-list').innerHTML=sorted.map(([n,s],i)=>{
     const isMe = n === myName;
     return `
