@@ -925,7 +925,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.132</div>
+<div class="ver">v2.133</div>
 
 <script>
 'use strict';
@@ -1236,6 +1236,13 @@ async function doJoin() {
               );
             } catch (_) {}
           }
+          // W9-fix: BUG-13 self-refresh. Supabase Realtime doesn't echo
+          // to sender, so our own publish above never triggers the
+          // participant_role_changed receiver locally. Mirror that
+          // receiver's behavior here — refresh currentParticipants and
+          // reconcile gameState.players against the post-prune state.
+          await refreshSessionState();
+          pruneAbsentPlayersFromGameState();
         }
       } catch (e) {
         log('rpc_session_heartbeat unexpected: ' + (e?.message || e));
