@@ -1267,6 +1267,40 @@ With the camera/AR workstream for Phase 1 viral karaoke sharing.
 
 ---
 
+### Deferred: admission_model_v2 §10 W10 cleanup tasks
+
+**Deferred in:** SESSION-5-PART-3C (closing-log doc commit; W-series shipped through `a7dd71a`)
+**Deferred on:** 2026-05-19
+**Priority:** Medium — documentation / config hygiene; non-blocking
+**Area:** Games
+**Status:** Deferred
+
+#### Context
+
+`docs/ADMISSION-MODEL-V2.md` §10's literal "W10 — Cleanup" work-package defined four post-implementation tasks: (1) `index.html` `APP_MANIFEST` shrink (drop `admission_mode` + `capacity`; keep `ask_proximity` + `turn_completion` per §2.4); (2) `docs/GAMES-CONTROL-MODEL.md` §9 supersession edits; (3) `docs/SESSION-5-CLOSEOUT-PLAN.md` restructure; (4) `docs/DEFERRED.md` mark-obsolete sweep (old queued-role / admission-mode-dispatcher / late-joiner-surface entries).
+
+What shipped under the "W10" label was different work — bug fixes, UX polish, the W5 dead-code sweep, and 12 *new* DEFERRED entries. The four §10-defined cleanup tasks remain undone. (The `a7dd71a` commit message states "admission_model_v2 §10 work fully shipped"; against §10's literal W10 text that overclaims — this entry records the gap honestly.)
+
+#### What's deferred
+
+All four tasks. None are blocking — each is documentation-or-config hygiene that benefits future onboarding and reduces stale-doc risk.
+
+#### Options when picking up
+
+Sequence is flexible. The `APP_MANIFEST` shrink is the most concrete — mechanical: identify which manifest entries are dead post-`admission_model_v2` and remove them. The three doc edits are research-first: read `GAMES-CONTROL-MODEL.md` §9 and `SESSION-5-CLOSEOUT-PLAN.md` to scope what supersession means now that the W-series has shipped. The `DEFERRED.md` mark-obsolete sweep is per-entry triage.
+
+#### When to pick this up
+
+When `admission_model_v2`-era docs are next referenced for a new game integration, or as a dedicated half-session.
+
+#### Related
+
+- `docs/ADMISSION-MODEL-V2.md` §10 (W10 work-package)
+- `docs/SESSION-5-PART-3C-CLOSING-LOG.md` ("What W10 delivered" deviation note)
+- W10 cleanup commit `a7dd71a`
+
+---
+
 ## Venues integration (post-Session-5)
 
 Cluster of items surfaced during Session 5 Part 2b scope review that resolve when venues-as-cross-app-service work begins (see "Venues as cross-app service (games, wellness, future apps)" entry above for the parent refactor). All six are architectural or design-clarification items, not bugs — they capture decisions deferred from Session 5 that affect games visual parity, proximity semantics, and participant lifecycle cleanup.

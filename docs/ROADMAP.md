@@ -7,10 +7,10 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 ## Active session
 
 **Session 5 — Universal session + participants + queue model**
-- **Status:** Part 1 complete. Part 2 complete (2a-2e shipped; 2f deferred to consolidation per audience.html no-investment doctrine, closeout `1d481b4`). Part 3a shipped (3a.1 plumbing + 3a.2 manager controls). Part 3b productionization + Phase 2 shipped (v2.108 → v2.113, Edge Function + db/019, 2026-05-04). 3b proper (active/audience integration) + 3c/3d (Last Card + Euchre integration) + Parts 4-5 pending.
-- **What's left in Session 5:** See `docs/SESSION-5-CLOSEOUT-PLAN.md` for the per-day execution plan, locked decisions, and cross-session continuity guidance.
-- **Estimated remaining:** 8-12 hours across 3-4 sessions. Part 3 ~6-9 hr remaining (3b/3c/3d per `docs/GAMES-CONTROL-MODEL.md` § 4.1). Part 4 ~0-1 hr (substantially absorbed into 2c). Part 5 ~2-3 hr verification with 2+ test accounts.
-- **References:** `docs/SESSION-5-CLOSEOUT-PLAN.md`, `docs/SESSION-5-PLAN.md`, `docs/SESSION-5-PART-2-BREAKDOWN.md`, `docs/SESSION-5-PART-2-CLOSING-LOG.md`, `docs/SESSION-5-PART-3-AUDIT.md`, `docs/SESSION-5-PART-3-CLOSING-LOG.md`, `docs/SESSION-5-PART-3B-CLOSING-LOG.md`, `docs/GAMES-CONTROL-MODEL.md`
+- **Status:** Part 1 complete. Part 2 complete (2a-2e shipped; 2f deferred to consolidation per audience.html no-investment doctrine, closeout `1d481b4`). Part 3a shipped (3a.1 plumbing + 3a.2 manager controls). Part 3b productionization + Phase 2 shipped (v2.108 → v2.113, Edge Function + db/019, 2026-05-04). **Part 3c — `admission_model_v2` §10 implementation — shipped:** W1-W6 earlier, W7-W10 across 2026-05-18 → 2026-05-19 (v2.121 → v2.137, tv `v2.101`, `db/024`). The §9.6 supersession folded the old 3b-proper / 3c / 3d per-game breakdown into the W1-W10 work-packages. Part 5 verification pending.
+- **What's left in Session 5:** Part 5 verification (multi-user end-to-end testing). See `docs/SESSION-5-CLOSEOUT-PLAN.md` for the per-day execution plan, locked decisions, and cross-session continuity guidance (note: that doc predates `admission_model_v2` and is on the §10 W10 cleanup list — see DEFERRED).
+- **Estimated remaining:** Part 5 ~2-3 hr verification with 2+ test accounts.
+- **References:** `docs/SESSION-5-CLOSEOUT-PLAN.md`, `docs/SESSION-5-PLAN.md`, `docs/ADMISSION-MODEL-V2.md`, `docs/SESSION-5-PART-2-BREAKDOWN.md`, `docs/SESSION-5-PART-2-CLOSING-LOG.md`, `docs/SESSION-5-PART-3-AUDIT.md`, `docs/SESSION-5-PART-3-CLOSING-LOG.md`, `docs/SESSION-5-PART-3B-CLOSING-LOG.md`, `docs/SESSION-5-PART-3C-CLOSING-LOG.md`, `docs/GAMES-CONTROL-MODEL.md`
 
 ### Commits shipped in Session 5
 
@@ -37,7 +37,14 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 - 3a.1: session/participants plumbing — manager identity from `control_role`, agora-identity-bind protocol, γ-1 lobbyPlayers synthesis as transitional bridge (`ea89c48` at v2.100)
 - 3a.2: manager controls — End Session button (`rpc_session_end` + `publishSessionEnded`); manager-as-player toggle via `rpc_session_update_participant`; Remove Player UI (`rpc_session_remove_participant`); `lobbyPlayers` + `managerIsPlayer` + γ-1 synthesis retired; `manager-player-status` Agora message retired (`8bff27b` at v2.101)
 
-**Next up:** 3b/3c/3d — per-game admission UX (Trivia, Last Card, Euchre). Per-game state machines, queueing semantics, and late-joiner flows per `docs/GAMES-CONTROL-MODEL.md` § 3 + § 4.1. SESSION-5-PLAN.md lines 333-349's original Part 3 work breakdown is now superseded by the Control Model's sub-decomposition.
+**Part 3c — `admission_model_v2` §10 (games admission, W1-W10):** (full commit detail in `docs/SESSION-5-PART-3C-CLOSING-LOG.md`)
+- **W1-W6** — schema migration, per-game manifest + admission stamping, dispatcher refactor, game-room updates, score-screen Play Again, Manager Select Players surface. Shipped before 2026-05-18, ending `cef155c` at v2.121. No closing log for W1-W6; reconstruct from `git log` + `docs/ADMISSION-MODEL-V2.md` §10 if needed.
+- **W7** (`68e8ee9` at v2.122): retired vestigial Last Card `managerNextRound` (resolved to a deletion — the path was a never-shipped multi-hand-Last-Card leftover).
+- **W8** (`b6898ea` → `2432d86`, v2.123 → v2.131, 9 commits): Pause + Leave UI; manager / player singleton-bar refactor (architectural keystone); Trivia routing refactor. Scope expanded vs §10's "Pause + Leave only" bullet.
+- **W9** (`02cdc08` `db/024` + `a1273df` flip + `5c1f97f` at v2.132 + `6b12290` at v2.133): implicit-leave detection via heartbeat + server-side prune. Heartbeat-only vs §10's `beforeunload` + heartbeat scope (deliberate; `beforeunload` misses crash/network-loss cases).
+- **W10** (`014c738` → `a7dd71a`, v2.134 → v2.137 + tv `v2.101`, 4 commits): Last Card issue fixes (manager roster auto-update on new joiner, top-strip card color), UX polish (double-tap to play, un-mirrored opponent initials), W5 dead-code sweep, 12 new DEFERRED entries, `.gitignore` swap-file block. The §10-defined "W10 Cleanup" tasks (APP_MANIFEST shrink, doc supersession edits, CLOSEOUT-PLAN restructure, DEFERRED mark-obsolete sweep) remain deferred — see `docs/DEFERRED.md` "admission_model_v2 §10 W10 cleanup tasks".
+
+**Next up:** Part 5 verification (multi-user end-to-end testing of Session 5 flows). After Session 5 closeout: the unified-app / NHHU-as-first-class planning session (see `docs/SESSION-5-PART-3C-CLOSING-LOG.md` "Next session entry point"). The old "3b/3c/3d per-game admission UX" item is superseded — `admission_model_v2` §9.6 restructured it into the now-shipped W1-W10 work-packages.
 
 ---
 

@@ -223,32 +223,28 @@ Don't put server-side dirs (`db/`, `supabase/`) into the iOS bundle — they're 
 
 ## Current state (May 2026)
 
-### Latest shipped: Trivia productionization + Trivia Phase 2 premium opt-in (2026-05-04)
-- `games/player.html` at `v2.113` on `origin/main`; `index.html` at `v2.101` (unchanged from 2026-05-03)
-- Two tracks across 6 versioned commits + Edge Function deploy + db/019 migration to prod. **Track 1 — Trivia productionization (v2.108 → v2.110)** made Trivia actually playable end-to-end for the first time: Euchre auto-end fix (analog of v2.107 Last Card race), OpenTDB swap replacing the broken browser-direct Anthropic call (which 401'd in production per CLAUDE.md doctrine line 140), four polish fixes (auto-reveal grace, non-manager local timer, progress indicator, wrong-answer styling). **Track 2 — Trivia Phase 2 (v2.111 → v2.113 + Edge Function + db/019)** added premium AI-generated questions via Anthropic Sonnet 4.6 through a Supabase Edge Function with 20/user/UTC-day rate limit. Browser-side wiring evolved through three commits: URL `?premium=1` easter-egg → in-UI toggle on Trivia info screen → polish (stale status reset + ☰ Games button removal). Browser falls back silently to OpenTDB on any premium failure.
+### Latest shipped: admission_model_v2 W7-W10 — games admission implementation (2026-05-18 → 2026-05-19)
+- `games/player.html` at `v2.137` on `origin/main`; `games/tv.html` at `v2.101`
+- 18 commits across two days implementing `admission_model_v2` §10 work-packages W7-W10 (W1-W6 shipped earlier). **W7** retired the vestigial Last Card `managerNextRound` path. **W8** (9 commits) shipped Pause + Leave UI on game surfaces and, beyond its §10 scope, restructured the manager / player control surfaces into app-level singleton bars and refactored Trivia routing. **W9** added implicit-leave detection — `db/024` (`last_seen_at` + `rpc_session_heartbeat` with server-side prune) plus a client heartbeat bundled into the existing 20s keepalive. **W10** shipped issue fixes + Last Card UX polish (top-strip card color, double-tap to play, un-mirrored opponent initials) + the W5 dead-code sweep + 12 new DEFERRED entries. Full forensic detail, deviations vs §10, and hardware-verification status: `docs/SESSION-5-PART-3C-CLOSING-LOG.md`.
 
-#### Resolved investigations from today (informational, no action required):
-- **Reveal feature** earns its place as manual override for v2.110's auto-reveal. Handles never-submitted-player and manager-skip-ahead cases.
-- **Games vs Switch Game** distinction resolved. ☰ Games removed in v2.113 as redundant pre-existing artifact (added v2.49 2026-04-15, never updated to match v2.101 cleanup pass). Switch Game retained as the proper "leave the current game" affordance with confirm + broadcast.
-- **URL `?premium=1` routing gap on iOS Safari** — query param gets stripped during session routing before `isPremiumTrivia()` runs. Resolved by in-UI toggle in v2.112; URL backup path preserved for compatibility.
-
-For full forensic detail (per-commit deliverables, architectural decisions, doctrine updates) see `docs/SESSION-5-PART-3B-CLOSING-LOG.md`. For hardware verification audit trail (per-commit GREEN/PARTIAL/PENDING/DEFERRED status, test sessions, fix-forward record, migration application record) see `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md`.
-
-### Recent shipped: Active/audience UX cluster (fully closed 2026-05-03)
-Historical context for yesterday's work; details preserved here for archaeological reference. The cluster shipped spec + migrations + default-role fix + shell rejoin bypass + toggle UI + roster sectioning + lock-on-start across cluster Commits 2 → 4 (v2.104 → v2.106 games/player.html + v2.101 index.html), plus adjacent Last Card game-end race fix (v2.107). All 6 verification tests GREEN against test sessions 8DSSXK / SU8RMJ / BVBZ39 / PQ6T3I / TBFJJH. Closeout at `4215387` (2026-05-03). Three pre-Trivia productionization fix-forwards: `b5e1af2` (v2.102, `publishSessionEnded` reused-channel BUG-10 redux), `7dde17c` (v2.103, `doJoin` `participant_role_changed` publish), and `6ce533b` (v2.107, Last Card game-end broadcast race). Spec amendment at `410ccc1` (GAMES-CONTROL-MODEL.md § 2.4 + § 1). Migrations: `db/017` (`8c83b35` + applied at `b1a8e4a`), `db/018` (with v2.105). See `docs/SESSION-5-PART-3-CLOSING-LOG.md` and `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md` for full cluster details.
+### Recent shipped: Trivia productionization + Trivia Phase 2 premium opt-in (2026-05-04)
+Made Trivia playable end-to-end for the first time (OpenTDB swap replacing the broken browser-direct Anthropic call) and added premium AI-generated questions via a Supabase Edge Function (`generate-trivia` + `db/019`, 20/user/UTC-day). `games/player.html` v2.108 → v2.113. Full detail: `docs/SESSION-5-PART-3B-CLOSING-LOG.md` + `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md`. The 2026-05-03 active/audience UX cluster that preceded it is covered in `docs/SESSION-5-PART-3-CLOSING-LOG.md`.
 
 ### Other context
-- Migrations tracker shipped 2026-05-02 (`97f1e83`). All 19 migrations listed in `db/MIGRATIONS_APPLIED.md`; db/015 verified ✅ 2026-05-03; db/017, db/018, db/019 all flipped to ✅ same-day as application.
+- Migrations tracker shipped 2026-05-02 (`97f1e83`). All 20 migrations listed in `db/MIGRATIONS_APPLIED.md`; db/015 verified ✅ 2026-05-03; db/017, db/018, db/019 all flipped to ✅ same-day as application.
 - `db/016_remove_participant.sql` applied to prod 2026-05-02
 - `db/019_trivia_premium_usage.sql` applied to prod 2026-05-04 (`8d70473` flip commit)
+- `db/024` (`session_participants.last_seen_at` + `rpc_session_heartbeat` with server-side prune) applied to prod 2026-05-19 (`a1273df` flip commit)
 - iOS Capacitor bundle still at v2.99 (pre-3a.1) — sync deferred until next Capacitor-relevant work; Mobile Safari is the verification target per CLAUDE.md doctrine
 - One existing Edge Function deployed: `send-push-notification`. Trivia Phase 2 added a second: `generate-trivia`.
 - See `docs/SESSION-5-PART-3-CLOSING-LOG.md`, `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md`, and `docs/GAMES-CONTROL-MODEL.md` § 2.4 + § 4.1 for full details
 
 ### Hardware verification status
-All 2026-05-04 commits verified GREEN on iPhone Safari (Mike, manager) + Mac Chrome (Michael, non-manager) EXCEPT v2.113 (PENDING — both polish items pending iPhone Safari verification at next session opening) and v2.108 (DEFERRED by analogy to v2.107 Last Card race fix — 4-player Euchre setup impractical with 2 devices). The 2026-05-03 active/audience cluster commits are also GREEN per the cluster's own verification record. See `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md` for the per-commit audit trail (test sessions, gate items, fix-forward record, migration application record). v2.113 hardware verification is the gate before any new track at next session opening.
+Most W7-W10 commits are operationally verified through hardware use across the 2026-05-18 → 2026-05-19 sessions, even where individual commit bodies say "static review only" (that phrase reflects the per-commit gate at commit time, before the verification round). `db/024` is verified on prod (`a1273df`; static schema checks + manual prune smoke test + 42501 auth-gate rejection). Outstanding: the W10/cleanup Game Over regression check (low risk — the dead-block null-ref hazard was explicitly handled in the showGameOver knock-on cleanup), and the opponent camera-video black-screen failure surfaced during W10/last-card-polish verification (filed in `docs/DEFERRED.md`). Per-commit detail: `docs/SESSION-5-PART-3C-CLOSING-LOG.md` "Hardware verification status".
 
 ### Active deferred items
+
+admission_model_v2 W7-W10 (filed 2026-05-18 → 2026-05-19) — 13 entries in `docs/DEFERRED.md`: 12 from the W10 cleanup commit `a7dd71a` (games UX/architecture papercuts, realtime-reliability items, the opponent camera-video black-screen bug, iOS heartbeat app-lifecycle hooks) plus "admission_model_v2 §10 W10 cleanup tasks" (the four §10-defined cleanup tasks — `APP_MANIFEST` shrink + doc supersession edits — that the W10 label did not actually deliver).
 
 Trivia Phase 2 (filed 2026-05-04, partially mitigated in v2.112) — three polish items in `docs/DEFERRED.md` "Trivia premium polish (post-Phase 2)" entry: lobby card subtitle dynamism, usage indicator UI (partially mitigated by toggle subtext mentioning the 20/day limit), "(premium)" status text styling.
 
@@ -275,10 +271,11 @@ Active/audience cluster (closed 2026-05-03, kept here for closure-trail):
 
 ### Up next
 
-Near-term (within Session 5 closing scope):
-1. **Trivia 3b proper** — active/audience integration per `docs/GAMES-CONTROL-MODEL.md` § 4.1: late-joiner choice screen (Active vs Audience), admission_mode dispatch in `handleMessage`'s `game-state` receiver, Skip Question manager-bar wiring (currently absent — `mgr-skip` button exists but only fires for Last Card). Modify-existing path per the cluster-closeout audit.
-2. **Last Card 3c + Euchre 3d** — completes Part 3 across all three games (per Session 5 plan).
-3. **Part 5 verification** — multi-user end-to-end testing of all Session 5 flows; requires 2+ test accounts.
+Near-term:
+1. **Unified-app / NHHU-as-first-class planning session** — how to serve non-household users as first-class users rather than via the frozen parallel `audience.html`. Frame around three axes: (1) HHU vs NHHU, (2) at home vs. not at home, (3) playing vs. watching. Reference: the four 2026-04-26 audience/NHHU entries in `docs/DEFERRED.md` plus `docs/KARAOKE-CONTROL-MODEL.md` § 5.5. See `docs/SESSION-5-PART-3C-CLOSING-LOG.md` "Next session entry point".
+2. **Part 5 verification** — multi-user end-to-end testing of Session 5 flows; requires 2+ test accounts.
+
+> The previous near-term tier ("Trivia 3b proper / Last Card 3c / Euchre 3d") is superseded — `admission_model_v2` §9.6 restructured per-game integration into the W1-W10 work-packages, now shipped (see Latest shipped).
 
 Medium-term (post-Session-5, hard-ordered):
 4. **Session 6** — SMS pre-invites for household onboarding (~1-2 hr; was Session 4.10.1)
@@ -305,6 +302,8 @@ If a topic comes up that needs more than what's in this document, point Claude t
 | Games roles + state machines + admission modes | `docs/GAMES-CONTROL-MODEL.md` |
 | Phone + TV state model (claim, registration, presence) | `docs/PHONE-AND-TV-STATE-MODEL.md` |
 | Long-term roadmap | `docs/ROADMAP.md` |
+| admission_model_v2 W7-W10 forensic detail (2026-05-18 → 2026-05-19) | `docs/SESSION-5-PART-3C-CLOSING-LOG.md` |
+| admission_model_v2 canonical design (two-mode/three-role/game-room) | `docs/ADMISSION-MODEL-V2.md` |
 | 2026-05-04 Trivia productionization + Phase 2 forensic detail | `docs/SESSION-5-PART-3B-CLOSING-LOG.md` |
 | 2026-05-04 hardware verification audit trail | `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md` |
 | 2026-05-03 active/audience cluster forensic detail | `docs/SESSION-5-PART-3-CLOSING-LOG.md` |
