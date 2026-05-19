@@ -925,7 +925,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.133</div>
+<div class="ver">v2.134</div>
 
 <script>
 'use strict';
@@ -1197,14 +1197,22 @@ async function doJoin() {
     try { streamId = await agoraClient.createDataStream({reliable:true,ordered:true}); log('streamId:'+streamId); }
     catch(e) { streamId=null; log('createDataStream not supported — using fallback'); }
     agoraReady = true;
-    // Keepalive: send Agora ping every 20s + W9 Supabase heartbeat
-    // for implicit-leave detection. Bundled into one setInterval —
-    // zero new timer overhead. rpc_session_heartbeat (db/024) bumps
-    // the caller's session_participants.last_seen_at = now() and
-    // opportunistically prunes stale peers (last_seen_at < now() -
-    // 60s AND left_at IS NULL). Returns count of pruned peers.
-    // When > 0, fire participant_role_changed so peer clients
-    // refreshSessionState via the existing W8b receiver pipeline.
+    // Keepalive: Agora ping + W9 Supabase heartbeat + W10 Issue #1
+    // state-convergence refresh. Bundled into one setInterval — zero
+    // new timer overhead. Three responsibilities per tick:
+    //   1. send Agora ping (data-channel keepalive)
+    //   2. rpc_session_heartbeat (db/024) bumps caller's last_seen_at
+    //      and opportunistically prunes stale peers (60s threshold).
+    //      Returns count of pruned peers; if > 0, fires
+    //      participant_role_changed publish + pruneAbsentPlayersFromGameState.
+    //   3. await refreshSessionState() on EVERY tick (not just when
+    //      prunedCount > 0). Closes the realtime sub gap — if Mike's
+    //      WebSocket silently drops post-SUBSCRIBED, broadcasts are
+    //      missed and currentParticipants goes stale. This refresh
+    //      guarantees eventual consistency within 20s regardless of
+    //      realtime state. W10 Issue #1 fix; mitigates the underlying
+    //      silent-disconnect bug (filed DEFERRED for postgres_changes
+    //      migration).
     // Heartbeat is opportunistic: if it fails one tick (network
     // blip, RPC down), the next 20s tick retries.
     setInterval(async () => {
@@ -1225,6 +1233,13 @@ async function doJoin() {
           log('rpc_session_heartbeat FAILED: ' + error.message + ' (code=' + (error.code || 'none') + ')');
           return;
         }
+        // W10 Issue #1: always refresh, regardless of prunedCount.
+        // Closes the realtime sub gap — managers see new joiners within
+        // 20s even when the realtime channel silently drops. Subsumes
+        // the W9-fix BUG-13 self-refresh path (which only fired on
+        // prunedCount > 0); always-refresh covers both cases plus the
+        // "peer joined and our realtime missed it" case.
+        await refreshSessionState();
         if (prunedCount > 0) {
           log('heartbeat pruned ' + prunedCount + ' stale participant(s)');
           if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
@@ -1236,12 +1251,6 @@ async function doJoin() {
               );
             } catch (_) {}
           }
-          // W9-fix: BUG-13 self-refresh. Supabase Realtime doesn't echo
-          // to sender, so our own publish above never triggers the
-          // participant_role_changed receiver locally. Mirror that
-          // receiver's behavior here — refresh currentParticipants and
-          // reconcile gameState.players against the post-prune state.
-          await refreshSessionState();
           pruneAbsentPlayersFromGameState();
         }
       } catch (e) {
@@ -1941,7 +1950,13 @@ function watchFromLobby() {
   applyToggleLockState();
 }
 
-function goToGameRoom() {
+async function goToGameRoom() {
+  // W10 Issue #1: refresh authoritative session state before reading
+  // currentMyRow / currentParticipants. Closes the gap where a peer
+  // joined while we were on a different screen and the realtime
+  // broadcast was missed (silent WebSocket disconnect, tab background,
+  // etc.). All 9 call sites are fire-and-forget — adding async is safe.
+  await refreshSessionState();
   const info=GAME_INFO[currentGame]||GAME_INFO.lastcard;
   const isManager = currentMyRow?.control_role === 'manager';
   // Participant toggle is shown for non-managers who have a session row;
