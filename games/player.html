@@ -271,16 +271,6 @@
     .score-pos { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-faint); min-width: 28px; }
     .score-name { flex: 1; font-size: var(--text-sm); color: var(--color-text-dim); }
     .score-pts { font-family: var(--font-mono); font-size: var(--text-md); color: var(--color-gold); font-weight: 500; }
-    /* W5/W6: score-screen Play Again affordances. The W5 inline per-row
-       toggle/indicator classes (.play-again-toggle, .play-again-indicator)
-       are retained for any legacy callers but no longer rendered by
-       showGameOver under W6 — the prominent below-list affordance
-       (.mgr-checkbox-row reused for non-manager; .action-btn for manager)
-       supersedes them. */
-    .play-again-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--color-gold); }
-    .play-again-toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--color-gold); cursor: pointer; }
-    .play-again-indicator { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-faint); }
-    .play-again-btns { display: flex; gap: 10px; width: 100%; max-width: 300px; }
 
     /* W6: selection-mode tap-to-toggle for Playing-section rows on screen-
        game-room. Manager-only, active during the over-capacity Start flow.
@@ -359,7 +349,6 @@
 
       .join-field      { max-width: 380px; }
       .scores-list     { max-width: 420px; }
-      .play-again-btns { max-width: 380px; }
 
       .action-btn { padding: 17px; font-size: var(--text-md); }
 
@@ -404,7 +393,6 @@
 
       .join-field      { max-width: 420px; }
       .scores-list     { max-width: 480px; }
-      .play-again-btns { max-width: 420px; }
 
       .action-btn { padding: 18px; font-size: var(--text-md); }
 
@@ -850,11 +838,6 @@
       <div class="page-title" style="text-align:center;" id="gameover-title">Game Over</div>
       <div class="page-sub" id="gameover-sub">Final Scores</div>
       <div class="scores-list" id="scores-list"></div>
-      <!-- Manager sees play again prompt -->
-      <div id="play-again-manager" style="display:none;width:100%;max-width:300px;text-align:center;">
-        <div style="font-size:var(--text-sm);color:var(--color-text-dim);margin-bottom:14px;">Ask everyone to play again?</div>
-        <button class="action-btn" onclick="managerAskPlayAgain()">Ask Play Again →</button>
-      </div>
       <!-- W6: Manager Play Again button (single, replaces legacy two-button
            Same Players / New Players pair). Routes to screen-game-room
            where the W6 Start button handles capacity/selection branching. -->
@@ -874,23 +857,6 @@
             <div style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:2px;">Uncheck to skip the next round</div>
           </div>
         </label>
-      </div>
-
-      <!-- Players see yes/no -->
-      <div id="play-again-player" style="display:none;width:100%;max-width:300px;text-align:center;">
-        <div style="font-size:var(--text-sm);color:var(--color-text-dim);margin-bottom:14px;" id="play-again-prompt">Play again?</div>
-        <div class="play-again-btns">
-          <button class="action-btn" onclick="respondPlayAgain(true)">Yes, I'm in!</button>
-          <button class="action-btn ghost" onclick="respondPlayAgain(false)">No thanks</button>
-        </div>
-      </div>
-      <!-- After responses: manager sees who said yes -->
-      <div id="play-again-results" style="display:none;width:100%;max-width:300px;">
-        <div class="section-label">Who wants to play again</div>
-        <div class="player-list" id="play-again-roster"></div>
-        <div style="margin-top:16px;">
-          <button class="action-btn" onclick="managerStartFromGameOver()">▶ Start New Game</button>
-        </div>
       </div>
     </div>
 
@@ -929,7 +895,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.136</div>
+<div class="ver">v2.137</div>
 
 <script>
 'use strict';
@@ -1025,7 +991,6 @@ let invitedNames=[];   // names of people invited but not yet joined
 // these timers are camera-flicker mitigation only.)
 const pendingRemovals = new Map();
 let gameInProgress=false;
-let playAgainResponses={};
 
 // W6 § 10: manager selection-mode state for screen-game-room. Set
 // only when the manager taps Start on a gated game with Playing count
@@ -1700,24 +1665,6 @@ function handleMessage(uid, data) {
   // themselves.
   if (msg.type==='participant-left') {
     showToast((msg._name || 'A player') + ' left');
-  }
-
-  if (msg.type==='ask-play-again') {
-    document.getElementById('play-again-player').style.display='block';
-    document.getElementById('play-again-prompt').textContent = (msg._name||'Manager')+' wants to play again — are you in?';
-    document.getElementById('play-again-manager').style.display='none';
-  }
-
-  if (msg.type==='play-again-response') {
-    playAgainResponses[uid] = {name:msg._name, yes:msg.yes};
-    renderPlayAgainResults();
-  }
-
-  if (msg.type==='game-restart') {
-    gameInProgress=false; gameState=null;
-    currentGame = msg.game || currentGame;
-    playerLimit = GAME_LIMITS[currentGame]?.default || 6;
-    goToGameRoom();
   }
 
   // Silent keepalive ping handler
@@ -3920,13 +3867,6 @@ function cardPts(c){if(['J','Q','K','A','10'].includes(c.value))return 10;if(c.v
 // flips role via the W5 handler). The W5 per-row inline checkbox /
 // indicator is gone — replaced by these prominent below-list controls.
 //
-// Legacy ask/respond/results blocks (play-again-manager,
-// play-again-player, play-again-results) stay hidden — dead but not
-// deleted, full deletion deferred to W10 cleanup. Likewise
-// showPlayAgainSameTeam / showPlayAgainNewPlayers /
-// managerStartFromGameOver / managerAskPlayAgain / respondPlayAgain /
-// renderPlayAgainResults are dead-but-retained.
-//
 // Default non-manager checkbox state: participation_role !== 'audience'.
 // Treats 'active' and 'queued' both as "wants to play". Queued users at
 // score-screen time stay queued unless they re-toggle (the manager's
@@ -3955,10 +3895,6 @@ function showGameOver(scores, reason, leaverName) {
       <div class="score-pts">${s} pts</div>
     </div>`;
   }).join('');
-  // Hide legacy ask/respond/results blocks (W5 — still superseded).
-  document.getElementById('play-again-manager').style.display='none';
-  document.getElementById('play-again-player').style.display='none';
-  document.getElementById('play-again-results').style.display='none';
   // W6: manager sees orange button; non-manager sees prominent checkbox.
   document.getElementById('play-again-sameteam').style.display=isManager?'block':'none';
   document.getElementById('play-again-self').style.display=isManager?'none':'block';
@@ -3976,67 +3912,6 @@ function showGameOver(scores, reason, leaverName) {
 function managerPlayAgain() {
   gameInProgress=false; gameState=null;
   goToGameRoom();
-}
-
-function managerAskPlayAgain() {
-  send({type:'ask-play-again'});
-  document.getElementById('play-again-manager').style.display='none';
-  document.getElementById('play-again-results').style.display='block';
-  // Auto-respond yes for manager if they're playing.
-  if (currentMyRow?.participation_role === 'active') {
-    playAgainResponses[myUid]={name:myName,yes:true};
-    renderPlayAgainResults();
-  }
-}
-
-function respondPlayAgain(yes) {
-  send({type:'play-again-response', yes});
-  document.getElementById('play-again-player').style.display='none';
-  document.getElementById('play-again-player').insertAdjacentHTML('afterend',
-    `<div style="font-size:var(--text-sm);color:var(--color-text-faint);text-align:center;padding:12px 0;">${yes?'✓ You\'re in!':'See you next time'}</div>`);
-}
-
-function renderPlayAgainResults() {
-  const el=document.getElementById('play-again-roster');
-  const yes=Object.values(playAgainResponses).filter(r=>r.yes);
-  el.innerHTML=yes.map(r=>`
-    <div class="player-row">
-      <div class="p-dot dot-green"></div>
-      <div class="p-name">${r.name}</div>
-      <div class="p-badge badge-mgr">In</div>
-    </div>`).join('');
-}
-
-function managerStartFromGameOver() {
-  const yesNames=Object.values(playAgainResponses).filter(r=>r.yes).map(r=>r.name);
-  if (yesNames.length < 2) { showToast('Need at least 2 players who said yes'); return; }
-  send({type:'game-restart', playerNames:yesNames});
-  gameInProgress=false; gameState=null;
-  goToGameRoom();
-}
-
-function showPlayAgainSameTeam() {
-  // Restart immediately with all currently active participants.
-  const connectedNames = currentParticipants
-    .filter(p => p.participation_role === 'active' && !p.left_at)
-    .map(p => p.display_name);
-  if (connectedNames.length < 2) { showToast('Need at least 2 players'); return; }
-  send({type:'game-restart', playerNames:connectedNames, game: currentGame});
-  gameInProgress=false; gameState=null;
-  goToGameRoom();
-  // Auto-start the new game after brief delay so players can navigate
-  setTimeout(()=>{
-    if (currentGame==='lastcard') managerStartLastCard();
-    else if (currentGame==='trivia') managerStartTrivia();
-    else if (currentGame==='euchre') managerStartEuchre();
-  }, 1500);
-}
-
-function showPlayAgainNewPlayers() {
-  // Reset everything and go to game picker
-  gameInProgress=false; gameState=null;
-  send({type:'switch-game'});
-  goToGamePicker();
 }
 
 // ── TRIVIA ────────────────────────────────────────────────────

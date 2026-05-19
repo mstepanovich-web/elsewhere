@@ -894,6 +894,379 @@ Not urgent for Session 5. Don't bundle with Session 5 — the scope creep risk i
 
 ---
 
+### Deferred: In-game Cam button has no on/off visual state
+
+**Deferred in:** W8a
+**Deferred on:** 2026-05-18
+**Priority:** Low — button works; missing affordance is cosmetic
+**Area:** Games
+**Status:** Deferred
+
+#### Context
+
+W8a (commit `b6898ea`) added the per-game action row scaffold — Pause / Leave / Cam / Add TV. The Cam button (`#pb-cam-btn`, `onclick="toggleGameCamera()"`) toggles the player's camera, but its label and styling never reflect the current camera state. A player can't tell at a glance whether their camera is currently publishing.
+
+#### What's deferred
+
+A visual on/off state on the Cam button — an `.active` class, icon swap, or label change ("📷 Cam" vs "📷 Cam Off") driven by the live camera state.
+
+#### Options when picking up
+
+Camera state is already tracked in `cameraState`. Toggle a `.active` class inside `toggleGameCamera()` and reflect it wherever the action row is (re-)rendered. Trivial once the camera-state plumbing is confirmed for the local player.
+
+#### When to pick this up
+
+Bundle with any camera/AR workstream, or a quick games-UX polish pass.
+
+#### Related
+
+- W8a commit `b6898ea`
+- DEFERRED "Opponent camera video renders as black screen…" — same camera subsystem
+
+---
+
+### Deferred: Manager-leave with manager-role-transfer
+
+**Deferred in:** W8b
+**Deferred on:** 2026-05-18
+**Priority:** High — a manager leaving mid-session strands the room
+**Area:** Games
+**Status:** Deferred
+
+#### Context
+
+W8b (commit `2146047`) wired Leave behavior — soft-leave for `no_impact` games, hard-leave for `terminates_game`. The manager role is special: only the manager can start/end games and pick the next game. When the manager themselves leaves, there is no handoff — the role is not transferred to any other participant.
+
+#### What's deferred
+
+A manager-role-transfer flow triggered when the current manager leaves: pick a successor and reassign `control_role='manager'`, or surface a "claim manager" affordance to the remaining players.
+
+#### Options when picking up
+
+Auto-assign to the longest-connected active participant via an RPC, or an explicit opt-in claim. Needs a product decision on automatic vs opt-in. Touches `session_participants.control_role` plus the realtime publish path (RPC-gated — see doctrine note).
+
+#### When to pick this up
+
+Before multi-session real-world testing. Currently a high-impact gap.
+
+#### Related
+
+- W8b commit `2146047`
+- `docs/KARAOKE-CONTROL-MODEL.md` — role model
+
+---
+
+### Deferred: `screen-watching` orphan dead code
+
+**Deferred in:** W8b
+**Deferred on:** 2026-05-18
+**Priority:** Low — dead code, no user impact
+**Area:** Games
+**Status:** Deferred
+
+#### Context
+
+During W8b Leave-behavior work, `#screen-watching` in `games/player.html` (the late-joiner "Game in Progress — watch but not play" screen, around line 867) was found unreachable — no live navigation path routes to it. The screen and its `watchFromLobby` button are orphaned.
+
+#### What's deferred
+
+Either delete `#screen-watching` + `watchFromLobby` + any helpers as dead code, or re-wire it if a late-joiner "watch" flow is still wanted.
+
+#### Options when picking up
+
+Confirm with product whether spectating a game-in-progress is on the roadmap. If yes, wire it; if no, delete. Don't delete blind — the W10 W5 sweep showed this file has dead-but-intentionally-retained code.
+
+#### When to pick this up
+
+Next games dead-code sweep, or when the spectator flow is specced.
+
+#### Related
+
+- W10 cleanup — W5 dead-code sweep (same file, same pattern)
+
+---
+
+### Deferred: `#mgr-start` dead UI deletion
+
+**Deferred in:** W8c-2
+**Deferred on:** 2026-05-18
+**Priority:** Low — dead code
+**Area:** Games
+**Status:** Deferred
+
+#### Context
+
+W8c-2 (commit `7ba885e`) refactored Trivia routing (info → game-room → Setup → Start Game). The refactor left `#mgr-start` (a manager-bar button, `onclick="managerStart()"`) dead — superseded by the new Setup → Start Game flow.
+
+#### What's deferred
+
+Delete the `#mgr-start` button element and, if unreferenced afterward, the `managerStart` handler.
+
+#### Options when picking up
+
+Grep `managerStart` / `#mgr-start` for live callers first — W10 cleanup showed apparently-dead things can still be wired. Delete only what is confirmed dead.
+
+#### When to pick this up
+
+Next games dead-code sweep.
+
+#### Related
+
+- W8c-2 commit `7ba885e`
+- W10 cleanup — W5 dead-code sweep
+
+---
+
+### Deferred: `.visible`-class vs inline-display visibility pattern cleanup
+
+**Deferred in:** W8a-fix
+**Deferred on:** 2026-05-18
+**Priority:** Low — works, but inconsistent and bug-prone
+**Area:** Games
+**Status:** Deferred
+
+#### Context
+
+W8a-fix (commit `4bec4e4`) restored Last Card deck-strip + others-strip visibility. The fix surfaced an inconsistent visibility pattern across the games surface: some elements use a `.visible` class toggled via `classList`, others use inline `style.display`. The mixed approach makes visibility regressions (like the one W8a-fix repaired) easy to reintroduce.
+
+#### What's deferred
+
+Standardize on one visibility mechanism across `games/player.html` (and `games/tv.html`) — pick the `.visible` class or `style.display` and convert the rest.
+
+#### Options when picking up
+
+The `.visible` class is the cleaner choice — CSS owns the display value, JS only toggles presence. Mechanical but wide-reaching; do it as a dedicated refactor commit, not bundled with feature work.
+
+#### When to pick this up
+
+Next games refactor pass; low urgency.
+
+#### Related
+
+- W8a-fix commit `4bec4e4`
+
+---
+
+### Deferred: Trivia Reveal double-scores when tapped during `reveal` phase
+
+**Deferred in:** W8c-3-fix1
+**Deferred on:** 2026-05-18
+**Priority:** Medium — silent score corruption
+**Area:** Games
+**Status:** Deferred
+
+#### Context
+
+W8c-3-fix1 (commit `d324922`) UX-polish work surfaced that the Trivia Reveal action is non-idempotent. If the reveal/scoring handler runs while the game is already in the `reveal` phase — e.g. the manager double-taps Reveal — scores are applied twice. The scoring step has no re-entry guard.
+
+#### What's deferred
+
+Make the reveal/scoring transition idempotent — scores must apply exactly once per question regardless of repeated Reveal taps or repeated entry into the `reveal` phase.
+
+#### Options when picking up
+
+A phase guard (`if (state.phase==='reveal') return;` before applying) or a per-question `scored` flag on game state. The flag is more robust against state-replay over Agora. Verify against the Trivia state machine (`waiting → question → reveal → … → game-end`).
+
+#### When to pick this up
+
+Before Trivia is exercised in real multiplayer sessions — silent score corruption is hard to notice and harder to undo.
+
+#### Related
+
+- W8c-3-fix1 commit `d324922`
+- Trivia state machine in `games/player.html`
+
+---
+
+### Deferred: `screen-lobby` → `screen-game-picker` rename
+
+**Deferred in:** W8c-3
+**Deferred on:** 2026-05-18
+**Priority:** Low — naming clarity
+**Area:** Games
+**Status:** Deferred
+
+#### Context
+
+W8c-3 (commit `c5a8c15`) was the manager + player bar singleton refactor. After it, the screen id `screen-lobby` is a misnomer — the screen is the game picker, not a lobby (the lobby concept moved elsewhere). The stale name makes the code harder to read.
+
+#### What's deferred
+
+Rename `screen-lobby` → `screen-game-picker` across `games/player.html` (id, CSS selectors, `goTo()` calls, any string refs) and `games/tv.html` if it carries a matching id.
+
+#### Options when picking up
+
+Mechanical find-replace, but verify every reference — including dynamic `goTo()` string arguments and CSS selectors. Do it as a standalone rename commit so the diff is reviewable.
+
+#### When to pick this up
+
+Next games refactor pass.
+
+#### Related
+
+- W8c-3 commit `c5a8c15`
+
+---
+
+### Deferred: Capacitor iOS app-lifecycle hooks for the heartbeat
+
+**Deferred in:** db/024
+**Deferred on:** 2026-05-19
+**Priority:** Medium — heartbeat accuracy degrades on native iOS
+**Area:** iOS
+**Status:** Deferred
+
+#### Context
+
+db/024 (commit `02cdc08`) added `session_participants.last_seen_at` + a heartbeat RPC; W9 (commit `5c1f97f`) added the client heartbeat for implicit-leave detection. On the Capacitor iOS app, when the app is backgrounded or suspended the JS heartbeat timer is throttled or paused by the OS — so a backgrounded native app either looks "alive" until the timer is killed, or stops heartbeating without ever sending a clean leave.
+
+#### What's deferred
+
+Wire Capacitor App-plugin lifecycle hooks (`appStateChange` / pause / resume) to the heartbeat: on background, send an explicit "going away" signal or stop heartbeating deterministically; on resume, restart it and re-sync authoritative state.
+
+#### Options when picking up
+
+Use `App.addListener('appStateChange', …)`. Decide policy first: does backgrounding count as a leave, or start a grace period? This ties into the prune-window tuning from W9. Verify natively — Mobile Safari won't reproduce iOS app-lifecycle behavior.
+
+#### When to pick this up
+
+When the iOS app bundle is next synced and the heartbeat is verified on-device (per the CLAUDE.md iOS Capacitor sync ritual).
+
+#### Related
+
+- db/024 commit `02cdc08`; W9 commit `5c1f97f`
+- DEFERRED "Agora WebRTC peer connection lifecycle decoupled from Supabase prune"
+- CLAUDE.md — iOS Capacitor sync ritual
+
+---
+
+### Deferred: Agora WebRTC peer connection lifecycle decoupled from Supabase prune
+
+**Deferred in:** W9-fix
+**Deferred on:** 2026-05-19
+**Priority:** Medium — produces visible stale camera tiles
+**Area:** Games
+**Status:** Deferred
+
+#### Context
+
+W9-fix (commit `6b12290`) added a self-refresh after a heartbeat-driven prune. The prune removes a participant from the Supabase-backed roster, but the Agora WebRTC peer connection (and its camera/video tracks) is a separate lifecycle. Nothing tears down the Agora peer when the Supabase prune fires, so a pruned participant's video element can linger on screen.
+
+#### What's deferred
+
+Couple Agora peer/track teardown to the prune event — when a participant is pruned from `session_participants`, also clean up their `cameraState` entry, detach the video element, and close/unsubscribe the Agora peer.
+
+#### Options when picking up
+
+Hook the prune handler to call `detachRemoteVideo` + Agora unsubscribe for the pruned uid. Needs the uid↔user_id reverse mapping available at prune time. Watch for the race where a pruned participant immediately rejoins.
+
+#### When to pick this up
+
+With the next camera / connection-stability pass; medium priority — the failure is visible (stale tiles) but not gameplay-blocking.
+
+#### Related
+
+- W9-fix commit `6b12290`
+- DEFERRED "Opponent camera video renders as black screen…"
+- DEFERRED "In-game Cam button has no on/off visual state"
+
+---
+
+### Deferred: Realtime subscription has no silent-disconnect detection or reconnect logic
+
+**Deferred in:** W10/issue-1
+**Deferred on:** 2026-05-19
+**Priority:** High — data silently goes stale with no error
+**Area:** Games
+**Status:** Deferred
+
+#### Context
+
+W10/issue-1 (commit `014c738`) made the manager roster auto-update on a new joiner. That work surfaced that the Supabase realtime subscription has no health monitoring — if the WebSocket silently drops (network blip, device sleep/wake, proxy timeout), the client keeps running with a dead subscription and never reconnects. The roster and game state silently go stale; no error is shown.
+
+#### What's deferred
+
+Silent-disconnect detection + reconnect for the realtime subscription — monitor channel state (`SUBSCRIBED` / `CHANNEL_ERROR` / `TIMED_OUT` / `CLOSED`) and, on loss, re-subscribe and re-fetch authoritative state.
+
+#### Options when picking up
+
+Use the channel `.subscribe((status) => …)` callback plus a periodic liveness check; on failure, tear down and re-create the channel, then re-pull `session_participants`. Coordinate with the W9 heartbeat — heartbeat failures are a correlated disconnect signal. Consider exponential backoff on reconnect.
+
+#### When to pick this up
+
+Before real-world sessions on flaky networks. High priority — the failure mode is invisible to the user.
+
+#### Related
+
+- W10/issue-1 commit `014c738`; W9 heartbeat commit `5c1f97f`
+- DEFERRED "Migrate participant-sync from broadcast publishes to postgres_changes…"
+
+---
+
+### Deferred: Migrate participant-sync from broadcast publishes to `postgres_changes` subscription
+
+**Deferred in:** W10/issue-1
+**Deferred on:** 2026-05-19
+**Priority:** Medium — architectural; removes a recurring desync footgun
+**Area:** Schema
+**Status:** Deferred
+
+#### Context
+
+W10/issue-1 (commit `014c738`) fixed the manager roster not auto-updating on a new joiner. The current participant-sync relies on explicit broadcast publishes, which are RPC-gated — per CLAUDE.md doctrine, direct SQL `UPDATE`s on `session_participants` do not publish realtime events. Every participant mutation must therefore route through an RPC that remembers to publish; a missed publish is a silent desync — exactly the W10/issue-1 bug class.
+
+#### What's deferred
+
+Migrate participant-sync to a `postgres_changes` subscription on `session_participants` — clients subscribe to row-level INSERT/UPDATE/DELETE directly, so any mutation path propagates without an explicit publish step.
+
+#### Options when picking up
+
+Supabase `postgres_changes` on `session_participants`, filtered by session. Removes the publish-discipline footgun, but requires the table in the realtime publication and RLS that permits the client SELECT. Re-validate the doctrine note about RPC-gated publishing — `postgres_changes` bypasses it. Larger change; do it as its own commit with careful testing. Pairs naturally with the disconnect/reconnect work.
+
+#### When to pick this up
+
+When realtime reliability is prioritized; alongside the silent-disconnect entry.
+
+#### Related
+
+- W10/issue-1 commit `014c738`
+- DEFERRED "Realtime subscription has no silent-disconnect detection…"
+- CLAUDE.md doctrine — "Direct SQL UPDATEs on `session_participants` do not publish realtime events"
+
+---
+
+### Deferred: Opponent camera video renders as black screen on Last Card opponent avatar
+
+**Deferred in:** W10 (hardware verification of v2.136)
+**Deferred on:** 2026-05-19
+**Priority:** Medium — camera feature broken; does not block gameplay
+**Area:** Games
+**Status:** Deferred
+
+#### Context
+
+Surfaced during hardware verification of v2.136 (W10/last-card-polish). On the Last Card opponents strip, an opponent's camera avatar shows a black screen instead of their video feed. State propagation works — the avatar correctly toggles between initials and a (black) video tile as the peer flips their camera on/off — but the actual video stream never appears.
+
+#### What's deferred
+
+Fix the video stream attaching to the cloned video element in `renderOthersStrip`.
+
+#### Options when picking up
+
+Suspected cause: `renderOthersStrip` builds the avatar with `cloneNode(true)` on the remote `<video>` element (`games/player.html`, ~line 3157). `cloneNode` does **not** copy a video element's `srcObject` — the live `MediaStream` is a JS property, not a serializable attribute — so the clone is a video element with no stream, hence black. Likely fix: don't clone — append/move the original `videoEl` — or, after cloning, explicitly re-assign `clone.srcObject = original.srcObject`. May have been introduced or surfaced by W8a (camera button scaffold, `b6898ea`) or W8c-3-fix1 (`d324922` — removed the redundant camera widget and added defensive null guards). Defer to a focused camera/AR workstream.
+
+#### When to pick this up
+
+With the camera/AR workstream for Phase 1 viral karaoke sharing.
+
+#### Related
+
+- W10/last-card-polish — un-mirror-initials fix touched the same `renderOthersStrip` avatar
+- DEFERRED "In-game Cam button has no on/off visual state"
+- DEFERRED "Agora WebRTC peer connection lifecycle decoupled from Supabase prune"
+
+---
+
 ## Venues integration (post-Session-5)
 
 Cluster of items surfaced during Session 5 Part 2b scope review that resolve when venues-as-cross-app-service work begins (see "Venues as cross-app service (games, wellness, future apps)" entry above for the parent refactor). All six are architectural or design-clarification items, not bugs — they capture decisions deferred from Session 5 that affect games visual parity, proximity semantics, and participant lifecycle cleanup.

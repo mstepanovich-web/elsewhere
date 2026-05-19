@@ -482,7 +482,7 @@
   </div>
   <div id="log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.100</div>
+<div class="ver">v2.101</div>
 
 <script>
 'use strict';
@@ -763,7 +763,6 @@ function handleMessage(uid, data) {
     }
 
     if (msg.type==='game-over')     { showLobby(); }
-    if (msg.type==='game-restart')  { showLobby(); }
     if (msg.type==='switch-game')   { showLobby(); }
 
   } catch(e) { tvLog('msg error: '+e); }
