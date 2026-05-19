@@ -201,6 +201,8 @@
     .lc-other-video { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; transform: scaleX(-1); border: 2px solid var(--color-border-dim); background: var(--color-surface); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 500; color: var(--color-text-faint); overflow: hidden; }
     .lc-other-video.active { border-color: var(--color-gold); box-shadow: 0 0 8px var(--color-border); }
     .lc-other-video.last-card { border-color: var(--color-red); animation: lc-pulse 0.8s infinite; }
+    /* counter-mirror just the initials text — .lc-other-video's scaleX(-1) is intentional for the camera <video>, not the <span> fallback */
+    .lc-other-video span { transform: scaleX(-1); }
     .lc-other-name { font-size: 10px; color: var(--color-text-faint); letter-spacing: .06em; text-align: center; max-width: 52px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .lc-other-count { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-dim); font-weight: 500; }
     @keyframes lc-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(232,25,44,.5)} 50%{box-shadow:0 0 0 6px rgba(232,25,44,0)} }
@@ -927,7 +929,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.135</div>
+<div class="ver">v2.136</div>
 
 <script>
 'use strict';
@@ -3753,6 +3755,8 @@ function renderHand(myTurn, s, handId, drawId, playId) {
         if(playBtn) playBtn.disabled=false;
         showSelectedPreview(card);
       };
+      // Double-tap is an additive fast path — single-tap select (above) is preserved; double-tap plays immediately via the same lcPlay route as the Play button.
+      div.ondblclick=()=>{ selectedCard=card; lcPlay(); };
     } else {
       // Still allow tapping disabled cards to show a "can't play" hint
       div.onclick=()=>{ if(!myTurn) showToast("It's not your turn"); else showToast("Can't play that card"); };
