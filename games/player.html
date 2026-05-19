@@ -925,7 +925,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.131</div>
+<div class="ver">v2.132</div>
 
 <script>
 'use strict';
@@ -1197,8 +1197,50 @@ async function doJoin() {
     try { streamId = await agoraClient.createDataStream({reliable:true,ordered:true}); log('streamId:'+streamId); }
     catch(e) { streamId=null; log('createDataStream not supported — using fallback'); }
     agoraReady = true;
-    // Keepalive: send ping every 20s to keep data channel fresh
-    setInterval(()=>{ if(agoraReady) send({type:'ping'}); }, 20000);
+    // Keepalive: send Agora ping every 20s + W9 Supabase heartbeat
+    // for implicit-leave detection. Bundled into one setInterval —
+    // zero new timer overhead. rpc_session_heartbeat (db/024) bumps
+    // the caller's session_participants.last_seen_at = now() and
+    // opportunistically prunes stale peers (last_seen_at < now() -
+    // 60s AND left_at IS NULL). Returns count of pruned peers.
+    // When > 0, fire participant_role_changed so peer clients
+    // refreshSessionState via the existing W8b receiver pipeline.
+    // Heartbeat is opportunistic: if it fails one tick (network
+    // blip, RPC down), the next 20s tick retries.
+    setInterval(async () => {
+      // Existing Agora keepalive — keeps data channel fresh.
+      if (agoraReady) send({type:'ping'});
+
+      // W9: Supabase heartbeat. Skip in pre-join / legacy states.
+      if (!currentSession?.id) return;
+      const user = window.elsewhere?.getCurrentUser?.();
+      if (!user) return;
+      if (!window.sb) return;
+      try {
+        const { data: prunedCount, error } = await window.sb.rpc(
+          'rpc_session_heartbeat',
+          { p_session_id: currentSession.id }
+        );
+        if (error) {
+          log('rpc_session_heartbeat FAILED: ' + error.message + ' (code=' + (error.code || 'none') + ')');
+          return;
+        }
+        if (prunedCount > 0) {
+          log('heartbeat pruned ' + prunedCount + ' stale participant(s)');
+          if (_playerRealtimeChannelDeviceKey && window.publishParticipantRoleChanged) {
+            try {
+              await window.publishParticipantRoleChanged(
+                _playerRealtimeChannelDeviceKey,
+                { session_id: currentSession.id },
+                _playerRealtimeChannel
+              );
+            } catch (_) {}
+          }
+        }
+      } catch (e) {
+        log('rpc_session_heartbeat unexpected: ' + (e?.message || e));
+      }
+    }, 20000);
 
     // 3a.1: bind own Agora uid to user_id + player_id. Sent once on Agora join
     // and retried every 3s for up to 60s if no peer ack. Recipients build
