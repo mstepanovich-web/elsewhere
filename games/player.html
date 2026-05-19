@@ -180,10 +180,12 @@
     .lc-top-row { display: flex; align-items: center; gap: 10px; }
     .lc-discard-area { display: flex; align-items: center; gap: 10px; flex: 1; }
     .lc-card-sm { width: 46px; height: 68px; border-radius: 7px; border: 1.5px solid rgba(255,255,255,.15); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 13px; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
-    /* game-semantic, intentionally not themed — Last Card / Euchre suit colors */
-    .lc-card-sm.red  { background: #c0392b; color: #fff; }
-    .lc-card-sm.black{ background: #1a1a2e; color: #eee; }
-    .lc-card-sm.wild { background: linear-gradient(135deg,#8e44ad,#c0392b,#27ae60,#2980b9); color: var(--color-gold); }
+    /* game-semantic, intentionally not themed — Last Card current-card colors (color-* matches .lc-card hand cards) */
+    .lc-card-sm.color-red    { background: #c0392b; color: #fff; }
+    .lc-card-sm.color-yellow { background: #d4ac0d; color: #1a1a1a; }
+    .lc-card-sm.color-blue   { background: #2980b9; color: #fff; }
+    .lc-card-sm.color-green  { background: #27ae60; color: #fff; }
+    .lc-card-sm.color-wild   { background: linear-gradient(135deg,#8e44ad,#c0392b,#27ae60,#2980b9); color: var(--color-gold); }
     .lc-card-sm.glow { box-shadow: 0 0 14px var(--color-border-bright); border-color: var(--color-gold); }
     .lc-pile-info { display: flex; flex-direction: column; gap: 2px; }
     .lc-pile-label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--color-text-faint); }
@@ -925,7 +927,7 @@
   </div>
   <div id="game-log-lines" style="color:var(--color-green);font-family:var(--font-mono);font-size:10px;"></div>
 </div>
-<div class="ver">v2.134</div>
+<div class="ver">v2.135</div>
 
 <script>
 'use strict';
@@ -3620,7 +3622,8 @@ function renderLastCard() {
   // Top card
   const top=s.discardPile[s.discardPile.length-1];
   const isWild=top&&top.color==='wild';
-  const cardCls=top?('color-'+top.color):'color-wild';
+  // Wild tints to the chosen active color: the strip answers "what must I match?" — after a wild that's s.currentColor, not "wild".
+  const cardCls=top?('color-'+(isWild&&s.currentColor?s.currentColor:top.color)):'color-wild';
   const cardLabel=top?(top.value==='Wild Draw 4'?'★+4':top.value==='Wild'?'★':top.value==='Draw 2'?'+2':top.value==='Skip'?'⊘':top.value==='Reverse'?'⇄':top.value):'—';
 
   // Phone strip
