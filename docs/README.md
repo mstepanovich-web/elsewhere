@@ -38,6 +38,24 @@ cat ~/Downloads/elsewhere-repo/docs/CONTEXT.md | pbcopy
 Use for: small fixes, conventions questions, navigation, "what's the state
 of X?", anything where Claude needs the mental model but not deep specs.
 
+### Unified-app / room-model work
+
+For work on the room/session model, manager authority, invites, the
+household/premium model, or the unified-app refactor:
+
+```bash
+cat ~/Downloads/elsewhere-repo/docs/CONTEXT.md \
+    ~/Downloads/elsewhere-repo/docs/UNIFIED-APP-PLAN.md \
+    ~/Downloads/elsewhere-repo/docs/ROOM-SESSION-MODEL.md \
+    ~/Downloads/elsewhere-repo/docs/ROOM-AUTHORITY-MODEL.md \
+    ~/Downloads/elsewhere-repo/docs/ROOM-ACCESS-INVITE-MODEL.md \
+    ~/Downloads/elsewhere-repo/docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md \
+    | pbcopy
+```
+
+UNIFIED-APP-PLAN.md is the umbrella — read it first; the other four are
+the detailed models.
+
 ### Karaoke session work — manager UI, queue management, role transitions
 
 For 2e.3 and any subsequent karaoke session work that touches roles,
@@ -98,6 +116,7 @@ cat ~/Downloads/elsewhere-repo/docs/CONTEXT.md \
     ~/Downloads/elsewhere-repo/docs/ROADMAP.md \
     ~/Downloads/elsewhere-repo/docs/SESSION-5-PART-2-BREAKDOWN.md \
     ~/Downloads/elsewhere-repo/docs/PHONE-AND-TV-STATE-MODEL.md \
+    ~/Downloads/elsewhere-repo/docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md \
     | pbcopy
 ```
 
@@ -105,7 +124,8 @@ Why:
 - **CONTEXT.md** — architecture overview
 - **ROADMAP.md** — long-term plan, where new apps fit
 - **SESSION-5-PART-2-BREAKDOWN.md** — broader Session-5 context, multi-app patterns
-- **PHONE-AND-TV-STATE-MODEL.md** — claim/registration/presence patterns, useful for any new surface
+- **PHONE-AND-TV-STATE-MODEL.md** — claim/registration/presence patterns, useful for any new surface. **Superseded by HOUSEHOLD-DEVICE-PRESENCE-MODEL.md**; kept here for legacy references.
+- **HOUSEHOLD-DEVICE-PRESENCE-MODEL.md** — current households / binding / presence / premium model; the canonical version of what PHONE-AND-TV-STATE-MODEL.md used to describe.
 
 ### Picking up a session mid-thread (rare)
 
@@ -143,8 +163,15 @@ gap to surface.
 - `CONTEXT.md` — The kickoff doc. Mental model + doctrine + current state. Update at end of every session.
 
 ### Models (stable)
-- `KARAOKE-CONTROL-MODEL.md` — Roles, transitions, surfaces for karaoke
-- `PHONE-AND-TV-STATE-MODEL.md` — Claim, registration, presence
+- `UNIFIED-APP-PLAN.md` — Unified-app / NHHU-primary plan (umbrella for the room/session model, manager authority, invites, and premium tier)
+- `ROOM-SESSION-MODEL.md` — Room / session / group entity model
+- `ROOM-AUTHORITY-MODEL.md` — Manager authority (room control + room ownership)
+- `ROOM-ACCESS-INVITE-MODEL.md` — Token-based room-access / invite model
+- `HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` — Households, TV devices, binding, presence, premium tier
+- `KARAOKE-CONTROL-MODEL.md` — Roles, transitions, surfaces for karaoke. **Partially superseded by `UNIFIED-APP-PLAN.md` / `ROOM-AUTHORITY-MODEL.md` / `HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`**; karaoke-specific detail retained.
+- `GAMES-CONTROL-MODEL.md` — Games roles, admission model, per-game specs. **Partially superseded by `UNIFIED-APP-PLAN.md` / `ROOM-AUTHORITY-MODEL.md` / `ROOM-SESSION-MODEL.md`**; games-specific detail retained.
+- `ADMISSION-MODEL-V2.md` — Canonical design for games admission (two-mode model, three-role model, game-room as shared surface, §10 W1–W10 implementation scope). **Partially superseded by `ROOM-SESSION-MODEL.md` / `UNIFIED-APP-PLAN.md`**; admission-mode mechanics retained.
+- `PHONE-AND-TV-STATE-MODEL.md` — Claim, registration, presence. **Superseded by `HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`**; retained for historical reference.
 - `KARAOKE-FUNCTION-AUDIT.md` — Function-level audit of singer.html
 - `INDEX.md` — Doc index
 - `ROADMAP.md` — Long-term plan

@@ -6,7 +6,7 @@
 >
 > Read top-to-bottom. Pointers to deeper docs are at the end.
 
-Last updated: 2026-05-04 (Trivia productionization + Trivia Phase 2 premium opt-in fully shipped — OpenTDB swap + polish [v2.108 → v2.110], generate-trivia Edge Function + db/019 migration deployed and cURL-verified, browser-side premium opt-in wiring [v2.111 → v2.113] with hidden URL easter-egg + in-UI toggle on Trivia info screen + Anthropic Sonnet 4.6 model bump. Trivia is now playable end-to-end for the first time)
+Last updated: 2026-05-20 (unified-app / NHHU-primary planning docs committed — UNIFIED-APP-PLAN.md and its four companions in `docs/` — and the model-describing sections of this doc revised to match: audience-as-mode replaces the schema/surface "audience" vocabulary trap; baseline + premium tiers replace HHU-primary eligibility; room control / room ownership replaces single-role manager. The Current state section is unchanged from the 2026-05-19 W10 close.)
 
 ---
 
@@ -28,7 +28,7 @@ The product is built around a few core ideas:
 ### Karaoke (live)
 - **TV surface:** `karaoke/stage.html` — shows lyrics, video background (DeepAR), Agora voice routing, idle screen between songs
 - **Phone surface:** `karaoke/singer.html` — every phone runs this; rendering is role-aware
-- **Audience surface:** `karaoke/audience.html` — for non-household users (out-of-home guests)
+- **`karaoke/audience.html`** — the current separate audience surface. In the unified-app model this is dissolved into a baseline watcher mode within the main app; see `docs/UNIFIED-APP-PLAN.md`.
 
 ### Games (in progress)
 - **TV surface:** `games/games.html`
@@ -61,65 +61,32 @@ Every `session_participant` row has two role columns:
 
 ### `participation_role`
 What the user IS doing in the session, right now:
-- `audience` — watching, may or may not be eligible to sing
+- `audience` — opt-in watcher mode, reversible (see "The 'audience' model" below)
 - `queued` — has signed up to sing; waiting their turn
 - `active` — currently singing (or about to)
 
 State machine: `audience → queued → active → audience` (cycle); `queued → audience` (leave queue); manager can force any transition.
 
 ### `control_role`
-What the user CAN DO administratively:
-- `member` — can act on their own row only
-- `manager` — can act on any row in the session (queue management, force-promote, skip, take over)
-
-The manager is set when the session is created; usually whoever started the session. Per session, exactly one manager.
+The `control_role` distinguishes a `member` (acts on their own row only) from a `manager` (acts on any row). In the unified-app model, manager authority belongs to the ROOM, not the session, and splits into room control (operational authority — queue, admit/remove, drive the screen — fully transferable) and room ownership (the personal binding to the convener's saved rooms — never transfers by succession). One room has one manager at a time. See `docs/ROOM-AUTHORITY-MODEL.md`.
 
 ---
 
-## ⚠️ Critical vocabulary trap: "audience"
+## The "audience" model
 
-**The word "audience" means two different things in karaoke and they get conflated constantly.** Read this before any task that involves manager actions, queue management, or rendering decisions on singer.html. Re-read it any time a discussion casually says "audience user" — that phrase is almost always ambiguous.
+"Audience" is a participation MODE, not a class of user. Any user can choose to watch rather than play (`participation_role = 'audience'`) and can leave that mode again — it is opt-in and reversible. There is no separate class of "audience users" and no separate audience surface in the target model: `karaoke/audience.html` is being dissolved into a baseline-tier watcher mode inside the main app.
 
-There are two distinct meanings:
-
-### Schema-state `'audience'` (database value)
-
-`session_participants.participation_role = 'audience'` — a database enum value meaning "this user is in the session but is neither the active singer nor in the queue." It is a state, not a role label.
-
-Users with this schema state include both:
-
-- **Available Singers who haven't queued yet** — HHU + at home + has TV device. Eligible to sing. Hasn't tapped Add to Queue. Surface-label: "Available Singer (not queued)."
-- **Actual non-singing audience members** — NHHU, OR HHU not at home, OR HHU without a TV device. Cannot sing. Surface-label: "Audience."
-
-The schema does not distinguish these two populations because the underlying queue/promotion logic doesn't need to. Eligibility is computed client-side at the moment of action (Add to Queue, Start Song, etc.).
-
-### Surface-label "Audience" (UI role)
-
-A karaoke UI role meaning "watching only, cannot sing." Lives on `audience.html`. Applied to NHHU users, or HHU users not at home, or HHU users without a TV device. **These users have no path to the queue, no path to active, and the manager UI cannot promote them.**
-
-### What this means for manager UI work (2e.3 and beyond)
-
-When the audit, model doc, or session logs say things like "force-promote an audience user" or "promote from audience" — they are *always* talking about the schema-state, never the surface label. The user being acted on is an Available Singer in disguise (HHU at home with a TV device whose `participation_role` happens to be `'audience'` because they haven't queued yet).
-
-The manager UI on singer.html only operates on rows in `session_participants`. Surface-label Audience users on `audience.html` don't appear in that table in any actionable way (audience.html is a frozen surface in Session 5 — see KARAOKE-CONTROL-MODEL § 4.3). So there is no path by which a manager could force-promote a "can't sing" user; the schema makes this impossible by construction.
-
-### Reading rule
-
-- See `'audience'` in code voice or schema discussion (backticks, `participation_role = 'audience'`, "schema-state audience") → **schema state**. Includes both populations. Manager UI can act on these rows.
-- See "Audience" capitalized as a UI role label (in role tables, surface vocabulary, UX copy) → **surface label**. Watching-only users on audience.html. Manager UI cannot act on them.
-- When in doubt, the four-role table in KARAOKE-CONTROL-MODEL.md § 1 is canonical. Refer back.
-
-If you find yourself thinking "but audience users can't sing — why is the manager promoting them?" — the language tripped you. Re-read it as the schema state.
+(Historical note: earlier docs describe an "audience vocabulary trap" — schema-state `'audience'` vs. a surface-label "Audience" for a distinct can't-participate population. The unified-app model removes that distinction. See `docs/UNIFIED-APP-PLAN.md` and `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`.)
 
 ---
 
-## HHU eligibility (the doctrinal rule)
+## Baseline and premium (the capability model)
 
-`singer.html` surface is **HHU-eligible by construction**. Anyone who reaches singer.html is a household member and is eligible to sing. The not-eligible branch in `singer.html` is dead code — if a non-eligible user ever reaches that surface, the bug is in routing (they should have gone to `audience.html`), not in render. Never write code in singer.html that handles the not-eligible case as a real surface; flag it as dead instead.
+Every registered Elsewhere user is a full, primary user of every app at the BASELINE tier — with no TV device required. Non-household users (NHHU) are first-class users, not a degraded or secondary case.
 
-(This was locked in 2e.1's model audit, Path A.)
+PREMIUM is a single optional capability on top of baseline: being camera-composited into the venue (with costume overlays). Premium activates for a user who has premium AND is present at a camera-equipped TV. It is a property of the user plus their physical situation — not gated by household membership.
 
-This doctrine is what makes the vocabulary trap above resolve cleanly in practice: every row the manager UI sees on singer.html with `participation_role = 'audience'` is, by construction, an Available Singer (eligible). The other population (Surface-label Audience) doesn't reach this surface.
+This supersedes the earlier "HHU + at-home + has-TV = primary; everyone else is secondary" doctrine. The full model is in `docs/UNIFIED-APP-PLAN.md` and `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`.
 
 ---
 
@@ -163,10 +130,9 @@ Apple Push for the Capacitor app. Token registration on app launch (handled by `
 
 Things we don't re-litigate:
 
-- **HHU-eligibility on singer.html:** see above.
+- **The unified-app model is now authoritative for the user/role/audience model.** Baseline vs. premium tiers, audience-as-mode, the room/session split, and room authority are defined in the five planning docs (`docs/UNIFIED-APP-PLAN.md` and its four companions). Where this doctrine list and the planning docs disagree, the planning docs win.
 - **Way 1 / Way 2 dual-mode:** every singer.html change preserves Way 1 fallback.
 - **`control_role` vs `participation_role`:** they're orthogonal axes, never collapsed. A manager can be queued. A member can be active.
-- **Schema-state `'audience'` ≠ Surface-label "Audience":** see vocabulary-trap section above. Manager UI acts only on the schema state.
 - **RPCs publish realtime; direct SQL UPDATEs do not.** All client-side mutations go through RPCs (`rpc_session_update_participant`, etc.) which broadcast `participant_role_changed` events. Direct SQL is for testing/admin only and connected clients won't react.
 - **Back-to-Elsewhere pill (← Elsewhere) is the canonical exit** from any app surface. No redundant Home tile, no breadcrumbs, no other exit.
 - **`sounds/ui/`** for application UI sounds (notifications, transitions). `sounds/` root is for venue ambient.
@@ -272,7 +238,7 @@ Active/audience cluster (closed 2026-05-03, kept here for closure-trail):
 ### Up next
 
 Near-term:
-1. **Unified-app / NHHU-as-first-class planning session** — how to serve non-household users as first-class users rather than via the frozen parallel `audience.html`. Frame around three axes: (1) HHU vs NHHU, (2) at home vs. not at home, (3) playing vs. watching. Reference: the four 2026-04-26 audience/NHHU entries in `docs/DEFERRED.md` plus `docs/KARAOKE-CONTROL-MODEL.md` § 5.5. See `docs/SESSION-5-PART-3C-CLOSING-LOG.md` "Next session entry point".
+1. **Unified-app / NHHU-primary — planning COMPLETE.** The design is captured in five docs in `docs/`: UNIFIED-APP-PLAN.md (umbrella), ROOM-SESSION-MODEL.md, ROOM-AUTHORITY-MODEL.md, ROOM-ACCESS-INVITE-MODEL.md, HOUSEHOLD-DEVICE-PRESENCE-MODEL.md. Next execution step is the Phase-1 room/session migration (see UNIFIED-APP-PLAN.md §5–§6).
 2. **Part 5 verification** — multi-user end-to-end testing of Session 5 flows; requires 2+ test accounts.
 
 > The previous near-term tier ("Trivia 3b proper / Last Card 3c / Euchre 3d") is superseded — `admission_model_v2` §9.6 restructured per-game integration into the W1-W10 work-packages, now shipped (see Latest shipped).
@@ -298,12 +264,17 @@ If a topic comes up that needs more than what's in this document, point Claude t
 
 | Topic | Doc |
 |---|---|
-| Karaoke roles, transitions, surfaces, role-aware rendering | `docs/KARAOKE-CONTROL-MODEL.md` |
-| Games roles + state machines + admission modes | `docs/GAMES-CONTROL-MODEL.md` |
-| Phone + TV state model (claim, registration, presence) | `docs/PHONE-AND-TV-STATE-MODEL.md` |
+| Unified-app / NHHU-primary planning (umbrella — read first) | `docs/UNIFIED-APP-PLAN.md` |
+| Room / session / group entity model | `docs/ROOM-SESSION-MODEL.md` |
+| Manager authority — room control + room ownership | `docs/ROOM-AUTHORITY-MODEL.md` |
+| Room-access / invite model (token-based, Edge Function) | `docs/ROOM-ACCESS-INVITE-MODEL.md` |
+| Households, TV devices, binding, presence, premium tier | `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` |
+| Karaoke roles, transitions, surfaces, role-aware rendering — **partially superseded by `docs/UNIFIED-APP-PLAN.md` / `docs/ROOM-AUTHORITY-MODEL.md` / `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`** | `docs/KARAOKE-CONTROL-MODEL.md` |
+| Games roles + state machines + admission modes — **partially superseded by `docs/UNIFIED-APP-PLAN.md` / `docs/ROOM-AUTHORITY-MODEL.md` / `docs/ROOM-SESSION-MODEL.md`** | `docs/GAMES-CONTROL-MODEL.md` |
+| Phone + TV state model (claim, registration, presence) — **superseded by `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`** | `docs/PHONE-AND-TV-STATE-MODEL.md` |
 | Long-term roadmap | `docs/ROADMAP.md` |
 | admission_model_v2 W7-W10 forensic detail (2026-05-18 → 2026-05-19) | `docs/SESSION-5-PART-3C-CLOSING-LOG.md` |
-| admission_model_v2 canonical design (two-mode/three-role/game-room) | `docs/ADMISSION-MODEL-V2.md` |
+| admission_model_v2 canonical design (two-mode/three-role/game-room) — **partially superseded by `docs/ROOM-SESSION-MODEL.md` / `docs/UNIFIED-APP-PLAN.md`** | `docs/ADMISSION-MODEL-V2.md` |
 | 2026-05-04 Trivia productionization + Phase 2 forensic detail | `docs/SESSION-5-PART-3B-CLOSING-LOG.md` |
 | 2026-05-04 hardware verification audit trail | `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md` |
 | 2026-05-03 active/audience cluster forensic detail | `docs/SESSION-5-PART-3-CLOSING-LOG.md` |
