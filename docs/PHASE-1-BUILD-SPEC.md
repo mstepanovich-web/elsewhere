@@ -170,6 +170,10 @@ Follows the existing numbered idempotent migration pattern (db/008 / db/020 / db
 
 ## D. Verified RPC migration worklist
 
+### Cross-cutting decisions (pinned)
+
+**Activity-timestamp target.** Every RPC in this worklist that bumps an activity timestamp MUST bump `rooms.last_activity_at` — this is the timestamp the reclaim RPCs' 10-minute inactivity gate reads (see the semantic table's `rpc_session_reclaim_manager` row). If the activity-bumping RPCs bumped only `sessions.last_activity_at`, the reclaim gate would read a timestamp nothing updates and would misfire. The activity-bumping RPCs SHOULD also continue to bump `sessions.last_activity_at` so the session-level timestamp stays meaningful for per-session reporting, but the `rooms` bump is required and the `sessions` bump is recommended-not-required. Applies to every activity-bumping RPC in the worklist — mechanical: `rpc_session_join`, `rpc_session_update_participant`, `rpc_session_update_queue_position`, `rpc_session_remove_participant`, `rpc_session_set_my_participation_role`, `rpc_karaoke_song_ended`; semantic: `rpc_session_start`, `rpc_session_end`, `rpc_session_leave`, `rpc_session_reclaim_manager`, `rpc_session_admin_reclaim`, `rpc_session_set_admission_mode`. The two read-only / non-bumping RPCs (`rpc_session_get_participants`, `rpc_session_heartbeat`) are not affected. `rpc_room_create` sets `rooms.last_activity_at` via the column default at row creation; no explicit bump needed.
+
 ### Mechanical re-pointing (8) — no logic change
 
 Each takes a session_id today, filters on it, no business logic ties to session identity beyond the filter. Re-point parameter `p_session_id` → `p_room_id`; re-point `where session_id =` → `where room_id =`. Auth gate changes from `is_session_participant(p_session_id)` to `is_room_participant(p_room_id)`.
@@ -183,7 +187,7 @@ Each takes a session_id today, filters on it, no business logic ties to session 
 | `rpc_session_set_my_participation_role` | db/017 | Self-only `active ↔ audience` flip on own row. Filter on session_id + auth.uid(). Re-point. |
 | `rpc_session_get_participants` | db/013 + db/023 | Returns participants with wanting_since. Filter on session_id. Re-point + update RETURNS TABLE doc. |
 | `rpc_session_heartbeat` | db/024 | Bumps caller's `last_seen_at` + prunes peers stale beyond 60s. Filter on session_id; auth via `is_session_participant`. Re-point both. The prune horizon (60s) is unchanged. |
-| `rpc_karaoke_song_ended` | db/013 | Karaoke-specific helper. Filter on session_id. Re-point. |
+| `rpc_karaoke_song_ended` | db/013 | Karaoke-specific helper. Filter on session_id. Re-point. **FOR UPDATE lock target (pinned):** the rewrite locks the current session under the room — `SELECT * FROM public.sessions WHERE room_id = p_room_id AND ended_at IS NULL FOR UPDATE` — because song-end is a session-scoped event and the session is the correct serialization granularity. Locking the room row instead would serialize all room operations unnecessarily; locking nothing would let two concurrent stage.html tabs both try to demote the same active singer. |
 
 ### Semantic (6) — logic changes at the room/session boundary
 
@@ -194,11 +198,19 @@ Each takes a session_id today, filters on it, no business logic ties to session 
 | `rpc_session_leave` | db/010 | **Three changes.** (1) Re-point all session_id filters → room_id. (2) Add a new optional parameter `p_successor_user_id uuid` (default null) to support the tier-1 named-successor path. (3) Rewrite successor selection per ROOM-AUTHORITY-MODEL.md's three-tier hierarchy: **(Tier 1)** if `p_successor_user_id` is non-null and resolves to an eligible active room participant (`left_at IS NULL`, not the leaver), promote them; **(Tier 2)** else if any active host (`control_role = 'host'`, `left_at IS NULL`, not the leaver) is present, promote the longest continuously-present host (by `joined_at asc LIMIT 1`); **(Tier 3)** else promote the longest continuously-present non-audience participant (`participation_role IN ('active', 'queued')`, `left_at IS NULL`, not the leaver, by `joined_at asc LIMIT 1`). The `joined_at asc` ordering is correct for "longest continuously-present" because per the existing row-creation contract (`db/008:114-116`), a rejoin gets a new row with a new `joined_at` — the column captures the participant's current unbroken stint. If no tier matches, end the session (mark all participants left, set `ended_at`) per ROOM-AUTHORITY-MODEL.md's empty-room rule. **Critical: this RPC transfers room CONTROL only — it must NOT touch `rooms.owner_user_id`.** |
 | `rpc_session_reclaim_manager` | db/010 | **Control transfer only.** Re-point session_id → room_id. Update `rooms.controller_user_id` (not the dropped `sessions.manager_user_id`). MUST NOT touch `rooms.owner_user_id`. The inactivity gate (10-min) and household-member authorization survive unchanged. |
 | `rpc_session_admin_reclaim` | db/010 | **Control transfer only.** Re-point. Updates `rooms.controller_user_id`; never `rooms.owner_user_id`. The household-admin gate survives unchanged. |
-| `rpc_session_set_admission_mode` | db/021 | **Stays session-scoped — cleanest of the six.** `admission_mode` is per-game (W1/W2 from ADMISSION-MODEL-V2.md) — a session property, not a room property. The RPC's filter stays `session_id`. Only change: the manager-authorization check, currently via `sessions.manager_user_id = v_user_id`, becomes a lookup through `sessions.room_id → rooms.controller_user_id`. |
+| `rpc_session_set_admission_mode` | db/021 | **Stays session-scoped — cleanest of the six.** `admission_mode` is per-game (W1/W2 from ADMISSION-MODEL-V2.md) — a session property, not a room property. The RPC's filter stays `session_id`. Only change: the manager-authorization check, currently via `session_participants.control_role = 'manager'` filtered by `session_id`, becomes a lookup through `sessions.room_id → rooms.controller_user_id`. |
 
 **Total: 8 mechanical + 6 semantic = 14 distinct RPCs.** Matches the plan's "~14."
 
 The promote_self_from_queue drop brings the count of pre-existing session RPCs from 15 → 14; all 14 migrate to room-keyed.
+
+### `rpc_room_create` — pinned implementation pattern (OQ2 (a) corollary)
+
+The new `rpc_room_create` introduced by the `rpc_session_start` split (semantic table, OQ2 (a)) needs an explicit pattern for room_code generation, because `rooms.room_code` carries the partial UNIQUE index `rooms_one_active_per_code` (active room codes are unique; ended rooms may reuse). A naive single INSERT can collide and raise SQLSTATE `23505` if two managers generate the same code concurrently, or if the generated code matches an existing active room's code.
+
+**Pattern:** generate a candidate `room_code` → attempt the INSERT → on `23505` (unique_violation) catch and retry with a fresh code → bounded retry (≤ 5 attempts). If all attempts collide, raise a clear error rather than looping unbounded or failing silently. Implementation lands in db/027.
+
+**Room_code format:** not pinned in this spec. Length, character set, and case are open. Settle the format when `rpc_room_create` is written and document the choice in db/027's header. The legacy `sessions.room_code` (now dropped) used a 4–6 character pattern per CLAUDE.md; carrying that convention forward is the obvious default unless there's a specific reason to change.
 
 ### Additional tracked work: `fire_promotion_push` trigger recreation
 
