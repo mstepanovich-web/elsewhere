@@ -17,6 +17,8 @@
 
 ### Entry points
 
+> **Pointer (2026-05-20):** The framing of `karaoke/audience.html` as a permanent surface and of `nhhu-home.html` as an NHHU-returning-from-audience placeholder is superseded by the NHHU-primary model in [`docs/UNIFIED-APP-PLAN.md`](docs/UNIFIED-APP-PLAN.md). Under that model, audience becomes an opt-in mode within the main app (not a separate surface) and NHHU users are first-class. The table below is retained as a current-code reference; the entries it describes are the targets of the unified-app refactor, not the long-term shape.
+
 | Path | Role |
 |---|---|
 | `index.html` | Elsewhere shell — post-login home, sign-in flow, badge menu, contacts/groups/household management, app launcher tiles |

@@ -52,6 +52,8 @@ Decisions locked by design conversation — reference these when future choices 
 
 ### Invite architecture: per-person tokens, identity-preserving
 
+> **SUPERSEDED — 2026-05-20.** The Phase-1 invite design described in this block is superseded by [`docs/ROOM-ACCESS-INVITE-MODEL.md`](docs/ROOM-ACCESS-INVITE-MODEL.md). Notable differences: invites are single-use rather than multi-use-per-contact; the invite link carries a token (not a login credential), with the invitee triggering their own magic link; resolution for unauthenticated invitees goes through a Supabase Edge Function; per-room invite policy gates token minting. The block below is retained for historical reference.
+
 - Each invite generates a unique token stored in the `invites` table
 - Token links `contact_id → session_id → status`
 - Link format: `elsewhere.my/i/TOKEN` (short URL with a tiny redirect handler)

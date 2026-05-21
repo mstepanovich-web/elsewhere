@@ -1,5 +1,7 @@
 # Karaoke Control Model
 
+> **PARTIALLY SUPERSEDED — 2026-05-20.** The manager/authority model, the audience model, and the HHU-eligibility framing in this document are superseded by the unified-app planning docs: [`UNIFIED-APP-PLAN.md`](./UNIFIED-APP-PLAN.md) (umbrella), [`ROOM-AUTHORITY-MODEL.md`](./ROOM-AUTHORITY-MODEL.md) (manager model), and [`HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`](./HOUSEHOLD-DEVICE-PRESENCE-MODEL.md) (eligibility, audience-as-mode). Karaoke-specific detail in this document not yet replaced is retained. Where this document and the new docs disagree, the new docs are authoritative.
+
 **Created:** 2026-04-25
 **Updated:** 2026-04-29 (vocabulary-trap callout added; phase status synced to 2e.2 shipped)
 **Purpose:** Defines the role hierarchy, state machine, and permission matrix for karaoke sessions in Elsewhere. Specifies what each role can do, how transitions happen, and how the manager intervenes when needed.

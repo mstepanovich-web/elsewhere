@@ -108,6 +108,9 @@ Both modes use the same Agora App ID (`b2c6543a9ed946829e6526cb68c7efc9`, hardco
 Games TV and player code use Agora data streams inline (matching the karaoke pattern). The earlier-shipped `games/engine/` directory was removed in Session 5 Part 3a.1 — it contained never-imported draft modules (`last-card.js`, `trivia.js`, `sync.js`) that did not match the actual inline implementations in `games/player.html`.
 
 ### Karaoke (stage / singer / audience)
+
+> **Pointer (2026-05-20):** The three-surface karaoke description below reflects current code, not the target architecture. The unified-app planning dissolves `audience.html` into baseline-tier watcher mode within the main app; see [`docs/UNIFIED-APP-PLAN.md`](docs/UNIFIED-APP-PLAN.md) and [`docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`](docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md). The description below is retained as a current-code map.
+
 All karaoke HTML lives under `karaoke/`. The DeepAR effect bundles live at `karaoke/effects/`.
 - `karaoke/stage.html` (TV, ~4.8k lines) is the central renderer: it owns the venue background, pulls YouTube karaoke videos via the YouTube Data API (`YT_API_KEY` is in-source), fetches synced lyrics from `lrclib.net`, and publishes a composited camera track to Agora as the singer's avatar.
 - `karaoke/singer.html` is the phone — picks songs, controls FX (reverb / echo / boost / DeepAR face filters), publishes mic audio.
@@ -146,6 +149,8 @@ Phantom/aspirational venues don't stay in the JSON — if there's no `.jpg` in `
 ## Doctrine
 
 - **`participation_role` enum overload is intentional.** The schema (`db/008`) defines `participation_role` as `'active'` / `'queued'` / `'audience'`. The `'audience'` value is overloaded by surface: on `karaoke/singer.html` it means "Available Singer (not queued)"; on `karaoke/audience.html` it means "watching only." The schema doesn't distinguish because eligibility (HHU + at-home + has-TV) is enforced **upstream** by the Elsewhere shell's gate on the Karaoke tile — never stored in the DB. By the time a user has a `participation_role` row, eligibility is implicit from the path that got them there. See `docs/SESSION-5-PART-2E-MODEL-AUDIT.md` for the full audit and `docs/KARAOKE-CONTROL-MODEL.md:42-49` for the canonical four-role mapping. **Future reviewers who see the audience-overload should fix the surface render, not split the enum.**
+
+  > **Pointer (2026-05-20):** This doctrine is being reframed by the unified-app planning. The schema enum values are retained, but the audience-overload reasoning above is superseded by the audience-as-mode model in [`docs/UNIFIED-APP-PLAN.md`](docs/UNIFIED-APP-PLAN.md) §2 and [`docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`](docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md). Going forward, the new docs are authoritative on the audience model.
 
 - **audience.html is a no-investment surface.** Regression fixes only — fix things that were working and stopped working. No new features, no spec-compliance updates, no design-decision reversals, no polish. Defer all other changes to the unified-app consolidation. The migration into singer.html (parameterized NHHU view) is the durable fix; don't invest in the deprecated surface. Canonical source: `docs/KARAOKE-CONTROL-MODEL.md` § 4.3 + § 5.5.
 

@@ -1,5 +1,7 @@
 # Games Control Model
 
+> **PARTIALLY SUPERSEDED — 2026-05-20.** The manager/authority model and the session-equals-gathering assumption in this document are superseded by the unified-app planning docs: [`UNIFIED-APP-PLAN.md`](./UNIFIED-APP-PLAN.md) (umbrella), [`ROOM-AUTHORITY-MODEL.md`](./ROOM-AUTHORITY-MODEL.md) (manager model), and [`ROOM-SESSION-MODEL.md`](./ROOM-SESSION-MODEL.md) (room/session split). Games-specific detail in this document not yet replaced is retained. Where this document and the new docs disagree, the new docs are authoritative.
+
 **Created:** 2026-04-30
 **Purpose:** Defines the role hierarchy, admission model, and per-game specs for games in Elsewhere. Specifies what each role can do, how late-joiners are handled per game, and how the manager intervenes when needed.
 **Scope:** `games/tv.html` and `games/player.html`. Three games: Trivia, Last Card, Euchre. Pictionary is referenced in `docs/SESSION-5-PLAN.md` but is not implemented; out of scope for Session 5 Part 3.

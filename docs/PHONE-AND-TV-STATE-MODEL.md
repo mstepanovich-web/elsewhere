@@ -1,5 +1,7 @@
 # Phone and TV State Model
 
+> **SUPERSEDED IN FULL — 2026-05-20.** This document is superseded in full by [`HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`](./HOUSEHOLD-DEVICE-PRESENCE-MODEL.md) (its §10 states this explicitly). For the manager-departure mechanics specifically, see [`ROOM-AUTHORITY-MODEL.md`](./ROOM-AUTHORITY-MODEL.md). This document is retained for historical reference. Where this document and the new docs disagree, the new docs are authoritative.
+
 **Created:** 2026-04-24
 **Supersedes:** SESSION-5-PLAN.md Decision 8 (per-app `ask_proximity` flag), Session 4.10.2's split between `screen-home` and `screen-tv-remote`
 **Referenced by:** SESSION-5-PART-2-BREAKDOWN.md Part 2c onward; docs/KARAOKE-CONTROL-MODEL.md

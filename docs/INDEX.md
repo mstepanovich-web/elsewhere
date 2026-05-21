@@ -22,8 +22,15 @@ Reading order for orientation in any active Session 5 work:
 
 | Doc | Purpose | Last updated |
 |---|---|---|
-| [PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md) | Canonical reference for phone/TV behavior across user contexts. Defines HHU/NHHU/HHM, Modes A/B/C, TV state machine, proximity model, Back-to-Elsewhere rule. Wins on conflicts. | `591796b` 2026-04-25 |
-| [KARAOKE-CONTROL-MODEL.md](./KARAOKE-CONTROL-MODEL.md) | Karaoke-specific spec: role hierarchy (Session Manager, Active Singer, Available Singer, Audience), state machine, permission matrix, UI surfaces, implementation mapping for Session 5 Part 2d/2e/2f. | `b7d4e70` 2026-04-25 |
+| [UNIFIED-APP-PLAN.md](./UNIFIED-APP-PLAN.md) | Umbrella for the unified-app workstream. Capability model (baseline + premium tiers), locked decisions, per-app experience breakdown, implementation sequencing. Read first for the whole picture. | 2026-05-20 |
+| [ROOM-SESSION-MODEL.md](./ROOM-SESSION-MODEL.md) | Room / session / group entity model. A room is the durable gathering; a session is the disposable per-app instance; a group is a saved room. Foundation for the room-aware refactor. | 2026-05-20 |
+| [ROOM-AUTHORITY-MODEL.md](./ROOM-AUTHORITY-MODEL.md) | Manager authority — split into room control (operational, transferable) and room ownership (personal, non-transferable). Succession rules on explicit and implicit manager departure. | 2026-05-19 |
+| [ROOM-ACCESS-INVITE-MODEL.md](./ROOM-ACCESS-INVITE-MODEL.md) | Token-based room-access / invite model. Per-room invite policy, single-use tokens, Edge Function resolution for unauthenticated invitees, cross-household join, magic-link handling. | 2026-05-20 |
+| [HOUSEHOLD-DEVICE-PRESENCE-MODEL.md](./HOUSEHOLD-DEVICE-PRESENCE-MODEL.md) | Households, TV devices, binding, declared presence ("are you home"), and the premium tier. Supersedes PHONE-AND-TV-STATE-MODEL.md in full. | 2026-05-20 |
+| [PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md) | **Superseded 2026-05-20** by HOUSEHOLD-DEVICE-PRESENCE-MODEL.md. Retained for historical reference. Previously: phone/TV behavior across user contexts (HHU/NHHU/HHM, Modes A/B/C, TV state machine, proximity, Back-to-Elsewhere). | `591796b` 2026-04-25 |
+| [KARAOKE-CONTROL-MODEL.md](./KARAOKE-CONTROL-MODEL.md) | **Partially superseded 2026-05-20** by UNIFIED-APP-PLAN.md / ROOM-AUTHORITY-MODEL.md / HOUSEHOLD-DEVICE-PRESENCE-MODEL.md. Karaoke-specific spec: role hierarchy, state machine, permission matrix, UI surfaces, implementation mapping. | `b7d4e70` 2026-04-25 |
+| [GAMES-CONTROL-MODEL.md](./GAMES-CONTROL-MODEL.md) | **Partially superseded 2026-05-20** by UNIFIED-APP-PLAN.md / ROOM-AUTHORITY-MODEL.md / ROOM-SESSION-MODEL.md. Games role hierarchy, admission model, per-game specs (Trivia, Last Card, Euchre), late-joiner handling, manager intervention. | 2026-04-30 |
+| [ADMISSION-MODEL-V2.md](./ADMISSION-MODEL-V2.md) | **Partially superseded 2026-05-20** by ROOM-SESSION-MODEL.md / UNIFIED-APP-PLAN.md. Canonical design for games admission: two-mode model (open/gated), three-role model, game-room as shared surface, §10 W1–W10 implementation scope. | 2026-05-15 |
 
 ## Reference / audit
 

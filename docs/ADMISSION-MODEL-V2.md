@@ -1,5 +1,7 @@
 # Admission Model v2 — canonical design
 
+> **PARTIALLY SUPERSEDED — 2026-05-20.** The session-equals-gathering framing throughout this document is superseded by the room/session split in [`ROOM-SESSION-MODEL.md`](./ROOM-SESSION-MODEL.md). The §10 W1–W10 execution plan is superseded by [`UNIFIED-APP-PLAN.md`](./UNIFIED-APP-PLAN.md) §5–§6. The admission-mode mechanics themselves (two-mode, capacity, per-game manifests) are largely retained. Where this document and the new docs disagree, the new docs are authoritative.
+
 **Created:** 2026-05-15
 **Status:** Locked design. Supersedes parts of `docs/GAMES-CONTROL-MODEL.md`
 (see § 9 for the supersession map). Implementation deferred to a separate
