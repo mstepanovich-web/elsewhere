@@ -58,65 +58,106 @@ so reclaiming is unambiguous.
 
 ## Manager departure
 
-How a room responds to losing its manager depends on whether the departure
-was explicit or implicit.
+How a room responds to losing its manager has two triggers — explicit
+departure (the manager deliberately leaves) or implicit loss (the manager
+vanishes) — and one three-tier succession hierarchy applied to either.
+The trigger affects which tier can match first; the hierarchy itself is
+the same.
 
 ### Explicit departure
 
 The manager has a "leave room" affordance. Choosing it prompts the manager
 to either:
 
-- Assign a successor — a named participant who receives room control; or
+- Name a successor — a specific participant who receives room control; or
+- Leave without naming a successor; or
 - End the room.
 
-The manager, being present and deliberate, makes the succession decision
-themselves. This is the preferred path because the person with the most
-context chooses the successor.
+Naming a successor is the preferred path: the person with the most
+context chooses. Leaving without naming falls through to the lower tiers
+of the hierarchy below.
 
 ### Implicit loss
 
 If the manager's presence ends without an explicit departure — phone dies,
 app closed, connection lost, walked away — the room cannot prompt anyone.
 The existing participant heartbeat / prune mechanism detects the manager's
-absence. When it does, it triggers auto-promotion of a successor.
+absence. Succession runs from tier 2 onward: the named-successor tier
+requires a deliberate naming, which an implicit loss did not produce.
 
-### Succession rule (auto-promotion)
+### The three-tier succession hierarchy
 
-When a successor must be chosen automatically, the room promotes the
-**longest continuously-present non-audience participant** to room control.
+When the manager has departed, the next controller is chosen by the first
+matching tier:
 
-- "Continuously-present" means the candidate's current unbroken presence —
-  a participant who left and rejoined is ranked by their current stint, not
-  their first.
-- "Non-audience" excludes participants in audience (watcher) mode, who have
-  opted out of the player track; promoting a watcher to controller would
-  promote someone who chose not to drive.
+**Tier 1 — Named successor (explicit departure only).** If the leaving
+manager named a specific participant when leaving, that participant
+becomes controller. The deliberate choice always wins.
+
+**Tier 2 — A present host.** If a participant with the host role
+(see "The host role" below) is currently in the room, the host becomes
+controller. A present host ALWAYS inherits over a longer-present
+non-host — tier 2 always beats tier 3. If multiple hosts are present,
+pick among them by the same "longest continuously-present" measure used
+in tier 3.
+
+**Tier 3 — Longest-present participant.** If no host is present, the
+room promotes the longest continuously-present non-audience participant
+to room control.
+
+- "Continuously-present" means the candidate's current unbroken presence
+  — a participant who left and rejoined is ranked by their current stint,
+  not their first.
+- "Non-audience" excludes participants in audience (watcher) mode, who
+  have opted out of the player track; promoting a watcher to controller
+  would promote someone who chose not to drive.
 
 ### Empty room — no eligible successor
 
-If, on either an explicit or an implicit departure, there is no eligible
-successor — no non-audience participant available to take control — the
-room ends.
+If no tier matches — no named successor, no present host, and no
+non-audience participant available — the room ends.
 
-"Empty" for this purpose means no participant eligible to become
-controller. A room containing only audience-mode watchers and no other
-participants is, for succession purposes, empty: there is no one to hand
-control to, so the room ends.
+A room containing only the departing manager, or only audience-mode
+watchers, is empty for succession purposes: there is no one to hand
+control to, so the room ends. Naming a successor who is not (or is no
+longer) an eligible participant falls through to the lower tiers; if
+those are empty too, the room ends.
 
-This is a single rule covering both triggers: manager departs (explicitly
-or implicitly) → look for an eligible successor → if none exists, end the
-room.
+## The host role
+
+A host is a standing deputy. While the room runs, a host holds
+manager-like authority over OTHER participants: a host can change other
+participants' participation roles, reorder the queue, and edit other
+participants' pre-selections. A host CANNOT assign the manager role
+itself, and CANNOT alter the manager's own row. Multiple participants
+may be hosts concurrently.
+
+The host is also the standing designated successor: tier 2 of the
+succession hierarchy promotes a present host over a longer-present
+non-host. This is the host role's secondary purpose — a "designated
+heir" that does not require the manager to name anyone at leave time.
+
+**Dormancy.** The host role is currently dormant in the product. The
+database schema (`control_role` enum value `'host'`) and the RPC
+authorization gates exist, but no current UI surfaces or assigns the
+role. It is intentionally retained, not vestigial: surfacing the host
+role — both as a deputy and as a standing successor — is a future
+feature. A reader who finds `'host'` in the schema or RPC bodies should
+know it is held for this design, not for legacy reasons.
 
 ## Summary
 
 - Manager authority = room control (operational, fully transferable) +
   room ownership (personal, never transfers by succession).
-- Explicit departure → manager assigns a successor or ends the room.
-- Implicit loss → auto-promote the longest continuously-present
-  non-audience participant to room control.
-- No eligible successor, either trigger → the room ends.
+- Manager departure has two triggers (explicit / implicit) and one
+  three-tier succession hierarchy: (1) named successor, (2) a present
+  host, (3) longest continuously-present non-audience participant.
+- A present host always inherits over a longer-present non-host.
+- No eligible successor at any tier → the room ends.
 - Room ownership stays with the original convener throughout; if they
   return, they reclaim control cleanly.
+- The host role is currently dormant in the product — kept by design,
+  not vestigial.
 
 ## Relationship to existing docs
 

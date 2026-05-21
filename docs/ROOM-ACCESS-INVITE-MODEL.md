@@ -46,8 +46,34 @@ One required change to the table: the column currently named session_type
 is renamed to app — it holds the app name and is simply misnamed.
 
 The URL shared with an invitee carries the token, not a raw room code. The
-token is the credential to enter the room; the room code stops being the
-de facto entry credential.
+token is the credential inside the invite URL: it is what the resolution
+flow validates, not the room code. The room code itself remains a valid
+direct entry path for users who already have the app — see "Room code as
+a secondary entry path" below.
+
+## Room code as a secondary entry path
+
+Invites are the primary way a user joins a room. A user receives a link
+(carrying the invite token), opens it, and is admitted into the room
+through the flow above.
+
+The room code is the secondary entry path. It is always visible in the
+room's UI but rendered low-prominence — present, not foregrounded. Its
+purpose is small but real: for a user who already has the Elsewhere app,
+sending a short room code to type can be easier than sending a link. The
+primary case is invites; the room-code path covers the friction where a
+link would be clunkier than a code.
+
+A UI requirement follows from this: a low-prominence room-code-entry
+affordance — a place in the shell to type a code and join — must exist.
+It belongs in the shell UI alongside the rest of the room-discovery
+surface, visually subordinated to the invite-acceptance and
+invite-creation flows.
+
+The two roles for the room code do not conflict. Inside an invite URL the
+token has replaced the room code as the invite credential. Outside that
+URL — as a value a known user can type directly — the room code remains
+valid and is the secondary entry path described here.
 
 ## Invite policy — who can invite
 

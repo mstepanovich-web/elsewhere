@@ -263,7 +263,10 @@ SELECT policies.
 Shell — roughly 13 sites in the shell's active-session state cluster
 re-point from "session for the bound TV" to "room and its current session."
 The cross-app-switch authority check moves to reading the room's manager,
-which is the correct level for it.
+which is the correct level for it. The shell UI also gains a
+low-prominence room-code-entry affordance (a place to type a code and
+join — see ROOM-ACCESS-INVITE-MODEL.md "Room code as a secondary entry
+path"), included in Phase 1 so it does not get lost in later phases.
 
 Confirmed fact — current_state has zero writers anywhere in the codebase;
 it is dormant scaffolding and carries no data. The room/session refactor
@@ -352,6 +355,12 @@ the answer rather than re-investigating:
   HOUSEHOLD-DEVICE-PRESENCE-MODEL.md. If a future reader finds content in
   the superseded doc that appears dropped rather than deliberately
   replaced, it should be raised against the new model.
+
+- Room codes are a secondary, low-prominence entry path; invites are
+  primary. Both must be visible in the shell UI, but the room-code-entry
+  affordance is visually subordinated. See ROOM-ACCESS-INVITE-MODEL.md
+  "Room code as a secondary entry path" for the model, and §6's shell
+  paragraph for the Phase-1 implementation hook.
 
 ## 9. Status
 

@@ -3126,6 +3126,42 @@ The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captur
 
 ---
 
+### Deferred: Low-prominence room-code-entry UI affordance
+
+**Deferred in:** Unified-app planning (2026-05-21)
+**Deferred on:** 2026-05-21
+**Priority:** Medium — required UI scope per ROOM-ACCESS-INVITE-MODEL; small in isolation, easy to lose in later phases if not tracked.
+**Area:** Shell
+**Status:** Deferred
+
+#### Context
+
+The unified-app planning establishes invites as the primary path for joining a room and the room code as a secondary, user-typeable entry path. `docs/ROOM-ACCESS-INVITE-MODEL.md` "Room code as a secondary entry path" specifies a UI requirement: a low-prominence room-code-entry affordance — a place in the shell to type a code and join — must exist. This entry tracks that affordance so it isn't lost as the unified-app refactor moves through its phases.
+
+#### What's deferred
+
+The shell UI for entering a room code to join a room. Specifically: a text input + submit affordance, low-prominence (subordinated visually to invite acceptance / invite creation), accessible from the shell home — wherever room-discovery surfaces land.
+
+The backing behavior is out of this entry's scope: room-code lookup goes through `rooms.room_code` once Phase 1 is in place. UI is the deferred work.
+
+#### Options when picking up
+
+- Form factor: a single input + button in a corner of the home screen; or behind a "Join by code" link/menu item that reveals the input. The model calls for "always visible but low-prominence" — a thin always-visible affordance is the closer fit.
+- Validation: client-side normalize (case, length, character set) before the lookup. Surface a clear error for malformed codes vs. unknown codes.
+- Failure modes: not-found, room ended, no permission (will fall through the existing RLS path once invites are wired up; until then, any authenticated user with the room_code should be able to look up an active room).
+- Cross-app placement: per the plan, the shell is multi-app — the affordance lives in the shell, not per-app.
+
+#### When to pick this up
+
+After Phase 1 lands (room/session schema in place; `room_code` on `rooms`). The affordance can land alongside Phase 3 (karaoke onto the new model) or Phase 5 (rooms / groups / cross-app movement), whichever surfaces the shell room-discovery UI first.
+
+#### Related
+
+- `docs/ROOM-ACCESS-INVITE-MODEL.md` — "Room code as a secondary entry path" section establishes the requirement.
+- `docs/UNIFIED-APP-PLAN.md` §6 (shell paragraph) and §8 (design-principle bullet) carry the same requirement at the implementation-sequencing and principle level.
+
+---
+
 ## Completed items
 
 *(Move entries here when they're addressed. Keep the full original entry — just update **Status** to `Completed in Session X.Y` and add a one-line completion note.)*

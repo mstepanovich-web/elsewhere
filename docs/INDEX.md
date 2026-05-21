@@ -22,10 +22,10 @@ Reading order for orientation in any active Session 5 work:
 
 | Doc | Purpose | Last updated |
 |---|---|---|
-| [UNIFIED-APP-PLAN.md](./UNIFIED-APP-PLAN.md) | Umbrella for the unified-app workstream. Capability model (baseline + premium tiers), locked decisions, per-app experience breakdown, implementation sequencing. Read first for the whole picture. | 2026-05-20 |
+| [UNIFIED-APP-PLAN.md](./UNIFIED-APP-PLAN.md) | Umbrella for the unified-app workstream. Capability model (baseline + premium tiers), locked decisions, per-app experience breakdown, implementation sequencing. Read first for the whole picture. | 2026-05-21 |
 | [ROOM-SESSION-MODEL.md](./ROOM-SESSION-MODEL.md) | Room / session / group entity model. A room is the durable gathering; a session is the disposable per-app instance; a group is a saved room. Foundation for the room-aware refactor. | 2026-05-20 |
-| [ROOM-AUTHORITY-MODEL.md](./ROOM-AUTHORITY-MODEL.md) | Manager authority — split into room control (operational, transferable) and room ownership (personal, non-transferable). Succession rules on explicit and implicit manager departure. | 2026-05-19 |
-| [ROOM-ACCESS-INVITE-MODEL.md](./ROOM-ACCESS-INVITE-MODEL.md) | Token-based room-access / invite model. Per-room invite policy, single-use tokens, Edge Function resolution for unauthenticated invitees, cross-household join, magic-link handling. | 2026-05-20 |
+| [ROOM-AUTHORITY-MODEL.md](./ROOM-AUTHORITY-MODEL.md) | Manager authority — split into room control (operational, transferable) and room ownership (personal, non-transferable). Succession rules on explicit and implicit manager departure. | 2026-05-21 |
+| [ROOM-ACCESS-INVITE-MODEL.md](./ROOM-ACCESS-INVITE-MODEL.md) | Token-based room-access / invite model. Per-room invite policy, single-use tokens, Edge Function resolution for unauthenticated invitees, cross-household join, magic-link handling. | 2026-05-21 |
 | [HOUSEHOLD-DEVICE-PRESENCE-MODEL.md](./HOUSEHOLD-DEVICE-PRESENCE-MODEL.md) | Households, TV devices, binding, declared presence ("are you home"), and the premium tier. Supersedes PHONE-AND-TV-STATE-MODEL.md in full. | 2026-05-20 |
 | [PHONE-AND-TV-STATE-MODEL.md](./PHONE-AND-TV-STATE-MODEL.md) | **Superseded 2026-05-20** by HOUSEHOLD-DEVICE-PRESENCE-MODEL.md. Retained for historical reference. Previously: phone/TV behavior across user contexts (HHU/NHHU/HHM, Modes A/B/C, TV state machine, proximity, Back-to-Elsewhere). | `591796b` 2026-04-25 |
 | [KARAOKE-CONTROL-MODEL.md](./KARAOKE-CONTROL-MODEL.md) | **Partially superseded 2026-05-20** by UNIFIED-APP-PLAN.md / ROOM-AUTHORITY-MODEL.md / HOUSEHOLD-DEVICE-PRESENCE-MODEL.md. Karaoke-specific spec: role hierarchy, state machine, permission matrix, UI surfaces, implementation mapping. | `b7d4e70` 2026-04-25 |
@@ -42,7 +42,7 @@ Reading order for orientation in any active Session 5 work:
 
 | Doc | Purpose | Last updated |
 |---|---|---|
-| [DEFERRED.md](./DEFERRED.md) | Single canonical place for every item deferred across sessions. Append-only. Read at session start to surface relevant items before planning. | `dc99039` 2026-04-25 |
+| [DEFERRED.md](./DEFERRED.md) | Single canonical place for every item deferred across sessions. Append-only. Read at session start to surface relevant items before planning. | 2026-05-21 |
 
 ## Historical / completed session plans
 
