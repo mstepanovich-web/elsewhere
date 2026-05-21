@@ -52,7 +52,16 @@ committed. Every superseded doc carries a supersession pointer. CONTEXT.md
 (the general kickoff doc), INFRA.md, and CLAUDE.md were all revised to
 match. No doc contains a known-false statement.
 
-**Execution phase: STARTING. Phase 1 not yet begun.**
+**Phase-1 execution-scope investigation: COMPLETE.** Its adopted output is
+`docs/PHASE-1-BUILD-SPEC.md` (commit `caf647e`), committed and reviewed —
+the structural plan that db/025 will be written against. The six open
+questions surfaced in §H are now closed: OQ1–OQ4 resolved (see §4 below
+for the adopted answers), OQ5 awareness-only, OQ6 was resolved at the
+spec's writing. No open questions remain blocking db/025.
+
+**Execution phase: in progress at the migration step.** Phase 1's schema
+migration (db/025) is the next concrete code change. The 14-RPC migration
+(db/026 onward) follows; Phases 2–5 follow that per UNIFIED-APP-PLAN §5.
 
 ## 3. The five planning docs — the design
 
@@ -73,18 +82,38 @@ All in docs/. Read all five after this brief:
 
 ## 4. The immediate next step
 
-Per UNIFIED-APP-PLAN.md §8: before db/025 (the Phase-1 migration) is
-written, the Phase-1 execution-scope investigation must be re-run against
-the final five-doc design and the actual current repo. The original
-investigation predates the manager controller/owner split, so it is
-stale.
+Write db/025 — the Phase-1 schema migration — against
+`docs/PHASE-1-BUILD-SPEC.md` §B (rooms table schema) and §C (migration
+step list), with the four resolved open questions folded in:
 
-This investigation is a CLAUDE CODE task (it reads the repo). Its output
-is a reviewable build spec — the final `rooms` schema (with BOTH a
-controller and an owner reference, per §6), the db/025 migration plan,
-and the verified RPC migration worklist (including the rpc_session_leave
-succession-logic change). It does NOT write migration code. Migration
-code is the step after, once the spec is reviewed.
+- **OQ1** — `rooms.room_code` carries a partial UNIQUE index:
+  `UNIQUE (room_code) WHERE ended_at IS NULL`. Active room codes are
+  unambiguously resolvable; historical (ended) rooms may reuse codes.
+- **OQ2** — `rpc_session_start` becomes session-creation-only and
+  requires `p_room_id` (room must already exist). A new
+  `rpc_room_create` owns fresh-room creation. Cleanest separation of
+  the durable room from the disposable session. `rpc_room_create` is
+  the only RPC that ever writes `rooms.owner_user_id`; this makes
+  owner-immutability a structural guarantee rather than a code-review
+  check.
+- **OQ3** — `sessions.current_state` stays untouched by db/025 (dormant
+  scaffolding; cheap to keep, no migration cost).
+- **OQ4** — The `is_session_*` compatibility wrappers added in db/025's
+  step 9 are kept through Phase 1 and dropped in a Phase-1.1 cleanup;
+  that cleanup includes an explicit grep-confirmed zero-caller check
+  before the drop.
+
+This is a CLAUDE CODE task (writes the repo). db/025 is **schema-only** —
+tables, indexes, RLS helpers, RLS policy updates, and the dead-RPC drop.
+**No RPCs are migrated in db/025.** The 14-RPC migration — eight
+mechanical re-pointings plus six semantic rewrites (including the new
+`rpc_room_create` and the three-tier `rpc_session_leave`) — is the step
+AFTER db/025, in `db/026` onward, kept as a series of small commits per
+PHASE-1-BUILD-SPEC.md §D.
+
+The db/025 migration is proposed as a reviewable diff and reviewed before
+commit. Apply to prod via Supabase SQL Editor after commit; update
+`db/MIGRATIONS_APPLIED.md` per CLAUDE.md doctrine.
 
 ## 5. Review discipline
 
