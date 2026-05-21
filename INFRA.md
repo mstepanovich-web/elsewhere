@@ -264,8 +264,6 @@ The original browser-direct Anthropic call (v2.108 and earlier) is preserved as 
 
 **Status:** Shipped. Trivia is playable end-to-end as of Session 5 Part 3b.
 
-**Note:** CLAUDE.md § "Games" still cites the browser-direct path as live; that doctrine line is stale and is flagged for a separate doc pass (out of scope for this audit).
-
 ### Spotify
 
 **Not currently integrated.** No Spotify references found in source. Mentioned in some prior planning docs as a future possibility (Name That Tune game) but no code exists.
