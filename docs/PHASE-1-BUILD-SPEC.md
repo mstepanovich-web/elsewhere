@@ -23,6 +23,9 @@ the remaining open questions are addressed.
 | Latest applied migration is db/024 (2026-05-19) | ✓ confirmed | `db/MIGRATIONS_APPLIED.md` shows all 24 ✅; db/025 is next |
 | `rpc_session_leave` currently selects successor by `joined_at asc` | ✓ confirmed | `db/010:302` (host-preference tier) and `db/010:315` (non-audience fallback tier) both `ORDER BY joined_at asc LIMIT 1`. The two-tier preference today (host first, then non-audience) was the input for the now-adopted three-tier hierarchy in ROOM-AUTHORITY-MODEL.md. |
 | `rpc_session_end` currently sweeps participants | ✓ confirmed | `db/009:344-348` — `update session_participants set left_at = now() where session_id = p_session_id and left_at is null` |
+| db/015's `trg_fire_promotion_push` trigger function reads `NEW.session_id` | **MISSED by the original investigation; surfaced during db/025 drafting** | `db/015:60-64` — `fire_promotion_push()` builds the Edge Function payload as `jsonb_build_object('user_id', NEW.user_id, 'type', 'promotion', 'session_id', NEW.session_id)`. The original sweep did not classify trigger function bodies as a separate dependency category and so did not flag this. See the methodology note immediately below. db/025 will explicitly drop the trigger and its backing function (see §C step 4); recreation is tracked in §D. |
+
+**Methodology note (post-hoc).** The original sweep audited RPC function bodies (catalogued in §D) and grepped SQL files for column-name references — it did NOT audit trigger function bodies as a separate category. plpgsql bodies aren't eagerly schema-validated: a function referencing a now-missing column compiles fine and fails only at first runtime call. The db/026-onward work should re-audit plpgsql trigger and function bodies if further column drops are planned.
 
 ---
 
@@ -75,7 +78,7 @@ Clean-slate cutover per UNIFIED-APP-PLAN §6. Existing session data is ephemeral
 
 Follows the existing numbered idempotent migration pattern (db/008 / db/020 / db/024 style).
 
-**Migration structure (10 steps):**
+**Migration structure (11 steps):**
 
 1. **Header comment block** — purpose, scope, idempotency notes, post-migration verification queries (per the db/020/024 footer convention).
 
@@ -92,12 +95,19 @@ Follows the existing numbered idempotent migration pattern (db/008 / db/020 / db
    ```
    Per §A: zero live callers; retired since admission-model v2.
 
-4. **Create `rooms` table** (schema from §B above), including:
+4. **Drop the `fire_promotion_push` trigger and function:**
+   ```sql
+   drop trigger if exists trg_fire_promotion_push on public.session_participants;
+   drop function if exists public.fire_promotion_push();
+   ```
+   The function body (db/015) reads `NEW.session_id`, which step 7 below removes. Because plpgsql function bodies are not eagerly validated against the schema (see §A's methodology note), a function left referencing a dropped column would silently survive the column drop and fail at the first matching UPDATE. Explicit drop is the safer posture. Recreation with room_id awareness is tracked in §D as a separate worklist item — it is NOT one of the 14 RPCs.
+
+5. **Create `rooms` table** (schema from §B above), including:
    - Two indexes (`rooms_room_code_idx`, `rooms_one_active_per_screen`).
    - `alter table public.rooms enable row level security`.
    - SELECT policy: room participants OR (if screen_ref not null) household members of the TV's household — mirrors the existing sessions SELECT pattern. Write policies: none (mutations via SECURITY DEFINER RPCs only).
 
-5. **Add `room_id` to `sessions`** + drop columns moving to room:
+6. **Add `room_id` to `sessions`** + drop columns moving to room:
    ```sql
    drop index if exists public.sessions_one_active_per_tv;
 
@@ -112,7 +122,7 @@ Follows the existing numbered idempotent migration pattern (db/008 / db/020 / db
    ```
    The `not null` is safe because step 2 emptied the table. New invariant: at most one active session per room.
 
-6. **Re-anchor `session_participants`** (the row-shape freeze + FK swap):
+7. **Re-anchor `session_participants`** (the row-shape freeze + FK swap):
    ```sql
    alter table public.session_participants
      add column room_id uuid not null references public.rooms(id) on delete cascade,
@@ -123,7 +133,7 @@ Follows the existing numbered idempotent migration pattern (db/008 / db/020 / db
    - Create the room-keyed equivalents (same predicates, same column structure, just `room_id` instead of `session_id`).
    - Leave `session_participants_user_idx` (on `user_id`) untouched.
 
-7. **Create new RLS helpers** (SECURITY DEFINER, paralleling db/008's pattern):
+8. **Create new RLS helpers** (SECURITY DEFINER, paralleling db/008's pattern):
    ```sql
    is_room_participant(p_room_id uuid)
    is_room_tv_household_member(p_room_id uuid)
@@ -131,20 +141,20 @@ Follows the existing numbered idempotent migration pattern (db/008 / db/020 / db
    ```
    Last two resolve through `rooms.screen_ref` → `tv_devices` → `household_members`. Returns false when `screen_ref IS NULL`.
 
-8. **Update SELECT policies on `sessions` and `session_participants`** to read against the new helpers, room_id-keyed.
+9. **Update SELECT policies on `sessions` and `session_participants`** to read against the new helpers, room_id-keyed.
 
-9. **Compatibility wrappers** for the session-keyed helpers, so any reader that still references them works during the RPC migration:
-   ```sql
-   create or replace function public.is_session_participant(p_session_id uuid)
-   returns boolean ... as $$
-     select public.is_room_participant(
-       (select room_id from public.sessions where id = p_session_id)
-     );
-   $$;
-   ```
-   Same pattern for the other two. Wrappers can be dropped in a later cleanup once all callers are migrated.
+10. **Compatibility wrappers** for the session-keyed helpers, so any reader that still references them works during the RPC migration:
+    ```sql
+    create or replace function public.is_session_participant(p_session_id uuid)
+    returns boolean ... as $$
+      select public.is_room_participant(
+        (select room_id from public.sessions where id = p_session_id)
+      );
+    $$;
+    ```
+    Same pattern for the other two. Wrappers can be dropped in a later cleanup once all callers are migrated.
 
-10. **Verification queries** in the migration footer (matching db/020/024 style):
+11. **Verification queries** in the migration footer (matching db/020/024 style):
     ```sql
     -- 1. SELECT count(*) FROM rooms;                   -- expect 0
     -- 2. \d sessions                                   -- room_id present, tv_device_id/manager_user_id/room_code absent
@@ -152,6 +162,8 @@ Follows the existing numbered idempotent migration pattern (db/008 / db/020 / db
     -- 4. \d+ rooms                                     -- two indexes + RLS enabled
     -- 5. SELECT proname FROM pg_proc WHERE proname LIKE 'is_room%';  -- 3 rows
     -- 6. SELECT 1 FROM pg_proc WHERE proname='rpc_session_promote_self_from_queue';  -- 0 rows
+    -- 7. SELECT 1 FROM pg_proc WHERE proname='fire_promotion_push';  -- 0 rows
+    -- 8. SELECT 1 FROM pg_trigger WHERE tgname='trg_fire_promotion_push';  -- 0 rows
     ```
 
 ---
@@ -187,6 +199,36 @@ Each takes a session_id today, filters on it, no business logic ties to session 
 **Total: 8 mechanical + 6 semantic = 14 distinct RPCs.** Matches the plan's "~14."
 
 The promote_self_from_queue drop brings the count of pre-existing session RPCs from 15 → 14; all 14 migrate to room-keyed.
+
+### Additional tracked work: `fire_promotion_push` trigger recreation
+
+Beyond the 14 RPCs above, the db/026-onward work tracks one additional
+item from §A's MISSED row: re-create the `fire_promotion_push` trigger
+and its backing function (both dropped in db/025 step 4) with room_id
+awareness, once a payload-shape decision is made.
+
+| Item | Where it lands | Required work |
+|---|---|---|
+| `fire_promotion_push()` function + `trg_fire_promotion_push` trigger | A new migration in db/026 onward (not one of the 14 RPCs) | Recreate the function and trigger. Trigger condition (`OLD.participation_role = 'queued' AND NEW.participation_role = 'active'` on `session_participants` AFTER UPDATE) is unchanged. Function body's `jsonb_build_object` payload changes per the open sub-question below. Until this lands, queued→active promotion push notifications do NOT fire — karaoke users whose iOS app is backgrounded do not receive the "you're up" push; foreground UI is unaffected (the realtime broadcast still drives it). |
+
+**Open sub-question (decision needed before recreation).** What does the
+push payload carry?
+
+- **(a)** `room_id` only — drop `session_id` entirely. Cleanest for the
+  new model. Breaking change for any iOS-side consumer that reads
+  `data.session_id`.
+- **(b)** Both `session_id` and `room_id`. `session_id` resolved at
+  trigger time via `select id from public.sessions where room_id = NEW.room_id and ended_at is null`.
+  Backward-compatible for the iOS app; slight extra query cost per push.
+- **(c)** `session_id` only (same lookup as (b)). Preserves the current
+  contract exactly; defers the iOS-side modernization.
+
+The decision requires auditing how `~/Projects/elsewhere-app/` (the
+out-of-repo Capacitor iOS app) uses `data.session_id` from the APNs
+payload — whether it routes the user somewhere based on it, or just
+shows the notification text. That audit is not schema-only work and is
+out of this spec's scope. Defer the recreation until the iOS audit
+lands.
 
 ---
 
@@ -303,16 +345,34 @@ Per UNIFIED-APP-PLAN §5 — karaoke is Phase 3, games is Phase 4. These per-sur
 
 ---
 
-## G. Partial-scaffolding confirmation
+## G. Partial-scaffolding confirmation, with an honest scope note
 
-**Confirmed clean slate.** No partial implementation exists.
+**Confirmed clean slate, for the rooms entity itself.** No partial
+implementation of the rooms entity exists:
 
 - `grep -rn "CREATE TABLE.*rooms" db/` → 0 matches
 - `grep -rn "room_id" db/` → 0 matches outside this investigation
 - `grep -rn "controller_user_id\|owner_user_id\|screen_ref" db/ shell/ games/ karaoke/ index.html tv2.html` → 0 matches anywhere
 - `room_code` exists on `sessions` (db/008) and `invites` (db/001), but those are the legacy / dormant homes that the migration moves away from / re-uses — not scaffolding for the new model.
 
-db/025 is a true greenfield migration with respect to the rooms entity.
+So db/025 is a true greenfield migration with respect to the rooms
+entity.
+
+**Scope of the broader dependency sweep was incomplete by one item.**
+The dependency sweep also aimed to catalog every reference to the four
+columns db/025 drops (`session_participants.session_id`,
+`sessions.tv_device_id`, `sessions.manager_user_id`,
+`sessions.room_code`). It surveyed RPC function bodies (catalogued in
+§D) and used SQL column-name grep — but it did NOT audit trigger
+function bodies as a separate category. That gap surfaced db/015's
+`fire_promotion_push` only during db/025's drafting, after this spec
+was already committed. The MISSED row in §A and the
+additional-tracked-work subsection in §D close the gap; §C step 4
+folds the explicit trigger+function drop into the migration. A future
+reader should calibrate trust in this spec accordingly: the
+rooms-entity scaffolding claim above is solid; the broader
+column-reference coverage was incomplete by the one trigger above and
+is now closed.
 
 ---
 
