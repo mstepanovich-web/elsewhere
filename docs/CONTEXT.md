@@ -18,7 +18,7 @@ The product is built around a few core ideas:
 
 - **The TV is the stage.** The TV runs `tv2.html` (idle launcher) or one of the per-app TV surfaces (e.g. `karaoke/stage.html` during karaoke). It is a passive display that reacts to phones in the room.
 - **Phones are controllers and participants.** Each phone in a household runs its own surface. For karaoke, that's `karaoke/singer.html` for active/queued/audience users.
-- **Households, not just devices.** Devices belong to households; sessions belong to households; participants are users in those households. This is the "HHU" (household user) model.
+- **Users, devices, and households.** Every registered user is a first-class user of every app — no TV device required. A claimed TV device adds the premium capability (camera compositing into the venue) but is not a participation gate. Households exist but do not gate participation; the full model is in `docs/UNIFIED-APP-PLAN.md` and `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`.
 - **Real-time everything.** State changes propagate via Supabase Realtime channels. The TV, the phones, and the manager all see the same state in <2 seconds.
 
 ---
