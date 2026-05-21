@@ -355,6 +355,21 @@ Per UNIFIED-APP-PLAN §6: *"roughly 13 sites in the shell's active-session state
 
 Per UNIFIED-APP-PLAN §5 — karaoke is Phase 3, games is Phase 4. These per-surface site updates ride those phases, not Phase 1.
 
+**RPC signature breakage from db/027 (heads-up for the shell rework).** When db/027 lands, `rpc_session_start`'s signature changes from 7 args (db/018) to 6 args:
+
+- **Dropped:** `p_tv_device_id` and `p_room_code`. Both columns are gone from `sessions` (db/025); the screen reference now lives on `rooms.screen_ref` and the room code on `rooms.room_code`. The bound-TV and code information moves to `rpc_room_create` (db/027).
+- **Added:** `p_room_id uuid` (required, no default) — the existing room to start a session under.
+- **Unchanged:** `p_app`, `p_admission_mode`, `p_capacity`, `p_ask_proximity`, `p_turn_completion`.
+
+Every existing client call site that passes the old 7-arg signature breaks at runtime once db/027 is applied. The Supabase JS client rejects unknown named arguments (Postgres raises on the wrong argument name), so the failure mode is a clear error rather than a silent mismatch. **Known call site:** `index.html:3141` (passes `p_room_code: room`). Any other surface that calls `rpc_session_start` with the old shape also breaks; locate them with `grep -rn "rpc_session_start" index.html tv2.html karaoke/ games/`.
+
+The new client flow is a two-call sequence:
+
+1. `sb.rpc('rpc_room_create', { p_screen_ref })` — create the durable room. `p_screen_ref` is the bound TV's `tv_devices.id`, or `null` for a screenless room. Returns the new `rooms` row including `id` and the generated `room_code`.
+2. `sb.rpc('rpc_session_start', { p_room_id, p_app, p_admission_mode, p_capacity, p_ask_proximity, p_turn_completion })` — create a session under the new room. The convener was already seated by `rpc_room_create`; this call applies the branched per-app `participation_role` default to the controller's existing row (no new participant insert).
+
+The transient breakage between db/027 applying and the shell rework landing is the same expected migration-window behavior the build spec's cutover framing covers — session and participant data is ephemeral and pre-launch, no real users exposed. The shell rework — when it picks up the ~13 sites described above — resolves it by switching every `rpc_session_start` caller to the two-call flow.
+
 ---
 
 ## G. Partial-scaffolding confirmation, with an honest scope note

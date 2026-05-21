@@ -3162,6 +3162,18 @@ After Phase 1 lands (room/session schema in place; `room_code` on `rooms`). The 
 
 ---
 
+### Deferred: Shell-side rpc_session_start client migration (db/027 signature breakage)
+
+**Deferred in:** Phase-1 RPC migration batch 2 (db/027)
+**Deferred on:** 2026-05-21
+**Priority:** Medium — known migration-window breakage per the build spec cutover framing; resolved when the §F shell rework lands.
+**Area:** Shell
+**Status:** Deferred
+
+db/027 changes `rpc_session_start`'s signature from 7 args (db/018) to 6: `p_tv_device_id` and `p_room_code` dropped, `p_room_id` added. Every existing client caller breaks at runtime once db/027 is applied — known call site: `index.html:3141` (passes `p_room_code`). The new client flow is a two-call sequence: `sb.rpc('rpc_room_create', { p_screen_ref })` returns the room, then `sb.rpc('rpc_session_start', { p_room_id, p_app, p_admission_mode, p_capacity, p_ask_proximity, p_turn_completion })`. Full description and rationale in `docs/PHASE-1-BUILD-SPEC.md` §F "RPC signature breakage from db/027 (heads-up for the shell rework)."
+
+---
+
 ## Completed items
 
 *(Move entries here when they're addressed. Keep the full original entry — just update **Status** to `Completed in Session X.Y` and add a one-line completion note.)*
