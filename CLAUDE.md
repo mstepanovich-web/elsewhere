@@ -44,7 +44,7 @@ The repo is the deploy artifact: edits to HTML/CSS/JS files go straight to produ
 ## Repo layout
 
 ```
-tv2.html                  # launcher — renders room-code QRs, watches Agora, forwards to the right TV page
+tv2.html                  # TV launcher — renders claim QR, subscribes to tv_device:<device_key> Supabase realtime channel, navigates to active app on launch_app broadcast
 elsewhere-theme.css       # single source of truth for colors/fonts/spacing/radii/z-index
 karaoke/
   stage.html              # TV (venue background, YouTube karaoke, lyrics, composited singer track)
@@ -88,16 +88,22 @@ See the doctrine section below for why. A vanilla `supabase functions deploy sen
 ## Architecture
 
 ### Device pairing model
-Each "session" is a 4–6 character room code, generated on the TV. Phones discover the TV by scanning a QR that points to a phone URL with `?code=ROOM`. Pairing is detected via Agora `user-joined` on a per-mode channel (no signaling server).
 
-`tv2.html` is the only launcher. It generates the room code, renders two QRs (karaoke / games), then runs two `AgoraRTC.createClient` watchers in parallel — one per mode — and `window.location.href`s the TV to the right destination as soon as a phone joins the corresponding channel:
+Each TV holds a stable `device_key` (UUID, generated once and persisted to `localStorage`). The pairing relationship between phone (user) and TV lives in `households` + `household_members` + `tv_devices` (`db/006`) — it's durable across sessions, not a per-launch room code.
 
-| Mode    | Channel suffix       | TV page                  | Phone page                |
-|---------|----------------------|--------------------------|---------------------------|
-| Karaoke | `elsewhere_<ROOM>`   | `karaoke/stage.html`     | `karaoke/singer.html`     |
-| Games   | `elsewhere_g<ROOM>`  | `games/tv.html`          | `games/player.html`       |
+**Launch flow (Supabase realtime broadcast, not Agora):**
 
-A new top-level `index.html` / Elsewhere shell is planned in Path B Session 2; there is currently no root-level entry page, so device pairing always starts from `tv2.html`.
+1. `tv2.html` boots, reads or generates `device_key`, renders a claim QR pointing to `claim.html?device_key=<UUID>` (with `&intent=signin` if the TV is already registered), and subscribes to the Supabase realtime channel `tv_device:<device_key>`. It listens for three broadcast events: `session_handoff`, `launch_app`, `session_ended` (`tv2.html:subscribeToHandoffChannel`).
+2. Phone scans the QR → lands on `claim.html` → signs in (or claims the TV via the household model) → bounces to `index.html` (the Elsewhere shell at repo root).
+3. From `index.html`, tapping an app tile publishes a `launch_app` broadcast on the TV's `tv_device:<device_key>` channel (via `shell/realtime.js:publishLaunchApp`).
+4. tv2.html's broadcast handler `window.location.href`s the TV to the destination page:
+
+| App     | TV destination           | Phone payload page        |
+|---------|--------------------------|---------------------------|
+| Karaoke | `karaoke/stage.html`     | `karaoke/singer.html`     |
+| Games   | `games/tv.html`          | `games/player.html`       |
+
+Once both devices are on the destination pages, **Agora carries the actual in-session media + data** — see § "Agora data channel". The Agora channels `elsewhere_<ROOM>` (karaoke) and `elsewhere_g<ROOM>` (games) still exist, but they're for media-and-data inside a running session, not for pairing detection at launch time.
 
 ### Agora data channel — the load-bearing detail
 Both modes use the same Agora App ID (`b2c6543a9ed946829e6526cb68c7efc9`, hardcoded as `AGORA_APP_ID` in every file that needs it) and the same data-stream pattern: JSON messages over `client.sendStreamMessage`. Two things will bite you:
@@ -140,7 +146,7 @@ Phantom/aspirational venues don't stay in the JSON — if there's no `.jpg` in `
 ### Games (last-card / trivia / euchre)
 - `games/tv.html` is the lobby + board renderer. `games/player.html` is the phone (with controls, the manager bar, and per-player camera tiles).
 - All three games (Last Card, Trivia, Euchre) are implemented inline in `games/player.html` (~3300 lines). The TV-side rendering for each game is in `games/tv.html`. Game state is plain JSON broadcast over Agora `sendStreamMessage` from the manager (authoritative state holder); receivers replace local state on each broadcast. Per-game state machines: Trivia (`waiting → question → reveal → ... → game-end`), Last Card (`playing → round-end`), Euchre (`bid1 → bid2 → play → hand-end → ... → game-end`).
-- Trivia hits the Anthropic API directly from the browser (`triviaGenerate` in `games/player.html`). There is no auth header in that fetch — if you're touching this, the manager's API key has to be supplied somewhere or the call will 401. Don't add a hard-coded server key.
+- Trivia generation runs in two tiers. **Baseline** (default) uses OpenTDB (`https://opentdb.com/api.php`) — public free API, no auth — called from `games/player.html`'s `triviaGenerate` at the OpenTDB-fetch path (~line 4069). **Premium** uses the `generate-trivia` Supabase Edge Function: browser calls `window.sb.functions.invoke('generate-trivia', ...)` (~line 4159), the Edge Function holds `ANTHROPIC_API_KEY` as a Supabase secret and adds the `x-api-key` header server-side; premium calls are rate-limited per-user-per-UTC-day via `trivia_premium_usage` (`db/019`). The original browser-direct Anthropic call is preserved only as a `// PHASE 2 REFERENCE` comment block in `games/player.html` lines ~4019–4053 — not live code, kept for future reference. **Don't hard-code a server API key in browser-side code.** New server-key consumers should follow the Edge Function pattern (Supabase Edge Function + Supabase secret), never inline.
 - The "manager" role (one player per room) is the only one allowed to start/end games and select the next game; manager identity is set when a user taps the Games tile in the Elsewhere shell (which calls `rpc_session_start`, inserting the caller as `control_role='manager'`). Pre-Session-5 the role was set via a `?mgr=1` URL param or a join-screen checkbox; both retired in 3a.1.
 
 ### Theme system
