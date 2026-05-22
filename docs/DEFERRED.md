@@ -3174,6 +3174,61 @@ db/027 changes `rpc_session_start`'s signature from 7 args (db/018) to 6: `p_tv_
 
 ---
 
+### Deferred: Phase-1 RPC migration in-flight — shell still on pre-db/026 RPC signatures
+
+**Deferred in:** Phase-1 RPC migration batch 3 (db/028)
+**Deferred on:** 2026-05-22
+**Priority:** High — once db/026/027/028 are applied to prod, every existing shell and per-surface call into the migrated RPCs breaks at runtime. The §F shell rework is the resolving work for the shell cluster; the per-surface karaoke/games sites resolve in Phase 3 / Phase 4 respectively.
+**Area:** Schema + Shell (Phase-1 migration arc)
+**Status:** Deferred (in-flight — mid-migration window)
+
+#### Context
+
+The Phase-1 RPC migration ships in three batches, all now committed to the repo:
+
+- **db/026** (commit `9e3926e`) — 8 mechanical re-points + `rpc_session_end` + `rpc_session_set_admission_mode`. Every session-keyed RPC's primary filter argument changes from `p_session_id` → `p_room_id`.
+- **db/027** (commit `2465ff5`) — `rpc_session_start` REWRITE (7 args → 6: `p_tv_device_id` and `p_room_code` dropped, `p_room_id` added) + NEW `rpc_room_create`. Caller flow becomes a two-call sequence: `rpc_room_create` → `rpc_session_start`.
+- **db/028** (commit `95dcf70`) — `rpc_session_leave` REWRITE (`p_session_id` → `(p_room_id, p_successor_user_id)`; new four-tier succession; first and only writer of `rooms.ended_at`) + `rpc_session_reclaim_manager` and `rpc_session_admin_reclaim` REWRITES (`p_session_id` → `p_room_id`; return type changes from sessions to rooms).
+
+All three are **committed to the repo, not yet applied to prod** as of 2026-05-22. Live apply state is tracked in `db/MIGRATIONS_APPLIED.md` — that file is the source of truth.
+
+#### What's deferred
+
+Until the three migrations are applied to prod AND the §F shell session-state cluster rework lands, the app is in a mid-migration window. The shell and per-surface code (`index.html`, `karaoke/*`, `games/*`, `claim.html`, `tv2.html`) still call the OLD pre-db/026 RPC signatures:
+
+- `rpc_session_leave(p_session_id)` — db/028 signature is now `(p_room_id, p_successor_user_id)`.
+- `rpc_session_start(p_tv_device_id, p_room_code, p_app, …)` — db/027 signature is now `(p_room_id, p_app, p_admission_mode, p_capacity, p_ask_proximity, p_turn_completion)`, and a separate `rpc_room_create` call must precede it. Known call site: `index.html:3141` (passes `p_room_code`).
+- `rpc_session_reclaim_manager(p_session_id)` — db/028 signature is now `(p_room_id)`, returns rooms.
+- `rpc_session_admin_reclaim(p_session_id)` — db/028 signature is now `(p_room_id)`, returns rooms.
+- The 8 mechanical RPCs (`rpc_session_join`, `rpc_session_update_participant`, `rpc_session_update_queue_position`, `rpc_session_remove_participant`, `rpc_session_set_my_participation_role`, `rpc_session_get_participants`, `rpc_session_heartbeat`, `rpc_karaoke_song_ended`) — all re-keyed to `p_room_id` in db/026.
+
+Every one of these client call sites breaks at runtime the moment the room-keyed RPCs replace them at the database. The resolving work is the §F shell session-state cluster rework (~13 sites), enumerated in `docs/PHASE-1-BUILD-SPEC.md` §F.
+
+The §F rework covers the SHELL session-state cluster only. The per-surface call sites under `karaoke/*` and `games/*` ride Phase 3 (karaoke) and Phase 4 (games) of UNIFIED-APP-PLAN §5, not Phase 1 — per PHASE-1-BUILD-SPEC.md §F's per-surface note (line 356). Those surfaces remain on the old session-keyed signatures until their respective phase lands; in the interim, the per-surface karaoke and games call sites are broken in the same way as the shell cluster but on a longer fix-window.
+
+#### Options when picking up
+
+1. **Apply migrations first, then the §F rework.** Brief broken-state window; the build spec frames this as acceptable since session data is ephemeral and the platform is pre-launch. Recommended path.
+2. **Land the §F rework first using shimmed client code that handles both signatures, apply migrations, drop the shim.** More work, narrower break window, more files churned twice.
+3. **Apply migrations and ship the §F rework in the same operator session.** Window minimised manually; depends on operator availability.
+
+Option 1 is the build-spec's recommended path.
+
+#### When to pick this up
+
+Immediately after `db/026` + `db/027` + `db/028` are applied to prod and recorded in `db/MIGRATIONS_APPLIED.md`. The §F shell rework is the next planned execution work after the three migrations land; per-surface karaoke and games rework follows in their respective phases.
+
+#### Related
+
+- DEFERRED entry "Shell-side rpc_session_start client migration (db/027 signature breakage)" — narrower predecessor; the present entry supersedes it in scope. Keep the narrower entry as a focused pointer to the `rpc_session_start`-specific call site (`index.html:3141`).
+- `db/MIGRATIONS_APPLIED.md` — live apply-state ledger (source of truth for whether each migration is committed-but-pending vs landed).
+- `docs/PHASE-1-BUILD-SPEC.md` §F — the ~13-site shell call-site enumeration; line 356 calls out the per-surface karaoke/games carve-out.
+- `docs/UNIFIED-APP-PLAN.md` §5 — phase sequencing (karaoke = Phase 3, games = Phase 4).
+- `docs/EXECUTION-HANDOFF.md` §2 + §4 — current-state snapshot (will need a refresh once the migrations apply).
+- Commits `9e3926e` (db/026), `2465ff5` (db/027), `95dcf70` (db/028).
+
+---
+
 ## Completed items
 
 *(Move entries here when they're addressed. Keep the full original entry — just update **Status** to `Completed in Session X.Y` and add a one-line completion note.)*
