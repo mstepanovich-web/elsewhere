@@ -6,7 +6,7 @@
 >
 > Read top-to-bottom. Pointers to deeper docs are at the end.
 
-Last updated: 2026-05-20 (unified-app / NHHU-primary planning docs committed — UNIFIED-APP-PLAN.md and its four companions in `docs/` — and the model-describing sections of this doc revised to match: audience-as-mode replaces the schema/surface "audience" vocabulary trap; baseline + premium tiers replace HHU-primary eligibility; room control / room ownership replaces single-role manager. The Current state section is unchanged from the 2026-05-19 W10 close.)
+Last updated: 2026-05-21 (Phase-1 unified-app migration progress addendum: db/025 applied 2026-05-21; db/026 + db/027 committed+pushed-not-applied; db/028 next. See "Current state" → "Other context" bullets and "Up next" item 1. Prior 2026-05-20 update — unified-app planning docs commit + model-section revisions — is unchanged.)
 
 ---
 
@@ -201,6 +201,10 @@ Made Trivia playable end-to-end for the first time (OpenTDB swap replacing the b
 - `db/016_remove_participant.sql` applied to prod 2026-05-02
 - `db/019_trivia_premium_usage.sql` applied to prod 2026-05-04 (`8d70473` flip commit)
 - `db/024` (`session_participants.last_seen_at` + `rpc_session_heartbeat` with server-side prune) applied to prod 2026-05-19 (`a1273df` flip commit)
+- `db/025` (Phase-1 rooms schema + session re-anchor — the unified-app workstream's schema cutover) applied to prod 2026-05-21 (`0843168` flip commit)
+- `db/026` (Phase-1 RPC batch 1 — 10 of 14 session-keyed RPCs to room-keyed) committed+pushed `9e3926e`. NOT yet applied.
+- `db/027` (Phase-1 RPC batch 2 — rpc_session_start split + new rpc_room_create) committed+pushed `2465ff5`. NOT yet applied. Includes the §F amendment + DEFERRED.md entry tracking the shell rework triggered by the rpc_session_start signature change.
+- `db/028` (Phase-1 RPC batch 3 — rpc_session_leave + reclaim RPCs) NOT yet started.
 - iOS Capacitor bundle still at v2.99 (pre-3a.1) — sync deferred until next Capacitor-relevant work; Mobile Safari is the verification target per CLAUDE.md doctrine
 - One existing Edge Function deployed: `send-push-notification`. Trivia Phase 2 added a second: `generate-trivia`.
 - See `docs/SESSION-5-PART-3-CLOSING-LOG.md`, `docs/SESSION-5-PART-3A2-VERIFICATION-LOG.md`, and `docs/GAMES-CONTROL-MODEL.md` § 2.4 + § 4.1 for full details
@@ -238,7 +242,7 @@ Active/audience cluster (closed 2026-05-03, kept here for closure-trail):
 ### Up next
 
 Near-term:
-1. **Unified-app / NHHU-primary — planning COMPLETE.** The design is captured in five docs in `docs/`: UNIFIED-APP-PLAN.md (umbrella), ROOM-SESSION-MODEL.md, ROOM-AUTHORITY-MODEL.md, ROOM-ACCESS-INVITE-MODEL.md, HOUSEHOLD-DEVICE-PRESENCE-MODEL.md. Next execution step is the Phase-1 room/session migration (see UNIFIED-APP-PLAN.md §5–§6).
+1. **Unified-app / NHHU-primary — planning COMPLETE; Phase-1 migration in progress.** The design is captured in five docs in `docs/`: UNIFIED-APP-PLAN.md (umbrella), ROOM-SESSION-MODEL.md, ROOM-AUTHORITY-MODEL.md, ROOM-ACCESS-INVITE-MODEL.md, HOUSEHOLD-DEVICE-PRESENCE-MODEL.md. Phase-1 execution: schema migration db/025 applied (2026-05-21); RPC batches db/026 (`9e3926e`) and db/027 (`2465ff5`) committed+pushed, not yet applied; db/028 (rpc_session_leave + reclaim RPCs) is the next batch to write. See `docs/EXECUTION-HANDOFF.md` for the per-migration handoff brief.
 2. **Part 5 verification** — multi-user end-to-end testing of Session 5 flows; requires 2+ test accounts.
 
 > The previous near-term tier ("Trivia 3b proper / Last Card 3c / Euchre 3d") is superseded — `admission_model_v2` §9.6 restructured per-game integration into the W1-W10 work-packages, now shipped (see Latest shipped).

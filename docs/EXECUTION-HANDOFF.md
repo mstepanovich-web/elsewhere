@@ -4,8 +4,7 @@
 docs, is the kickoff for any new chat continuing the unified-app
 execution work. Read this FIRST, then the planning docs.
 
-**Last updated:** 2026-05-21 (execution phase starting; Phase 1 not yet
-begun)
+**Last updated:** 2026-05-21 (Phase-1 migration in progress: db/025 applied; db/026 + db/027 committed-not-applied; db/028 next — see §2 and §4)
 
 ---
 
@@ -53,15 +52,37 @@ committed. Every superseded doc carries a supersession pointer. CONTEXT.md
 match. No doc contains a known-false statement.
 
 **Phase-1 execution-scope investigation: COMPLETE.** Its adopted output is
-`docs/PHASE-1-BUILD-SPEC.md` (commit `caf647e`), committed and reviewed —
-the structural plan that db/025 will be written against. The six open
-questions surfaced in §H are now closed: OQ1–OQ4 resolved (see §4 below
-for the adopted answers), OQ5 awareness-only, OQ6 was resolved at the
-spec's writing. No open questions remain blocking db/025.
+`docs/PHASE-1-BUILD-SPEC.md` (initial commit `caf647e`, amended by
+`fcc42f6` for three cross-cutting pinned decisions + an S6 current-state
+correction). The six open questions surfaced in §H are now closed.
 
-**Execution phase: in progress at the migration step.** Phase 1's schema
-migration (db/025) is the next concrete code change. The 14-RPC migration
-(db/026 onward) follows; Phases 2–5 follow that per UNIFIED-APP-PLAN §5.
+**Phase-1 migration: in progress.**
+
+- **db/025** (schema cutover — rooms entity + session/participant
+  re-anchor): committed `dddbeb6`, **applied to prod** 2026-05-21,
+  recorded in `db/MIGRATIONS_APPLIED.md` (`0843168` flip commit).
+- **db/026** (RPC batch 1 — 10 of 14 session-keyed RPCs to room-keyed;
+  the 8 mechanical re-points + rpc_session_end +
+  rpc_session_set_admission_mode): committed + pushed `9e3926e`.
+  **Written, not yet applied.**
+- **db/027** (RPC batch 2 — rpc_session_start split + new
+  rpc_room_create; the OQ2 (a) shape): committed + pushed `2465ff5`.
+  Same commit added the §F amendment recording the rpc_session_start
+  client signature breakage + a DEFERRED.md entry tracking the shell
+  rework needed. **Written, not yet applied.**
+- **db/028** (RPC batch 3 — rpc_session_leave with three-tier
+  succession + new `p_successor_user_id` parameter, plus
+  rpc_session_reclaim_manager and rpc_session_admin_reclaim):
+  **next, not started.** See §4.
+
+After db/028 lands and applies, the immediate-after work is: apply
+db/026/027/028 to prod + update `db/MIGRATIONS_APPLIED.md`; the §F
+shell session-state cluster rework (resolves the rpc_session_start
+client-breakage transient from db/027); the `fire_promotion_push`
+trigger recreation (pending an iOS-app audit on payload shape); and
+the Phase-1.1 compat-wrapper cleanup (drop the `is_session_*`
+wrappers after a grep-confirmed zero-caller check). Then Phases 2–5
+per UNIFIED-APP-PLAN §5.
 
 ## 3. The five planning docs — the design
 
@@ -82,38 +103,65 @@ All in docs/. Read all five after this brief:
 
 ## 4. The immediate next step
 
-Write db/025 — the Phase-1 schema migration — against
-`docs/PHASE-1-BUILD-SPEC.md` §B (rooms table schema) and §C (migration
-step list), with the four resolved open questions folded in:
+Write db/028 — the third and final Phase-1 RPC migration batch.
+Three RPCs land:
 
-- **OQ1** — `rooms.room_code` carries a partial UNIQUE index:
-  `UNIQUE (room_code) WHERE ended_at IS NULL`. Active room codes are
-  unambiguously resolvable; historical (ended) rooms may reuse codes.
-- **OQ2** — `rpc_session_start` becomes session-creation-only and
-  requires `p_room_id` (room must already exist). A new
-  `rpc_room_create` owns fresh-room creation. Cleanest separation of
-  the durable room from the disposable session. `rpc_room_create` is
-  the only RPC that ever writes `rooms.owner_user_id`; this makes
-  owner-immutability a structural guarantee rather than a code-review
-  check.
-- **OQ3** — `sessions.current_state` stays untouched by db/025 (dormant
-  scaffolding; cheap to keep, no migration cost).
-- **OQ4** — The `is_session_*` compatibility wrappers added in db/025's
-  step 9 are kept through Phase 1 and dropped in a Phase-1.1 cleanup;
-  that cleanup includes an explicit grep-confirmed zero-caller check
-  before the drop.
+- **rpc_session_leave** — re-point to room-keyed, plus three-tier
+  succession (named successor → present host → longest-present
+  non-audience), with a new optional `p_successor_user_id uuid`
+  parameter for tier 1. See ROOM-AUTHORITY-MODEL.md for the model
+  and PHASE-1-BUILD-SPEC.md §D's `rpc_session_leave` row for the
+  migration scope.
+- **rpc_session_reclaim_manager** — re-point to room-keyed; updates
+  `rooms.controller_user_id` (NOT `rooms.owner_user_id`, which is
+  immutable post-creation per the OQ2 structural guarantee).
+- **rpc_session_admin_reclaim** — same shape as reclaim_manager but
+  household-admin gate instead of inactivity gate.
 
-This is a CLAUDE CODE task (writes the repo). db/025 is **schema-only** —
-tables, indexes, RLS helpers, RLS policy updates, and the dead-RPC drop.
-**No RPCs are migrated in db/025.** The 14-RPC migration — eight
-mechanical re-pointings plus six semantic rewrites (including the new
-`rpc_room_create` and the three-tier `rpc_session_leave`) — is the step
-AFTER db/025, in `db/026` onward, kept as a series of small commits per
-PHASE-1-BUILD-SPEC.md §D.
+**Recommend an investigate-first round before writing**, same
+pattern as db/027 used. db/027's pre-write investigation surfaced
+the convener-seating gap and the controller-only branched-default
+scope; both were resolved in advance instead of mid-write. db/028's
+risk surface is comparable — the three-tier succession is the
+largest model-vs-RPC translation in the workstream, and the
+manager-alone / empty-room branch reaches into Phase-5 territory
+(room-ending) that the build spec only sketches. Worth
+investigating in advance:
 
-The db/025 migration is proposed as a reviewable diff and reviewed before
-commit. Apply to prod via Supabase SQL Editor after commit; update
-`db/MIGRATIONS_APPLIED.md` per CLAUDE.md doctrine.
+- Three-tier succession SQL shape (named successor as a new
+  parameter; host vs. non-audience tie-breakers via `joined_at`
+  + the row-existence contract).
+- Auth/write target for both reclaim RPCs
+  (`rooms.controller_user_id`, with the
+  `session_participants.control_role` mirror).
+- The "no eligible successor → room ends" branch — what exactly
+  sets `rooms.ended_at`?
+
+The investigate-then-write rhythm proven by db/027 is the right
+discipline here. db/028 is the last RPC migration in the Phase-1
+arc; missing a model detail at the end is worse than at the
+beginning because there's no fourth batch to absorb a correction.
+
+**After db/028 commits, the immediate-after work:**
+
+- Apply db/026 + db/027 + db/028 to prod (Supabase SQL Editor),
+  updating `db/MIGRATIONS_APPLIED.md` for each.
+- §F shell session-state cluster rework (Phase-1-scope client-side
+  migration; the rpc_session_start signature breakage from db/027
+  is the most concrete forcing function — see DEFERRED.md entry).
+- `fire_promotion_push` trigger recreation with room_id awareness
+  (pending an iOS-app audit on data.session_id payload usage —
+  tracked in PHASE-1-BUILD-SPEC.md §D's "Additional tracked work").
+- Phase-1.1 compat-wrapper cleanup: drop the `is_session_*`
+  wrappers after a grep-confirmed zero-caller check.
+
+Then Phases 2–5 per UNIFIED-APP-PLAN §5.
+
+**Deferred follow-up (separate task):** ROADMAP.md's "Active
+session" still lists Session 5; the unified-app workstream
+hasn't been promoted to active-session status there. Structural
+decision, worth a separate review rather than a hasty addendum
+here.
 
 ## 5. Review discipline
 
