@@ -231,7 +231,9 @@ begin;
 -- per the corrected succession order, host always beats named.
 -- Silently falls through to tier 3 if the named user is ineligible
 -- (left_at IS NOT NULL, audience-mode, or is the leaver themselves).
-create or replace function public.rpc_session_leave(
+drop function if exists public.rpc_session_leave(uuid);
+
+create function public.rpc_session_leave(
   p_room_id            uuid,
   p_successor_user_id  uuid default null
 )
@@ -444,7 +446,9 @@ comment on function public.rpc_session_leave(uuid, uuid) is
 -- inactivity gate (the §D pinned activity-target timestamp).
 --
 -- NEVER touches rooms.owner_user_id — control transfer only.
-create or replace function public.rpc_session_reclaim_manager(p_room_id uuid)
+drop function if exists public.rpc_session_reclaim_manager(uuid);
+
+create function public.rpc_session_reclaim_manager(p_room_id uuid)
 returns public.rooms
 language plpgsql
 security definer
@@ -550,7 +554,9 @@ comment on function public.rpc_session_reclaim_manager(uuid) is
 -- "head of household yanks the remote" escape hatch.
 --
 -- NEVER touches rooms.owner_user_id — control transfer only.
-create or replace function public.rpc_session_admin_reclaim(p_room_id uuid)
+drop function if exists public.rpc_session_admin_reclaim(uuid);
+
+create function public.rpc_session_admin_reclaim(p_room_id uuid)
 returns public.rooms
 language plpgsql
 security definer

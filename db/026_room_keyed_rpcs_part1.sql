@@ -92,7 +92,9 @@ begin;
 
 
 -- ─── 1. rpc_session_join (M1) ────────────────────────────────────────────
-create or replace function public.rpc_session_join(
+drop function if exists public.rpc_session_join(uuid, text);
+
+create function public.rpc_session_join(
   p_room_id            uuid,
   p_participation_role text default 'audience'
 )
@@ -174,7 +176,9 @@ comment on function public.rpc_session_join(uuid, text) is
 
 
 -- ─── 2. rpc_session_update_participant (M2) ──────────────────────────────
-create or replace function public.rpc_session_update_participant(
+drop function if exists public.rpc_session_update_participant(uuid, uuid, text, text, jsonb);
+
+create function public.rpc_session_update_participant(
   p_room_id            uuid,
   p_user_id            uuid,
   p_control_role       text  default null,
@@ -359,7 +363,9 @@ comment on function public.rpc_session_update_participant(uuid, uuid, text, text
 
 
 -- ─── 3. rpc_session_update_queue_position (M3) ───────────────────────────
-create or replace function public.rpc_session_update_queue_position(
+drop function if exists public.rpc_session_update_queue_position(uuid, uuid, int);
+
+create function public.rpc_session_update_queue_position(
   p_room_id      uuid,
   p_user_id      uuid,
   p_new_position int
@@ -445,7 +451,9 @@ comment on function public.rpc_session_update_queue_position(uuid, uuid, int) is
 
 
 -- ─── 4. rpc_session_remove_participant (M4) ──────────────────────────────
-create or replace function public.rpc_session_remove_participant(
+drop function if exists public.rpc_session_remove_participant(uuid, uuid);
+
+create function public.rpc_session_remove_participant(
   p_room_id uuid,
   p_user_id uuid
 )
@@ -518,7 +526,9 @@ comment on function public.rpc_session_remove_participant(uuid, uuid) is
 
 
 -- ─── 5. rpc_session_set_my_participation_role (M5) ───────────────────────
-create or replace function public.rpc_session_set_my_participation_role(
+drop function if exists public.rpc_session_set_my_participation_role(uuid, text);
+
+create function public.rpc_session_set_my_participation_role(
   p_room_id uuid,
   p_role    text
 )
@@ -647,7 +657,9 @@ comment on function public.rpc_session_get_participants(uuid) is
 
 
 -- ─── 7. rpc_session_heartbeat (M7) ───────────────────────────────────────
-create or replace function public.rpc_session_heartbeat(p_room_id uuid)
+drop function if exists public.rpc_session_heartbeat(uuid);
+
+create function public.rpc_session_heartbeat(p_room_id uuid)
 returns integer
 language plpgsql
 security definer
@@ -694,7 +706,9 @@ comment on function public.rpc_session_heartbeat(uuid) is
 
 
 -- ─── 8. rpc_karaoke_song_ended (M8) ──────────────────────────────────────
-create or replace function public.rpc_karaoke_song_ended(
+drop function if exists public.rpc_karaoke_song_ended(uuid);
+
+create function public.rpc_karaoke_song_ended(
   p_room_id uuid
 )
 returns public.sessions

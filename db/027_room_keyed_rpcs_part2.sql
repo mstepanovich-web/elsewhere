@@ -301,7 +301,9 @@ comment on function public.rpc_room_create(uuid) is
 -- their existing participation_role, queue_position, and wanting_since
 -- across a session-start, consistent with ROOM-SESSION-MODEL.md's
 -- cross-app-move "nothing to copy" / "same membership" framing.
-create or replace function public.rpc_session_start(
+drop function if exists public.rpc_session_start(uuid, text, text, int, boolean, text, text);
+
+create function public.rpc_session_start(
   p_room_id         uuid,
   p_app             text,
   p_admission_mode  text,
