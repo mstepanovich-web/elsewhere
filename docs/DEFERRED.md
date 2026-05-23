@@ -3317,71 +3317,6 @@ Either: (a) opportunistically during the §F shell-rework when the publishers ar
 
 ---
 
-### Deferred: turn-notification iOS feature depends on fire_promotion_push trigger recreation
-
-**Deferred in:** Premium-control model documentation (Phase 3 Body B audit)
-**Deferred on:** 2026-05-23
-**Priority:** Medium — user-visible feature; blocked on infrastructure already tracked.
-**Area:** iOS shell + Schema (trigger function)
-**Status:** Deferred (audit completed 2026-05-23; trigger recreation + Edge Function update remain)
-
-#### Context
-
-The premium-control model assumes a turn-notification UX: when a user is queued in a karaoke (or other turn-based) session and their turn approaches, the iOS app shows a push notification that taps back to their active room. This is the existing queued→active promotion-push flow extended to the room-keyed schema.
-
-The infrastructure for this — the `fire_promotion_push()` trigger function and `trg_fire_promotion_push` trigger — was dropped by db/025 because the original db/015 implementation referenced columns that no longer exist post-rooms-anchoring. The trigger's recreation is already tracked as a known piece of additional work in PHASE-1-BUILD-SPEC.md §D's "Additional tracked work: fire_promotion_push trigger recreation" subsection, pending an iOS-app audit on the `data.session_id` payload usage in the current notification handler — that audit has now completed (see "Audit findings (2026-05-23)" below).
-
-#### Audit findings (2026-05-23)
-
-The iOS-app audit gating this work has completed. Findings:
-
-**The iOS app reads NOTHING from the push payload's data object.** The only push-notification consumers in the entire codebase are the two `PushNotifications.addListener('pushNotificationReceived', …)` and `PushNotifications.addListener('pushNotificationActionPerformed', …)` handlers in `karaoke/singer.html` at lines ~2094 and ~2098. Both read only `notif.title` / `notif.body` and only call `log(...)`. Neither reads `notif.data.session_id`, `notif.data.room_id`, or any other field of `data`. The routing-from-payload logic was never implemented — both handlers carry explicit `// TODO 2e.1+:` comments noting the intent and the gap. (The unbuilt tap-routing work is tracked as a separate DEFERRED entry — see Related, below.)
-
-**The build-spec's payload sub-question is therefore MOOT for the app today.** The build-spec (PHASE-1-BUILD-SPEC.md §D) framed three options for the recreated trigger's payload — (a) room_id only, (b) both, (c) session_id only — pending the iOS audit. With the audit complete, the answer is: none of them functionally differ for the app today. The recreated trigger can send any payload shape; nothing on-device will read it. The functional contract is just `{ user_id, type: 'promotion' }` — `user_id` routes the push to the right device token(s), and the `send-push-notification` Edge Function (`supabase/functions/send-push-notification/index.ts` lines 241–245) synthesizes the visible `title` and `body` text from the `type: 'promotion'` marker.
-
-**Recommended payload for the recreated trigger:** `{ user_id, type, room_id }` — `room_id` rather than `session_id`. Rationale: ROOM-SESSION-MODEL.md frames the user-facing identity as the room (the user navigates back to a ROOM, not a session — rooms outlive sessions), and this entry's existing "tap back to the active room (not just the active session)" note already commits to that framing. Sending `room_id` now costs nothing functionally and avoids a second migration when the eventual tap-routing implementation needs it. This is a recommendation, not a locked decision — confirm when writing the migration.
-
-**Downstream caveat — ship together:** `supabase/functions/send-push-notification/index.ts:244` hard-codes `session_id: body.session_id` when synthesizing the data object for service-role calls. If the recreated trigger sends `room_id` instead of `session_id`, this line must be updated to read whichever field the trigger sends (e.g. `room_id: body.room_id`). Otherwise the deployed Edge Function produces `session_id: undefined` in the APNs payload — harmless for the app today (nothing reads it) but stale-named when the tap-routing work eventually lands and starts reading the field. The Edge Function change is a one-line edit + `supabase functions deploy send-push-notification --no-verify-jwt` (the `--no-verify-jwt` flag is mandatory per CLAUDE.md doctrine, since the trigger sends a shared-secret in the Authorization header). Must ship with the trigger recreation, not after.
-
-**Scope honesty:** recreating the trigger restores the PUSH delivery — the user receives the "You're up! / Tap to take the stage" notification on their iOS device. It does NOT restore tap-to-route behavior — tapping the notification still just opens the app to wherever it was, because the routing implementation (the `// TODO 2e.1+` work in `karaoke/singer.html`'s two listeners) was never built. That work is tracked as its own DEFERRED entry, "push-notification tap routing — `// TODO 2e.1+` in karaoke/singer.html never implemented" (see Related). The two work items are sequenced: recreate trigger first (push delivery works), then build tap-routing (tap-into-room works).
-
-#### What's deferred
-
-The turn-notification feature itself, as user-facing UX, is dependent on:
-
-1. The fire_promotion_push trigger recreation with `room_id` awareness — the schema-side work. Now actionable: the iOS audit has confirmed any payload shape works for the app today, and the recommended `{ user_id, type, room_id }` shape future-proofs for the tap-routing work.
-2. The Edge Function update at `supabase/functions/send-push-notification/index.ts:244` — must ship in the same operator session as the trigger (see audit findings above).
-3. The iOS-side tap-routing logic — separately tracked DEFERRED entry. Until that lands, recreating the trigger restores the push but not the "tap returns to active room" behavior.
-
-When fire_promotion_push is recreated, push delivery works end-to-end. Re-testing should confirm: (a) a queued→active transition in `session_participants` fires the trigger; (b) the Edge Function receives the call with the new payload and forwards a synthesized "You're up!" alert to APNs; (c) the device shows the notification. Tap-to-route is verified separately under the tap-routing entry's work.
-
-#### Options when picking up
-
-Folded into the fire_promotion_push trigger recreation work. Sequence:
-
-1. Write `db/NNN_fire_promotion_push_recreation.sql` — recreates the trigger function with the recommended `{ user_id, type, room_id }` payload (or alternative shape if reconsidered). Apply to prod via Supabase SQL Editor, record in `db/MIGRATIONS_APPLIED.md`.
-2. Update `supabase/functions/send-push-notification/index.ts:244` to read whichever field the trigger sends. Deploy via `supabase functions deploy send-push-notification --no-verify-jwt`.
-3. Verify end-to-end: trigger a queued→active transition, confirm the iOS device receives the push.
-
-Tap-routing follows in a separate DEFERRED entry's work.
-
-#### When to pick this up
-
-Whenever a future schema migration session is convened, or before the karaoke surface is exercised by real users (per CLAUDE.md, the platform is pre-launch, so urgency is low). The audit completing is what makes this actionable — there is no longer a blocker.
-
-#### Related
-
-- DEFERRED entry "push-notification tap routing — `// TODO 2e.1+` in karaoke/singer.html never implemented" — the unbuilt tap-routing work that the user-visible "tap back to room" UX depends on.
-- `docs/PHASE-1-BUILD-SPEC.md` §D, "Additional tracked work: fire_promotion_push trigger recreation" — the infrastructure dependency.
-- `docs/ROOM-SESSION-MODEL.md` § "Multi-room membership and the one-engagement rule" — the model context (the user has an active room they can be notified to return to).
-- `db/015_promotion_push_trigger.sql` — the original trigger definition (now dropped by db/025); pattern source for the recreation.
-- `db/025_rooms_and_session_anchor.sql` — the migration that dropped the trigger.
-- `supabase/functions/send-push-notification/index.ts` lines 235–245 — the Edge Function that synthesizes title/body and constructs the APNs `data` payload; line 244 needs the field-name update.
-- `karaoke/singer.html` lines ~2094 and ~2098 — the two push-notification listeners (debug-log-only today).
-- 2026-05-23 iOS-app audit (planning-chat transcript) — the source of the findings above.
-
----
-
 ### Deferred: HH-admin administrative actions without engagement transition
 
 **Deferred in:** Premium-control model documentation (Body A "Seize authority" subsection)
@@ -4015,3 +3950,69 @@ Whichever comes first. If neither has triggered by the time W7-W10 ship, surface
 **Status:** Completed 2026-05-23 — function removed from `index.html` in the Phase-1.1 cleanup commit. The §F Part 1 commit `c270800` made the function unreferenced by switching the shell to the two-call session-start flow; this cleanup removes the dead definition (10 lines, the function plus its header comment).
 
 `index.html`'s `generateRoomCode()` function was the random-room-code generator used by the old single-call `rpc_session_start` flow. Post-db/027, room codes are generated server-side inside `rpc_room_create` (6-char alphabet from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, bounded collision-retry). The shell no longer pre-generates one. After §F Part 1 (commit landed 2026-05-23) the function is unreferenced — `grep -n "generateRoomCode" index.html` returns only its definition. Remove in a future dead-code sweep — natural pair with the Phase-1.1 compat-wrapper cleanup (drop `is_session_*` wrappers) noted in `docs/EXECUTION-HANDOFF.md` §4 "After the §F shell rework lands."
+
+---
+
+### Deferred: turn-notification iOS feature depends on fire_promotion_push trigger recreation
+
+**Deferred in:** Premium-control model documentation (Phase 3 Body B audit)
+**Deferred on:** 2026-05-23
+**Priority:** Medium — user-visible feature; blocked on infrastructure already tracked.
+**Area:** iOS shell + Schema (trigger function)
+**Status:** Completed 2026-05-23 — push DELIVERY restored. db/029 (`db/029_fire_promotion_push_recreation.sql`, commit `b0f8a47`) recreated the `fire_promotion_push()` function and `trg_fire_promotion_push` trigger with the room-keyed payload `{ user_id, type: 'promotion', room_id }`, applied to prod 2026-05-23 via Supabase SQL Editor. The send-push-notification Edge Function (`supabase/functions/send-push-notification/index.ts:244`) was deployed in lockstep to read `body.room_id` in its synthesized APNs data object. All 5 static verification queries passed (function exists with SECURITY DEFINER, body references NEW.room_id and NOT NEW.session_id, trigger exists on session_participants with tgenabled = 'O' and the queued→active WHEN clause, Vault secrets present). End-to-end smoke test pending exercise of a queued→active transition on a real device. **SCOPE HONESTY:** this completion restored push DELIVERY only — the user now receives the "You're up! / Tap to take the stage" notification. It did NOT restore tap-to-route behavior — tapping the notification still just opens the app to wherever it was. The `// TODO 2e.1+` tap-routing implementation in `karaoke/singer.html`'s push listeners (lines ~2094, ~2098) was never built and remains tracked as the SEPARATE ACTIVE entry "push-notification tap routing — `// TODO 2e.1+` in karaoke/singer.html never implemented" (do not close that entry; only this delivery-side entry is complete).
+
+#### Context
+
+The premium-control model assumes a turn-notification UX: when a user is queued in a karaoke (or other turn-based) session and their turn approaches, the iOS app shows a push notification that taps back to their active room. This is the existing queued→active promotion-push flow extended to the room-keyed schema.
+
+The infrastructure for this — the `fire_promotion_push()` trigger function and `trg_fire_promotion_push` trigger — was dropped by db/025 because the original db/015 implementation referenced columns that no longer exist post-rooms-anchoring. The trigger's recreation is already tracked as a known piece of additional work in PHASE-1-BUILD-SPEC.md §D's "Additional tracked work: fire_promotion_push trigger recreation" subsection, pending an iOS-app audit on the `data.session_id` payload usage in the current notification handler — that audit has now completed (see "Audit findings (2026-05-23)" below).
+
+#### Audit findings (2026-05-23)
+
+The iOS-app audit gating this work has completed. Findings:
+
+**The iOS app reads NOTHING from the push payload's data object.** The only push-notification consumers in the entire codebase are the two `PushNotifications.addListener('pushNotificationReceived', …)` and `PushNotifications.addListener('pushNotificationActionPerformed', …)` handlers in `karaoke/singer.html` at lines ~2094 and ~2098. Both read only `notif.title` / `notif.body` and only call `log(...)`. Neither reads `notif.data.session_id`, `notif.data.room_id`, or any other field of `data`. The routing-from-payload logic was never implemented — both handlers carry explicit `// TODO 2e.1+:` comments noting the intent and the gap. (The unbuilt tap-routing work is tracked as a separate DEFERRED entry — see Related, below.)
+
+**The build-spec's payload sub-question is therefore MOOT for the app today.** The build-spec (PHASE-1-BUILD-SPEC.md §D) framed three options for the recreated trigger's payload — (a) room_id only, (b) both, (c) session_id only — pending the iOS audit. With the audit complete, the answer is: none of them functionally differ for the app today. The recreated trigger can send any payload shape; nothing on-device will read it. The functional contract is just `{ user_id, type: 'promotion' }` — `user_id` routes the push to the right device token(s), and the `send-push-notification` Edge Function (`supabase/functions/send-push-notification/index.ts` lines 241–245) synthesizes the visible `title` and `body` text from the `type: 'promotion'` marker.
+
+**Recommended payload for the recreated trigger:** `{ user_id, type, room_id }` — `room_id` rather than `session_id`. Rationale: ROOM-SESSION-MODEL.md frames the user-facing identity as the room (the user navigates back to a ROOM, not a session — rooms outlive sessions), and this entry's existing "tap back to the active room (not just the active session)" note already commits to that framing. Sending `room_id` now costs nothing functionally and avoids a second migration when the eventual tap-routing implementation needs it. This is a recommendation, not a locked decision — confirm when writing the migration.
+
+**Downstream caveat — ship together:** `supabase/functions/send-push-notification/index.ts:244` hard-codes `session_id: body.session_id` when synthesizing the data object for service-role calls. If the recreated trigger sends `room_id` instead of `session_id`, this line must be updated to read whichever field the trigger sends (e.g. `room_id: body.room_id`). Otherwise the deployed Edge Function produces `session_id: undefined` in the APNs payload — harmless for the app today (nothing reads it) but stale-named when the tap-routing work eventually lands and starts reading the field. The Edge Function change is a one-line edit + `supabase functions deploy send-push-notification --no-verify-jwt` (the `--no-verify-jwt` flag is mandatory per CLAUDE.md doctrine, since the trigger sends a shared-secret in the Authorization header). Must ship with the trigger recreation, not after.
+
+**Scope honesty:** recreating the trigger restores the PUSH delivery — the user receives the "You're up! / Tap to take the stage" notification on their iOS device. It does NOT restore tap-to-route behavior — tapping the notification still just opens the app to wherever it was, because the routing implementation (the `// TODO 2e.1+` work in `karaoke/singer.html`'s two listeners) was never built. That work is tracked as its own DEFERRED entry, "push-notification tap routing — `// TODO 2e.1+` in karaoke/singer.html never implemented" (see Related). The two work items are sequenced: recreate trigger first (push delivery works), then build tap-routing (tap-into-room works).
+
+#### What's deferred
+
+The turn-notification feature itself, as user-facing UX, is dependent on:
+
+1. The fire_promotion_push trigger recreation with `room_id` awareness — the schema-side work. Now actionable: the iOS audit has confirmed any payload shape works for the app today, and the recommended `{ user_id, type, room_id }` shape future-proofs for the tap-routing work.
+2. The Edge Function update at `supabase/functions/send-push-notification/index.ts:244` — must ship in the same operator session as the trigger (see audit findings above).
+3. The iOS-side tap-routing logic — separately tracked DEFERRED entry. Until that lands, recreating the trigger restores the push but not the "tap returns to active room" behavior.
+
+When fire_promotion_push is recreated, push delivery works end-to-end. Re-testing should confirm: (a) a queued→active transition in `session_participants` fires the trigger; (b) the Edge Function receives the call with the new payload and forwards a synthesized "You're up!" alert to APNs; (c) the device shows the notification. Tap-to-route is verified separately under the tap-routing entry's work.
+
+#### Options when picking up
+
+Folded into the fire_promotion_push trigger recreation work. Sequence:
+
+1. Write `db/NNN_fire_promotion_push_recreation.sql` — recreates the trigger function with the recommended `{ user_id, type, room_id }` payload (or alternative shape if reconsidered). Apply to prod via Supabase SQL Editor, record in `db/MIGRATIONS_APPLIED.md`.
+2. Update `supabase/functions/send-push-notification/index.ts:244` to read whichever field the trigger sends. Deploy via `supabase functions deploy send-push-notification --no-verify-jwt`.
+3. Verify end-to-end: trigger a queued→active transition, confirm the iOS device receives the push.
+
+Tap-routing follows in a separate DEFERRED entry's work.
+
+#### When to pick this up
+
+Whenever a future schema migration session is convened, or before the karaoke surface is exercised by real users (per CLAUDE.md, the platform is pre-launch, so urgency is low). The audit completing is what makes this actionable — there is no longer a blocker.
+
+#### Related
+
+- DEFERRED entry "push-notification tap routing — `// TODO 2e.1+` in karaoke/singer.html never implemented" — the unbuilt tap-routing work that the user-visible "tap back to room" UX depends on. **STILL ACTIVE** — this completion entry covers delivery only.
+- `docs/PHASE-1-BUILD-SPEC.md` §D, "Additional tracked work: fire_promotion_push trigger recreation" — the infrastructure dependency.
+- `docs/ROOM-SESSION-MODEL.md` § "Multi-room membership and the one-engagement rule" — the model context (the user has an active room they can be notified to return to).
+- `db/015_promotion_push_trigger.sql` — the original trigger definition (dropped by db/025); pattern source for the recreation.
+- `db/025_rooms_and_session_anchor.sql` — the migration that dropped the trigger.
+- `db/029_fire_promotion_push_recreation.sql` — the recreation migration (this entry's resolving work; commit `b0f8a47`, applied to prod 2026-05-23).
+- `supabase/functions/send-push-notification/index.ts` lines 235–245 — the Edge Function that synthesizes title/body and constructs the APNs `data` payload; line 244 was updated to read `room_id` (deployed 2026-05-23).
+- `karaoke/singer.html` lines ~2094 and ~2098 — the two push-notification listeners (debug-log-only today; tap-routing tracked separately).
+- 2026-05-23 iOS-app audit (planning-chat transcript) — the source of the audit findings above.
