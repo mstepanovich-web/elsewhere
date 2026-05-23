@@ -3380,55 +3380,6 @@ Whenever HH-admin remote-management surfaces become a real UX concern — likely
 
 ---
 
-### Deferred: ownership-seize implementing RPC
-
-**Deferred in:** Premium-control model documentation (Body A "Seize authority" subsection)
-**Deferred on:** 2026-05-23
-**Priority:** Medium — designed operation with two predicates and prescribed behavior; the model is in place, the RPC is not. Not blocking until a UX flow needs it.
-**Area:** Schema (RPC layer)
-**Status:** Deferred (now actionable — schema dependency on `tv_devices.can_embed` satisfied by db/030, applied 2026-05-23; pickup gated on a UX forcing function per "When to pick this up" below).
-
-#### Context
-
-ROOM-AUTHORITY-MODEL.md § "Seize authority" fully specifies ownership-seize: a NEW immediate take-control operation distinct from the existing inactivity-reclaim path. Two predicates:
-
-- **Convener-seize.** `auth.uid() = rooms.owner_user_id`. The original convener may seize their own room at any time the premium-control layer is active.
-- **Admin-seize.** The caller is an HH admin of the household that OWNS the room — i.e., `rooms.owner_user_id` is on that admin's household roster.
-
-The operation is gated on the premium-control layer being active (room bound to an embedding-capable device) and ownership-class membership, not on inactivity. Distinct from `rpc_session_reclaim_manager` (10-min idle gate, household-of-displaying-TV membership) and `rpc_session_admin_reclaim` (admin of displaying-TV's household, no inactivity gate).
-
-The model includes the engagement-prompt behavior (one-engagement transition prompt fires on seize) and the implementation note: "Ownership-seize has no RPC yet; the model is written down so that when its RPC ships, the predicates and engagement-prompt behavior are already defined."
-
-#### What's deferred
-
-A new RPC, probably named `rpc_room_seize` (or `rpc_room_ownership_seize` if the naming should be unambiguous against the existing reclaim RPCs):
-
-- Single parameter: `p_room_id uuid`.
-- Auth gates: (a) caller is authenticated; (b) premium-control layer is active for the room — queryable as `tv_devices.can_embed = true` for the room's `screen_ref` (column shipped via db/030, applied 2026-05-23); (c) caller satisfies one of the two predicates: convener-seize OR admin-seize.
-- Behavior: identical demote-then-promote mechanic on `session_participants.control_role` as the existing reclaim RPCs (drives off `session_participants_one_manager` partial-unique index); writes `rooms.controller_user_id` to the caller; bumps `rooms.last_activity_at`.
-- Returns `rooms` row.
-
-**Runtime-effect note.** db/030 shipped the schema column with no writer — every row currently reads `can_embed = false`. When this RPC ships, its auth gate (b) will refuse every seize attempt in prod until the self-report writer lands (tracked in the separate "tv_devices.can_embed self-report path" entry). The RPC can ship in any order relative to the self-report writer; both must land before the seize operation actually grants control to anyone in prod. That's the right safety posture, not a blocker — the RPC's correctness is independent of any row's current `can_embed` value.
-
-#### Options when picking up
-
-- **Reuse pieces of `rpc_session_reclaim_manager`**: the demote-then-promote mechanic on `session_participants.control_role` is identical to the existing reclaim RPCs (db/028 §§1 + 3). The only differences are the auth gates and the absence of the 10-min inactivity check. Could be factored as a shared helper or copy-pasted; copy-paste is simpler and matches the pattern already in use.
-
-(The original "Wait for the can_embed column to land" and "Implement defensively against unknown can_embed" options are obsolete — db/030 shipped the column. The auth gate (b) reads `can_embed` directly without defensive null-handling.)
-
-#### When to pick this up
-
-When ownership-seize has a forcing UX function — i.e., when a user-facing flow needs the operation. Until then, the model is documented and the prose note in `### Seize authority` says the RPC is tracked here. A future shell-side UI that surfaces "Seize control" on an admin's household-rooms list, for example, would be the natural trigger.
-
-#### Related
-
-- `docs/ROOM-AUTHORITY-MODEL.md` § "Seize authority" — the full specification this entry tracks.
-- DEFERRED entry "tv_devices.can_embed self-report path (claim flow + tv2.html capability detection)" — the former C1 entry, now re-scoped after db/030 shipped the schema column. Schema half (the part this RPC needs) is done; the self-report half remains active but does NOT gate this RPC's implementation. See the "Runtime-effect note" in "What's deferred" above for how the two interact at runtime.
-- `db/030_tv_devices_can_embed.sql` — the schema column this RPC's auth gate (b) reads (applied 2026-05-23).
-- `db/028_room_keyed_rpcs_part3.sql` — `rpc_session_reclaim_manager` and `rpc_session_admin_reclaim`, the existing reclaim RPCs whose demote-then-promote mechanic ownership-seize would reuse.
-
----
-
 ### Deferred: drop the three is_session_* compat wrappers from db/025
 
 **Deferred in:** Phase-1.1 cleanup (post-§F-Part-1 discovery)
@@ -4041,3 +3992,53 @@ Whenever a future schema migration session is convened, or before the karaoke su
 - `supabase/functions/send-push-notification/index.ts` lines 235–245 — the Edge Function that synthesizes title/body and constructs the APNs `data` payload; line 244 was updated to read `room_id` (deployed 2026-05-23).
 - `karaoke/singer.html` lines ~2094 and ~2098 — the two push-notification listeners (debug-log-only today; tap-routing tracked separately).
 - 2026-05-23 iOS-app audit (planning-chat transcript) — the source of the audit findings above.
+
+---
+
+### Deferred: ownership-seize implementing RPC
+
+**Deferred in:** Premium-control model documentation (Body A "Seize authority" subsection)
+**Deferred on:** 2026-05-23
+**Priority:** Medium — designed operation with two predicates and prescribed behavior; the model is in place, the RPC is not. Not blocking until a UX flow needs it.
+**Area:** Schema (RPC layer)
+**Status:** Completed 2026-05-23 — RPC SHIPPED. db/031 (`db/031_room_seize.sql`, commit `b654f91`) created `rpc_room_seize(p_room_id uuid) returns public.rooms` with all 5 guards (authed; room exists; room not ended; screen_ref + can_embed; convener-OR-admin-of-owner's-household), the demote-then-promote mechanic copied verbatim from db/028's reclaim RPCs, GRANT EXECUTE TO authenticated, and rooms.owner_user_id preserved (sentinel check returned 0 rows). Applied to prod 2026-05-23 via Supabase SQL Editor; 4 of 5 footer verification queries passed (function shape + SECURITY DEFINER; body content + preservation guarantee; GRANT; sole-writer sentinel). **SCOPE HONESTY:** the RPC exists in prod, is correct, and is callable — but guard 4b (`can_embed = true`) will REFUSE every seize attempt in prod until a `tv_devices.can_embed = true` row exists, which is the deferred self-report writer's job. The end-to-end smoke test (footer verification 5) is deferred to whenever that writer ships. Seize becoming functionally usable in prod still waits on the SEPARATE ACTIVE entry "tv_devices.can_embed self-report path (claim flow + tv2.html capability detection)" — do not close that entry; only this RPC-implementation entry is complete. The RPC's correctness is independent of any row's current `can_embed` value; this is the correct interim safety posture.
+
+#### Context
+
+ROOM-AUTHORITY-MODEL.md § "Seize authority" fully specifies ownership-seize: a NEW immediate take-control operation distinct from the existing inactivity-reclaim path. Two predicates:
+
+- **Convener-seize.** `auth.uid() = rooms.owner_user_id`. The original convener may seize their own room at any time the premium-control layer is active.
+- **Admin-seize.** The caller is an HH admin of the household that OWNS the room — i.e., `rooms.owner_user_id` is on that admin's household roster.
+
+The operation is gated on the premium-control layer being active (room bound to an embedding-capable device) and ownership-class membership, not on inactivity. Distinct from `rpc_session_reclaim_manager` (10-min idle gate, household-of-displaying-TV membership) and `rpc_session_admin_reclaim` (admin of displaying-TV's household, no inactivity gate).
+
+The model includes the engagement-prompt behavior (one-engagement transition prompt fires on seize) and the implementation note: "Ownership-seize has no RPC yet; the model is written down so that when its RPC ships, the predicates and engagement-prompt behavior are already defined."
+
+#### What's deferred
+
+A new RPC, probably named `rpc_room_seize` (or `rpc_room_ownership_seize` if the naming should be unambiguous against the existing reclaim RPCs):
+
+- Single parameter: `p_room_id uuid`.
+- Auth gates: (a) caller is authenticated; (b) premium-control layer is active for the room — queryable as `tv_devices.can_embed = true` for the room's `screen_ref` (column shipped via db/030, applied 2026-05-23); (c) caller satisfies one of the two predicates: convener-seize OR admin-seize.
+- Behavior: identical demote-then-promote mechanic on `session_participants.control_role` as the existing reclaim RPCs (drives off `session_participants_one_manager` partial-unique index); writes `rooms.controller_user_id` to the caller; bumps `rooms.last_activity_at`.
+- Returns `rooms` row.
+
+**Runtime-effect note.** db/030 shipped the schema column with no writer — every row currently reads `can_embed = false`. When this RPC ships, its auth gate (b) will refuse every seize attempt in prod until the self-report writer lands (tracked in the separate "tv_devices.can_embed self-report path" entry). The RPC can ship in any order relative to the self-report writer; both must land before the seize operation actually grants control to anyone in prod. That's the right safety posture, not a blocker — the RPC's correctness is independent of any row's current `can_embed` value.
+
+#### Options when picking up
+
+- **Reuse pieces of `rpc_session_reclaim_manager`**: the demote-then-promote mechanic on `session_participants.control_role` is identical to the existing reclaim RPCs (db/028 §§1 + 3). The only differences are the auth gates and the absence of the 10-min inactivity check. Could be factored as a shared helper or copy-pasted; copy-paste is simpler and matches the pattern already in use.
+
+(The original "Wait for the can_embed column to land" and "Implement defensively against unknown can_embed" options are obsolete — db/030 shipped the column. The auth gate (b) reads `can_embed` directly without defensive null-handling.)
+
+#### When to pick this up
+
+When ownership-seize has a forcing UX function — i.e., when a user-facing flow needs the operation. Until then, the model is documented and the prose note in `### Seize authority` says the RPC is tracked here. A future shell-side UI that surfaces "Seize control" on an admin's household-rooms list, for example, would be the natural trigger.
+
+#### Related
+
+- `docs/ROOM-AUTHORITY-MODEL.md` § "Seize authority" — the full specification this entry tracks.
+- DEFERRED entry "tv_devices.can_embed self-report path (claim flow + tv2.html capability detection)" — the former C1 entry, now re-scoped after db/030 shipped the schema column. Schema half (the part this RPC needs) is done; the self-report half remains active but does NOT gate this RPC's implementation. See the "Runtime-effect note" in "What's deferred" above for how the two interact at runtime. **STILL ACTIVE** — this completion entry covers RPC implementation only; seize becoming functionally usable in prod still waits on that entry.
+- `db/030_tv_devices_can_embed.sql` — the schema column this RPC's auth gate (b) reads (applied 2026-05-23).
+- `db/031_room_seize.sql` — the resolving migration for this entry (commit `b654f91`, applied to prod 2026-05-23).
+- `db/028_room_keyed_rpcs_part3.sql` — `rpc_session_reclaim_manager` and `rpc_session_admin_reclaim`, the existing reclaim RPCs whose demote-then-promote mechanic ownership-seize reuses (verbatim copy).
