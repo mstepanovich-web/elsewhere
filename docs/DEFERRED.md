@@ -3229,44 +3229,66 @@ Immediately after `db/026` + `db/027` + `db/028` are applied to prod and recorde
 
 ---
 
-### Deferred: tv_devices needs an embedding-capability column (premium-control-layer activation predicate)
+### Deferred: tv_devices.can_embed self-report path (claim flow + tv2.html capability detection)
 
-**Deferred in:** Premium-control model documentation (post-Phase-1)
-**Deferred on:** 2026-05-23
-**Priority:** Medium — required to make the premium-control layer's activation predicate runtime-enforceable; not blocking until premium features ship.
-**Area:** Schema + tv2.html + Shell (claim flow)
-**Status:** Deferred
+**Deferred in:** Premium-control model documentation (post-Phase-1); split out from the original C1 entry on 2026-05-23 after the schema half landed as db/030.
+**Deferred on:** 2026-05-23 (original C1); re-scoped 2026-05-23 after db/030 shipped the schema half.
+**Priority:** Low — blocked on the compositing pipeline existing as code (see "Blocker" below). Until then, every device defaults to `can_embed = false` and the premium-control layer is inactive everywhere; that's a known interim state and is correct under the conservative-default rationale.
+**Area:** Schema (claim RPCs) + tv2.html + claim.html (QR URL bridge)
+**Status:** Deferred — schema column shipped via db/030; the self-report and claim-flow recording remain open and blocked. (Applied date recorded in `db/MIGRATIONS_APPLIED.md` after operator apply.)
 
 #### Context
 
-The premium-control layer documented in ROOM-AUTHORITY-MODEL.md § "When the premium-control layer is active" activates when a room is bound to an embedding-capable device — a device with a camera plus the compositing pipeline to overlay participants into the venue. "Embedding-capable" is a capability, not a hardware brand: a laptop with a USB webcam acting as a household TV satisfies this exactly the same way the eventual Elsewhere hardware unit will.
+The premium-control layer documented in ROOM-AUTHORITY-MODEL.md § "When the premium-control layer is active" activates when a room is bound to an embedding-capable device — a device with both (a) a camera accessible to the TV browser, and (b) the compositing pipeline to overlay participants into the venue. The activation predicate is `tv_devices.can_embed = true` for the screen the room is bound to.
 
-The tv_devices schema has no device-classification column. Confirmed by the 2026-05-23 tv_devices schema investigation: every tv_devices row is "some browser that loaded tv2.html and was claimed by a household admin," with no discriminator. The schema cannot tell a real Elsewhere camera-equipped device from a laptop browser claimed as a TV. Until a discriminator exists, the premium-control layer's activation predicate is a logical concept the docs describe, not a runtime-enforceable condition.
+The original C1 entry covered three pieces of work: schema column, tv2.html self-report, claim-flow recording. The 2026-05-23 C1 investigation surfaced a blocker on pieces 2+3 — see below. This entry has been re-scoped to track only pieces 2+3; piece 1 (the schema column) shipped separately as db/030.
+
+#### Schema column status — DONE
+
+The schema column landed in `db/030_tv_devices_can_embed.sql`. Shape: `can_embed boolean NOT NULL DEFAULT false`. Column comment records the rationale. Every existing `tv_devices` row received the conservative default `false`. No code path currently writes to the column — the writer is the self-report / claim-flow recording work that remains in this entry.
+
+C5 (the ownership-seize RPC, separate DEFERRED entry) is unblocked schema-side by db/030 alone — its auth gate (b) can now be expressed in SQL as `tv_devices.can_embed = true`. C5 does not depend on the self-report path; C5 ships against whatever value the column holds.
+
+#### Blocker — compositing pipeline does not exist as code yet
+
+ROOM-AUTHORITY-MODEL.md defines embedding capability as a two-part conjunction: **camera AND compositing pipeline.** The camera half is detectable from tv2.html via `navigator.mediaDevices.enumerateDevices()` (presence) or `getUserMedia` (usability) — the existing pattern at `karaoke/stage.html:1410–1413` demonstrates this. The compositing pipeline half is **NOT detectable today** because the compositing pipeline itself has not been built. There is no API, no module, no feature flag, no version stamp to query.
+
+Honestly setting `can_embed = true` requires both halves to be true. Setting it based on camera presence alone would mis-report: every modern laptop has `kind: 'videoinput'` devices in `enumerateDevices()`, including ones that will never run the pipeline. The conservative-default `false` is correct until both halves can be checked.
+
+The C1 investigation's open question 6 captured this: *"The model's definition of `can_embed` includes a check for a thing that doesn't exist yet."*
 
 #### What's deferred
 
-Three pieces of work, sequenced:
+Two pieces of work, both gated on the compositing pipeline shipping:
 
-1. **Schema migration.** Add an embedding-capability column to tv_devices — proposed shape `can_embed boolean NOT NULL DEFAULT false` (conservative default — older claimed devices that pre-date the column stay non-embedding until re-claimed or upgraded). An enum (`device_type text NOT NULL CHECK (device_type IN ('elsewhere_tv', 'browser', ...)) DEFAULT 'browser'`) is the alternative if multi-class becomes useful; decide at migration time.
-2. **tv2.html self-report.** The TV browser detects camera + compositing capability at boot (`navigator.mediaDevices.enumerateDevices`, plus whatever compositing-feature detection lands with the embedding pipeline) and reports its capabilities to the claim flow.
-3. **Claim-flow recording.** `rpc_claim_tv_device` and `rpc_link_tv_to_existing_household` accept a new parameter recording the self-reported capability, written into the new tv_devices column at claim time. Re-claim flow lets a user upgrade an existing tv_devices row's capability.
+1. **tv2.html self-report.** The TV browser detects camera presence + compositing-pipeline availability at boot. Camera presence via `navigator.mediaDevices.enumerateDevices()` filtered to `kind === 'videoinput'` (presence-only, no permission prompt) is the established pattern. Compositing-pipeline availability is a feature-flag / version check / library-presence check that does not yet exist as code; the design of that check is part of the compositing pipeline's own delivery.
+2. **Claim-flow recording.** `rpc_claim_tv_device` and `rpc_link_tv_to_existing_household` (db/006 onward) accept a new optional parameter `p_can_embed boolean DEFAULT false`, written into `tv_devices.can_embed` at claim time. tv2.html passes its self-reported value through the existing QR URL bridge — the QR currently carries `?device_key=<uuid>`; extend to `?device_key=<uuid>&can_embed=<bool>`. `claim.html` parses the new param at the same line 132 pattern. `index.html` (the page that calls the claim RPCs at lines 1953–1966) forwards the value as the new RPC parameter.
+
+Re-claim semantics for the upgrade case (laptop → real Elsewhere hardware on the same `device_key`) need a small additional decision: `rpc_link_tv_to_existing_household` currently raises 23505 if `device_key` is already claimed; an upgrade-via-re-claim path needs either an UPDATE branch in the existing RPC or a separate `rpc_tv_update_capability` RPC the household admin can call. Defer the decision to pickup time.
 
 #### Options when picking up
 
-- Boolean vs. enum: boolean (`can_embed`) is simplest and matches the layer's binary predicate. An enum (`device_type`) is more expressive — could later distinguish `'elsewhere_tv'`, `'browser'`, `'kiosk'`, `'screen_share'` — at the cost of a more involved migration when the value set grows. Default to boolean unless a multi-class need surfaces.
-- Self-report vs. server-attest: the model assumes the claim is self-reported and trusted. A future hardware-attestation path (a signed claim from real Elsewhere hardware) could harden this — but is not in this scope.
-- Re-claim UX: if a user upgrades their hardware (laptop browser → real Elsewhere unit), either re-scan the QR (the claim flow re-runs and overwrites) or expose an admin-side toggle on the household's TV list.
+- **Wait for the compositing pipeline.** The honest path. Self-report is meaningful only when the pipeline check is a real thing.
+- **Ship a presence-only self-report now.** Detect camera presence only; record `can_embed = (camera exists)`. The premium-control layer would then activate on any device with a camera, which is most laptops. Embeds would fail at runtime when the pipeline tries to run on devices that don't have it. Not recommended — defeats the conservative-default safety.
+- **Manual admin toggle as an interim.** A future admin-side UI surfaces a "this device supports embedding" checkbox on the household's TV list; the admin sets it after confirming the device is a real Elsewhere unit. Avoids the detection problem entirely; less precise; not appropriate for self-claimed devices.
+
+Recommendation: wait for the pipeline. Until that ships, the column is `false` everywhere and the premium-control layer doesn't activate — that's the right safety posture.
 
 #### When to pick this up
 
-Before the premium-control layer's RPCs ship (ownership-seize, premium-filtered succession) — those RPCs need a runtime predicate to gate on. Concretely: before any code path needs to ask "is this room's screen embedding-capable?" in production.
+When the compositing pipeline is shipped or far enough along that a feature-detection check exists. At that point this entry's self-report and claim-flow recording become writable in one batch.
 
 #### Related
 
-- `docs/ROOM-AUTHORITY-MODEL.md` § "When the premium-control layer is active" — the section that documents the activation predicate this column would express.
+- `docs/ROOM-AUTHORITY-MODEL.md` § "When the premium-control layer is active" — the activation predicate this column expresses.
 - `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` §4 (TV devices) and §9 (The premium tier) — the device-model context.
-- `db/006_household_and_tv_devices.sql` — the current tv_devices definition (no classification column).
-- The 2026-05-23 tv_devices schema investigation (planning-chat record) confirming no discriminator exists today.
+- `db/030_tv_devices_can_embed.sql` — the schema half (this entry's piece-1, now done).
+- DEFERRED entry "ownership-seize implementing RPC" (C5) — first SQL reader of the new column; unblocked by db/030 alone.
+- `db/006_household_and_tv_devices.sql` — `rpc_claim_tv_device` and `rpc_link_tv_to_existing_household`, the RPCs that will gain the new optional parameter when the self-report path lands.
+- `tv2.html` lines 367–377 (`getOrCreateDeviceKey`) and ~507 (QR URL composition) — the TV-side boot path that would carry the self-reported value through the QR bridge.
+- `claim.html` line 132 — where the phone reads `device_key` from the URL; will read `can_embed` the same way.
+- `karaoke/stage.html` lines 1410–1413 — existing camera-detection pattern (`getUserMedia` + `enumerateDevices` + `videoinput` filter) the self-report would adapt for the camera half.
+- 2026-05-23 tv_devices schema investigation + 2026-05-23 C1 investigation (planning-chat transcripts) — the discovery that surfaced the compositing-pipeline blocker.
 
 ---
 
