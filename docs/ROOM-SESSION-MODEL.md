@@ -125,6 +125,34 @@ it.
 When a user attempts to engage a second room while already engaged
 elsewhere, they are prompted to confirm leaving the first ("Leave [room A]
 to join [room B]?"). This reuses the cross-app-switch confirmation pattern.
+The prompt fires at the session-creation or session-join action, NOT at
+shell tile-tap navigation — see "Tile-tap is navigation, not session
+creation" below for the distinction.
+
+## Tile-tap is navigation, not session creation
+
+Tapping an app tile in the Elsewhere shell is navigation into the
+app — nothing more. It does NOT:
+
+- create a room or session;
+- make the user the manager / controller of anything;
+- enter the user into a one-engagement transition.
+
+Session and room creation are deliberate in-app actions. Inside an
+app, a user explicitly creates a new gathering — "Create a new game"
+in the games app, "Start a karaoke session" in the karaoke app, etc.
+That deliberate action is when a new room (if needed) is created and
+when the user becomes its controller.
+
+The shell tile is the door; the in-app create action is the
+threshold. Walking through the door is free; crossing the threshold
+is the engagement.
+
+This separation matters because it preserves the multi-room
+membership rule (a user may belong to many rooms) and the
+one-engagement rule (active engagement is one room at a time) without
+forcing the shell to disambiguate every tap. Tile-tap is freely
+repeatable; engagement transitions are deliberate and prompted.
 
 ## The TV QR code is a display mechanism, not a room-creation mechanism
 

@@ -3229,6 +3229,221 @@ Immediately after `db/026` + `db/027` + `db/028` are applied to prod and recorde
 
 ---
 
+### Deferred: tv_devices needs an embedding-capability column (premium-control-layer activation predicate)
+
+**Deferred in:** Premium-control model documentation (post-Phase-1)
+**Deferred on:** 2026-05-23
+**Priority:** Medium — required to make the premium-control layer's activation predicate runtime-enforceable; not blocking until premium features ship.
+**Area:** Schema + tv2.html + Shell (claim flow)
+**Status:** Deferred
+
+#### Context
+
+The premium-control layer documented in ROOM-AUTHORITY-MODEL.md § "When the premium-control layer is active" activates when a room is bound to an embedding-capable device — a device with a camera plus the compositing pipeline to overlay participants into the venue. "Embedding-capable" is a capability, not a hardware brand: a laptop with a USB webcam acting as a household TV satisfies this exactly the same way the eventual Elsewhere hardware unit will.
+
+The tv_devices schema has no device-classification column. Confirmed by the 2026-05-23 tv_devices schema investigation: every tv_devices row is "some browser that loaded tv2.html and was claimed by a household admin," with no discriminator. The schema cannot tell a real Elsewhere camera-equipped device from a laptop browser claimed as a TV. Until a discriminator exists, the premium-control layer's activation predicate is a logical concept the docs describe, not a runtime-enforceable condition.
+
+#### What's deferred
+
+Three pieces of work, sequenced:
+
+1. **Schema migration.** Add an embedding-capability column to tv_devices — proposed shape `can_embed boolean NOT NULL DEFAULT false` (conservative default — older claimed devices that pre-date the column stay non-embedding until re-claimed or upgraded). An enum (`device_type text NOT NULL CHECK (device_type IN ('elsewhere_tv', 'browser', ...)) DEFAULT 'browser'`) is the alternative if multi-class becomes useful; decide at migration time.
+2. **tv2.html self-report.** The TV browser detects camera + compositing capability at boot (`navigator.mediaDevices.enumerateDevices`, plus whatever compositing-feature detection lands with the embedding pipeline) and reports its capabilities to the claim flow.
+3. **Claim-flow recording.** `rpc_claim_tv_device` and `rpc_link_tv_to_existing_household` accept a new parameter recording the self-reported capability, written into the new tv_devices column at claim time. Re-claim flow lets a user upgrade an existing tv_devices row's capability.
+
+#### Options when picking up
+
+- Boolean vs. enum: boolean (`can_embed`) is simplest and matches the layer's binary predicate. An enum (`device_type`) is more expressive — could later distinguish `'elsewhere_tv'`, `'browser'`, `'kiosk'`, `'screen_share'` — at the cost of a more involved migration when the value set grows. Default to boolean unless a multi-class need surfaces.
+- Self-report vs. server-attest: the model assumes the claim is self-reported and trusted. A future hardware-attestation path (a signed claim from real Elsewhere hardware) could harden this — but is not in this scope.
+- Re-claim UX: if a user upgrades their hardware (laptop browser → real Elsewhere unit), either re-scan the QR (the claim flow re-runs and overwrites) or expose an admin-side toggle on the household's TV list.
+
+#### When to pick this up
+
+Before the premium-control layer's RPCs ship (ownership-seize, premium-filtered succession) — those RPCs need a runtime predicate to gate on. Concretely: before any code path needs to ask "is this room's screen embedding-capable?" in production.
+
+#### Related
+
+- `docs/ROOM-AUTHORITY-MODEL.md` § "When the premium-control layer is active" — the section that documents the activation predicate this column would express.
+- `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` §4 (TV devices) and §9 (The premium tier) — the device-model context.
+- `db/006_household_and_tv_devices.sql` — the current tv_devices definition (no classification column).
+- The 2026-05-23 tv_devices schema investigation (planning-chat record) confirming no discriminator exists today.
+
+---
+
+### Deferred: shell/realtime.js publisher payloads carry pre-room-model field names
+
+**Deferred in:** §F shell-rework investigation (2026-05-22)
+**Deferred on:** 2026-05-23
+**Priority:** Low — no live failure today; latent risk for Phase 3/4 surfaces that parse payloads.
+**Area:** Shell — `shell/realtime.js`
+**Status:** Deferred
+
+#### Context
+
+The realtime publishers in `shell/realtime.js` (lines 264–315) build broadcast payloads using pre-db/025 field names: `session_id`, `manager_user_id`, `room_code`. These were the canonical identifiers under the single-entity sessions model. After db/025/026/027/028, the canonical identifiers are `room_id`, `controller_user_id`, and `rooms.room_code` (a room property, not a session property).
+
+The shell subscribers do NOT parse these payloads — they re-query via `refreshActiveSession` on event receipt (DECISION-6 option i, recorded at `index.html:2505`). So the field names are harmless for the shell-tier subscription path that was the focus of §F.
+
+#### What's deferred
+
+The renaming pass on the publisher payloads:
+
+- `session_id` → `room_id` (or both, if any downstream receiver cares about the session specifically)
+- `manager_user_id` → `controller_user_id` (semantic match to `rooms.controller_user_id`)
+- `room_code` is now a room property, not a session property — likely droppable from the payload entirely (receivers re-query for it if needed)
+
+Affected publishers (shell/realtime.js lines 264–315):
+
+- `publishSessionStarted`
+- `publishParticipantRoleChanged`
+- `publishQueueUpdated`
+- `publishSessionEnded`
+
+#### Options when picking up
+
+- **Rename in place.** Single pass over the four publishers. Receivers in the shell don't care; only Phase 3/4 surfaces that parse payloads (karaoke / games) might. Audit those at the same time.
+- **Defer until Phase 3/4 surfaces are touched.** Each per-surface phase can deal with the rename for its own consumers. Less coupled but more scattered.
+- **Drop `room_code` from payloads entirely.** Receivers can `.select('room_code')` from rooms if they need it. Reduces payload size and removes the ambiguity of "this came from the session payload but it's really a room property."
+
+#### When to pick this up
+
+Either: (a) opportunistically during the §F shell-rework when the publishers are being touched anyway; or (b) at the start of Phase 3 (karaoke) when surfaces that parse payloads start needing the corrected names. Whichever happens first.
+
+#### Related
+
+- DEFERRED entry "Phase-1 RPC migration in-flight — shell still on pre-db/026 RPC signatures" — the broader umbrella entry; this is one of its narrower sub-items.
+- `shell/realtime.js:264-315` — the publisher functions in question.
+- The §F shell-rework investigation (2026-05-22) that surfaced this gap.
+
+---
+
+### Deferred: turn-notification iOS feature depends on fire_promotion_push trigger recreation
+
+**Deferred in:** Premium-control model documentation (Phase 3 Body B audit)
+**Deferred on:** 2026-05-23
+**Priority:** Medium — user-visible feature; blocked on infrastructure already tracked.
+**Area:** iOS shell + Schema (trigger function)
+**Status:** Deferred
+
+#### Context
+
+The premium-control model assumes a turn-notification UX: when a user is queued in a karaoke (or other turn-based) session and their turn approaches, the iOS app shows a push notification that taps back to their active room. This is the existing queued→active promotion-push flow extended to the room-keyed schema.
+
+The infrastructure for this — the `fire_promotion_push()` trigger function and `trg_fire_promotion_push` trigger — was dropped by db/025 because the original db/015 implementation referenced columns that no longer exist post-rooms-anchoring. The trigger's recreation is already tracked as a known piece of additional work in PHASE-1-BUILD-SPEC.md §D's "Additional tracked work: fire_promotion_push trigger recreation" subsection, pending an iOS-app audit on the `data.session_id` payload usage in the current notification handler.
+
+#### What's deferred
+
+The turn-notification feature itself, as user-facing UX, is dependent on:
+
+1. The fire_promotion_push trigger recreation with `room_id` awareness (already tracked, pending iOS payload audit).
+2. The iOS notification handler in the Capacitor app correctly tapping the user back into the active room (not just the active session — rooms outlive sessions per ROOM-SESSION-MODEL.md, so the tap target should be the room).
+
+When fire_promotion_push is recreated, the turn-notification feature should be re-tested end-to-end as part of that work — including the "tap to return to room" flow against the new room/session split.
+
+#### Options when picking up
+
+Folded into the fire_promotion_push trigger recreation work. The turn-notification feature is the user-facing outcome; the trigger is the implementation. The iOS payload audit (already tracked) is the gating step before either lands.
+
+#### When to pick this up
+
+When fire_promotion_push is recreated. The audit step has been deferred pending iOS-app inspection of the current `data.session_id` payload usage — once that audit completes, both the trigger and the turn-notification feature can land together.
+
+#### Related
+
+- `docs/PHASE-1-BUILD-SPEC.md` §D, "Additional tracked work: fire_promotion_push trigger recreation" — the infrastructure dependency.
+- `docs/ROOM-SESSION-MODEL.md` § "Multi-room membership and the one-engagement rule" — the model context (the user has an active room they can be notified to return to).
+- `db/015_promotion_push_trigger.sql` — the original trigger definition (now dropped by db/025).
+- `db/025_rooms_and_session_anchor.sql` — the migration that dropped the trigger.
+
+---
+
+### Deferred: HH-admin administrative actions without engagement transition
+
+**Deferred in:** Premium-control model documentation (Body A "Seize authority" subsection)
+**Deferred on:** 2026-05-23
+**Priority:** Low — current behavior (every seize is an engagement transition) is correct, just slightly inconvenient for admins managing many household rooms.
+**Area:** Shell + RPC layer (seize / engagement boundary)
+**Status:** Deferred
+
+#### Context
+
+The premium-control model treats ownership-seize uniformly as an engagement transition: an HH admin who seizes a room while already engaged in another room fires the normal one-engagement "Leave [room A] to seize [room B]?" confirmation. This is the documented behavior in ROOM-AUTHORITY-MODEL.md § "Seize authority" under "Engagement prompt on seize."
+
+For SOME admin actions on a household-owned room — specifically, purely administrative actions like ending the room or removing a participant — the engagement-transition framing is heavyweight. An admin who's actively engaged in their family room and wants to remotely end a stale household-owned room they're not engaged in shouldn't have to leave their family room to do it; the action is administrative, not participatory.
+
+#### What's deferred
+
+A future enhancement that distinguishes administrative actions from take-control:
+
+- Administrative actions (end the room; remove a participant; possibly evict-via-device-authority) on a household-owned room do NOT count as an engagement transition. The admin performs the action and remains in their current room without prompt.
+- Take-control actions (ownership-seize; pass-control-to-self) DO count as engagement transitions — those put the admin in the seized room's driver seat, which is exactly what engagement means.
+
+The distinction is between "I'm reaching in to administer this room from outside" and "I'm taking over and now I'm in it."
+
+#### Options when picking up
+
+- **UI affordance.** A separate "manage" affordance for household-owned rooms in the admin's room list, distinct from "join" or "seize." The manage affordance offers administrative actions inline; the join/seize affordance handles engagement transitions.
+- **RPC-level distinction.** Administrative-action RPCs (`rpc_room_end`, `rpc_session_remove_participant`) accept an admin caller without requiring the caller to be a current participant. The auth gate checks admin-on-owning-household instead of currently-engaged.
+- **Engagement-prompt suppression flag.** A simpler intermediate: keep the same RPCs but mark certain calls as administrative, suppressing the engagement prompt at the client level. Less clean but a smaller change.
+
+#### When to pick this up
+
+Whenever HH-admin remote-management surfaces become a real UX concern — likely after the household-management surfaces ship (admin's room list, household roster management, etc.). Not before; the current uniform-engagement-transition behavior is correct for the primary use case (admin actively joins to take over).
+
+#### Related
+
+- `docs/ROOM-AUTHORITY-MODEL.md` § "Seize authority" — the "Engagement prompt on seize" prose note that points at this entry.
+- `docs/ROOM-SESSION-MODEL.md` § "Multi-room membership and the one-engagement rule" — the model context.
+- `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` §3 (Households) — household-management context.
+
+---
+
+### Deferred: ownership-seize implementing RPC
+
+**Deferred in:** Premium-control model documentation (Body A "Seize authority" subsection)
+**Deferred on:** 2026-05-23
+**Priority:** Medium — designed operation with two predicates and prescribed behavior; the model is in place, the RPC is not. Not blocking until a UX flow needs it.
+**Area:** Schema (RPC layer)
+**Status:** Deferred
+
+#### Context
+
+ROOM-AUTHORITY-MODEL.md § "Seize authority" fully specifies ownership-seize: a NEW immediate take-control operation distinct from the existing inactivity-reclaim path. Two predicates:
+
+- **Convener-seize.** `auth.uid() = rooms.owner_user_id`. The original convener may seize their own room at any time the premium-control layer is active.
+- **Admin-seize.** The caller is an HH admin of the household that OWNS the room — i.e., `rooms.owner_user_id` is on that admin's household roster.
+
+The operation is gated on the premium-control layer being active (room bound to an embedding-capable device) and ownership-class membership, not on inactivity. Distinct from `rpc_session_reclaim_manager` (10-min idle gate, household-of-displaying-TV membership) and `rpc_session_admin_reclaim` (admin of displaying-TV's household, no inactivity gate).
+
+The model includes the engagement-prompt behavior (one-engagement transition prompt fires on seize) and the implementation note: "Ownership-seize has no RPC yet; the model is written down so that when its RPC ships, the predicates and engagement-prompt behavior are already defined."
+
+#### What's deferred
+
+A new RPC, probably named `rpc_room_seize` (or `rpc_room_ownership_seize` if the naming should be unambiguous against the existing reclaim RPCs):
+
+- Single parameter: `p_room_id uuid`.
+- Auth gates: (a) caller is authenticated; (b) premium-control layer is active for the room (depends on the `can_embed` schema column tracked by C1 above); (c) caller satisfies one of the two predicates: convener-seize OR admin-seize.
+- Behavior: identical demote-then-promote mechanic on `session_participants.control_role` as the existing reclaim RPCs (drives off `session_participants_one_manager` partial-unique index); writes `rooms.controller_user_id` to the caller; bumps `rooms.last_activity_at`.
+- Returns `rooms` row.
+
+#### Options when picking up
+
+- **Wait for the can_embed column (C1) to land** — without the embedding-capability discriminator, the layer's activation predicate can't be expressed in SQL. C1 is upstream of this entry.
+- **Implement defensively against unknown can_embed**: treat absent column or NULL as "layer inactive" and refuse to seize. Lets the RPC ship before C1 but with the layer always-inactive in practice. Less clean.
+- **Reuse pieces of `rpc_session_reclaim_manager`**: the demote-then-promote mechanic on `session_participants.control_role` is identical to the existing reclaim RPCs (db/028 §§1 + 3). The only differences are the auth gates and the absence of the 10-min inactivity check. Could be factored as a shared helper or copy-pasted; copy-paste is simpler and matches the pattern already in use.
+
+#### When to pick this up
+
+When ownership-seize has a forcing UX function — i.e., when a user-facing flow needs the operation. Until then, the model is documented and the prose note in `### Seize authority` says the RPC is tracked here. A future shell-side UI that surfaces "Seize control" on an admin's household-rooms list, for example, would be the natural trigger.
+
+#### Related
+
+- `docs/ROOM-AUTHORITY-MODEL.md` § "Seize authority" — the full specification this entry tracks.
+- DEFERRED entry "tv_devices needs an embedding-capability column" — upstream dependency (the layer's activation predicate).
+- `db/028_room_keyed_rpcs_part3.sql` — `rpc_session_reclaim_manager` and `rpc_session_admin_reclaim`, the existing reclaim RPCs whose demote-then-promote mechanic ownership-seize would reuse.
+
+---
+
 ## Completed items
 
 *(Move entries here when they're addressed. Keep the full original entry — just update **Status** to `Completed in Session X.Y` and add a one-line completion note.)*
