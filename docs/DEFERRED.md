@@ -3292,50 +3292,211 @@ When the compositing pipeline is shipped or far enough along that a feature-dete
 
 ---
 
-### Deferred: shell/realtime.js publisher payloads carry pre-room-model field names
+### Deferred: C2 surface-side completion (18 publisher call sites in singer/stage/player)
 
-**Deferred in:** §F shell-rework investigation (2026-05-22)
+**Deferred in:** C2 shell-half completion (this commit, 2026-05-23)
 **Deferred on:** 2026-05-23
-**Priority:** Low — no live failure today; latent risk for Phase 3/4 surfaces that parse payloads.
+**Priority:** Low — no live failure today (the shell's `refreshActiveSession`-on-event pattern means shell-tier readers don't depend on payload fields; surface subscribers either ignore the payload entirely or read fields C2 doesn't rename). Latent risk for future Phase 3/4 work that starts reading the renamed field names.
+**Area:** Surfaces — `karaoke/singer.html`, `karaoke/stage.html`, `games/player.html`
+**Status:** Deferred
+
+#### Context
+
+The C2 rename (`session_id` → `room_id`, `manager_user_id` → `controller_user_id`) landed for the shell call sites in `index.html` × 4 in this commit. 18 publisher invocations remain on the three pre-Phase-3 surfaces, each still sending `{ session_id: currentSession.id }`. They're deferred here because the surface files are themselves untouched since 2026-04-30 — three weeks before db/025 was applied to prod on 2026-05-21. Per `db/MIGRATIONS_APPLIED.md` db/028 apply-note: *"per-surface karaoke and games call-site reworks ride Phase 3 and Phase 4 respectively per UNIFIED-APP-PLAN §5."* This entry is part of that deferred surface batch.
+
+#### What's deferred — the 18 call sites
+
+**`karaoke/singer.html` — 7 invocations** (3× publishParticipantRoleChanged, 4× publishQueueUpdated):
+
+- line 2692 — `publishQueueUpdated` (moveQueue)
+- line 2821 — `publishParticipantRoleChanged` (promoteTap)
+- line 2829 — `publishQueueUpdated` (promoteTap)
+- line 2882 — `publishParticipantRoleChanged` (removeTap)
+- line 2890 — `publishQueueUpdated` (removeTap)
+- line 2954 — `publishParticipantRoleChanged` (skipTap)
+- line 2962 — `publishQueueUpdated` (skipTap)
+
+**`karaoke/stage.html` — 2 invocations** (1× publishParticipantRoleChanged, 1× publishQueueUpdated):
+
+- line 3978 — `publishParticipantRoleChanged` (triggerSongEndRpc)
+- line 3986 — `publishQueueUpdated` (triggerSongEndRpc)
+
+**`games/player.html` — 9 invocations** (8× publishParticipantRoleChanged, 1× publishSessionEnded):
+
+- line 1216 — `publishParticipantRoleChanged` (heartbeat-prune)
+- line 1329 — `publishParticipantRoleChanged` (Session: doJoin)
+- line 2044 — `publishParticipantRoleChanged` (toggleManagerAsPlayer)
+- line 2109 — `publishParticipantRoleChanged` (togglePlayerAsParticipant)
+- line 2170 — `publishParticipantRoleChanged` (score-screen Play Again toggle)
+- line 2540 — `publishParticipantRoleChanged` (onLeaveTap terminates_game branch)
+- line 2568 — `publishParticipantRoleChanged` (onLeaveTap no_impact branch)
+- line 2613 — `publishParticipantRoleChanged` (handleRemovePlayer)
+- line 3458 — `publishSessionEnded` (managerEndSession)
+
+**`games/tv.html` — 0 invocations.** It is a subscriber only (channel handlers at lines 1451–1453), not a publisher. Listed for completeness so future readers don't search for it.
+
+Grand total: **18 invocations across 3 surface files** (7 + 2 + 9 + 0).
+
+#### Enablement prerequisite
+
+Each surface needs its `refreshSessionState()`'s `from('sessions').select(...)` widened to include `room_id` before `currentSession.room_id` is available to source. Those SELECTs currently project columns dropped by db/025 (`manager_user_id`, `room_code`, `tv_device_id`) and would 400 against prod if exercised post-db/025 — they're stale, untouched since 2026-04-30, and tracked as the SEPARATE ACTIVE entry "schema-stale sessions SELECTs/filters on the four pre-Phase-3 surfaces." Ship both items as one batch per surface.
+
+#### Options when picking up
+
+- **Bundle with the schema-stale SELECT cleanup.** The natural pair: the SELECT widening unblocks `currentSession.room_id` for the rename, and the WHERE-filter rewrite (`room_code` / `tv_device_id` → `room_id`) is the same edit per surface. One commit per surface.
+- **Rename in place without widening.** Strictly worse — the renamed call sites would send `room_id: undefined` until the SELECT is fixed. Don't pick this option.
+
+#### When to pick this up
+
+Phase 3 (karaoke) or Phase 4 (games) per `docs/UNIFIED-APP-PLAN.md` §5 — whichever surface migration runs first.
+
+#### Related
+
+- DEFERRED entry "shell/realtime.js publisher payloads carry pre-room-model field names" (Completed items, 2026-05-23) — the shell half of this work.
+- DEFERRED entry "schema-stale sessions SELECTs/filters on the four pre-Phase-3 surfaces" — the parallel cleanup; ship as one batch with this entry per surface.
+- `db/MIGRATIONS_APPLIED.md` db/028 apply-note — the explicit deferral of surface-side reworks to Phase 3/4.
+
+---
+
+### Deferred: schema-stale sessions SELECTs/filters on the four pre-Phase-3 surfaces
+
+**Deferred in:** C2 shell-half investigation (2026-05-23)
+**Deferred on:** 2026-05-23
+**Priority:** Medium — these queries would 400 against prod (`manager_user_id` / `room_code` / `tv_device_id` are absent from `public.sessions` post-db/025). Not surfaced as a live regression because the surface flows haven't been exercised since db/025 applied 2026-05-21. Must land before any user-facing test of the surface flows.
+**Area:** Surfaces — `karaoke/singer.html`, `karaoke/stage.html`, `games/player.html`, `games/tv.html`
+**Status:** Deferred
+
+#### Context
+
+db/025 (applied to prod 2026-05-21) dropped three columns from `public.sessions`: `manager_user_id`, `room_code`, `tv_device_id`. The verification narrative in `db/MIGRATIONS_APPLIED.md` row 33 confirms verbatim: *"`\d public.sessions` confirmed `room_id` present (NOT NULL, FK -> rooms) and `tv_device_id` / `manager_user_id` / `room_code` absent."*
+
+Four surface files still contain `from('sessions').select(...)` callers that project and/or filter on those dropped columns. They were last modified between 2026-04-26 and 2026-04-30 — well before db/025 — and have not had a single line changed since (`git log --since=2026-05-21 -- karaoke/singer.html karaoke/stage.html games/player.html games/tv.html` returns empty). The shell (`index.html`) was correctly updated during the §F shell-rework (2026-05-22→23) and its two `sessions` SELECTs both filter by `room_id` and project only existing columns.
+
+Per `db/MIGRATIONS_APPLIED.md` db/028 apply-note: *"per-surface karaoke and games call-site reworks ride Phase 3 and Phase 4 respectively per UNIFIED-APP-PLAN §5."* This entry is part of that deferred surface batch — it is **known Phase-3/4 surface-migration debt, not a regression**.
+
+#### What's deferred — the 7 sites
+
+**`karaoke/singer.html` — 2 sites:**
+
+- line 750 — `select('id').eq('room_code', raw)`. Projection is clean; WHERE filter references dropped `room_code`. Fix: look up `rooms.id WHERE room_code = raw`, then SELECT sessions WHERE `room_id = rooms.id`.
+- line 2291 — `select('id, app, manager_user_id, admission_mode, capacity, room_code, started_at, current_state, tv_device_id').eq('room_code', roomCode)`. Projects 3 dropped columns + WHERE on dropped column. Fix: project `id, app, room_id, admission_mode, capacity, started_at, current_state` and rewrite the filter via the rooms→room_id lookup pattern.
+
+**`karaoke/stage.html` — 2 sites:**
+
+- line 5411 — `select('id, app, manager_user_id, admission_mode, capacity, room_code, started_at, current_state').eq('tv_device_id', tv.id)`. Projects 2 dropped columns + WHERE on dropped column. Fix: project minus dropped cols, add `room_id`; rewrite filter via the rooms→room_id lookup (`rooms.screen_ref` references tv_devices).
+- line 5757 — `select('id').eq('tv_device_id', tv.id)`. Projection is clean; WHERE filter references dropped `tv_device_id`. Same rooms→room_id lookup pattern as above.
+
+**`games/player.html` — 1 site:**
+
+- line 2754 — same shape as `karaoke/singer.html:2291`. Same fix (project + filter rewrite).
+
+**`games/tv.html` — 2 sites:**
+
+- line 1322 — same shape as `karaoke/stage.html:5757`. Same fix (rooms→room_id lookup).
+- line 1386 — same shape as `karaoke/stage.html:5411`. Same fix.
+
+Total: **7 stale sites across 4 files**.
+
+#### How is this not currently broken?
+
+The four surfaces haven't been exercised end-to-end since db/025 applied 2026-05-21. The §F shell-rework (2026-05-22→23) tested the shell only. The Mike-observed lobby render in `games/player.html` during §F testing landed via the URL deep-link (`?room=...&mgr=1`) but did not exercise the multi-user roster path that would expose the SELECT failure. The next end-to-end test of the surfaces will surface this — fix before that test runs.
+
+#### Options when picking up
+
+- **Bundle with C2 surface-side completion.** The natural pair: this entry's SELECT widening + filter rewrite is the prerequisite for that entry's `currentSession.room_id` source. One commit per surface, covering both items.
+- **Schema-cleanup pass only, no rename.** Strictly preparatory — leaves the C2 surface-side payload rename for a later pass. Less coupled.
+
+Recommend the bundled approach — both items are surface-migration work, both ride Phase 3/4, and the SELECT widening is what makes the rename functional.
+
+#### When to pick this up
+
+Phase 3 (karaoke) or Phase 4 (games) per `docs/UNIFIED-APP-PLAN.md` §5 — whichever surface migration runs first. MUST land before any user-facing test of the surface flows (the SELECTs will 400 in prod the first time they're exercised post-db/025).
+
+#### Related
+
+- DEFERRED entry "C2 surface-side completion (18 publisher call sites in singer/stage/player)" — the rename half of the same surface-migration batch.
+- DEFERRED entry "shell/realtime.js publisher payloads carry pre-room-model field names" (Completed items, 2026-05-23) — the shell parallel of this entry's surface work.
+- `db/025_rooms_and_session_anchor.sql` lines 198–203 — the migration that dropped the three columns.
+- `db/MIGRATIONS_APPLIED.md` row 33 — the prod-apply confirmation for db/025.
+- `db/MIGRATIONS_APPLIED.md` db/028 apply-note — the explicit deferral of surface-side reworks to Phase 3/4.
+
+---
+
+### Deferred: publishParticipantRoleChanged contract drift — payload.user_id always undefined
+
+**Deferred in:** C2 shell-half investigation (2026-05-23)
+**Deferred on:** 2026-05-23
+**Priority:** Medium — the karaoke singer's "own-promotion detection" §6b branch never fires from the realtime path (the modal is missed for foregrounded queued→active singers). Not a crash; the push-notification path is the primary backstop. Worth fixing during karaoke surface migration (Phase 3).
+**Area:** Shell — `shell/realtime.js` doc-comment vs all 14 `publishParticipantRoleChanged` producers; consumer at `karaoke/singer.html:2143`
+**Status:** Deferred
+
+#### Context
+
+`shell/realtime.js:276-279`'s doc-comment for `publishParticipantRoleChanged` advertises the payload as `{ session_id, user_id, control_role, participation_role } — always includes the CURRENT values of both roles (not a delta)`. **No producer in the repo sends `user_id`, `control_role`, or `participation_role`.** Every one of the 14 callsites passes only `{ session_id: <X>.id }` (or, post-C2-shell, `{ room_id: <X>.id }` for the 2 shell sites at `index.html:3057, 3266`).
+
+`karaoke/singer.html:2143` reads `payload.user_id` for §6b own-promotion detection: when a queued participant is promoted to active and is foregrounded on their phone, the realtime handler is supposed to detect "this is me" and show the take-stage modal. The `if (payload.user_id && myUserId && payload.user_id === myUserId ...)` guard always short-circuits because `payload.user_id` is always `undefined`. The branch never fires from this path.
+
+The §6b own-promotion flow still works via the **push-notification path** (db/029's recreated `fire_promotion_push` trigger fires on the queued→active UPDATE → APNs → device shows alert), so it's not a complete miss — just a missing foreground-on-phone modal. The push handler itself currently logs only (per the 2026-05-23 iOS audit), so the foreground gap and the push-tap-routing gap together mean: a queued singer's own promotion produces a push notification with title/body text and no other in-app UX.
+
+#### What's deferred
+
+Either of these (not both):
+
+- **Make producers send what the contract advertises.** Update all 14 `publishParticipantRoleChanged` callers to send `{ room_id, user_id, control_role, participation_role }`. Then the `karaoke/singer.html:2143` branch starts firing. Cost: 14 callsites; each needs to source `user_id` + the two role values from the RPC's return row.
+
+- **Update the contract to match what producers send and delete the dead branch.** Trim the doc-comment to `{ room_id }`, delete the §6b own-promotion-detection block in `karaoke/singer.html:2135-2165`, and rely on the push-notification path for own-promotion UX. Cost: small JS deletion + doc-comment trim. Requires confirming push-notification tap-routing (currently unbuilt — separate DEFERRED entry) is the intended replacement.
+
+The first option preserves the realtime path as a foreground backup for backgrounded-push UX. The second option deletes aspirational code that has never functioned.
+
+#### When to pick this up
+
+During Phase 3 karaoke surface migration, when `karaoke/singer.html` is being touched anyway. The two options above need a UX decision (push-only own-promotion vs. realtime + push fallback) — that decision belongs to the karaoke surface migration session.
+
+#### Related
+
+- DEFERRED entry "C2 surface-side completion (18 publisher call sites in singer/stage/player)" — Phase 3 surface migration will touch the same callsites; natural opportunistic moment.
+- DEFERRED entry "push-notification tap routing — `// TODO 2e.1+` in karaoke/singer.html never implemented" — relevant if option 2 (delete the realtime path) is picked; the push path needs to be the complete own-promotion UX.
+- `shell/realtime.js:276-279` — the doc-comment that drifted from observed producer behavior.
+- `karaoke/singer.html:2135-2165` — the §6b own-promotion-detection branch that never fires from realtime today.
+- C2 shell-half investigation (2026-05-23, planning-chat transcript) — the source of this finding.
+
+---
+
+### Deferred: publishManagerChanged is a dead publisher (zero callers in repo)
+
+**Deferred in:** C2 shell-half investigation (2026-05-23)
+**Deferred on:** 2026-05-23
+**Priority:** Low — dead code only, no runtime impact; tracked so it doesn't get orphaned in a later cleanup pass.
 **Area:** Shell — `shell/realtime.js`
 **Status:** Deferred
 
 #### Context
 
-The realtime publishers in `shell/realtime.js` (lines 264–315) build broadcast payloads using pre-db/025 field names: `session_id`, `manager_user_id`, `room_code`. These were the canonical identifiers under the single-entity sessions model. After db/025/026/027/028, the canonical identifiers are `room_id`, `controller_user_id`, and `rooms.room_code` (a room property, not a session property).
+`shell/realtime.js:272` defines `window.publishManagerChanged(device_key, { session_id, new_manager_user_id, reason })` and lines 23-24 + 268-271 advertise its contract. **Zero call sites exist anywhere in the repo** — `grep -rn "publishManagerChanged" --include="*.html" --include="*.js" .` returns only the definition, the file-top advertisement, and the function-header doc-comment.
 
-The shell subscribers do NOT parse these payloads — they re-query via `refreshActiveSession` on event receipt (DECISION-6 option i, recorded at `index.html:2505`). So the field names are harmless for the shell-tier subscription path that was the focus of §F.
+The file-top emission matrix at `shell/realtime.js:31-50` lists three RPCs that the comment says SHOULD trigger `manager_changed`: `rpc_session_leave` (auto-promoted new manager), `rpc_session_reclaim_manager`, `rpc_session_admin_reclaim`. None of those callsites in `index.html` or any surface actually invokes `publishManagerChanged` post-RPC.
 
 #### What's deferred
 
-The renaming pass on the publisher payloads:
+Either:
 
-- `session_id` → `room_id` (or both, if any downstream receiver cares about the session specifically)
-- `manager_user_id` → `controller_user_id` (semantic match to `rooms.controller_user_id`)
-- `room_code` is now a room property, not a session property — likely droppable from the payload entirely (receivers re-query for it if needed)
+- **Wire it up.** Add a `publishManagerChanged` call after the three RPCs the emission matrix names. Source `new_manager_user_id` from the RPC's return value (the auto-promoted/reclaimed manager's user_id, available on the returned `session_participants` row for `rpc_session_leave` or the returned `rooms` row's `controller_user_id` for the reclaim RPCs post-db/028).
 
-Affected publishers (shell/realtime.js lines 264–315):
+- **Drop it.** Delete the function definition, the file-top advertisement, the doc-comment, and the emission-matrix lines that reference it. Less code, no behavior change.
 
-- `publishSessionStarted`
-- `publishParticipantRoleChanged`
-- `publishQueueUpdated`
-- `publishSessionEnded`
+The choice depends on whether any downstream consumer wants `manager_changed` as a distinct event-type vs. piggybacking on `participant_role_changed` (which already fires for the same RPCs per the emission matrix). Today, every subscriber treats `participant_role_changed` as the manager-change signal too — so dropping `publishManagerChanged` loses nothing functional.
 
-#### Options when picking up
-
-- **Rename in place.** Single pass over the four publishers. Receivers in the shell don't care; only Phase 3/4 surfaces that parse payloads (karaoke / games) might. Audit those at the same time.
-- **Defer until Phase 3/4 surfaces are touched.** Each per-surface phase can deal with the rename for its own consumers. Less coupled but more scattered.
-- **Drop `room_code` from payloads entirely.** Receivers can `.select('room_code')` from rooms if they need it. Reduces payload size and removes the ambiguity of "this came from the session payload but it's really a room property."
+The C2 rename deliberately left `publishManagerChanged`'s payload contract untouched (renaming a dead function's contract is theater). Whichever option is picked, the contract update lives with that work, not with C2.
 
 #### When to pick this up
 
-Either: (a) opportunistically during the §F shell-rework when the publishers are being touched anyway; or (b) at the start of Phase 3 (karaoke) when surfaces that parse payloads start needing the corrected names. Whichever happens first.
+Opportunistically during any `shell/realtime.js` cleanup pass, or when a downstream consumer surfaces a need for `manager_changed` as a distinct event-type. Until then, no urgency.
 
 #### Related
 
-- DEFERRED entry "Phase-1 RPC migration in-flight — shell still on pre-db/026 RPC signatures" — the broader umbrella entry; this is one of its narrower sub-items.
-- `shell/realtime.js:264-315` — the publisher functions in question.
-- The §F shell-rework investigation (2026-05-22) that surfaced this gap.
+- `shell/realtime.js` lines 23, 24, 268-274 — the definition + advertisement.
+- DEFERRED entry "shell/realtime.js publisher payloads carry pre-room-model field names" (Completed items, 2026-05-23) — the C2 rename that surfaced this finding.
+- The §F shell-rework investigation (2026-05-22) and C2 shell-half investigation (2026-05-23) — where the zero-caller observation was first surfaced.
 
 ---
 
@@ -4042,3 +4203,56 @@ When ownership-seize has a forcing UX function — i.e., when a user-facing flow
 - `db/030_tv_devices_can_embed.sql` — the schema column this RPC's auth gate (b) reads (applied 2026-05-23).
 - `db/031_room_seize.sql` — the resolving migration for this entry (commit `b654f91`, applied to prod 2026-05-23).
 - `db/028_room_keyed_rpcs_part3.sql` — `rpc_session_reclaim_manager` and `rpc_session_admin_reclaim`, the existing reclaim RPCs whose demote-then-promote mechanic ownership-seize reuses (verbatim copy).
+
+---
+
+### Deferred: shell/realtime.js publisher payloads carry pre-room-model field names
+
+**Deferred in:** §F shell-rework investigation (2026-05-22)
+**Deferred on:** 2026-05-23
+**Priority:** Low — no live failure today; latent risk for Phase 3/4 surfaces that parse payloads.
+**Area:** Shell — `shell/realtime.js`
+**Status:** Completed 2026-05-23 — SHELL HALF ONLY. The 4 shell publisher call sites in `index.html` were renamed (3057, 3128, 3266, 3317), `shell/realtime.js`'s file-top emission matrix and 4 per-function doc-comments were updated to match, and the two stale "deferred per DEFERRED C2" comments in `index.html` (lines 3019–3024 and 3311–3315) were updated to reflect the post-rename state. **SCOPE HONESTY:** 18 publisher call sites remain pre-rename on the three pre-Phase-3 surfaces (`karaoke/singer.html` × 7, `karaoke/stage.html` × 2, `games/player.html` × 9; `games/tv.html` has 0 publisher calls). Those ride Phase 3/4 surface migration. Tracked as the SEPARATE ACTIVE entry "C2 surface-side completion (18 publisher call sites in singer/stage/player)" — do not close that entry; only this shell half is complete. `publishManagerChanged` was deliberately untouched (zero callers; renaming a dead publisher's contract is theater) and is tracked as a separate dead-publisher entry. `publishParticipantRoleChanged`'s aspirational `{ user_id, control_role, participation_role }` doc-contract was preserved as-is (no producer sends those today); the always-undefined `payload.user_id` read in `karaoke/singer.html:2143` is tracked as a separate latent-bug entry.
+
+#### Context
+
+The realtime publishers in `shell/realtime.js` (lines 264–315) build broadcast payloads using pre-db/025 field names: `session_id`, `manager_user_id`, `room_code`. These were the canonical identifiers under the single-entity sessions model. After db/025/026/027/028, the canonical identifiers are `room_id`, `controller_user_id`, and `rooms.room_code` (a room property, not a session property).
+
+The shell subscribers do NOT parse these payloads — they re-query via `refreshActiveSession` on event receipt (DECISION-6 option i, recorded at `index.html:2505`). So the field names are harmless for the shell-tier subscription path that was the focus of §F.
+
+#### What was deferred
+
+The renaming pass on the publisher payloads:
+
+- `session_id` → `room_id` — shell half ✅ done (4 of 22 total invocations across all publishers; the remaining 18 surface invocations are tracked in the separate surface-completion entry).
+- `manager_user_id` → `controller_user_id` — ✅ done at the only site that sent it (`index.html:3317`, the only `publishSessionStarted` caller anywhere in the repo).
+- `room_code` retained per the C2 commit's decision: dropping a field is a behavior change for no gain; the rename is the point.
+
+Per-publisher breakdown (shell renamed in this commit / surface still pending / aggregate):
+
+- `publishSessionStarted` — 1 of 1 done in shell; 0 surface callers. Fully complete.
+- `publishParticipantRoleChanged` — 2 of 14 done in shell; 12 remain on surfaces (singer × 3, stage × 1, player × 8).
+- `publishQueueUpdated` — 0 of 5 done in shell (no shell callers); 5 remain on surfaces (singer × 4, stage × 1).
+- `publishSessionEnded` — 1 of 2 done in shell; 1 remains on `games/player.html:3458`.
+- `publishManagerChanged` — 0 of 0 callers anywhere; tracked separately as dead publisher.
+
+#### Resolution (shell half)
+
+The shell rename + doc-comment updates landed in this commit. Per-call-site sourcing:
+
+- `index.html:3057` → `room_id: active.room.id` (handleSameAppRejoin)
+- `index.html:3128` → `room_id: active.room?.id` (handleCrossAppSwitch end-session publish)
+- `index.html:3266` → `room_id: existing.room_id` (R4 catch path)
+- `index.html:3317` → `room_id: room.id`, `controller_user_id: room.controller_user_id` (handleTvRemoteTileTap session-started publish)
+
+All four sources are guaranteed populated in their respective scopes (verified during proposal review).
+
+#### Related
+
+- DEFERRED entry "C2 surface-side completion (18 publisher call sites in singer/stage/player)" — the surface half of this work. **STILL ACTIVE** — Phase 3/4 surface migration.
+- DEFERRED entry "schema-stale sessions SELECTs/filters on the four pre-Phase-3 surfaces" — the parallel surface-side schema-cleanup work. The 7 surface `sessions` SELECTs reference dropped columns post-db/025; they're paired with the surface-side C2 rename as one batch per surface. **STILL ACTIVE**.
+- DEFERRED entry "publishParticipantRoleChanged contract drift — payload.user_id always undefined" — the latent bug surfaced during this investigation; not a regression introduced by C2. **STILL ACTIVE**.
+- DEFERRED entry "publishManagerChanged is a dead publisher (zero callers in repo)" — the dead-code finding surfaced during this investigation. **STILL ACTIVE**.
+- DEFERRED entry "Phase-1 RPC migration in-flight — shell still on pre-db/026 RPC signatures" — the broader umbrella entry; this was one of its narrower sub-items.
+- `shell/realtime.js:264-315` — the publisher functions in question.
+- The §F shell-rework investigation (2026-05-22) that surfaced this gap.

@@ -20,11 +20,11 @@
 //
 //   Session 5 publishers (object-payload signatures; all async/awaitable,
 //   all throw on failure matching the existing publishers' contract):
-//   window.publishSessionStarted(device_key, { session_id, app, manager_user_id, room_code })
+//   window.publishSessionStarted(device_key, { room_id, app, controller_user_id, room_code })
 //   window.publishManagerChanged(device_key, { session_id, new_manager_user_id, reason })
-//   window.publishParticipantRoleChanged(device_key, { session_id, user_id, control_role, participation_role })
-//   window.publishQueueUpdated(device_key, { session_id })
-//   window.publishSessionEnded(device_key, { session_id, reason })
+//   window.publishParticipantRoleChanged(device_key, { room_id, user_id, control_role, participation_role })
+//   window.publishQueueUpdated(device_key, { room_id })
+//   window.publishSessionEnded(device_key, { room_id, reason })
 //
 // Session 5 event emission matrix — which RPC success triggers which publish:
 //
@@ -260,7 +260,7 @@ async function broadcast(device_key, event, payload) {
 }
 
 // Fired after rpc_session_start success.
-// Payload: { session_id, app, manager_user_id, room_code }.
+// Payload: { room_id, app, controller_user_id, room_code }.
 window.publishSessionStarted = async function publishSessionStarted(device_key, payload) {
   return broadcast(device_key, 'session_started', payload);
 };
@@ -275,7 +275,7 @@ window.publishManagerChanged = async function publishManagerChanged(device_key, 
 
 // Fired when a participant's control_role or participation_role changes.
 // See file-top emission matrix for the full list of triggering RPCs.
-// Payload: { session_id, user_id, control_role, participation_role } —
+// Payload: { room_id, user_id, control_role, participation_role } —
 // always includes the CURRENT values of both roles (not a delta).
 window.publishParticipantRoleChanged = async function publishParticipantRoleChanged(device_key, payload, channel = null) {
   if (channel) {
@@ -289,7 +289,7 @@ window.publishParticipantRoleChanged = async function publishParticipantRoleChan
 // Fired for pure queue metadata changes that don't involve role transitions:
 // queue-position reorder, or pre-selection update. Consumers re-query
 // session_participants to get authoritative state.
-// Payload: { session_id }.
+// Payload: { room_id }.
 window.publishQueueUpdated = async function publishQueueUpdated(device_key, payload, channel = null) {
   if (channel) {
     await channel.send({ type: 'broadcast', event: 'queue_updated', payload });
@@ -303,7 +303,7 @@ window.publishQueueUpdated = async function publishQueueUpdated(device_key, payl
 // ending (manager alone or no eligible promotee). Phase 1 does not
 // distinguish "manager alone" from "no eligible promotee" — both emit
 // reason 'manager_left'.
-// Payload: { session_id, reason }.
+// Payload: { room_id, reason }.
 //   reason ∈ {'user_ended', 'manager_left'}
 //
 // Optional `channel` argument (BUG-10 fix extended): pass an already-

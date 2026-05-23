@@ -3017,11 +3017,11 @@
       // defaults to 'active'; karaoke stays 'audience' per
       // docs/KARAOKE-CONTROL-MODEL.md § 1 schema-state semantics.
       //
-      // Post-db/026-028: rpc_session_join is keyed on p_room_id (was
-      // p_session_id pre-db/026). The cache's room.id is the canonical
-      // identifier; active.session?.id is only used for the
-      // session_started/participant_role_changed broadcast payloads
-      // (whose field names are deferred-renamed per DEFERRED C2).
+      // Post-db/026-028 + C2-shell: rpc_session_join is keyed on
+      // p_room_id (was p_session_id pre-db/026). The cache's room.id
+      // is the canonical identifier; the participant_role_changed
+      // broadcast below now carries room_id directly. No remaining
+      // shell-side use of active.session.id for this flow.
       const { error: joinErr } = await window.sb.rpc('rpc_session_join', {
         p_room_id: active.room.id,
         p_participation_role: app === 'games' ? 'active' : 'audience',
@@ -3055,7 +3055,7 @@
         if (!joinErr && window.publishParticipantRoleChanged) {
           try {
             await window.publishParticipantRoleChanged(ctx.device_key, {
-              session_id: active.session?.id,
+              room_id: active.room.id,
             });
           } catch (e) {
             console.error('[elsewhere] participant_role_changed publish failed:', e);
@@ -3126,7 +3126,7 @@
       if (ctx) {
         try {
           await publishSessionEnded(ctx.device_key, {
-            session_id: active.session?.id,
+            room_id: active.room?.id,
             reason: 'user_ended',
           });
         } catch (e) {
@@ -3264,7 +3264,7 @@
             if (!r4JoinErr && window.publishParticipantRoleChanged) {
               try {
                 await window.publishParticipantRoleChanged(device_key, {
-                  session_id: existing.id,
+                  room_id: existing.room_id,
                 });
               } catch (e) {
                 console.error('[elsewhere] participant_role_changed publish failed:', e);
@@ -3308,17 +3308,18 @@
       // by reading the sessions table on mount rather than relying
       // purely on broadcast.
       //
-      // Payload field names (session_id, manager_user_id, room_code)
-      // are pre-db/025 names retained for compat; the values now come
-      // from the room object where the underlying column moved (per
-      // db/025: manager_user_id → rooms.controller_user_id; room_code
-      // → rooms.room_code). Field-name rename is tracked as DEFERRED C2.
+      // Post-C2-shell: payload field names match the room-keyed
+      // schema — room_id (rooms.id), controller_user_id
+      // (rooms.controller_user_id), room_code (rooms.room_code).
+      // Pre-§F + C2-shell, these were named session_id /
+      // manager_user_id / room_code with values pulled from the
+      // room object as a compat layer.
       try {
         await publishSessionStarted(device_key, {
-          session_id:      session.id,
-          app:             session.app,
-          manager_user_id: room.controller_user_id,
-          room_code:       room.room_code,
+          room_id:            room.id,
+          app:                session.app,
+          controller_user_id: room.controller_user_id,
+          room_code:          room.room_code,
         });
       } catch (e) {
         console.error('[elsewhere] session_started publish failed:', e);
