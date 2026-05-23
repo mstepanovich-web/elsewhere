@@ -2333,7 +2333,7 @@
       const label = tile.querySelector('.tile-label');
       const sub = tile.querySelector('.tile-sub');
       if (!label || !sub) return; // defensive: tile structure mismatch
-      const hasActiveSession = active?.app === app;
+      const hasActiveSession = active.session?.app === app;
 
       if (hasActiveSession) {
         // Per DECISION-1: "Active Session" primary label + app name as sub.
@@ -2419,16 +2419,21 @@
       screen.dataset.tvDeviceId = '';
       document.getElementById('home-tv-header').classList.add('hidden');
       document.getElementById('home-tv-switch').classList.add('hidden');
-      _activeSessionForBoundTv = null; // 2c.3.1: clear active-session state on sign-out
+      _activeSessionForBoundTv = { session: null, room: null }; // 2c.3.1: clear active-session state on sign-out
       renderHome(); // Mode C → tiles render as active legacy
     }
 
     // ── 2c.3.1: Active session tracking ────────────────────────────
     //
-    // Tracks the active session (if any) for the currently-bound TV.
-    // Used by Section 2's renderHomeTiles to apply "Active Session" tile
-    // state and by Section 3+4's handleHomeTileTap dispatch to route
-    // rejoin vs. cross-app switch flows.
+    // Tracks the active room (and its current session, if any) for the
+    // currently-bound TV. Used by Section 2's renderHomeTiles to apply
+    // "Active Session" tile state and by Section 3+4's handleHomeTileTap
+    // dispatch to route rejoin vs. cross-app switch flows.
+    //
+    // The room/session split (post-db/025-028) means a TV's screen can
+    // host a room with no current session (between apps during a
+    // cross-app move). The cache shape carries both, with either
+    // sub-field nullable independently.
     //
     // Only ONE TV is bound at a time per the state model ("apps grid
     // scoping is per currently-selected TV, not global"), so a single
@@ -2440,12 +2445,19 @@
     // CONTRACT: do NOT read this variable directly. Use getActiveSession().
     // The accessor lets us swap storage shape later (e.g., variable → Map)
     // without rewriting every consumer.
-    let _activeSessionForBoundTv = null; // { id, app, room_code, manager_user_id } | null
+    //
+    // SHAPE: always nested. Sub-fields are nullable; the cache object
+    // itself is NEVER null. Consumers use active.session?.x /
+    // active.room?.x; no top-level (active) null check is needed.
+    //
+    // { session: { id, app } | null,
+    //   room:    { id, controller_user_id, room_code } | null }
+    let _activeSessionForBoundTv = { session: null, room: null };
 
-    // Returns the active session for the currently-bound TV, or null if
-    // none. Callers must not cache the return value across await points
-    // — refreshActiveSession may update the module state during any
-    // realtime event callback.
+    // Returns the active-room cache as { session, room } — both sub-fields
+    // possibly null; the cache object itself is NEVER null. Callers must
+    // not cache the return value across await points — refreshActiveSession
+    // may update the module state during any realtime event callback.
     function getActiveSession() {
       return _activeSessionForBoundTv;
     }
@@ -2470,28 +2482,57 @@
         // events that arrive during a transient unbind state).
         // clearHomeTvBinding handles its own state clear +
         // render directly via the renderHome chain.
-        _activeSessionForBoundTv = null;
+        _activeSessionForBoundTv = { session: null, room: null };
         renderHomeTiles();
         return;
       }
 
       try {
-        const { data, error } = await window.sb
-          .from('sessions')
-          .select('id, app, room_code, manager_user_id')
-          .eq('tv_device_id', ctx.tv_device_id)
+        // Two-query path per the room/session split (post-db/025-028):
+        //
+        // 1. Find the room bound to this TV (rooms.screen_ref + not-ended).
+        //    The partial unique index rooms_one_active_per_screen
+        //    guarantees at most one match.
+        // 2. If a room exists, find its active session (sessions keyed
+        //    by room_id + not-ended). Either may be null — the cache is
+        //    { session: ... | null, room: ... | null }, and the "room
+        //    exists but no session" state (between apps during a
+        //    cross-app move) is naturally representable.
+        const { data: room, error: roomErr } = await window.sb
+          .from('rooms')
+          .select('id, controller_user_id, room_code')
+          .eq('screen_ref', ctx.tv_device_id)
           .is('ended_at', null)
           .maybeSingle();
 
-        if (error) {
-          console.error('[elsewhere] refreshActiveSession query failed:', error);
+        if (roomErr) {
+          console.error('[elsewhere] refreshActiveSession rooms query failed:', roomErr);
           // Leave existing state in place — next refresh (realtime event
           // or explicit call) retries. Stale state is a Phase 1 seam;
           // banner/tile dispatch still functions, just with stale data.
           return;
         }
 
-        _activeSessionForBoundTv = data || null;
+        if (!room) {
+          _activeSessionForBoundTv = { session: null, room: null };
+          renderHomeTiles();
+          return;
+        }
+
+        const { data: session, error: sessionErr } = await window.sb
+          .from('sessions')
+          .select('id, app')
+          .eq('room_id', room.id)
+          .is('ended_at', null)
+          .maybeSingle();
+
+        if (sessionErr) {
+          console.error('[elsewhere] refreshActiveSession sessions query failed:', sessionErr);
+          // Leave existing state in place — next refresh retries.
+          return;
+        }
+
+        _activeSessionForBoundTv = { session: session || null, room };
         renderHomeTiles();
       } catch (e) {
         console.error('[elsewhere] refreshActiveSession exception:', e);
@@ -2925,10 +2966,10 @@
 
       if (mode === 'A' || mode === 'B') {
         // 2c.3.1: active-session takes precedence over plain start flow.
-        if (active && active.app === app) {
+        if (active.session?.app === app) {
           return handleSameAppRejoin(active, app);
         }
-        if (active && active.app !== app) {
+        if (active.session && active.session.app !== app) {
           // Cross-app switch: end current session, start new one.
           // Non-manager users see the locked non-manager alert without
           // a confirm prompt. See handleCrossAppSwitch for the full
@@ -3037,11 +3078,11 @@
       const user = window.elsewhere?.getCurrentUser?.();
       if (!user) return; // shouldn't happen — Mode A/B require auth
 
-      const currentAppLabel = TILE_DEFAULT_COPY[active.app]?.label || active.app;
+      const currentAppLabel = TILE_DEFAULT_COPY[active.session?.app]?.label || active.session?.app;
       const newAppLabel     = TILE_DEFAULT_COPY[newApp]?.label     || newApp;
 
       // Non-manager pre-check: surface the locked alert immediately.
-      if (active.manager_user_id !== user.id) {
+      if (active.room?.controller_user_id !== user.id) {
         alert(`Only the current manager can switch apps. Ask them to end the ${currentAppLabel} session first.`);
         return;
       }
@@ -3054,7 +3095,7 @@
       // pre-check went stale (admin reclaim between pre-check and RPC)
       // or the session was ended by another mechanism.
       const { error: endErr } = await window.sb.rpc('rpc_session_end', {
-        p_session_id: active.id,
+        p_session_id: active.session?.id,
       });
       if (endErr) {
         if (endErr.code === '42501') {
@@ -3079,7 +3120,7 @@
       if (ctx) {
         try {
           await publishSessionEnded(ctx.device_key, {
-            session_id: active.id,
+            session_id: active.session?.id,
             reason: 'user_ended',
           });
         } catch (e) {
