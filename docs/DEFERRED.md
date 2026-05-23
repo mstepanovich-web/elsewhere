@@ -3444,15 +3444,61 @@ When ownership-seize has a forcing UX function — i.e., when a user-facing flow
 
 ---
 
-### Deferred: `generateRoomCode()` in index.html is dead code post-§F-Part-1
+### Deferred: drop the three is_session_* compat wrappers from db/025
 
-**Deferred in:** §F shell-rework Part 1 (rpc_session_start two-call flow)
+**Deferred in:** Phase-1.1 cleanup (post-§F-Part-1 discovery)
 **Deferred on:** 2026-05-23
-**Priority:** Low — dead code only, no runtime impact; tracked so it doesn't get orphaned in a later cleanup pass.
-**Area:** Shell — `index.html`
+**Priority:** Low — wrappers are orphaned in prod (zero live callers) and cause no harm; this is pure tidiness, not a forcing function.
+**Area:** Schema (drop migration)
 **Status:** Deferred
 
-`index.html`'s `generateRoomCode()` function was the random-room-code generator used by the old single-call `rpc_session_start` flow. Post-db/027, room codes are generated server-side inside `rpc_room_create` (6-char alphabet from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, bounded collision-retry). The shell no longer pre-generates one. After §F Part 1 (commit landed 2026-05-23) the function is unreferenced — `grep -n "generateRoomCode" index.html` returns only its definition. Remove in a future dead-code sweep — natural pair with the Phase-1.1 compat-wrapper cleanup (drop `is_session_*` wrappers) noted in `docs/EXECUTION-HANDOFF.md` §4 "After the §F shell rework lands."
+#### Context
+
+`db/025_rooms_and_session_anchor.sql` lines 387–440 define three compat wrappers that resolve a session_id to its room_id and delegate to the room-keyed helpers:
+
+- `is_session_participant(p_session_id uuid)` → `is_room_participant(...)`
+- `is_session_tv_household_member(p_session_id uuid)` → `is_room_tv_household_member(...)`
+- `is_session_tv_household_admin(p_session_id uuid)` → `is_room_tv_household_admin(...)`
+
+Each wrapper's own COMMENT carries the same future-removal language: *"To be dropped in a Phase-1.1 cleanup with a grep-confirmed zero-caller check."* The build-spec context is at `docs/PHASE-1-BUILD-SPEC.md` §H (OQ4 recommendation, line 419) and `docs/EXECUTION-HANDOFF.md` §4 "After the §F shell rework lands."
+
+Phase A discovery on 2026-05-23 confirmed the zero-caller condition: `db/026/027/028` (the live RPC implementations in prod) call NONE of the wrappers — all use the room-keyed helpers directly (`is_room_participant`, `is_room_tv_household_member`, `is_room_tv_household_admin`). `db/025` itself dropped the old RLS policies that referenced the session-keyed helpers and recreated them as room-keyed predicates. Client code (`index.html`, `shell/`, `games/`, `karaoke/`, `tv2.html`, `claim.html`) and edge functions (`supabase/`) contain zero direct references — they can't, since these are server-side functions. The wrappers are orphaned in prod.
+
+#### What's deferred
+
+A small migration — proposed `db/029_drop_is_session_compat_wrappers.sql` — issuing three DROP statements inside a `begin;` / `commit;` envelope:
+
+- `drop function if exists public.is_session_participant(uuid);`
+- `drop function if exists public.is_session_tv_household_member(uuid);`
+- `drop function if exists public.is_session_tv_household_admin(uuid);`
+
+The `(uuid)` argument-type signature is required by Postgres to disambiguate overloads (matches the wrappers' actual signature). `IF EXISTS` for idempotency — consistent with the `c657c9f` DROP-FUNCTION-IF-EXISTS discipline established by db/026-028's fix.
+
+Footer verification query (run via Supabase SQL Editor after applying):
+
+- `SELECT proname FROM pg_proc WHERE proname LIKE 'is_session_%' AND pronamespace = 'public'::regnamespace;` — expect 0 rows post-apply.
+
+The migration runs against prod with the same apply-and-verify discipline as `db/026/027/028`: commit to repo, apply via SQL Editor, record in `db/MIGRATIONS_APPLIED.md`.
+
+#### Options when picking up
+
+- **As a standalone db/029 migration.** Cleanest framing — one migration, one purpose, one MIGRATIONS_APPLIED row. Matches the pattern.
+- **Folded into the next genuine schema migration.** If another `db/NNN` lands first for a different reason, append the three DROPs to it. Reduces migration count by one but couples unrelated changes.
+- **As a Phase-1.1 batch.** If other Phase-1.1 cleanups need migrations (currently none planned), combine.
+
+Recommendation: standalone db/029 when the next schema work happens. Not worth its own dedicated session.
+
+#### When to pick this up
+
+Not urgent. The wrappers cost a row each in `pg_proc` and nothing else — they are dead code but don't degrade performance, RLS, or correctness. Pick up when the next planned schema migration ships (or any operator session that's already in the Supabase SQL Editor for another reason).
+
+#### Related
+
+- `db/025_rooms_and_session_anchor.sql` lines 387–440 — the wrapper definitions.
+- `docs/PHASE-1-BUILD-SPEC.md` §H line 419 — the "compat wrapper lifetime" open question; OQ4 recommendation to keep through Phase 1 and drop in Phase 1.1.
+- `docs/EXECUTION-HANDOFF.md` §4 — Phase-1.1 cleanup bullet noting this work.
+- Phase A discovery (planning-chat transcript, 2026-05-23) — the zero-caller confirmation across `db/`, client code, and edge functions.
+- Commit `c657c9f` — the `DROP FUNCTION IF EXISTS` discipline pattern this migration follows.
 
 ---
 
@@ -3881,3 +3927,15 @@ Whichever comes first. If neither has triggered by the time W7-W10 ship, surface
 - v2.108 (commit `bc99f13`) — pattern source for "deferred-by-analogy" hardware verification
 - `docs/SESSION-5-PART-3B-VERIFICATION-LOG.md` — prior verification log capturing the v2.108 deferral pattern
 - `docs/ADMISSION-MODEL-V2.md` § 10 W6 — spec the W6 work was verified against
+
+---
+
+### Deferred: `generateRoomCode()` in index.html is dead code post-§F-Part-1
+
+**Deferred in:** §F shell-rework Part 1 (rpc_session_start two-call flow)
+**Deferred on:** 2026-05-23
+**Priority:** Low — dead code only, no runtime impact; tracked so it doesn't get orphaned in a later cleanup pass.
+**Area:** Shell — `index.html`
+**Status:** Completed 2026-05-23 — function removed from `index.html` in the Phase-1.1 cleanup commit. The §F Part 1 commit `c270800` made the function unreferenced by switching the shell to the two-call session-start flow; this cleanup removes the dead definition (10 lines, the function plus its header comment).
+
+`index.html`'s `generateRoomCode()` function was the random-room-code generator used by the old single-call `rpc_session_start` flow. Post-db/027, room codes are generated server-side inside `rpc_room_create` (6-char alphabet from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, bounded collision-retry). The shell no longer pre-generates one. After §F Part 1 (commit landed 2026-05-23) the function is unreferenced — `grep -n "generateRoomCode" index.html` returns only its definition. Remove in a future dead-code sweep — natural pair with the Phase-1.1 compat-wrapper cleanup (drop `is_session_*` wrappers) noted in `docs/EXECUTION-HANDOFF.md` §4 "After the §F shell rework lands."

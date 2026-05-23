@@ -3336,16 +3336,6 @@
       }
     }
 
-    // 6-char room, 0/1/O/I-safe alphabet — matches tv2.html's generator.
-    function generateRoomCode() {
-      const ALPHABET = 'ABCDEFGHIJKLMNPQRSTUVWXYZ23456789';
-      const bytes = new Uint8Array(6);
-      crypto.getRandomValues(bytes);
-      let out = '';
-      for (const b of bytes) out += ALPHABET[b % ALPHABET.length];
-      return out;
-    }
-
     // ── Foreground refresh ──────────────────────────────────────────
 
     // When the app returns to foreground, re-query TVs if user is currently
