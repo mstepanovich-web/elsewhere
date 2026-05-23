@@ -118,6 +118,8 @@ There is **one** post-login home screen on the phone. It replaces the prior `scr
 
 ### Three rendering modes (conditional state, not separate screens)
 
+> **Superseded for tile state.** Shell tile state — per-user per-app — is now specified in `docs/UNIFIED-APP-PLAN.md` §10. The Mode A/B/C structure and the "Active session relabeling", "Cross-app switching", and "Tile state matrix" subsections below are retained for historical context (the pre-room-model framing). The home-screen header, badge menu, and proximity-banner material outside the tile-state cluster remains authoritative here.
+
 The home screen renders differently based on user context, but the differences are CSS/content variations within a single DOM section:
 
 #### Mode A — Household user, at home

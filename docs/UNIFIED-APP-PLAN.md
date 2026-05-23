@@ -367,3 +367,248 @@ the answer rather than re-investigating:
 Planning is complete. The locked decisions, the four companion models, and
 this plan constitute the workstream design. The next action is execution,
 beginning with the Phase-1 migration.
+
+## 10. Shell tile state — per-user per-app
+
+The shell home screen renders an app tile for each app (karaoke, games,
+wellness, future). Each tile may carry a state signal — a badge — that
+reflects the signed-in user's relationship to that app. This section
+specifies the badge vocabulary, the data sources behind each signal, the
+precedence between signals when multiple apply, and what is buildable in
+which phase.
+
+This section SUPERSEDES the tile-state material in
+`docs/PHONE-AND-TV-STATE-MODEL.md` ("Three rendering modes" through "Tile
+state matrix"). That doc was written before the room/session model and
+keys tile state to the bound TV; this spec keys tile state to the user.
+PTSM retains its TV-side and home-screen-shell material — only the tile-
+state subsection is superseded.
+
+**Scope.** This section specifies the VISIBLE BADGE STATE only — what
+appears on each tile. Tap behavior is governed by
+`docs/ROOM-SESSION-MODEL.md` ("Tile-tap is navigation, not session
+creation") and is not re-specified here.
+
+### 10.1 The shift: bound-TV-keyed → per-user per-app
+
+The current implementation (`index.html:2310-2353`, the `renderHomeTiles`
++ `applyHomeTileState` pair landed in Session 5 Part 2c.3.1 and reshaped
+to the nested `{session, room}` cache in §F Part 2) renders one signal
+per tile: *"does the bound TV have a session in this app?"* When yes:
+the tile gets the `.active-session` class, label = `"Active Session"`,
+sub = the app's default label.
+
+This is correct for the pre-room-model world where a user had at most
+one session, attached to one TV. Under the room/session model
+(`docs/ROOM-SESSION-MODEL.md`), a user has unlimited multi-room
+membership across apps and a single global engagement at a time — and
+the tile can express more than just the bound-TV state. The badge
+becomes per-user per-app.
+
+The mechanism stays: `renderHomeTiles()` orchestrator,
+`applyHomeTileState(tile, app, mode, active)` per-tile applier,
+`TILE_DEFAULT_COPY` for the default labels. What changes is the input
+domain — `active` (a single bound-TV cache) widens to include the
+user's cross-app participant rows.
+
+### 10.2 Signal vocabulary
+
+Four signals are recognized. They are listed in order of urgency from
+most-to-least; precedence ties resolve in §10.3.
+
+#### Signal C — Turn imminent
+
+**Meaning.** The signed-in user is queued in an active session in this
+app and their turn is approaching (the queued→active promotion the push-
+notification path already triggers via `db/029`'s `fire_promotion_push`).
+
+**Badge.** A high-visibility marker on the tile — e.g. a small "Up next"
+pill, or a pulse on the tile. Exact visual is design work; the spec
+requires that this signal is unambiguously the most-prominent of the four
+when it fires.
+
+**Data source.** `session_participants` row where `user_id = me AND
+participation_role = 'queued' AND left_at IS NULL`, JOIN-ed via `room_id`
+to `rooms` where `app = X` and the room's current session has `ended_at
+IS NULL`. The queue-position field (or the push-trigger event) can further
+gate "imminent" vs. "queued but distant" if desired.
+
+**Phase-buildable.** ⚠️ Phase 3 (karaoke) at earliest — the queue concept
+is karaoke-first in the current product. Games' queue model is different
+(participation toggles, not a karaoke-style ordered queue) and may not
+need this signal. Wellness has no queue concept defined. The data is on
+hand — the `db/029` trigger payload already carries `room_id` — so the
+missing piece is the shell-side reader.
+
+#### Signal B — Engaged
+
+**Meaning.** The signed-in user is currently participating in a session
+in this app. Per the one-engagement rule, this signal fires for AT MOST
+ONE app tile globally — a user is "engaged" in one room at a time, period.
+
+**Badge.** Tile label reads e.g. `"You're in a session"` (or similar);
+the tile carries a distinct class (e.g. `.engaged`). Visually distinct
+from Signal A (bound-TV session) and Signal D (other-room session) —
+the user should be able to tell at a glance "this is what I'm doing
+right now."
+
+**Data source.** `session_participants` row where `user_id = me AND
+left_at IS NULL`, JOIN-ed via `room_id` to `rooms` where `app = X` and
+JOIN-ed via the room's current session ID to `sessions` where `ended_at
+IS NULL`. The room/session model defines engagement as
+*(member of room) AND (room has active session)*; the query reads both
+predicates.
+
+**One-engagement-rule respect.** The query may return rows for >1 app in
+edge cases (the rule is UX-enforced, not DB-enforced — see ROOM-SESSION-
+MODEL.md §108-119). If that happens, the badge picks the most-recently-
+joined row (by `session_participants.joined_at desc LIMIT 1`) and surfaces
+Signal B on that single app's tile only. Other apps fall through to
+lower-precedence signals. This is graceful degradation, not silent — the
+in-app prompt (the one-engagement transition prompt) handles correction.
+
+**Phase-buildable.** ⚠️ Phase 3 at earliest — needs the cross-app
+participants query in the shell. Until then, Signal A (bound-TV session)
+covers the engaged case for the bound-TV scenario, which is the common
+case.
+
+#### Signal A — Bound-TV session
+
+**Meaning.** The bound TV is running a session in this app. The signed-in
+user may or may not be a participant — this signal is about the TV, not
+the user. It exists for backward compatibility with the pre-room-model
+behavior and remains the primary signal for the common Mode A case
+(at-home user looking at their own TV's home screen).
+
+**Badge.** Today's behavior — `.active-session` class, label = `"Active
+Session"`, sub = the app's default label (per `TILE_DEFAULT_COPY`).
+Visually distinct from Signal B (engagement) — Signal A says "there's a
+session here," Signal B says "you're in it."
+
+**Data source.** Already implemented. `getActiveSession()` returns
+`{session, room}` for the bound TV (the `_activeSessionForBoundTv`
+nested cache from §F Part 2); the predicate is `active.session?.app ===
+app` per `applyHomeTileState`'s line at `index.html:2336`.
+
+**Phase-buildable.** ✅ Already shipped (Phase 1, §F). No new data
+source needed.
+
+#### Signal D — Other-room session
+
+**Meaning.** The signed-in user is a member of one or more rooms in this
+app that have active sessions, EXCEPT the bound TV's session (which is
+covered by Signal A). This is the multi-room awareness signal — "you
+have a karaoke room going at your friend's house while you're standing
+in your own living room."
+
+**Badge.** Low-prominence indicator — e.g. a small dot or count on the
+tile (`•` or `2`). Strictly less prominent than Signal A. Tapping
+behavior (which room is targeted by the in-app navigation) is governed
+by `docs/ROOM-ACCESS-INVITE-MODEL.md` and the in-app room list, not by
+this signal.
+
+**Data source.** `rooms` where `app = X AND ended_at IS NULL`, JOIN-ed
+via `session_participants` where `user_id = me AND left_at IS NULL`,
+EXCLUDING any room whose ID equals `active.room?.id` (the bound TV's
+room, if any).
+
+**Phase-buildable.** ⚠️ Phase 5 (rooms / groups / cross-app movement)
+at earliest — multi-room concept lands in Phase 5 per §5. Until then,
+this signal is absent and tiles fall through to Signal A or default.
+
+### 10.3 Signal precedence
+
+When multiple signals apply to the same tile, the highest-priority signal
+controls the visible badge. Lower-priority signals may render as
+secondary visual elements (e.g. a count dot alongside a Signal-B label),
+but their primary signal is suppressed.
+
+Precedence order (highest first):
+
+1. **Signal C — Turn imminent.** Actionable urgency overrides everything.
+2. **Signal B — Engaged.** Fires on at most one tile globally (one-
+   engagement rule). When B fires on a tile, A and D are suppressed on
+   that same tile.
+3. **Signal A — Bound-TV session.** The pre-room-model default. Fires
+   when the bound TV has a session in this app and Signal B has not
+   fired for the same app.
+4. **Signal D — Other-room session.** Fires when none of A/B/C apply
+   for this tile but rooms outside the bound TV have active sessions
+   in this app.
+5. **Default.** No signal. Tile shows the `TILE_DEFAULT_COPY` label and
+   sub.
+
+Mode A/B/C from PTSM (now superseded for tile state, retained for header
+and proximity-banner concerns) still influences `.greyed` state on
+TV-required apps: Mode B karaoke tile greys when no Signal A/B/C/D
+applies. The FLAG-3 precedence rule from today's `applyHomeTileState`
+holds: any active signal overrides `.greyed` because the tile is
+tappable in that state regardless of proximity.
+
+### 10.4 Buildability per phase
+
+| Signal | Phase | Status | What unlocks it |
+|---|---|---|---|
+| A — Bound-TV session | 1 | ✅ Shipped | `getActiveSession()` reads the nested cache from §F Part 2. |
+| B — Engaged | 3+ | ⚠️ Not built | Cross-app `session_participants` query in the shell. |
+| C — Turn imminent | 3+ | ⚠️ Not built | Shell reader of the queued state; karaoke-first. Push-trigger payload already carries `room_id` (db/029). |
+| D — Other-room session | 5 | ⚠️ Not built | Multi-room concept lands in Phase 5; cross-app `rooms` query. |
+
+The recommended build order matches §5's phase sequencing — A is in
+place, B and C land with Phase 3 (karaoke onto the new model) where the
+shell gains its first reason to read cross-app participant state, and D
+lands with Phase 5 when multi-room becomes a first-class concept.
+
+### 10.5 Wellness
+
+Wellness has no sessions, rooms, queues, or participants today —
+`docs/UNIFIED-APP-PLAN.md` §5 lists wellness as built greenfield "after"
+the model is finished. The wellness tile renders the default copy
+("Coming soon") and no signal fires until the wellness app introduces
+sessions and rooms. The spec scales naturally: when wellness gets rooms,
+the same signal vocabulary applies.
+
+### 10.6 Tap behavior — out of scope
+
+Tap behavior on a tile is NOT specified by this section. Per
+`docs/ROOM-SESSION-MODEL.md` § "Tile-tap is navigation, not session
+creation", tile-tap is navigation into the app; session and room
+creation are deliberate in-app actions. The shell tile is the door; the
+in-app create action is the threshold. Per-signal tap dispatch (rejoin
+vs. join-as-audience vs. start-fresh vs. confirm-cross-app-switch)
+remains the implementation's concern, governed by the room/session model
+and the dispatchers already in `index.html` (`handleHomeTileTap`,
+`handleSameAppRejoin`, `handleTvRemoteTileTap`, `handleCrossAppSwitch`).
+
+### 10.7 Relationship to other models
+
+- `docs/PHONE-AND-TV-STATE-MODEL.md` — superseded for the tile-state
+  matrix; retained for TV-side state and the home-screen shell
+  structural material (header, badge menu, proximity banner).
+- `docs/ROOM-SESSION-MODEL.md` — source of the multi-room membership
+  rule and the one-engagement rule that Signal B respects.
+- `docs/ROOM-AUTHORITY-MODEL.md` — irrelevant to badge state; controller
+  / owner authority is in-app and not surfaced on the shell tile.
+- `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` — provides the
+  "household membership" and "at-home" predicates Mode A/B/C derive
+  from; tile state inherits Mode-driven `.greyed` behavior on
+  TV-required apps when no signal fires.
+- `docs/ROOM-ACCESS-INVITE-MODEL.md` — invites and room-code-entry are
+  separate shell surfaces from the app-tile grid; an invite badge or
+  pending-invitations tile (see DEFERRED.md "Pending Invitations
+  inbox UI") would be its own indicator, not Signal A/B/C/D.
+
+### 10.8 The implementation hook
+
+The function to modify is `applyHomeTileState(tile, app, mode, active)`
+at `index.html:2332`. Its current signature accepts `active` (the
+bound-TV cache). The Phase-3 evolution extends it to accept the user's
+cross-app participant state — either as an additional argument or by
+making the function read a new shell-side cache populated by a
+`refreshUserAppState()` orchestrator. The Phase-1 default-state path
+(restore `TILE_DEFAULT_COPY`, set `.greyed` per Mode B karaoke rule)
+is preserved unchanged.
+
+The `TILE_DEFAULT_COPY` constant gains a wellness entry when the
+wellness tile is added; no schema change is implied by this spec
+beyond what Phase 3+ already needs.
