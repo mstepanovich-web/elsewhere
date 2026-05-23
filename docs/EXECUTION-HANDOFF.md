@@ -4,7 +4,7 @@
 docs, is the kickoff for any new chat continuing the unified-app
 execution work. Read this FIRST, then the planning docs.
 
-**Last updated:** 2026-05-22 (Phase-1 RPC migration arc complete — db/026/027/028 all applied to prod 2026-05-22; §4 now points at the §F shell session-state cluster rework)
+**Last updated:** 2026-05-23 (premium-control + regular-user model documentation pass complete — see ROOM-AUTHORITY-MODEL.md / HOUSEHOLD-DEVICE-PRESENCE-MODEL.md / ROOM-SESSION-MODEL.md; §4 now points at §F shell-rework IMPLEMENTATION — the §F pre-write investigation already ran this session and is recorded inline)
 
 ---
 
@@ -125,14 +125,60 @@ room and its current session," and every shell call site for
 `rpc_session_reclaim_manager`, and `rpc_session_admin_reclaim` is
 switched to the new room-keyed signatures.
 
+**The §F pre-write investigation already ran this session
+(2026-05-23) and is recorded in the planning-chat transcript.** Its
+findings — the §F site table has zero drift; only 4 live shell-tier
+RPC call sites exist (all in `index.html`); rpc_room_create has zero
+existing callers — are good as of this date and do not need to be
+re-derived. The next session does NOT need to re-run the §F
+investigation; it picks up at IMPLEMENTATION.
+
+**Implementation decisions already made (during the investigation
++ planning-chat review):**
+
+- **Cache shape: nested `{ session, room }`.** The shell's
+  `_activeSessionForBoundTv` becomes `{ session: { id, app } | null,
+  room: { id, controller_user_id, room_code } | null }`. Faithful
+  to the room/session split; the "room exists but no session"
+  state (between apps in a cross-app move) is naturally
+  representable.
+- **Keep `room_code` under `room`.** No current consumer reads it,
+  but it's cheap to carry for future banner/QR UX.
+- **Two-call session-start flow.** Where the shell today calls
+  `rpc_session_start(...)`, the new flow is `rpc_room_create(...)`
+  followed by `rpc_session_start({ p_room_id, ... })`. Transparent
+  room-reuse: when a room already exists for the screen, the
+  handler skips `rpc_room_create` and calls `rpc_session_start`
+  directly against the existing `room.id`. New error path: if the
+  room exists but the current user is NOT its controller, the
+  handler surfaces a clean message rather than letting
+  `rpc_session_start` raise `42501`.
+- **`rpc_session_end` argument unchanged.** Keeps `p_session_id`
+  per db/026; only the surrounding state-cluster reads change, not
+  the RPC call itself.
+
+**The model the §F rework builds against is complete and
+committed.** The premium-control model (commit `c086af7`) and the
+regular-user tile-navigation model (commit `8e1d24f`) are
+documented across `docs/ROOM-AUTHORITY-MODEL.md`,
+`docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`, and
+`docs/ROOM-SESSION-MODEL.md`. The investigation's flag-4
+question — "how does tile-tap interact with session creation and
+the one-engagement prompt?" — is now resolved by
+ROOM-SESSION-MODEL.md's new section "Tile-tap is navigation, not
+session creation": tile-tap is freely-repeatable navigation only;
+session creation is a deliberate in-app action; the
+one-engagement prompt fires at session-creation/join, not at
+tile-tap.
+
 **Forcing function.** The shell still calls the OLD pre-db/026 RPC
-signatures (`rpc_session_start` with 7 args including `p_room_code`;
-`rpc_session_leave(p_session_id)`; reclaim RPCs with `p_session_id`
-and a sessions-typed return; the 8 mechanical RPCs filtered by
-`p_session_id`). All of these are runtime-broken now that the
-room-keyed RPCs are live in prod — Postgres rejects the calls
-because the named-argument shapes no longer exist at the database.
-This is the mid-migration window already recorded as
+signatures (`rpc_session_start` with 7 args including
+`p_room_code`; `rpc_session_leave(p_session_id)`; reclaim RPCs
+with `p_session_id` and a sessions-typed return; the 8 mechanical
+RPCs filtered by `p_session_id`). All of these are runtime-broken
+now that the room-keyed RPCs are live in prod — Postgres rejects
+the calls because the named-argument shapes no longer exist at the
+database. This is the mid-migration window recorded as
 `docs/DEFERRED.md`'s "Phase-1 RPC migration in-flight — shell still
 on pre-db/026 RPC signatures" entry; the §F rework is the resolving
 work for the SHELL portion of that entry.
@@ -146,37 +192,51 @@ surfaces remain on the old session-keyed signatures until their
 respective phase lands; their breakage is bounded to those surfaces
 and does not block the shell-level Phase-1 close.
 
-**Recommend an investigate-first round before any code**, same
-discipline as db/027 and db/028's pre-write investigations. Read
-§F's enumeration in PHASE-1-BUILD-SPEC.md, then audit the actual
-current shell-side state-cluster sites: locate every shell call
-site for the five affected semantic RPCs (`rpc_session_start`,
-`rpc_session_leave`, `rpc_session_reclaim_manager`,
-`rpc_session_admin_reclaim`, `rpc_session_end`) and the 8 mechanical
-RPCs; identify the active-session state cluster's read paths in
-`index.html` / `claim.html` / `tv2.html` / `shell/realtime.js` (and
-any shell-tier helper modules); confirm whether the §F site count
-(~13) still matches current code or has drifted. Surface anything
-that doesn't match the build spec as a question, don't act on it.
-db/027 and db/028's pre-write investigations both turned up
-real issues that were better resolved in advance than mid-write —
-the §F rework's risk surface is comparable.
+**Tracked downstream work — already in DEFERRED.md.** Five new
+entries landed this session (commit `8e1d24f`) capturing the
+premium-control model's tracked future work. The §F rework does
+NOT need to act on any of these — they are downstream of the shell
+rework — but the next session should know they exist:
+
+- **C1: tv_devices needs a `can_embed` column.** Required to make
+  the premium-control layer's activation predicate
+  runtime-enforceable.
+- **C2: `shell/realtime.js` publisher payloads carry pre-room-model
+  field names.** Harmless for the shell-tier subscription path
+  (subscribers re-query); latent risk for Phase 3/4 surfaces that
+  parse payloads.
+- **C3: turn-notification depends on `fire_promotion_push` trigger
+  recreation.** Cross-links to PHASE-1-BUILD-SPEC.md §D's existing
+  trigger-recreation tracking.
+- **C4: HH-admin administrative actions without engagement
+  transition.** Future enhancement; current uniform-engagement
+  behavior is correct for the primary use case.
+- **C5: ownership-seize implementing RPC.** Operation fully
+  specified in ROOM-AUTHORITY-MODEL.md § "Seize authority"; RPC
+  not yet implemented.
 
 **After the §F shell rework lands:**
 
 - `fire_promotion_push` trigger recreation with room_id awareness
-  (pending an iOS-app audit on data.session_id payload usage —
-  tracked in PHASE-1-BUILD-SPEC.md §D's "Additional tracked work").
+  (DEFERRED C3 above; the iOS payload audit is the gating step).
 - Phase-1.1 compat-wrapper cleanup: drop the `is_session_*`
   wrappers after a grep-confirmed zero-caller check.
 
 Then Phases 2–5 per UNIFIED-APP-PLAN §5.
 
-**Deferred follow-up (separate task):** ROADMAP.md's "Active
-session" still lists Session 5; the unified-app workstream
-hasn't been promoted to active-session status there. Structural
-decision, worth a separate review rather than a hasty addendum
-here.
+**Deferred follow-ups (separate tasks):**
+
+- ROADMAP.md's "Active session" still lists Session 5; the
+  unified-app workstream hasn't been promoted to active-session
+  status there. Structural decision worth a separate review rather
+  than a hasty addendum here.
+- **Per-user per-app tile-badge spec in UNIFIED-APP-PLAN.md** —
+  parked from the 2026-05-23 model-documentation pass. The
+  premium-control model documentation deferred the tile-badge UX
+  spec to a separate UAP task; it has NOT been written into any
+  doc yet and is NOT a DEFERRED.md entry. Needs its own future
+  task to draft + land. Surface item for whoever picks up after
+  §F.
 
 ## 5. Review discipline
 
