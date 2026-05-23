@@ -241,7 +241,7 @@ Deno.serve(async (req) => {
     if (isServiceRole && body.type === "promotion") {
       title   = title   || "You're up!";
       pushBody = pushBody || "Tap to take the stage";
-      data    = data    || { type: "promotion", session_id: body.session_id };
+      data    = data    || { type: "promotion", room_id: body.room_id };
     }
 
     if (!user_id || !title || !pushBody) {
