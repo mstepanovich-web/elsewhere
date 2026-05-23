@@ -3011,13 +3011,19 @@
     // message and leave home tile state as-is. Stale tile
     // state corrects on next realtime event or
     // enterHomeForTv refresh. Phase 1 tolerance.
-    async function handleSameAppRejoin(session, app) {
+    async function handleSameAppRejoin(active, app) {
       // v2.101 (cluster Commit 2.6): branch role on app per
       // docs/GAMES-CONTROL-MODEL.md § 2.4.4 — games lobby-state self-join
       // defaults to 'active'; karaoke stays 'audience' per
       // docs/KARAOKE-CONTROL-MODEL.md § 1 schema-state semantics.
+      //
+      // Post-db/026-028: rpc_session_join is keyed on p_room_id (was
+      // p_session_id pre-db/026). The cache's room.id is the canonical
+      // identifier; active.session?.id is only used for the
+      // session_started/participant_role_changed broadcast payloads
+      // (whose field names are deferred-renamed per DEFERRED C2).
       const { error: joinErr } = await window.sb.rpc('rpc_session_join', {
-        p_session_id: session.id,
+        p_room_id: active.room.id,
         p_participation_role: app === 'games' ? 'active' : 'audience',
       });
 
@@ -3049,7 +3055,7 @@
         if (!joinErr && window.publishParticipantRoleChanged) {
           try {
             await window.publishParticipantRoleChanged(ctx.device_key, {
-              session_id: session.id,
+              session_id: active.session?.id,
             });
           } catch (e) {
             console.error('[elsewhere] participant_role_changed publish failed:', e);
@@ -3059,9 +3065,9 @@
 
       // Navigate. Per FLAG-A: no &mgr=1 for games rejoin.
       if (app === 'karaoke') {
-        location.href = 'karaoke/singer.html?code=' + encodeURIComponent(session.room_code);
+        location.href = 'karaoke/singer.html?code=' + encodeURIComponent(active.room?.room_code);
       } else if (app === 'games') {
-        location.href = 'games/player.html?room=' + encodeURIComponent(session.room_code);
+        location.href = 'games/player.html?room=' + encodeURIComponent(active.room?.room_code);
       }
     }
 
@@ -3159,36 +3165,71 @@
 
       if (app === 'wellness') return; // no destination yet; Wellness is hidden on phone anyway
 
-      const room = generateRoomCode();
+      const tv_device_id = screen.dataset.tvDeviceId;
+      if (!tv_device_id) {
+        alert("Couldn't start session: TV id missing. Reopen the TV from Your TVs and try again.");
+        return;
+      }
+
+      // Post-db/026-028 two-call session-start flow:
+      // 1. Resolve the room: reuse the cached room if one exists for
+      //    this screen (between-apps state or pre-existing), else
+      //    create a new one via rpc_room_create.
+      // 2. Call rpc_session_start({ p_room_id, ... }) — the new
+      //    6-arg signature. p_tv_device_id and p_room_code are gone;
+      //    rpc_room_create generates the room_code now.
+      //
+      // Non-controller guard: rpc_session_start raises 42501 when the
+      // caller is not the room's controller. Detect that in advance
+      // when reusing an existing room so the user sees a clean
+      // message instead of an RPC error toast.
+      const cached = getActiveSession();
+      let room = cached.room; // { id, controller_user_id, room_code } | null
+
+      if (room) {
+        const user = window.elsewhere?.getCurrentUser?.();
+        if (!user || user.id !== room.controller_user_id) {
+          alert(`You aren't the manager of this room. Ask the manager to start a ${TILE_DEFAULT_COPY[app]?.label || app} session.`);
+          return;
+        }
+      } else {
+        // No existing room — create one. rpc_room_create seats the
+        // caller as the room's initial manager-audience participant
+        // and generates the 6-char room_code.
+        const { data: newRoom, error: createErr } = await window.sb.rpc('rpc_room_create', {
+          p_screen_ref: tv_device_id,
+        });
+        if (createErr) {
+          alert("Couldn't create room: " + (createErr.message || 'unknown error'));
+          return;
+        }
+        room = newRoom;
+      }
 
       // Session 5 Part 2b: create the session row before broadcasting.
       // Client-supplied manifest (plan-doc-confirmed in commit 157d920).
       // RPC failure: surface error, no broadcast, no navigation. 2c.2
       // adds a defensive 23505 ("active session exists") catch — see R4
       // design in the SESSION-5-PART-2-BREAKDOWN.md § 2c discussion.
-      const tv_device_id = screen.dataset.tvDeviceId;
-      if (!tv_device_id) {
-        alert("Couldn't start session: TV id missing. Reopen the TV from Your TVs and try again.");
-        return;
-      }
       const manifest = APP_MANIFEST[app];
       const { data, error: startErr } = await window.sb.rpc('rpc_session_start', {
-        p_tv_device_id:    tv_device_id,
+        p_room_id:         room.id,
         p_app:             app,
         p_admission_mode:  manifest.admission_mode,
         p_capacity:        manifest.capacity,
         p_ask_proximity:   manifest.ask_proximity,
         p_turn_completion: manifest.turn_completion,
-        p_room_code:       room,
       });
       if (startErr) {
         // 2c.2 R4: defensive handling for "active session exists" (errcode 23505).
         // Same-app: best-effort rejoin. Different-app: surface a message.
+        // Post-db/025: sessions are keyed on room_id (not tv_device_id),
+        // so the R4 lookup is scoped to the room we just resolved above.
         if (startErr.code === '23505') {
           const { data: existing } = await window.sb
             .from('sessions')
-            .select('id, app, room_code')
-            .eq('tv_device_id', tv_device_id)
+            .select('id, app, room_id')
+            .eq('room_id', room.id)
             .is('ended_at', null)
             .maybeSingle();
 
@@ -3206,8 +3247,11 @@
             // the standard supabase-js destructure pattern (replaces the
             // earlier .catch() which couldn't distinguish 23505 from
             // success — needed now to gate the publish below).
+            //
+            // Post-db/026: rpc_session_join takes p_room_id. The room
+            // is the one we just resolved (existing.room_id matches).
             const { error: r4JoinErr } = await window.sb.rpc('rpc_session_join', {
-              p_session_id: existing.id,
+              p_room_id: existing.room_id,
               p_participation_role: app === 'games' ? 'active' : 'audience',
             });
 
@@ -3228,9 +3272,9 @@
             }
 
             if (app === 'karaoke') {
-              location.href = 'karaoke/singer.html?code=' + encodeURIComponent(existing.room_code);
+              location.href = 'karaoke/singer.html?code=' + encodeURIComponent(room.room_code);
             } else if (app === 'games') {
-              location.href = 'games/player.html?room=' + encodeURIComponent(existing.room_code);
+              location.href = 'games/player.html?room=' + encodeURIComponent(room.room_code);
             }
             return;
           }
@@ -3263,26 +3307,32 @@
       // Part 2d stage state) must tolerate missed session_started events
       // by reading the sessions table on mount rather than relying
       // purely on broadcast.
+      //
+      // Payload field names (session_id, manager_user_id, room_code)
+      // are pre-db/025 names retained for compat; the values now come
+      // from the room object where the underlying column moved (per
+      // db/025: manager_user_id → rooms.controller_user_id; room_code
+      // → rooms.room_code). Field-name rename is tracked as DEFERRED C2.
       try {
         await publishSessionStarted(device_key, {
           session_id:      session.id,
           app:             session.app,
-          manager_user_id: session.manager_user_id,
-          room_code:       session.room_code,
+          manager_user_id: room.controller_user_id,
+          room_code:       room.room_code,
         });
       } catch (e) {
         console.error('[elsewhere] session_started publish failed:', e);
       }
       try {
-        await publishLaunchApp(device_key, app, room);
+        await publishLaunchApp(device_key, app, room.room_code);
       } catch (e) {
         console.error('[elsewhere] launch_app publish failed:', e);
       }
 
       if (app === 'karaoke') {
-        location.href = 'karaoke/singer.html?code=' + encodeURIComponent(room);
+        location.href = 'karaoke/singer.html?code=' + encodeURIComponent(room.room_code);
       } else if (app === 'games') {
-        location.href = 'games/player.html?room=' + encodeURIComponent(room) + '&mgr=1';
+        location.href = 'games/player.html?room=' + encodeURIComponent(room.room_code) + '&mgr=1';
       }
     }
 

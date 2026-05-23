@@ -3444,6 +3444,18 @@ When ownership-seize has a forcing UX function — i.e., when a user-facing flow
 
 ---
 
+### Deferred: `generateRoomCode()` in index.html is dead code post-§F-Part-1
+
+**Deferred in:** §F shell-rework Part 1 (rpc_session_start two-call flow)
+**Deferred on:** 2026-05-23
+**Priority:** Low — dead code only, no runtime impact; tracked so it doesn't get orphaned in a later cleanup pass.
+**Area:** Shell — `index.html`
+**Status:** Deferred
+
+`index.html`'s `generateRoomCode()` function was the random-room-code generator used by the old single-call `rpc_session_start` flow. Post-db/027, room codes are generated server-side inside `rpc_room_create` (6-char alphabet from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, bounded collision-retry). The shell no longer pre-generates one. After §F Part 1 (commit landed 2026-05-23) the function is unreferenced — `grep -n "generateRoomCode" index.html` returns only its definition. Remove in a future dead-code sweep — natural pair with the Phase-1.1 compat-wrapper cleanup (drop `is_session_*` wrappers) noted in `docs/EXECUTION-HANDOFF.md` §4 "After the §F shell rework lands."
+
+---
+
 ## Completed items
 
 *(Move entries here when they're addressed. Keep the full original entry — just update **Status** to `Completed in Session X.Y` and add a one-line completion note.)*
