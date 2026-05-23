@@ -6,45 +6,18 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 
 ## Active session
 
-**Session 5 — Universal session + participants + queue model**
-- **Status:** Part 1 complete. Part 2 complete (2a-2e shipped; 2f deferred to consolidation per audience.html no-investment doctrine, closeout `1d481b4`). Part 3a shipped (3a.1 plumbing + 3a.2 manager controls). Part 3b productionization + Phase 2 shipped (v2.108 → v2.113, Edge Function + db/019, 2026-05-04). **Part 3c — `admission_model_v2` §10 implementation — shipped:** W1-W6 earlier, W7-W10 across 2026-05-18 → 2026-05-19 (v2.121 → v2.137, tv `v2.101`, `db/024`). The §9.6 supersession folded the old 3b-proper / 3c / 3d per-game breakdown into the W1-W10 work-packages. Part 5 verification pending.
-- **What's left in Session 5:** Part 5 verification (multi-user end-to-end testing). See `docs/SESSION-5-CLOSEOUT-PLAN.md` for the per-day execution plan, locked decisions, and cross-session continuity guidance (note: that doc predates `admission_model_v2` and is on the §10 W10 cleanup list — see DEFERRED).
-- **Estimated remaining:** Part 5 ~2-3 hr verification with 2+ test accounts.
-- **References:** `docs/SESSION-5-CLOSEOUT-PLAN.md`, `docs/SESSION-5-PLAN.md`, `docs/ADMISSION-MODEL-V2.md`, `docs/SESSION-5-PART-2-BREAKDOWN.md`, `docs/SESSION-5-PART-2-CLOSING-LOG.md`, `docs/SESSION-5-PART-3-AUDIT.md`, `docs/SESSION-5-PART-3-CLOSING-LOG.md`, `docs/SESSION-5-PART-3B-CLOSING-LOG.md`, `docs/SESSION-5-PART-3C-CLOSING-LOG.md`, `docs/GAMES-CONTROL-MODEL.md`
+**Unified-app workstream — Phase 2: venue extraction (UAP §5)**
 
-### Commits shipped in Session 5
+Phase 1 of the unified-app refactor (the room/session foundation) shipped 2026-05-21 → 2026-05-23 — see "Unified-app workstream — Phase 1: Room/session foundation" in the Completed section below for full commits + verified-prod state. Phases 3, 4, 5 (karaoke onto the new model, games conformance, rooms/groups/cross-app movement) follow per `docs/UNIFIED-APP-PLAN.md` §5. This active entry is Phase 2: pull venue rendering out of the karaoke stage into a shared shell renderer and make the venue registry cross-app.
 
-**Part 1 — Schema + RPCs + shell/realtime.js extraction:**
-- `253e077` — Part 1a: sessions + session_participants schema with RLS (db/008)
-- `979f70d` — Part 1b.1: session lifecycle RPCs (db/009)
-- `a0373e0` — Part 1b.2: manager mechanics RPCs (db/010)
-- `5f60d13` — Part 1b.3: role and queue mutation RPCs (db/011)
-- `9e10bf4` — Part 1c: extract realtime helpers into `shell/realtime.js`
-
-**Part 2 — Karaoke integration:** (full commit detail in `docs/SESSION-5-PART-2-CLOSING-LOG.md`)
-- 2a: realtime publishers (`d1b4edd`)
-- 2b: session lifecycle wiring (`601d125`)
-- 2c.1/2/3.1/3.2: home unification + active session relabeling + Back-to-Elsewhere visibility (`daa8718`, `0a3a9ea`, `e4a348e`, `5617689`)
-- 2d.0/1: karaoke session helpers + stage.html session integration (`db/013` + multiple commits)
-- 2e.0/1/2: push notification infrastructure + role-aware UI + self write actions (multiple commits, latest `9ec5006`/`ee7849a`)
-- 2e.3.1/2: manager queue UI + manager override commands panel (multiple commits, latest `af1e468` at v2.120)
-- 2f: deferred to consolidation (no commits)
-- BUG fixes during 2e.3: `ce36fe5` (BUG-5 web sign-up redirect), `1b870d3` (BUG-10 realtime publish race at v2.118), `ad97ea5` (BUG-13/3/7 manager refresh + cosmetic at v2.119)
-- Closeout: `1d481b4` (audience.html no-investment doctrine + 5 papercuts + closing log), `7f8f97e` (5 open bugs filed to DEFERRED)
-
-**Part 3 — Games integration:**
-- 3a prereq: `db/016_remove_participant.sql` — manager-only soft-removal RPC (`05d2cae`)
-- 3a.1: session/participants plumbing — manager identity from `control_role`, agora-identity-bind protocol, γ-1 lobbyPlayers synthesis as transitional bridge (`ea89c48` at v2.100)
-- 3a.2: manager controls — End Session button (`rpc_session_end` + `publishSessionEnded`); manager-as-player toggle via `rpc_session_update_participant`; Remove Player UI (`rpc_session_remove_participant`); `lobbyPlayers` + `managerIsPlayer` + γ-1 synthesis retired; `manager-player-status` Agora message retired (`8bff27b` at v2.101)
-
-**Part 3c — `admission_model_v2` §10 (games admission, W1-W10):** (full commit detail in `docs/SESSION-5-PART-3C-CLOSING-LOG.md`)
-- **W1-W6** — schema migration, per-game manifest + admission stamping, dispatcher refactor, game-room updates, score-screen Play Again, Manager Select Players surface. Shipped before 2026-05-18, ending `cef155c` at v2.121. No closing log for W1-W6; reconstruct from `git log` + `docs/ADMISSION-MODEL-V2.md` §10 if needed.
-- **W7** (`68e8ee9` at v2.122): retired vestigial Last Card `managerNextRound` (resolved to a deletion — the path was a never-shipped multi-hand-Last-Card leftover).
-- **W8** (`b6898ea` → `2432d86`, v2.123 → v2.131, 9 commits): Pause + Leave UI; manager / player singleton-bar refactor (architectural keystone); Trivia routing refactor. Scope expanded vs §10's "Pause + Leave only" bullet.
-- **W9** (`02cdc08` `db/024` + `a1273df` flip + `5c1f97f` at v2.132 + `6b12290` at v2.133): implicit-leave detection via heartbeat + server-side prune. Heartbeat-only vs §10's `beforeunload` + heartbeat scope (deliberate; `beforeunload` misses crash/network-loss cases).
-- **W10** (`014c738` → `a7dd71a`, v2.134 → v2.137 + tv `v2.101`, 4 commits): Last Card issue fixes (manager roster auto-update on new joiner, top-strip card color), UX polish (double-tap to play, un-mirrored opponent initials), W5 dead-code sweep, 12 new DEFERRED entries, `.gitignore` swap-file block. The §10-defined "W10 Cleanup" tasks (APP_MANIFEST shrink, doc supersession edits, CLOSEOUT-PLAN restructure, DEFERRED mark-obsolete sweep) remain deferred — see `docs/DEFERRED.md` "admission_model_v2 §10 W10 cleanup tasks".
-
-**Next up:** Part 5 verification (multi-user end-to-end testing of Session 5 flows). After Session 5 closeout: the unified-app / NHHU-as-first-class planning session (see `docs/SESSION-5-PART-3C-CLOSING-LOG.md` "Next session entry point"). The old "3b/3c/3d per-game admission UX" item is superseded — `admission_model_v2` §9.6 restructured it into the now-shipped W1-W10 work-packages.
+- **Status:** Active. Prerequisite for "navigate venues" being a baseline experience in any app. Per UAP §5, Phase 2 "can overlap Phase 1" — fully unblocked now that Phase 1 is closed.
+- **Estimated:** TBD pending session planning.
+- **Three-part work** (per `docs/DEFERRED.md` "Venues as cross-app service (games, wellness, future apps)", line ~846 — the canonical entry):
+  1. Extract 360° panorama rendering from `karaoke/stage.html` into `shell/venue-renderer.js` (Three.js setup, texture loading, transition UX). Keep karaoke's ambient effects separate (DEFERRED `shell/venue-effects.js` entry).
+  2. Games integration: each game's blockade image becomes a venue entry in `venues.json` with product tag `'games'`; session-wide venue selection; games pages consume the shared renderer.
+  3. Phase-2 follow-up: DeepAR camera insertion for player/participant presence in games (same technique karaoke uses for singers).
+- **Trigger** (per the DEFERRED entry): either wellness app start, OR games visual parity priority. Not blocking the workstream's gating — Phases 3 and 4 depend on Phase 1 (done); Phase 3 additionally depends on Phase 2.
+- **References:** `docs/UNIFIED-APP-PLAN.md` §5 Phase 2 + the four companion model docs; `docs/EXECUTION-HANDOFF.md` §4 (operator-facing brief, refreshed each session); `docs/DEFERRED.md` "Venues as cross-app service" (canonical, line ~846) + "Venues integration (post-Session-5)" parent cluster (line ~897).
 
 ---
 
@@ -52,7 +25,7 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 
 > **Note on numbering:** Sessions 6 → 12 are a clean integer sequence reflecting technical-first dependency ordering. Sessions 6 + 7 (formerly 4.10.1 + 4.11) renumbered 2026-05-04 to drop the 4.x topical prefix in favor of the post-Session-5 sequence. The legacy 4.x numbering is preserved in the "Completed sessions" section below for traceability against shipped work.
 >
-> Hard ordering Session 6 → 7 → 8 → 9 → 10 → 11 → 12: small wins first (SMS pre-invites, admin UI, Trivia premium UX), then keystone reworks (audience.html unification, cross-app venues), then user-acquisition + new app surfaces (NHHU conversion funnel, wellness app). Sessions 9 + 10 unblock Sessions 11 + 12.
+> Session 10 (Venues at platform level) is now the active entry above as UAP §5 Phase 2 — its body is no longer in this queue; the active entry holds the working detail. Sessions 9, 11, 12 carry one-line cross-ref notes mapping each to its UAP §5 phase (9 → Phase 3 karaoke; 11 → Phase 3+ funnel; 12 → post-Phase-5 "then wellness/worlds"). Hard ordering for the remaining queue: 6 → 7 → 8 (small wins first — SMS pre-invites, admin UI, Trivia premium UX); 9 + 11 + 12 sequenced per their UAP phase dependencies.
 
 ### Session 6 — SMS pre-invites for household onboarding
 
@@ -77,6 +50,8 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 
 ### Session 9 — Audience.html unification (NHHU → HHU UI merge)
 
+> **UAP §5 phase mapping:** Phase 3 (karaoke onto the new model). Tracked under the active unified-app workstream — see Active section above.
+
 - **Why:** Current parallel UI codebases (audience.html for NHHU, singer.html/index.html for HHU) compound complexity with every feature added. Post-Session-5 work to absorb audience.html into the HHU app as a parameterized NHHU view. Same UI fabric for both populations, conditional rendering hides TV-required features.
 - **Status:** Keystone for further platform work — until this lands, NHHU conversion funnel + games venues + wellness all fight against the audience-vs-singer split.
 - **Estimated:** TBD pending session planning. Substantial structural work.
@@ -88,21 +63,9 @@ High-level session pipeline so we don't lose context between sessions. Updated a
   - `docs/DEFERRED.md` "Migrate audience.html into unified app as parameterized NHHU view" (line 1436)
   - `docs/DEFERRED.md` "Audience.html freeze" (line 1422, active constraint)
 
-### Session 10 — Venues at platform level (cross-app service)
-
-- **Why:** Venues are currently karaoke-only (`karaoke/stage.html` owns the 360° panorama renderer, `venues.json` schema, etc.). Elevating them to a platform-level cross-app service usable by Games (and future apps like wellness) is a documented post-Session-5 architectural rework.
-- **Estimated:** TBD pending session planning.
-- **Three-part work documented:**
-  1. Extract 360° panorama rendering from `karaoke/stage.html` into `shell/venue-renderer.js` (Three.js setup, texture loading, transition UX)
-  2. Games integration: each game's blockade image becomes a venue entry in `venues.json` with product tag 'games'; games pages consume the shared renderer
-  3. Phase 2 follow-up: DeepAR camera insertion for player presence in games
-- **Triggers** (per DEFERRED entry): either wellness app start, OR games visual parity priority. NOT urgent for Session 5; explicit "don't bundle with Session 5" guidance.
-- **Depends on:** Could run parallel with Session 9, but Session 9 first means Session 10 has cleaner UI fabric to build into.
-- **References:**
-  - `docs/DEFERRED.md` "Venues as cross-app service (games, wellness, future apps)" (line 846, canonical)
-  - `docs/DEFERRED.md` "Venues integration (post-Session-5)" parent cluster (line 897, six downstream items)
-
 ### Session 11 — Audience-to-NHHU conversion path (user-acquisition funnel)
+
+> **UAP §5 phase mapping:** Phase 3+ (sister UX/funnel layer to karaoke surface work). Tracked under the active unified-app workstream — see Active section above.
 
 - **Why:** Convert passive audience members into registered users. Phase 1 placeholder may ship in Session 5 (minimal Elsewhere home for NHHU returning from audience deep link, with "go back" + "explore Elsewhere" options). Full conversion funnel (sign-up, app downloads, game launchers) is post-Session-5.
 - **Status:** User-acquisition strategy. Sister item to Session 9 unification — listed in same § 5.4-5.5 vicinity but distinct scope (UX/funnel work vs. structural UI rework).
@@ -114,6 +77,8 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 
 ### Session 12 — Wellness app implementation
 
+> **UAP §5 phase mapping:** post-Phase-5 ("then — wellness and worlds, built greenfield against the finished model"). Tracked under the active unified-app workstream — see Active section above.
+
 - **Why:** Wellness is a placeholder in the architecture today (no implementation). Adding it requires both the unified app (Session 9 — wellness needs the same UI fabric, otherwise becomes a third parallel codebase) and the platform-level venue service (Session 10 — wellness sessions need their own venue/environment system).
 - **Estimated:** TBD pending session planning.
 - **Depends on:** Session 9 (unification) AND Session 10 (cross-app venues). Without both, wellness becomes a third parallel UI codebase.
@@ -124,6 +89,69 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 ---
 
 ## Completed sessions
+
+### Unified-app workstream — Phase 1: Room/session foundation
+
+**Completed:** 2026-05-21 → 2026-05-23 (db/025-031 applied to prod; §F shell rework + Phase-1 post-work shipped; 10 commits pushed in the closing push)
+
+Shipped the keystone of the unified-app refactor: a `rooms` entity that durably persists across app switches; `sessions` demoted to per-app instances under a room; `session_participants` re-anchored from `session_id` to `room_id`; the 14 RPCs re-keyed plus new `rpc_room_create`; the shell session-state cluster re-pointed from "the session for the bound TV" to "the room and its current session"; plus closing-out post-work: push-trigger recreation (db/029), premium-control-layer schema column (db/030), ownership-seize RPC (db/031), realtime publisher field-name rename (shell half), and the per-user per-app tile-badge spec (UAP §10).
+
+Architectural significance: Phase 1 is the keystone for UAP §5's remaining phases. Phases 3 (karaoke surface migration) and 5 (rooms/groups/cross-app movement) depend on Phase 1 directly. Phase 2 (venue extraction) can run independently and is now the active session.
+
+**Commits (chronological):**
+
+- `dddbeb6` — db/025 schema cutover (rooms entity + session/participant re-anchor)
+- `9e3926e` — db/026 RPC batch 1 (8 mechanical re-points + session_end + set_admission_mode)
+- `2465ff5` — db/027 RPC batch 2 (rpc_session_start split + new rpc_room_create per OQ2 (a))
+- `95dcf70` — db/028 RPC batch 3 (rpc_session_leave four-tier succession + reclaim RPCs)
+- `c657c9f` — forward-correction: DROP FUNCTION ahead of CREATE OR REPLACE for 11 renamed/re-typed functions
+- `409676b`, `4bd0829`, `da87d26` — db/026 / db/027 / db/028 apply bookkeeping
+- `d790703` — §F Part 2: nested {session, room} cache reshape
+- `c270800` — §F Part 1: re-point shell RPC call sites to room-keyed signatures
+- `58b36c3` — version bump v2.138
+- `daeff0b` — Phase-1.1 dead-code cleanup (generateRoomCode removed; is_session_* wrapper drop deferred)
+- `5eb8258` — iOS notification-payload audit (DEFERRED record)
+- `b0f8a47` + `89a629e` — db/029 fire_promotion_push recreation + Edge Function payload update
+- `2ca15a8` + `fd553ac` — db/030 tv_devices.can_embed column (schema half)
+- `b654f91` + `cbd2783` — db/031 rpc_room_seize ownership-seize RPC
+- `a5ed589` — C2 shell-half realtime publisher payload rename (4 shell sites; 18 surface sites deferred to Phase 3/4)
+- `bf45b2c` — UNIFIED-APP-PLAN §10 tile-badge spec + PHONE-AND-TV-STATE-MODEL.md supersession pointer
+
+All 7 db migrations (db/025-031) applied to prod via Supabase SQL Editor; recorded in `db/MIGRATIONS_APPLIED.md`. iOS bundle synced through `bf45b2c` (this session's close); Xcode rebuild outstanding as normal deferred step.
+
+**DEFERRED entries that emerged:** C1 self-report writer (the writer half of `tv_devices.can_embed`; blocked on compositing pipeline not yet existing as code); C2 surface-side completion (18 publisher call sites in singer/stage/player still send `session_id`); schema-stale `sessions` SELECTs on the four pre-Phase-3 surfaces (7 sites reference dropped columns); C4 HH-admin administrative actions without engagement transition; publishParticipantRoleChanged contract drift / latent `payload.user_id` always undefined; publishManagerChanged dead publisher (zero callers); push-notification tap-routing (`// TODO 2e.1+`) unbuilt; low-prominence room-code-entry UI affordance.
+
+**Details:** `docs/UNIFIED-APP-PLAN.md` (workstream design); `docs/PHASE-1-BUILD-SPEC.md` (Phase 1 detailed spec + verified RPC migration worklist); `docs/EXECUTION-HANDOFF.md` §2 (Phase 1 + post-work status) + §4 (the current-and-next state); four companion model docs (`docs/ROOM-SESSION-MODEL.md`, `docs/ROOM-AUTHORITY-MODEL.md`, `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`, `docs/ROOM-ACCESS-INVITE-MODEL.md`); `db/MIGRATIONS_APPLIED.md` rows for db/025-031.
+
+### Session 5 — Universal session + participants + queue model
+
+**Completed:** 2026-05-19 (Parts 1, 2, 3a, 3b, 3c W1-W10 shipped; Part 5 verification superseded — see "Workstream pivot" below)
+
+Shipped the universal session + participants + queue model: `sessions` table with RLS and lifecycle RPCs (Part 1); karaoke integration with realtime publishers, session lifecycle wiring, home unification, push notification infrastructure, manager queue UI (Part 2); games integration with manager controls, End Session, Remove Player (Part 3a); Trivia productionization with Edge Function + db/019 premium gating (Part 3b — internally called "Trivia Phase 2", not to be confused with UAP §5's Phase 2); admission_model_v2 §10 W1-W10 (schema migration, per-game manifest + admission stamping, dispatcher refactor, Pause + Leave UI, heartbeat + server-side prune, Last Card UX polish, dead-code sweep) — Part 3c.
+
+**Commits (Part 1 — Schema + RPCs + shell/realtime.js extraction):**
+- `253e077` — Part 1a: sessions + session_participants schema with RLS (db/008)
+- `979f70d` — Part 1b.1: session lifecycle RPCs (db/009)
+- `a0373e0` — Part 1b.2: manager mechanics RPCs (db/010)
+- `5f60d13` — Part 1b.3: role and queue mutation RPCs (db/011)
+- `9e10bf4` — Part 1c: extract realtime helpers into `shell/realtime.js`
+
+**Commits (Part 2 — Karaoke integration):** full detail in `docs/SESSION-5-PART-2-CLOSING-LOG.md`. Key milestones: 2a realtime publishers (`d1b4edd`), 2b session lifecycle wiring (`601d125`), 2c home unification + active-session relabeling + Back-to-Elsewhere (`daa8718`, `0a3a9ea`, `e4a348e`, `5617689`), 2d karaoke session helpers + stage.html session integration (`db/013` + multiple commits), 2e push notification infrastructure + role-aware UI + self write actions + manager queue UI (multiple commits, latest `af1e468` at v2.120). 2f deferred to consolidation per audience.html no-investment doctrine. BUG fixes during 2e.3: `ce36fe5` (BUG-5), `1b870d3` (BUG-10 at v2.118), `ad97ea5` (BUG-13/3/7 at v2.119). Closeout: `1d481b4` (5 papercuts + closing log), `7f8f97e` (5 open bugs filed to DEFERRED).
+
+**Commits (Part 3a — Games integration):**
+- `05d2cae` — db/016 manager-only soft-removal RPC
+- `ea89c48` — Part 3a.1 session/participants plumbing (v2.100)
+- `8bff27b` — Part 3a.2 manager controls (v2.101)
+
+**Commits (Part 3b — Trivia productionization + premium opt-in via Edge Function):** full detail in `docs/SESSION-5-PART-3B-CLOSING-LOG.md`. v2.108 → v2.113, Edge Function + db/019, shipped 2026-05-04.
+
+**Commits (Part 3c — `admission_model_v2` §10, W1-W10):** full detail in `docs/SESSION-5-PART-3C-CLOSING-LOG.md`. W1-W6 ended at `cef155c` v2.121 (pre-2026-05-18). W7 `68e8ee9` v2.122. W8 `b6898ea` → `2432d86` v2.123 → v2.131 (9 commits). W9 `02cdc08` (db/024) + `a1273df` + `5c1f97f` v2.132 + `6b12290` v2.133. W10 `014c738` → `a7dd71a` v2.134 → v2.137 + tv `v2.101` (4 commits).
+
+**Workstream pivot.** Part 5 verification (multi-user end-to-end testing) was not run as a discrete Session-5 closeout. The work pivoted directly to the unified-app workstream's Phase 1 schema rework on 2026-05-21 (see "Unified-app workstream — Phase 1" above). Phase 1 entirely subsumes the Session-5 participant model by introducing the `rooms` entity and re-anchoring `session_participants` to `room_id`. The Session-5 schema (`session_participants` keyed by `session_id`) is therefore superseded; the data was cleared as a clean-slate migration pre-step (acceptable since pre-launch + ephemeral data).
+
+**DEFERRED entries that emerged:** many across all parts; see per-part closing logs for specific entries. The §10 W10 Cleanup tasks (APP_MANIFEST shrink, doc supersession edits, CLOSEOUT-PLAN restructure, DEFERRED mark-obsolete sweep) remain tracked as `docs/DEFERRED.md` "admission_model_v2 §10 W10 cleanup tasks".
+
+**Details:** `docs/SESSION-5-PLAN.md`, `docs/SESSION-5-PART-2-BREAKDOWN.md`, `docs/SESSION-5-PART-2-CLOSING-LOG.md`, `docs/SESSION-5-PART-3-AUDIT.md`, `docs/SESSION-5-PART-3-CLOSING-LOG.md`, `docs/SESSION-5-PART-3B-CLOSING-LOG.md`, `docs/SESSION-5-PART-3C-CLOSING-LOG.md`, `docs/ADMISSION-MODEL-V2.md`, `docs/GAMES-CONTROL-MODEL.md`, `docs/SESSION-5-CLOSEOUT-PLAN.md` (the never-executed verification plan).
 
 ### Session 4.10.3 — Phone back-to-Elsewhere + coordinated TV teardown
 

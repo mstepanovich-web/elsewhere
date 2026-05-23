@@ -186,6 +186,8 @@ restricted (singing is premium-present only).
 
 ## 5. Implementation sequencing
 
+**Numbering note.** "Phase N" in this document refers exclusively to this migration sequencing — the dependency-ordered phases listed below. The repo contains unrelated "Phase N" references that are not phases of this plan: Session 5 Part 3b's session-internal "Trivia Phase 2" (the 2026-05-04 premium AI-questions track) and product-roadmap items such as Elsewhere Kids and social-publish. Do not cross-reference numbering schemes.
+
 Order is dependency-firm; sizing is directional.
 
 - Phase 0 — investigation. Complete.
