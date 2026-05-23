@@ -3386,7 +3386,7 @@ Whenever HH-admin remote-management surfaces become a real UX concern — likely
 **Deferred on:** 2026-05-23
 **Priority:** Medium — designed operation with two predicates and prescribed behavior; the model is in place, the RPC is not. Not blocking until a UX flow needs it.
 **Area:** Schema (RPC layer)
-**Status:** Deferred
+**Status:** Deferred (now actionable — schema dependency on `tv_devices.can_embed` satisfied by db/030, applied 2026-05-23; pickup gated on a UX forcing function per "When to pick this up" below).
 
 #### Context
 
@@ -3404,15 +3404,17 @@ The model includes the engagement-prompt behavior (one-engagement transition pro
 A new RPC, probably named `rpc_room_seize` (or `rpc_room_ownership_seize` if the naming should be unambiguous against the existing reclaim RPCs):
 
 - Single parameter: `p_room_id uuid`.
-- Auth gates: (a) caller is authenticated; (b) premium-control layer is active for the room (depends on the `can_embed` schema column tracked by C1 above); (c) caller satisfies one of the two predicates: convener-seize OR admin-seize.
+- Auth gates: (a) caller is authenticated; (b) premium-control layer is active for the room — queryable as `tv_devices.can_embed = true` for the room's `screen_ref` (column shipped via db/030, applied 2026-05-23); (c) caller satisfies one of the two predicates: convener-seize OR admin-seize.
 - Behavior: identical demote-then-promote mechanic on `session_participants.control_role` as the existing reclaim RPCs (drives off `session_participants_one_manager` partial-unique index); writes `rooms.controller_user_id` to the caller; bumps `rooms.last_activity_at`.
 - Returns `rooms` row.
 
+**Runtime-effect note.** db/030 shipped the schema column with no writer — every row currently reads `can_embed = false`. When this RPC ships, its auth gate (b) will refuse every seize attempt in prod until the self-report writer lands (tracked in the separate "tv_devices.can_embed self-report path" entry). The RPC can ship in any order relative to the self-report writer; both must land before the seize operation actually grants control to anyone in prod. That's the right safety posture, not a blocker — the RPC's correctness is independent of any row's current `can_embed` value.
+
 #### Options when picking up
 
-- **Wait for the can_embed column (C1) to land** — without the embedding-capability discriminator, the layer's activation predicate can't be expressed in SQL. C1 is upstream of this entry.
-- **Implement defensively against unknown can_embed**: treat absent column or NULL as "layer inactive" and refuse to seize. Lets the RPC ship before C1 but with the layer always-inactive in practice. Less clean.
 - **Reuse pieces of `rpc_session_reclaim_manager`**: the demote-then-promote mechanic on `session_participants.control_role` is identical to the existing reclaim RPCs (db/028 §§1 + 3). The only differences are the auth gates and the absence of the 10-min inactivity check. Could be factored as a shared helper or copy-pasted; copy-paste is simpler and matches the pattern already in use.
+
+(The original "Wait for the can_embed column to land" and "Implement defensively against unknown can_embed" options are obsolete — db/030 shipped the column. The auth gate (b) reads `can_embed` directly without defensive null-handling.)
 
 #### When to pick this up
 
@@ -3421,7 +3423,8 @@ When ownership-seize has a forcing UX function — i.e., when a user-facing flow
 #### Related
 
 - `docs/ROOM-AUTHORITY-MODEL.md` § "Seize authority" — the full specification this entry tracks.
-- DEFERRED entry "tv_devices needs an embedding-capability column" — upstream dependency (the layer's activation predicate).
+- DEFERRED entry "tv_devices.can_embed self-report path (claim flow + tv2.html capability detection)" — the former C1 entry, now re-scoped after db/030 shipped the schema column. Schema half (the part this RPC needs) is done; the self-report half remains active but does NOT gate this RPC's implementation. See the "Runtime-effect note" in "What's deferred" above for how the two interact at runtime.
+- `db/030_tv_devices_can_embed.sql` — the schema column this RPC's auth gate (b) reads (applied 2026-05-23).
 - `db/028_room_keyed_rpcs_part3.sql` — `rpc_session_reclaim_manager` and `rpc_session_admin_reclaim`, the existing reclaim RPCs whose demote-then-promote mechanic ownership-seize would reuse.
 
 ---
