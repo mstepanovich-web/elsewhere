@@ -47,8 +47,8 @@ claimed TV devices.
   phone). The existing household-invite mechanism (pending invites matched
   on email) is how a person is added.
 - Household membership is the entitlement axis for household-account
-  spending and household management — see section 9. It is NOT the gate for
-  premium embedding — see section 8.
+  spending and household management — see section 10. It is NOT the gate for
+  premium embedding — see section 9.
 - A household is created when a user claims their first TV device. A
   newly-registered user has no household by default — being registered and
   being in a household are independent.
@@ -99,7 +99,44 @@ The TV exposes its code persistently — full-screen when idle, and as a
 compact affordance while an app is running — so binding and display are
 available at any time, not only at idle.
 
-## 7. Presence — "are you home?"
+## 7. Device authority
+
+Device authority is the power to evict whatever is currently using a
+household's physical screen.
+
+Predicate: the caller is an HH admin of the household that OWNS the
+TV device — i.e., `tv_devices.household_id` is on that admin's
+household roster.
+
+Device authority grants exactly one thing — eviction. The "what is
+using the screen" can be three things:
+
+- a room locally owned and displayed on the household's TV;
+- a foreign household's room embedded on the household's TV (the
+  foreign room continues to exist; only its embedding on this
+  screen ends);
+- a non-room cast (a phone or browser mirroring content via a
+  casting mechanism, with no `rooms.screen_ref`).
+
+Device authority is explicitly NOT room control. Evicting a room
+from your household's screen does NOT make you the controller of
+the evicted room. The room continues to exist (in scenarios 1 and 2
+above) under whatever authority owned it before; only its presence
+on your physical screen ends. Whoever was controlling the room
+remains in control; they will simply be controlling it somewhere
+else (a different screen, or no screen).
+
+Three concrete scenarios that demonstrate the room/device split
+are documented in ROOM-AUTHORITY-MODEL.md § "Room vs. device
+authority — the three scenarios."
+
+Device authority is a peer concept to room authority. Together
+they make up the premium-control layer described in
+ROOM-AUTHORITY-MODEL.md § "The premium-control layer." See that
+section for the layer's activation predicate, the ownership-seize
+operation (room-side), and the premium succession degrade rule.
+
+## 8. Presence — "are you home?"
 
 Premium is co-presence with a camera-equipped screen. Binding proves a
 durable association with a TV; it does not prove the user is physically
@@ -122,7 +159,7 @@ Automatic presence detection — e.g. Bluetooth or ultrasonic proximity
 between phone and TV — would remove the need to ask. It is noted as a
 possible future enhancement, not part of this model.
 
-## 8. The premium tier
+## 9. The premium tier
 
 Baseline tier is every registered user's full access to every app, with no
 TV device required. (See UNIFIED-APP-PLAN.md section 2.)
@@ -136,7 +173,7 @@ true:
 
 1. The user has premium (a property of their own account).
 2. They are present at a TV device — i.e. bound to it (section 5) and
-   presence declared (section 7).
+   presence declared (section 8).
 
 Whose TV it is does not matter. Any premium user, present at any TV — their
 own household's, a friend's, anywhere — is embedded. Premium embedding is
@@ -148,7 +185,13 @@ who embeds.)
 Premium is therefore defined by a physical situation — a premium user,
 present at a camera-equipped screen — not by household membership.
 
-## 9. Purchasing — the two-wallet rule
+The same embedding-capable-device predicate that gates premium
+embedding (this section) also gates the room-side premium-control
+layer — see ROOM-AUTHORITY-MODEL.md § "When the premium-control
+layer is active" for the layer's room-side operations
+(ownership-seize, premium-filtered succession) and device authority.
+
+## 10. Purchasing — the two-wallet rule
 
 Two wallets exist:
 
@@ -166,14 +209,14 @@ The rules:
   means the visited household's wallet is unavailable to them.
 
 The HHU / guest distinction governs ONLY this wallet rule and household
-management. It does NOT gate premium embedding (see section 8). A guest who
+management. It does NOT gate premium embedding (see section 9). A guest who
 has premium and is present is embedded exactly like an HHU.
 
 The broader payments / premium-paid-services model — how paid services are
 priced, delivered, and managed — is not designed. The two-wallet rule above
 is the one decided constraint within an otherwise undesigned area.
 
-## 10. Relationship to existing docs
+## 11. Relationship to existing docs
 
 This document supersedes PHONE-AND-TV-STATE-MODEL.md in full. That document
 should carry a supersession pointer to this one. Any HHU / NHHU / proximity

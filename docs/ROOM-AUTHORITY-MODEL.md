@@ -167,6 +167,246 @@ role — both as a deputy and as a standing successor — is a future
 feature. A reader who finds `'host'` in the schema or RPC bodies should
 know it is held for this design, not for legacy reasons.
 
+## The premium-control layer
+
+The "premium-control layer" is the set of additional authority concepts
+that apply when a room is bound to an embedding-capable screen. Two
+new authority surfaces matter under this layer:
+
+- **Expanded room-control operations.** Beyond the four-tier
+  succession hierarchy already covered above, room control may
+  transfer in two other ways: a controller may pass control to a
+  successor without leaving the room, and an ownership-class user
+  may seize control immediately. Both are documented below.
+- **Device authority.** A peer authority category — not room control —
+  keyed on ownership of the physical TV device the room is bound to.
+  Device authority grants the power to evict whatever is currently
+  using the household's screen; it does NOT grant room control. See
+  HOUSEHOLD-DEVICE-PRESENCE-MODEL.md §7 for the device-authority
+  side.
+
+The layer is conditional. The activation predicate is documented in
+"When the premium-control layer is active" below.
+
+### Control-transfer operations
+
+Room control may transfer in three operations:
+
+1. **Pass control without leaving.** The current controller hands
+   control to a specific other participant while remaining in the
+   room as a non-controller participant. Available to all users —
+   not gated on ownership, admin status, or the layer being active.
+   The acting user must be the current controller; the target must
+   be an eligible participant (active room participant, not in
+   audience-only mode).
+2. **Ownership-seize.** An ownership-class user takes control of a
+   LIVE room without waiting for any pre-existing controller to
+   leave. Not gated on inactivity. See "Seize authority" below for
+   the two predicates and the relationship to the existing
+   inactivity-reclaim path.
+3. **Succession on leave.** The current controller leaves the room
+   and a successor is chosen by the four-tier hierarchy documented
+   above in "Manager departure." This is the only path that ENDS the
+   controller's room membership; pass-control and seize do not.
+
+Each operation writes `rooms.controller_user_id` to the new
+controller. Room ownership (`rooms.owner_user_id`) is never written by
+any of these — it stays with the original convener.
+
+### Seize authority
+
+Seize is the immediate take-control operation, available to
+ownership-class authority. It is a distinct operation from the
+existing **inactivity-reclaim** path — the two are cousins, not
+synonyms:
+
+|  | Ownership-seize (NEW) | Inactivity-reclaim (existing) |
+|---|---|---|
+| Target room state | LIVE — controller is actively driving the room | STALE — controller has been idle ≥ 10 min |
+| Gated on inactivity? | No — immediate | Yes — 10-min idle window required |
+| Caller predicate | Ownership-class only (the two predicates below) | Any household member (member-reclaim) or HH admin (admin-reclaim) of the **displaying TV's** household |
+| Implementing RPC | (not yet implemented — see "Implementation" below) | `rpc_session_reclaim_manager` / `rpc_session_admin_reclaim` |
+| Intended use | Owner/admin asserts authority over a live room | Free a stalled room whose controller has walked away |
+
+The two seize predicates (when the premium-control layer is active —
+see "When the premium-control layer is active" below):
+
+- **Convener-seize.** `auth.uid() = rooms.owner_user_id`. The original
+  convener may seize their own room at any time the layer is active.
+  Applies to any room the user owns, regardless of where the room is
+  displayed.
+- **Admin-seize.** The caller is an HH admin of the household that
+  OWNS the room — i.e., `rooms.owner_user_id` is on that admin's
+  household roster. **Note the narrowed predicate:** admin-seize
+  keys on ROOM OWNERSHIP, not on the room being displayed on the
+  household's device. An admin whose household OWNS a room may seize
+  it even if it is currently being displayed on a foreign screen;
+  conversely, an admin whose household OWNS the displaying TV
+  CANNOT seize a foreign household's room just because it sits on
+  their screen. The eviction power for that case is device
+  authority (HDPM §7), not seize.
+
+The host role (see "The host role" above) is NOT in scope for seize.
+A host gets succession-priority — tier 1 of the four-tier hierarchy
+— but cannot seize an actively-controlled room. The host's
+authority is upgraded only when the current controller leaves; not
+before.
+
+**Engagement prompt on seize.** An HH admin who seizes a room while
+already engaged in another room fires the normal one-engagement
+"Leave [room A] to seize [room B]?" confirmation — seize is an
+engagement transition like any other room-join. (See
+ROOM-SESSION-MODEL.md § "Multi-room membership and the
+one-engagement rule.")
+
+A future enhancement — HH admins performing purely administrative
+actions on a household-owned room (end it, remove a participant)
+WITHOUT it counting as an engagement transition — is planned but
+deferred. The current model treats every seize as an engagement
+transition; the deferred enhancement would distinguish administrative
+actions from take-control. Tracked in DEFERRED.md.
+
+**Implementation.** Inactivity-reclaim's RPCs (db/010, re-pointed in
+db/028) are live in prod. Ownership-seize has no RPC yet; the
+model is written down so that when its RPC ships, the predicates
+and engagement-prompt behavior are already defined. The
+implementing-RPC work is tracked in DEFERRED.md, not under the
+existing reclaim RPCs.
+
+### Room vs. device authority — the three scenarios
+
+The room/device authority split is the key new structural concept
+of the premium-control layer. Three scenarios make the split
+concrete. In each case, "this household" is the household relative
+to which an HH admin is making a claim of authority.
+
+1. **Room owned by this household, displayed on this household's
+   device.** The HH admin has BOTH authorities: admin-seize on the
+   room (the room is owned by this household, so the admin-seize
+   predicate `rooms.owner_user_id` is on this admin's roster) AND
+   device authority on the screen (the TV device belongs to this
+   household). The admin can take control of the room, or evict
+   the room from the screen, or both. The operations are
+   independent — seize transfers control without changing where
+   the room is displayed; eviction changes display without changing
+   who controls the room.
+2. **Room owned by a foreign household, embedded on this
+   household's device.** The HH admin has ONLY device authority.
+   They can evict the foreign room from their screen — that's
+   their physical property. They CANNOT seize the foreign room:
+   the admin-seize predicate fails (`rooms.owner_user_id` belongs
+   to a different household's roster). Eviction returns the
+   screen to the local household's control; the foreign room
+   continues to exist on the foreign household's terms,
+   somewhere else (a different screen, or no screen).
+3. **Room merely cast onto this household's screen (no binding).**
+   The HH admin has ONLY device authority. There is no
+   `screen_ref` to the household's device — the room is being
+   displayed through a casting mechanism, not bound. The admin
+   can revoke the cast (device authority); they cannot seize a
+   room they don't own.
+
+The throughline: device authority is "this is our physical screen,
+and we decide what is on it." Room authority is "this is our
+gathering, and we decide who controls it." They are separate
+because the room and the screen are separable concepts.
+
+### When the premium-control layer is active
+
+The premium-control layer activates when a room is bound (via
+`rooms.screen_ref`) to an **embedding-capable** device.
+
+"Embedding-capable" is a CAPABILITY of the device, not a hardware
+brand. The capability is: a camera, present and accessible to the
+TV browser, plus the compositing pipeline to overlay participants
+into the venue. A laptop with a USB webcam acting as a household
+TV satisfies this exactly the same way the eventual Elsewhere
+hardware unit will. The model does not enumerate brands; it
+enumerates capabilities.
+
+The current schema has no column that records this capability —
+every `tv_devices` row is presently "some browser that claimed
+itself to a household," with no discrimination between
+embedding-capable hardware and a plain claimed screen. Adding an
+embedding-capability column (e.g. `tv_devices.can_embed`),
+tv2.html's self-report, and the claim-flow's recording is deferred
+work; see DEFERRED.md. Until that column exists, the layer's
+activation predicate is a logical concept the docs describe, not
+yet a runtime-enforceable condition. The model is written down so
+that when the schema catches up, the logic is in place.
+
+When the layer is NOT active — a room bound to a non-embedding
+device, or a screenless room — the four-tier succession
+hierarchy above and the existing standard operations
+(manager-departure, inactivity-reclaim, pass-control) are the
+entirety of the authority model. The premium-layer-only
+operations (ownership-seize, premium-filtered succession) and
+device authority do not apply.
+
+### Succession under the premium layer — the degrade rule
+
+When the premium-control layer is active and the current controller
+leaves the room, the four-tier succession hierarchy from "Manager
+departure" above is applied — but with the candidate pool filtered
+to **premium-present** users only. "Premium-present" means a user
+who satisfies both of the following:
+
+- has premium on their own account; AND
+- is declared-present (HDPM §8) at the room's embedding-capable
+  device.
+
+The four tiers (host → named successor → longest non-audience →
+room-end) run against this filtered pool first, exactly as they do
+in the non-premium case — just with non-premium-present candidates
+excluded from consideration at every tier.
+
+If no premium-present candidate is found at any tier, the room does
+NOT end immediately. The premium filter degrades: succession falls
+back to the plain four-tier hierarchy against all candidates
+(premium-present or not). Embedding goes dark — the room runs
+without camera-composited presence on the screen — and the room
+continues.
+
+The room ends (tier 4 of the plain hierarchy) only if NO
+non-audience candidate is available, premium-present or not. The
+premium filter never causes the room to end prematurely; it is a
+preference layer, not a stricter gate.
+
+Rationale: the layer's purpose is to keep premium embedding alive
+when possible. Forcing the room to end the moment all
+premium-present candidates leave would punish the non-premium
+members for the premium members' departure. Degrading to the plain
+hierarchy preserves the room and downgrades only the embedding
+capability — which is the right tradeoff: the room is the thing of
+value, and the embedding is an enhancement.
+
+### Known imperfection — presence vs. stored controller pointer
+
+Presence (HDPM §8) is volatile and declared. Room control
+(`rooms.controller_user_id`) is a stored pointer. The two can
+drift: a controller who physically walks away from the
+embedding-capable TV while their phone stays connected to
+Supabase remains the controller-of-record even though they are no
+longer present. The heartbeat / prune mechanism does not detect
+physical departure — only the absence of network heartbeats.
+
+This is an accepted imperfection. Three mitigations are in place:
+
+- The existing inactivity-reclaim path: if the controller becomes
+  inactive (no network heartbeat for ≥ 10 minutes), any household
+  member of the displaying TV's household may reclaim via
+  `rpc_session_reclaim_manager`.
+- Ownership-seize: the room's owner, or an HH admin of the owning
+  household, may seize at any time without waiting for the
+  inactivity timer.
+- Future presence-based detection (Bluetooth / ultrasonic
+  proximity) is noted in HDPM §8 as a possible enhancement; if it
+  lands, the controller's stored pointer could be re-evaluated
+  against live presence.
+
+The model does not solve the drift; it acknowledges the gap and
+documents the routes around it.
+
 ## Summary
 
 - Manager authority = room control (operational, fully transferable) +
@@ -184,6 +424,18 @@ know it is held for this design, not for legacy reasons.
   return, they reclaim control cleanly.
 - The host role is currently dormant in the product — kept by design,
   not vestigial.
+- **The premium-control layer** activates when a room is bound to an
+  embedding-capable device. It adds two new room-control transfer
+  operations (pass-control-without-leaving; ownership-seize) and a
+  premium-filtered succession with a degrade rule (embedding goes
+  dark; room continues). Ownership-seize is distinct from the
+  existing inactivity-reclaim: seize is immediate and
+  ownership-gated; reclaim requires the 10-min idle window and is
+  household-gated.
+- **Device authority** (see HOUSEHOLD-DEVICE-PRESENCE-MODEL.md §7) is
+  a peer authority category — eviction power on the household's
+  physical screen — distinct from room control. Evicting a room
+  from your screen does NOT make you that room's controller.
 
 ## Relationship to existing docs
 
