@@ -583,6 +583,20 @@ set with the app's patch applied (add / suppress / modify by `id`, per
 those anchors are *drawn* is the app's rendering layer (§2.1 layer 4),
 not the resolver's job.
 
+**Read-only output contract (as built).** `resolveAnchorSet` returns a
+new array of new anchor objects — it never mutates its inputs. But the
+copy is **shallow**: each output anchor is a fresh object, yet its
+`jsonb` fields (`payload`, `link`) are reference-shared with the input
+default anchors. The resolved anchor list is therefore **read-only** —
+callers and renderers must not mutate the array, any anchor in it, or
+any anchor's `payload`/`link`, because a mutation would corrupt the
+shared default. Deep-cloning every payload on every resolve was rejected
+as needless cost (the resolver itself never writes into payloads); the
+read-only contract is the trade. The resolver degrades gracefully on a
+malformed or stale patch — it never throws (it is on the render path) —
+and emits a `console.warn` breadcrumb so authoring problems are
+discoverable.
+
 ### 5.4 Effect/media anchors resolve to references, not implementations
 
 An anchor of type `spotlight` or `particle` does not carry effect *code*
@@ -598,6 +612,21 @@ This is the registry idea, correctly located: the **resolver** always
 returns data (resolved anchors, each naming a type + payload); a
 **renderer/effect registry** maps type → implementation. One resolver,
 one registry, no per-attribute proliferation.
+
+**Mechanism vs. implementations — the Phase 2 / Phase 3 split (as
+built).** The registry has two separable parts, and only one is Phase 2.
+The registry *mechanism* — the `type → implementation` map, the
+register / lookup / unregister API, the graceful "nothing registered"
+handling — is Phase 2, shipped as `shell/venue-registry.js`. The
+registry *implementations* — the actual Three.js spotlight builder, the
+particle emitter, the audio player — are **Phase 3**, because they are
+produced by translating karaoke's existing procedural effects, and
+Phase 2 does not touch karaoke (§10). So Phase 2 ships the registry as a
+working but **empty** mechanism: zero implementations registered, every
+`getAnchorRenderer` call returns `null`. Phase 3 populates it. A registry
+with no implementations is not an unfinished deliverable — it is the
+correct Phase-2 state; the mechanism and its contents are deliberately
+separate shipments.
 
 **Phase-3 translation cost — flagged so it is not a hidden surprise.**
 The consultation noted karaoke's *current* effects
@@ -717,6 +746,25 @@ rather than UI-edited — is acceptable: it is pre-launch, internal-only,
 and a minimal import path covers it (plausibly from Time Travel Studio
 exports, whose format the model already matches).
 
+**The "minimal seed/import path" — what it actually is (as resolved).**
+Phase 2 commits to a seed/import path but does not specify its form.
+Investigation settled it: there is **no seed/import path to build**, and
+that is the correct outcome, not a gap. Reasoning: (1) there is zero
+authored data of the new attribute kinds anywhere in `elsewhere-repo` —
+no anchors, no `motion`, no DB-form `ambient`, no per-venue `camera_fov`,
+no `costumes` rows — so there is nothing to seed; (2) the new attribute
+columns are all nullable and the resolver returns fallbacks on `null`,
+so an unseeded venue renders correctly; (3) the repo already has a seed
+pattern — `db/003`'s `INSERT INTO ... ON CONFLICT DO NOTHING` inside a
+migration — and the "no build step" doctrine rules out new ingestion
+tooling. So the seed path **is** the existing migration-`INSERT`
+pattern: when authored venue data first exists (from the admin-UI
+fast-follow, or from Phase 3 translating karaoke's `AMBIENT_PROFILES`
+and effects into DB rows), a future migration uses that pattern to seed
+it. Phase 2's deliverable here is this paragraph — the recognition that
+the path already exists — not code. No `db/033` seed migration, no
+import script, no placeholder.
+
 Note: the Time Travel Studio is an **existing external authoring tool**
 (a separate side project, not in `elsewhere-repo`) that already authors
 exactly this anchor data. It is **not** the Elsewhere admin UI and Phase
@@ -815,11 +863,31 @@ questions are now closed.
   consultation confirmed `shell/` is flat today with **no
   subdirectory precedent** — revision 1's claim that a `shell/venue/`
   cluster "matches existing convention" was wrong. Resolution: the new
-  venue modules are **flat files** following the existing pattern —
-  `shell/venue-bootstrap.js`, `shell/venue-resolver.js`,
-  `shell/venue-anchors.js`, `shell/venue-registry.js` (exact split to be
-  finalized at implementation). No new subdirectory convention is
-  introduced. Each follows the established dual ESM-export +
+  venue modules are **flat files** following the existing pattern. No
+  new subdirectory convention is introduced.
+
+  **Module split — as actually built (supersedes the provisional
+  list).** The provisional list named four files
+  (`venue-bootstrap.js`, `venue-resolver.js`, `venue-anchors.js`,
+  `venue-registry.js`). The split that shipped is smaller:
+  - `shell/venue-settings.js` — generalized in place (kept its name,
+    §5.1). Absorbed what the provisional `venue-resolver.js` *and*
+    `venue-anchors.js` would have been: the generalized
+    `resolveVenueAttribute`, plus `loadVenueAnchors` and
+    `resolveAnchorSet`. No separate resolver or anchors file.
+  - `shell/venue-registry.js` — built as named (the registry
+    mechanism).
+  - `venue-bootstrap.js` — **not built. Dropped from Phase 2.** The name
+    came from revision 1's assumption that `venues.json` would shrink to
+    a thin bootstrap manifest needing a dedicated loader. Revision 2's
+    §4.2 reframe ("`venues.json` keeps every field; it is not shrunk")
+    removed that motivation. Investigation confirmed no Phase-2 consumer
+    needs a shell-level `venues.json` loader: the resolver receives
+    `venueJson` from its caller, the registry never touches the file.
+    The one genuine task in the vicinity — deduplicating the
+    copy-pasted `loadVenuesManifest()` in `karaoke/stage.html` and
+    `karaoke/singer.html` — requires editing karaoke and is therefore
+    **Phase 3** karaoke-surface work, not Phase 2. Each follows the established dual ESM-export +
   `window.elsewhere.*` pattern, and loads after `shell/auth.js` (which
   initializes `window.sb` / `window.elsewhere`). `shell/venue-settings.js`
   is generalized **in place, keeping its name** (see §5.1).

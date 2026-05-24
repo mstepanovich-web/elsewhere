@@ -6,16 +6,17 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 
 ## Active session
 
-**Unified-app workstream — Phase 2: venue abstraction (UAP §5)**
+**Venue admin UI — Phase 2 fast-follow (UAP §5 / spec §7)**
 
-Phase 1 of the unified-app refactor (the room/session foundation) shipped 2026-05-21 → 2026-05-23 — see "Unified-app workstream — Phase 1: Room/session foundation" in the Completed section below for full commits + verified-prod state. Phases 3, 4, 5 (karaoke onto the new model, games conformance, rooms/groups/cross-app movement) follow per `docs/UNIFIED-APP-PLAN.md` §5. This active entry is Phase 2: build the venue abstraction — a complete cross-app venue layer. Scope is broader than the original "extract panorama renderer" framing per the spec's reframe (§1 + §2).
+Phase 2 of the unified-app refactor (the venue abstraction's data layer + resolver + anchor renderer registry mechanism) shipped 2026-05-24 — see "Unified-app workstream — Phase 2: Venue abstraction" in the Completed section below for full commits + verified-prod state. Phases 3, 4, 5 follow per `docs/UNIFIED-APP-PLAN.md` §5. The active entry now is the **venue admin UI fast-follow** — the editing surface that fills the (currently dormant) Phase-2 tables with real content: anchors, motion, ambient, costume library + per-venue suggested lists, per-app overrides.
 
-- **Authoritative spec:** `docs/PHASE-2-BUILD-SPEC.md` (committed 2026-05-24, revision 3 with all open questions closed). Defines the four-layer model (skybox / venue-attributes / costume / app-rendering), the unified anchor system, the storage model (DB-backed defaults + `venues.json` retained-for-existing-attributes bootstrap + patch-style per-app overrides), the generalized resolver, the costume library, and the admin-UI fast-follow. Supersedes the prior `docs/DEFERRED.md` "Venues as cross-app service" three-part breakdown (per spec §1 + §12).
-- **Status:** Schema layer SHIPPED. **db/032 venue-abstraction schema applied to prod 2026-05-24** (commit `a254993`): extended `venue_defaults` + `karaoke_venue_settings` with Phase-2 default/override columns; created three new tables (`venue_anchors`, `costumes`, `venue_suggested_costumes`); all new tables empty per spec §10 "Phase 2 ships dormant." Recorded in `db/MIGRATIONS_APPLIED.md`. Next execution task: the `shell/venue-*.js` modules (resolver first, per spec §5).
-- **Estimated remaining:** TBD per session planning. Schema is the smallest piece; the resolver + anchor model + registries are more substantial; admin UI is a fast-follow per spec §7.
-- **Scope per the spec:** layers 1-3 + the resolver. Phase 2 does NOT rewire karaoke (Phase 3), does NOT integrate games (later session), does NOT build any app's rendering layer (per spec §10 non-goals).
-- **Trigger:** spec landing + planning-chat green-light. Phases 3 and 4 depend on Phase 1 (done); Phase 3 additionally depends on Phase 2.
-- **References:** `docs/PHASE-2-BUILD-SPEC.md` (the spec, §1-§12, with §9 open questions all closed); `docs/UNIFIED-APP-PLAN.md` §5 Phase 2 (workstream framing); `docs/EXECUTION-HANDOFF.md` §4 (operator-facing brief); `db/032_venue_abstraction_schema.sql` (schema migration, applied 2026-05-24, commit `a254993`); `docs/DEFERRED.md` "Venues as cross-app service" entry (now superseded for Phase 2 design by the spec) + "Venues integration (post-Session-5)" parent cluster (sub-items disposition tracked in spec §12 bullet 3).
+- **Authoritative spec:** `docs/PHASE-2-BUILD-SPEC.md` §7 (the admin UI scope decision). Settled as a Phase-2 fast-follow rather than bundled into Phase 2 — bundling would have roughly doubled the phase; the abstraction is independently valuable and the UI fills it.
+- **Sequencing lean (revisitable):** admin UI BEFORE Phase 3 karaoke rewire, on risk-isolation grounds. Phase 3 will translate karaoke's procedural `AMBIENT_PROFILES` + `addVenueEffects3D` into registry implementations + `venue_anchors` records (spec §5.4 "Phase-3 translation cost"). Doing that translation with a working admin UI that can author the target data is lower-risk than building the translation while the writer-path is still a future thing. Lean is revisitable if a forcing function emerges (e.g., a karaoke regression that needs the translation immediately).
+- **Status:** Not started. Spec §7 describes the surface ("editing camera/motion/ambient, authoring and positioning anchors, managing the costume library and per-venue suggested lists, and editing per-app override patches"). No execution brief yet; this entry is the placeholder.
+- **Estimated:** TBD per session planning. Substantial — the UI is the largest single piece in the Phase-2-and-fast-follow arc.
+- **Scope per the spec:** the editing surface itself + the SECURITY DEFINER RPCs that gate its writes (per repo doctrine; spec §4.5 + §7 boundary). Does NOT rewire karaoke (Phase 3) and does NOT integrate games (Phase 4).
+- **Trigger:** planning-chat brief.
+- **References:** `docs/PHASE-2-BUILD-SPEC.md` §7 (the admin UI scope decision) + §3-§6 (the data model the UI edits); `db/032_venue_abstraction_schema.sql` (the tables the UI writes to); `shell/venue-settings.js` (the resolver / save helpers the UI reads + writes through); `shell/venue-registry.js` (the registry the UI does NOT touch — renderer impls are Phase 3).
 
 ---
 
@@ -23,7 +24,7 @@ Phase 1 of the unified-app refactor (the room/session foundation) shipped 2026-0
 
 > **Note on numbering:** Sessions 6 → 12 are a clean integer sequence reflecting technical-first dependency ordering. Sessions 6 + 7 (formerly 4.10.1 + 4.11) renumbered 2026-05-04 to drop the 4.x topical prefix in favor of the post-Session-5 sequence. The legacy 4.x numbering is preserved in the "Completed sessions" section below for traceability against shipped work.
 >
-> Session 10 (Venues at platform level) is now the active entry above as UAP §5 Phase 2 — its body is no longer in this queue; the active entry holds the working detail. Sessions 9, 11, 12 carry one-line cross-ref notes mapping each to its UAP §5 phase (9 → Phase 3 karaoke; 11 → Phase 3+ funnel; 12 → post-Phase-5 "then wellness/worlds"). Hard ordering for the remaining queue: 6 → 7 → 8 (small wins first — SMS pre-invites, admin UI, Trivia premium UX); 9 + 11 + 12 sequenced per their UAP phase dependencies.
+> Session 10's content (Venues at platform level) is now in the Completed section as the "Unified-app workstream — Phase 2: Venue abstraction" entry — its body is no longer in this queue; the Completed entry holds the working detail. Sessions 9, 11, 12 carry one-line cross-ref notes mapping each to its UAP §5 phase (9 → Phase 3 karaoke; 11 → Phase 3+ funnel; 12 → post-Phase-5 "then wellness/worlds"). Hard ordering for the remaining queue: 6 → 7 → 8 (small wins first — SMS pre-invites, admin UI, Trivia premium UX); 9 + 11 + 12 sequenced per their UAP phase dependencies.
 
 ### Session 6 — SMS pre-invites for household onboarding
 
@@ -48,7 +49,7 @@ Phase 1 of the unified-app refactor (the room/session foundation) shipped 2026-0
 
 ### Session 9 — Audience.html unification (NHHU → HHU UI merge)
 
-> **UAP §5 phase mapping:** Phase 3 (karaoke onto the new model). Tracked under the active unified-app workstream — see Active section above.
+> **UAP §5 phase mapping:** Phase 3 (karaoke onto the new model). Phase 1 and Phase 2 of the workstream are complete (see Completed section); the immediate next step is the venue admin UI fast-follow (Active section above); Phase 3 follows per the current sequencing lean. **Spec §12 bullets 3 (DEFERRED cluster 6-sub-entry disposition) and 4 (INFRA.md / CLAUDE.md updates) ride with Phase 3** — both describe karaoke operational behavior, which only changes when Phase 3 rewires karaoke. They remain tracked in spec §12.
 
 - **Why:** Current parallel UI codebases (audience.html for NHHU, singer.html/index.html for HHU) compound complexity with every feature added. Post-Session-5 work to absorb audience.html into the HHU app as a parameterized NHHU view. Same UI fabric for both populations, conditional rendering hides TV-required features.
 - **Status:** Keystone for further platform work — until this lands, NHHU conversion funnel + games venues + wellness all fight against the audience-vs-singer split.
@@ -63,7 +64,7 @@ Phase 1 of the unified-app refactor (the room/session foundation) shipped 2026-0
 
 ### Session 11 — Audience-to-NHHU conversion path (user-acquisition funnel)
 
-> **UAP §5 phase mapping:** Phase 3+ (sister UX/funnel layer to karaoke surface work). Tracked under the active unified-app workstream — see Active section above.
+> **UAP §5 phase mapping:** Phase 3+ (sister UX/funnel layer to karaoke surface work). Phase 1 and Phase 2 of the workstream are complete (see Completed section); the immediate next step is the venue admin UI fast-follow (Active section above); Phase 3 follows. This work rides with Phase 3.
 
 - **Why:** Convert passive audience members into registered users. Phase 1 placeholder may ship in Session 5 (minimal Elsewhere home for NHHU returning from audience deep link, with "go back" + "explore Elsewhere" options). Full conversion funnel (sign-up, app downloads, game launchers) is post-Session-5.
 - **Status:** User-acquisition strategy. Sister item to Session 9 unification — listed in same § 5.4-5.5 vicinity but distinct scope (UX/funnel work vs. structural UI rework).
@@ -75,7 +76,7 @@ Phase 1 of the unified-app refactor (the room/session foundation) shipped 2026-0
 
 ### Session 12 — Wellness app implementation
 
-> **UAP §5 phase mapping:** post-Phase-5 ("then — wellness and worlds, built greenfield against the finished model"). Tracked under the active unified-app workstream — see Active section above.
+> **UAP §5 phase mapping:** post-Phase-5 ("then — wellness and worlds, built greenfield against the finished model"). Phase 1 and Phase 2 of the workstream are complete (see Completed section); the immediate next step is the venue admin UI fast-follow (Active section above); Phases 3, 4, 5 follow before this post-Phase-5 work begins.
 
 - **Why:** Wellness is a placeholder in the architecture today (no implementation). Adding it requires both the unified app (Session 9 — wellness needs the same UI fabric, otherwise becomes a third parallel codebase) and the platform-level venue service (Session 10 — wellness sessions need their own venue/environment system).
 - **Estimated:** TBD pending session planning.
@@ -87,6 +88,43 @@ Phase 1 of the unified-app refactor (the room/session foundation) shipped 2026-0
 ---
 
 ## Completed sessions
+
+### Unified-app workstream — Phase 2: Venue abstraction
+
+**Completed:** 2026-05-24 (db/032 schema applied to prod 2026-05-24; spec + bookkeeping commits + two shell-module commits all pushed 2026-05-24; close-out docs commit lands the phase)
+
+Shipped the venue abstraction — a complete cross-app venue layer per `docs/PHASE-2-BUILD-SPEC.md`. Build is in three architectural layers (data, resolver, renderer-registry mechanism) plus docs. Per spec §10, Phase 2 ships DORMANT — no live consumer of the new exports, karaoke not rewired (Phase 3), games not integrated (Phase 4), no app rendering layers built.
+
+What shipped:
+
+- **Data layer.** db/032 venue-abstraction schema migration. Extended `venue_defaults` and `karaoke_venue_settings` with the Phase-2 default/override columns (`camera_fov`, `motion`, `ambient`, `anchor_patch`). Created three new tables: `venue_anchors` (typed anchor records per spec §3.1), `costumes` (cross-app library, records only), `venue_suggested_costumes` (venue→costume association). All new tables empty. Applied to prod 2026-05-24 via Supabase SQL Editor; recorded in `db/MIGRATIONS_APPLIED.md`. Two design decisions in the migration header: motion modeled as jsonb (varying parameter sets per motion type — `static`/`orbit`/future `elliptical`), and all three authored-content FKs use ON DELETE RESTRICT (blocking venue/costume deletes that would silently destroy authored content). All 12 footer verification queries passed.
+- **Resolver.** `shell/venue-settings.js` generalized from a yaw/pitch-only resolver into a per-attribute-and-anchor-set resolver. 4 legacy exports preserved bit-for-bit (karaoke's 7 callsites in `karaoke/stage.html` continue to work unchanged); 3 new exports widen the capability: `resolveVenueAttribute` (scalar resolver handling per-view legacy attributes AND non-per-view Phase-2 attributes via a per-attribute config table), `loadVenueAnchors` (sibling loader for `venue_anchors` rows; not a widening of `loadVenueSettings`), `resolveAnchorSet` (pure function applying the §4.4 patch shape to a default anchor list, with `console.warn` breadcrumbs on malformed/stale patches and a documented read-only contract on the returned array).
+- **Anchor renderer registry mechanism.** `shell/venue-registry.js` new file. 4 exports: `ANCHOR_TYPE_VOCABULARY` (frozen 7-type list per spec §3.2 / db/032 CHECK), `registerAnchorRenderer`, `getAnchorRenderer`, `unregisterAnchorRenderer`. Pure in-memory `Map`; no `window.sb` / no `shell/auth.js` dependency (loads in any order). Ships EMPTY with zero implementations registered — Phase 3 populates it (translation work explicitly named in spec §5.4 "Phase-3 translation cost"). `getAnchorRenderer` returns `null` on missing (no fake no-op renderer); callers handle null on the render path.
+- **Docs.** `docs/PHASE-2-BUILD-SPEC.md` committed and revised through to the close-out version (all open questions closed); DEFERRED "Venues as cross-app service" entry gained a supersession-by-spec notice; the PHASE1-NOTES `venue-effects.js` IOU marked absorbed-into-Phase-2.
+
+**Commits (chronological):**
+
+- `a254993` — feat(phase-2): db/032 add venue-abstraction schema — Phase 2 §4.5 (additive, dormant). Schema migration + apply-row in one commit (single-session write+apply).
+- `0b91206` — docs: commit PHASE-2-BUILD-SPEC + §12 bookkeeping (DEFERRED supersession, ROADMAP active-entry update). The spec, plus §12 bullet-1/2 disposition tasks (DEFERRED notice + IOU absorbed + ROADMAP active-entry initialization).
+- `d5ca112` — feat(phase-2): generalize shell/venue-settings.js — venue attribute + anchor resolver (§5). The resolver generalization, 4 legacy exports preserved bit-for-bit, 3 new exports.
+- `a62d1e9` — feat(phase-2): add shell/venue-registry.js — anchor renderer registry mechanism (§5.4). New file, ships empty, no dependencies.
+
+(Plus the close-out docs commit that this entry lands in — records Phase 2 as completed and rotates ROADMAP's active entry to the venue admin UI fast-follow.)
+
+**Phase 2 scope items resolved without code:**
+
+- **`shell/venue-bootstrap.js` — DROPPED, not built.** The Revision-1 plan to shrink `venues.json` into a thin bootstrap was reversed in Revision 2 (the "venues.json keeps every field its current readers use" reframe, spec §4.2). With venues.json un-shrunk and no Phase-2 consumer that loads it from a shell module, a bootstrap loader had nothing to do. Decision recorded in spec OQ5. The duplicated `loadVenuesManifest()` between `karaoke/stage.html` and `karaoke/singer.html` is real Phase-3 dedup work (consolidating it requires touching karaoke, which Phase 2's §10 non-goal forbids).
+- **`shell/venue-anchors.js` — folded into `shell/venue-settings.js`.** The anchor loader (`loadVenueAnchors`) and the anchor-set resolver (`resolveAnchorSet`) ship inside `venue-settings.js` rather than as a separate file. Same module conventions, fewer files, single import path for the venue-data primitives.
+- **Seed/import path (spec §7) — document-only.** No code, no db/033, no placeholder migration. The investigation found: zero authored data of the new attribute kinds exists in the repo today; the established seed pattern is db/003's literal `INSERT INTO ... ON CONFLICT DO NOTHING` inside a migration (the precedent that IS the path when authored data exists); the repo has zero ingestion tooling and CLAUDE.md doctrine rules out adding any; Time Travel Studio is external to elsewhere-repo and Phase 2 explicitly does not adopt it (spec §10). The "minimal seed/import path" is the recognition: the existing migration-INSERT pattern IS the path; it materializes when authored data exists (from the admin UI or Phase 3 translation).
+
+**DEFERRED entries that emerged or were modified:**
+
+- `docs/DEFERRED.md` "Venues as cross-app service (games, wellness, future apps)" — gained a supersession-by-spec notice at the top of its body; kept in active list because the spec is now the authority for design, but the entry's three-part work breakdown remains useful historical reference.
+- PHASE1-NOTES migrated section "Extract ambient venue effects into shell/venue-effects.js" IOU — marked `[x] Absorbed into Phase 2`.
+
+**Next:** venue admin UI (fast-follow per spec §7) — see Active section above for the placeholder entry. Phase 3 (karaoke onto the new model) follows the admin UI per the current sequencing lean; the §12 bullet-3 (DEFERRED cluster sub-entry disposition) and bullet-4 (INFRA.md / CLAUDE.md updates) ride with Phase 3 — see Session 9 entry below.
+
+**Details:** `docs/PHASE-2-BUILD-SPEC.md` (the spec); `docs/UNIFIED-APP-PLAN.md` §5 Phase 2 (workstream framing); `db/032_venue_abstraction_schema.sql`; `shell/venue-settings.js`; `shell/venue-registry.js`; `db/MIGRATIONS_APPLIED.md` row for db/032.
 
 ### Unified-app workstream — Phase 1: Room/session foundation
 
