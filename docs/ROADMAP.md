@@ -6,18 +6,16 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 
 ## Active session
 
-**Unified-app workstream — Phase 2: venue extraction (UAP §5)**
+**Unified-app workstream — Phase 2: venue abstraction (UAP §5)**
 
-Phase 1 of the unified-app refactor (the room/session foundation) shipped 2026-05-21 → 2026-05-23 — see "Unified-app workstream — Phase 1: Room/session foundation" in the Completed section below for full commits + verified-prod state. Phases 3, 4, 5 (karaoke onto the new model, games conformance, rooms/groups/cross-app movement) follow per `docs/UNIFIED-APP-PLAN.md` §5. This active entry is Phase 2: pull venue rendering out of the karaoke stage into a shared shell renderer and make the venue registry cross-app.
+Phase 1 of the unified-app refactor (the room/session foundation) shipped 2026-05-21 → 2026-05-23 — see "Unified-app workstream — Phase 1: Room/session foundation" in the Completed section below for full commits + verified-prod state. Phases 3, 4, 5 (karaoke onto the new model, games conformance, rooms/groups/cross-app movement) follow per `docs/UNIFIED-APP-PLAN.md` §5. This active entry is Phase 2: build the venue abstraction — a complete cross-app venue layer. Scope is broader than the original "extract panorama renderer" framing per the spec's reframe (§1 + §2).
 
-- **Status:** Active. Prerequisite for "navigate venues" being a baseline experience in any app. Per UAP §5, Phase 2 "can overlap Phase 1" — fully unblocked now that Phase 1 is closed.
-- **Estimated:** TBD pending session planning.
-- **Three-part work** (per `docs/DEFERRED.md` "Venues as cross-app service (games, wellness, future apps)", line ~846 — the canonical entry):
-  1. Extract 360° panorama rendering from `karaoke/stage.html` into `shell/venue-renderer.js` (Three.js setup, texture loading, transition UX). Keep karaoke's ambient effects separate (DEFERRED `shell/venue-effects.js` entry).
-  2. Games integration: each game's blockade image becomes a venue entry in `venues.json` with product tag `'games'`; session-wide venue selection; games pages consume the shared renderer.
-  3. Phase-2 follow-up: DeepAR camera insertion for player/participant presence in games (same technique karaoke uses for singers).
-- **Trigger** (per the DEFERRED entry): either wellness app start, OR games visual parity priority. Not blocking the workstream's gating — Phases 3 and 4 depend on Phase 1 (done); Phase 3 additionally depends on Phase 2.
-- **References:** `docs/UNIFIED-APP-PLAN.md` §5 Phase 2 + the four companion model docs; `docs/EXECUTION-HANDOFF.md` §4 (operator-facing brief, refreshed each session); `docs/DEFERRED.md` "Venues as cross-app service" (canonical, line ~846) + "Venues integration (post-Session-5)" parent cluster (line ~897).
+- **Authoritative spec:** `docs/PHASE-2-BUILD-SPEC.md` (committed 2026-05-24, revision 3 with all open questions closed). Defines the four-layer model (skybox / venue-attributes / costume / app-rendering), the unified anchor system, the storage model (DB-backed defaults + `venues.json` retained-for-existing-attributes bootstrap + patch-style per-app overrides), the generalized resolver, the costume library, and the admin-UI fast-follow. Supersedes the prior `docs/DEFERRED.md` "Venues as cross-app service" three-part breakdown (per spec §1 + §12).
+- **Status:** Schema layer SHIPPED. **db/032 venue-abstraction schema applied to prod 2026-05-24** (commit `a254993`): extended `venue_defaults` + `karaoke_venue_settings` with Phase-2 default/override columns; created three new tables (`venue_anchors`, `costumes`, `venue_suggested_costumes`); all new tables empty per spec §10 "Phase 2 ships dormant." Recorded in `db/MIGRATIONS_APPLIED.md`. Next execution task: the `shell/venue-*.js` modules (resolver first, per spec §5).
+- **Estimated remaining:** TBD per session planning. Schema is the smallest piece; the resolver + anchor model + registries are more substantial; admin UI is a fast-follow per spec §7.
+- **Scope per the spec:** layers 1-3 + the resolver. Phase 2 does NOT rewire karaoke (Phase 3), does NOT integrate games (later session), does NOT build any app's rendering layer (per spec §10 non-goals).
+- **Trigger:** spec landing + planning-chat green-light. Phases 3 and 4 depend on Phase 1 (done); Phase 3 additionally depends on Phase 2.
+- **References:** `docs/PHASE-2-BUILD-SPEC.md` (the spec, §1-§12, with §9 open questions all closed); `docs/UNIFIED-APP-PLAN.md` §5 Phase 2 (workstream framing); `docs/EXECUTION-HANDOFF.md` §4 (operator-facing brief); `db/032_venue_abstraction_schema.sql` (schema migration, applied 2026-05-24, commit `a254993`); `docs/DEFERRED.md` "Venues as cross-app service" entry (now superseded for Phase 2 design by the spec) + "Venues integration (post-Session-5)" parent cluster (sub-items disposition tracked in spec §12 bullet 3).
 
 ---
 

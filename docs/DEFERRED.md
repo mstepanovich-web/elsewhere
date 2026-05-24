@@ -849,7 +849,9 @@ Before real customer acquisition (first-time claim is the most visible onboardin
 **Deferred on:** 2026-04-23
 **Priority:** Medium — enables games visual parity with karaoke; unlocks Phase 2 camera-insertion across all apps
 **Area:** Shell / cross-app rendering
-**Status:** Deferred
+**Status:** Deferred — superseded for Phase 2 design by `docs/PHASE-2-BUILD-SPEC.md` (2026-05-24)
+
+> **Superseded by `docs/PHASE-2-BUILD-SPEC.md`** (committed 2026-05-24, revision 3). The build spec now governs Phase 2 design. In particular, the "keep ambient effects separate / `shell/venue-effects.js`" instruction in this entry's `#### What's deferred` section is **superseded** — per the spec's §1, ambient and 3D venue effects are venue attributes (a stadium's spotlights belong to the stadium, not to karaoke) and are absorbed into the venue abstraction's anchor system (§3.2), not left behind in karaoke. The three-part work breakdown below remains a useful historical reference; the spec is the authority on detailed design and is broader in scope (the venue abstraction, not just panorama extraction).
 
 #### Context
 
@@ -3092,7 +3094,7 @@ The entries below were moved from PHASE1-NOTES.md on 2026-04-21. They are captur
 - [ ] ~~Create `venues.json` metadata file with product tags when wellness needs it~~ — shipped in Session 4.9 Part A
 - [ ] DeepAR `background_segmentation` jsdelivr 404 — karaoke/stage.html falls back to MediaPipe, low priority
 - [ ] ~143 text-tone hardcoded colors deferred from Session 1 color audit — rebrand-safe enough for now
-- [ ] Extract ambient venue effects into shell/venue-effects.js when wellness work begins
+- [x] ~~Extract ambient venue effects into shell/venue-effects.js when wellness work begins~~ — **Absorbed into Phase 2 venue abstraction (2026-05-24).** Per `docs/PHASE-2-BUILD-SPEC.md` §1, ambient effects are not karaoke code to be lifted out — they are venue attributes that belong to the venue (a stadium's spotlights belong to the stadium). The standalone `shell/venue-effects.js` extraction is no longer a separate effort; effect / ambient / media anchors live in the venue abstraction's anchor system (§3.2 anchor type vocabulary).
 - [ ] Move karaoke performance effects (DeepAR filters, confetti) formally under karaoke/effects/
 - [ ] Laptop/TV production auth path for karaoke/stage.html (Session 4.10+) — **being addressed by 4.10**
 - [ ] Tune back_yaw / back_pitch for remaining venues via admin dialog (most NULL today)
