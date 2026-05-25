@@ -167,9 +167,9 @@ role — both as a deputy and as a standing successor — is a future
 feature. A reader who finds `'host'` in the schema or RPC bodies should
 know it is held for this design, not for legacy reasons.
 
-## The premium-control layer
+## The immersive-control layer
 
-The "premium-control layer" is the set of additional authority concepts
+The "immersive-control layer" is the set of additional authority concepts
 that apply when a room is bound to an embedding-capable screen. Two
 new authority surfaces matter under this layer:
 
@@ -186,7 +186,7 @@ new authority surfaces matter under this layer:
   side.
 
 The layer is conditional. The activation predicate is documented in
-"When the premium-control layer is active" below.
+"When the immersive-control layer is active" below.
 
 ### Control-transfer operations
 
@@ -228,8 +228,8 @@ synonyms:
 | Implementing RPC | (not yet implemented — see "Implementation" below) | `rpc_session_reclaim_manager` / `rpc_session_admin_reclaim` |
 | Intended use | Owner/admin asserts authority over a live room | Free a stalled room whose controller has walked away |
 
-The two seize predicates (when the premium-control layer is active —
-see "When the premium-control layer is active" below):
+The two seize predicates (when the immersive-control layer is active —
+see "When the immersive-control layer is active" below):
 
 - **Convener-seize.** `auth.uid() = rooms.owner_user_id`. The original
   convener may seize their own room at any time the layer is active.
@@ -276,7 +276,7 @@ existing reclaim RPCs.
 ### Room vs. device authority — the three scenarios
 
 The room/device authority split is the key new structural concept
-of the premium-control layer. Three scenarios make the split
+of the immersive-control layer. Three scenarios make the split
 concrete. In each case, "this household" is the household relative
 to which an HH admin is making a claim of authority.
 
@@ -311,9 +311,9 @@ and we decide what is on it." Room authority is "this is our
 gathering, and we decide who controls it." They are separate
 because the room and the screen are separable concepts.
 
-### When the premium-control layer is active
+### When the immersive-control layer is active
 
-The premium-control layer activates when a room is bound (via
+The immersive-control layer activates when a room is bound (via
 `rooms.screen_ref`) to an **embedding-capable** device.
 
 "Embedding-capable" is a CAPABILITY of the device, not a hardware
@@ -339,43 +339,43 @@ When the layer is NOT active — a room bound to a non-embedding
 device, or a screenless room — the four-tier succession
 hierarchy above and the existing standard operations
 (manager-departure, inactivity-reclaim, pass-control) are the
-entirety of the authority model. The premium-layer-only
-operations (ownership-seize, premium-filtered succession) and
+entirety of the authority model. The immersive-layer-only
+operations (ownership-seize, immersive-filtered succession) and
 device authority do not apply.
 
-### Succession under the premium layer — the degrade rule
+### Succession under the immersive layer — the degrade rule
 
-When the premium-control layer is active and the current controller
+When the immersive-control layer is active and the current controller
 leaves the room, the four-tier succession hierarchy from "Manager
 departure" above is applied — but with the candidate pool filtered
-to **premium-present** users only. "Premium-present" means a user
-who satisfies both of the following:
-
-- has premium on their own account; AND
-- is declared-present (HDPM §8) at the room's embedding-capable
-  device.
+to **immersive-present** users only. "Immersive-present" means a user
+who is presently embeddable on the displaying screen — i.e. bound
+to the displaying TV with presence declared (HDPM §8), where the TV
+is embed-capable (`tv_devices.can_embed = true`). There is no
+account-level property in this predicate. (This matches "immersive
+activates" in HOUSEHOLD-DEVICE-PRESENCE-MODEL.md §9.)
 
 The four tiers (host → named successor → longest non-audience →
 room-end) run against this filtered pool first, exactly as they do
-in the non-premium case — just with non-premium-present candidates
-excluded from consideration at every tier.
+in the non-immersive case — just with non-immersive-present
+candidates excluded from consideration at every tier.
 
-If no premium-present candidate is found at any tier, the room does
-NOT end immediately. The premium filter degrades: succession falls
+If no immersive-present candidate is found at any tier, the room does
+NOT end immediately. The immersive filter degrades: succession falls
 back to the plain four-tier hierarchy against all candidates
-(premium-present or not). Embedding goes dark — the room runs
+(immersive-present or not). Embedding goes dark — the room runs
 without camera-composited presence on the screen — and the room
 continues.
 
 The room ends (tier 4 of the plain hierarchy) only if NO
-non-audience candidate is available, premium-present or not. The
-premium filter never causes the room to end prematurely; it is a
+non-audience candidate is available, immersive-present or not. The
+immersive filter never causes the room to end prematurely; it is a
 preference layer, not a stricter gate.
 
-Rationale: the layer's purpose is to keep premium embedding alive
+Rationale: the layer's purpose is to keep immersive embedding alive
 when possible. Forcing the room to end the moment all
-premium-present candidates leave would punish the non-premium
-members for the premium members' departure. Degrading to the plain
+immersive-present candidates leave would punish the non-immersive
+members for the immersive members' departure. Degrading to the plain
 hierarchy preserves the room and downgrades only the embedding
 capability — which is the right tradeoff: the room is the thing of
 value, and the embedding is an enhancement.
@@ -424,10 +424,10 @@ documents the routes around it.
   return, they reclaim control cleanly.
 - The host role is currently dormant in the product — kept by design,
   not vestigial.
-- **The premium-control layer** activates when a room is bound to an
+- **The immersive-control layer** activates when a room is bound to an
   embedding-capable device. It adds two new room-control transfer
   operations (pass-control-without-leaving; ownership-seize) and a
-  premium-filtered succession with a degrade rule (embedding goes
+  immersive-filtered succession with a degrade rule (embedding goes
   dark; room continues). Ownership-seize is distinct from the
   existing inactivity-reclaim: seize is immediate and
   ownership-gated; reclaim requires the 10-min idle window and is

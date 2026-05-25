@@ -130,7 +130,7 @@ What shipped:
 
 **Completed:** 2026-05-21 → 2026-05-23 (db/025-031 applied to prod; §F shell rework + Phase-1 post-work shipped; 10 commits pushed in the closing push)
 
-Shipped the keystone of the unified-app refactor: a `rooms` entity that durably persists across app switches; `sessions` demoted to per-app instances under a room; `session_participants` re-anchored from `session_id` to `room_id`; the 14 RPCs re-keyed plus new `rpc_room_create`; the shell session-state cluster re-pointed from "the session for the bound TV" to "the room and its current session"; plus closing-out post-work: push-trigger recreation (db/029), premium-control-layer schema column (db/030), ownership-seize RPC (db/031), realtime publisher field-name rename (shell half), and the per-user per-app tile-badge spec (UAP §10).
+Shipped the keystone of the unified-app refactor: a `rooms` entity that durably persists across app switches; `sessions` demoted to per-app instances under a room; `session_participants` re-anchored from `session_id` to `room_id`; the 14 RPCs re-keyed plus new `rpc_room_create`; the shell session-state cluster re-pointed from "the session for the bound TV" to "the room and its current session"; plus closing-out post-work: push-trigger recreation (db/029), immersive-control-layer schema column (db/030), ownership-seize RPC (db/031), realtime publisher field-name rename (shell half), and the per-user per-app tile-badge spec (UAP §10).
 
 Architectural significance: Phase 1 is the keystone for UAP §5's remaining phases. Phases 3 (karaoke surface migration) and 5 (rooms/groups/cross-app movement) depend on Phase 1 directly. Phase 2 (venue extraction) can run independently and is now the active session.
 

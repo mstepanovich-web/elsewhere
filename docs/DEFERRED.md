@@ -3233,15 +3233,15 @@ Immediately after `db/026` + `db/027` + `db/028` are applied to prod and recorde
 
 ### Deferred: tv_devices.can_embed self-report path (claim flow + tv2.html capability detection)
 
-**Deferred in:** Premium-control model documentation (post-Phase-1); split out from the original C1 entry on 2026-05-23 after the schema half landed as db/030.
+**Deferred in:** Immersive-control model documentation (post-Phase-1); split out from the original C1 entry on 2026-05-23 after the schema half landed as db/030.
 **Deferred on:** 2026-05-23 (original C1); re-scoped 2026-05-23 after db/030 shipped the schema half.
-**Priority:** Low — blocked on the compositing pipeline existing as code (see "Blocker" below). Until then, every device defaults to `can_embed = false` and the premium-control layer is inactive everywhere; that's a known interim state and is correct under the conservative-default rationale.
+**Priority:** Low — blocked on the compositing pipeline existing as code (see "Blocker" below). Until then, every device defaults to `can_embed = false` and the immersive-control layer is inactive everywhere; that's a known interim state and is correct under the conservative-default rationale.
 **Area:** Schema (claim RPCs) + tv2.html + claim.html (QR URL bridge)
 **Status:** Deferred — schema column shipped via db/030; the self-report and claim-flow recording remain open and blocked. (Applied date recorded in `db/MIGRATIONS_APPLIED.md` after operator apply.)
 
 #### Context
 
-The premium-control layer documented in ROOM-AUTHORITY-MODEL.md § "When the premium-control layer is active" activates when a room is bound to an embedding-capable device — a device with both (a) a camera accessible to the TV browser, and (b) the compositing pipeline to overlay participants into the venue. The activation predicate is `tv_devices.can_embed = true` for the screen the room is bound to.
+The immersive-control layer documented in ROOM-AUTHORITY-MODEL.md § "When the immersive-control layer is active" activates when a room is bound to an embedding-capable device — a device with both (a) a camera accessible to the TV browser, and (b) the compositing pipeline to overlay participants into the venue. The activation predicate is `tv_devices.can_embed = true` for the screen the room is bound to.
 
 The original C1 entry covered three pieces of work: schema column, tv2.html self-report, claim-flow recording. The 2026-05-23 C1 investigation surfaced a blocker on pieces 2+3 — see below. This entry has been re-scoped to track only pieces 2+3; piece 1 (the schema column) shipped separately as db/030.
 
@@ -3271,10 +3271,10 @@ Re-claim semantics for the upgrade case (laptop → real Elsewhere hardware on t
 #### Options when picking up
 
 - **Wait for the compositing pipeline.** The honest path. Self-report is meaningful only when the pipeline check is a real thing.
-- **Ship a presence-only self-report now.** Detect camera presence only; record `can_embed = (camera exists)`. The premium-control layer would then activate on any device with a camera, which is most laptops. Embeds would fail at runtime when the pipeline tries to run on devices that don't have it. Not recommended — defeats the conservative-default safety.
+- **Ship a presence-only self-report now.** Detect camera presence only; record `can_embed = (camera exists)`. The immersive-control layer would then activate on any device with a camera, which is most laptops. Embeds would fail at runtime when the pipeline tries to run on devices that don't have it. Not recommended — defeats the conservative-default safety.
 - **Manual admin toggle as an interim.** A future admin-side UI surfaces a "this device supports embedding" checkbox on the household's TV list; the admin sets it after confirming the device is a real Elsewhere unit. Avoids the detection problem entirely; less precise; not appropriate for self-claimed devices.
 
-Recommendation: wait for the pipeline. Until that ships, the column is `false` everywhere and the premium-control layer doesn't activate — that's the right safety posture.
+Recommendation: wait for the pipeline. Until that ships, the column is `false` everywhere and the immersive-control layer doesn't activate — that's the right safety posture.
 
 #### When to pick this up
 
@@ -3282,8 +3282,8 @@ When the compositing pipeline is shipped or far enough along that a feature-dete
 
 #### Related
 
-- `docs/ROOM-AUTHORITY-MODEL.md` § "When the premium-control layer is active" — the activation predicate this column expresses.
-- `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` §4 (TV devices) and §9 (The premium tier) — the device-model context.
+- `docs/ROOM-AUTHORITY-MODEL.md` § "When the immersive-control layer is active" — the activation predicate this column expresses.
+- `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` §4 (TV devices) and §9 (The immersive capability) — the device-model context.
 - `db/030_tv_devices_can_embed.sql` — the schema half (this entry's piece-1, now done).
 - DEFERRED entry "ownership-seize implementing RPC" (C5) — first SQL reader of the new column; unblocked by db/030 alone.
 - `db/006_household_and_tv_devices.sql` — `rpc_claim_tv_device` and `rpc_link_tv_to_existing_household`, the RPCs that will gain the new optional parameter when the self-report path lands.
@@ -3504,7 +3504,7 @@ Opportunistically during any `shell/realtime.js` cleanup pass, or when a downstr
 
 ### Deferred: HH-admin administrative actions without engagement transition
 
-**Deferred in:** Premium-control model documentation (Body A "Seize authority" subsection)
+**Deferred in:** Immersive-control model documentation (Body A "Seize authority" subsection)
 **Deferred on:** 2026-05-23
 **Priority:** Low — current behavior (every seize is an engagement transition) is correct, just slightly inconvenient for admins managing many household rooms.
 **Area:** Shell + RPC layer (seize / engagement boundary)
@@ -3512,7 +3512,7 @@ Opportunistically during any `shell/realtime.js` cleanup pass, or when a downstr
 
 #### Context
 
-The premium-control model treats ownership-seize uniformly as an engagement transition: an HH admin who seizes a room while already engaged in another room fires the normal one-engagement "Leave [room A] to seize [room B]?" confirmation. This is the documented behavior in ROOM-AUTHORITY-MODEL.md § "Seize authority" under "Engagement prompt on seize."
+The immersive-control model treats ownership-seize uniformly as an engagement transition: an HH admin who seizes a room while already engaged in another room fires the normal one-engagement "Leave [room A] to seize [room B]?" confirmation. This is the documented behavior in ROOM-AUTHORITY-MODEL.md § "Seize authority" under "Engagement prompt on seize."
 
 For SOME admin actions on a household-owned room — specifically, purely administrative actions like ending the room or removing a participant — the engagement-transition framing is heavyweight. An admin who's actively engaged in their family room and wants to remotely end a stale household-owned room they're not engaged in shouldn't have to leave their family room to do it; the action is administrative, not participatory.
 
@@ -4258,3 +4258,55 @@ All four sources are guaranteed populated in their respective scopes (verified d
 - DEFERRED entry "Phase-1 RPC migration in-flight — shell still on pre-db/026 RPC signatures" — the broader umbrella entry; this was one of its narrower sub-items.
 - `shell/realtime.js:264-315` — the publisher functions in question.
 - The §F shell-rework investigation (2026-05-22) that surfaced this gap.
+
+---
+
+### Deferred: code-side premium→immersive rename (db/030, db/031, db/032)
+
+**Deferred in:** Docs-only premium→immersive rename pass (this session)
+**Deferred on:** 2026-05-25
+**Priority:** Medium overall, with the RAISE EXCEPTION strings the higher-priority part (see below). Not urgent-urgent — `rpc_room_seize` has no callers in production yet — but should land before any Phase-3 surface exercises that RPC, so failure messages match the renamed docs.
+**Area:** SQL migrations — `db/030_tv_devices_can_embed.sql`, `db/031_room_seize.sql`, `db/032_venue_abstraction_schema.sql`
+**Status:** Deferred
+
+#### Context
+
+The docs-only rename pass on 2026-05-25 renamed the capability-framing term "premium" to "immersive" across the planning docs — "premium-control layer" → "immersive-control layer", "premium user" → "immersive user", "premium tier" → "immersive capability", and the §9 / §3 factual correction passages that wrongly framed the capability as an account-level entitlement. Doc-code drift now exists: the SQL migrations still use the old "premium" terminology in comments and in raised exception bodies.
+
+The companion `trivia_premium_usage` code paths (`db/019`, `games/player.html`, `supabase/functions/generate-trivia/index.ts`) are NOT in scope here — that "premium" is the code-named Trivia AI feature, unrelated to the immersive capability.
+
+#### What's deferred — two parts, the first higher-priority
+
+**Part 1 — RAISE EXCEPTION strings in `db/031_room_seize.sql` (higher-priority).** The exception bodies raised by `rpc_room_seize` use the old terminology and are USER-VISIBLE — they surface as API error messages to any client that fails the guard. Two specific strings:
+
+- ~line 150: `raise exception 'room is not bound to a screen (premium-control layer inactive)' using errcode = '55000'`
+- ~line 165: `raise exception 'premium-control layer not active for this room''s screen' using errcode = '55000'`
+
+Both should be bumped to `immersive-control layer` so a failing seize call returns a message that matches the renamed docs. `rpc_room_seize` currently has zero callers in production (guard 4b's `can_embed = true` check refuses every attempt until the can_embed self-report writer ships — see the separate "tv_devices.can_embed self-report path" entry), so this is not urgent. It should land before any Phase-3 surface exercises that RPC; otherwise a future debugger will see "premium-control layer not active" in a log while every doc says "immersive-control layer."
+
+**Part 2 — SQL comment hygiene (lower-priority, doc-code consistency).** Comment text using "premium-control layer" / "premium-filtered succession" / "premium layer" / "premium-gated" remains in three files:
+
+- `db/030_tv_devices_can_embed.sql` — 10 occurrences in the file header and column comment (e.g. "Schema half of the premium-control-layer activation predicate"). These describe the migration's purpose for future readers.
+- `db/031_room_seize.sql` — 8 occurrences in comments (in addition to the 2 in raised exception bodies covered by Part 1). Comments describe the seize predicates and the layer-activation gate.
+- `db/032_venue_abstraction_schema.sql` — 1 occurrence at line 374: `'is premium-gated, and is NOT built in Phase 2.'` Costume capability description.
+
+These are comments only — pure doc-code consistency, no behavior change. Lower priority because no user / debugger sees them outside the source files.
+
+#### Options when picking up
+
+- **Bundle Parts 1 and 2 as one migration.** A new `db/0NN_premium_to_immersive_terminology.sql` that issues `CREATE OR REPLACE FUNCTION rpc_room_seize ...` with the corrected exception strings, plus `COMMENT ON COLUMN ... IS ...` updates for `tv_devices.can_embed`. Comments inside migration files themselves (the SQL-comment headers in db/030/031/032) are harder to update via migration because they're embedded in already-applied SQL — those would require editing the .sql files in place and bumping per-file change notes. Pragmatic: rewrite the exception strings via a CREATE OR REPLACE migration; leave the historical SQL-file comments alone (their job was to explain the migration at apply time).
+- **Edit the .sql files in place + new migration for the exception strings.** Both. Rewrites the historical record of the .sql files, but matches the renamed docs. Less reversible.
+- **Defer indefinitely until rpc_room_seize gains real callers.** Acceptable if Phase 3's surface migration doesn't exercise seize. Risky because the next chat that debugs a seize failure will hit "premium-control layer inactive" in their log and re-investigate the term.
+
+Recommendation: Part 1 as a small standalone migration when convenient (perfunctory CREATE OR REPLACE with updated exception text); Part 2 leave alone (historical SQL records).
+
+#### When to pick this up
+
+Before any client code path can call `rpc_room_seize`. That call path activates with the immersive-control-layer self-report writer (separate DEFERRED entry "tv_devices.can_embed self-report path"). If those two ship together, the exception strings should be corrected first; if seize callers ship before the self-report, fix this entry's Part 1 first.
+
+#### Related
+
+- DEFERRED entry "tv_devices.can_embed self-report path (claim flow + tv2.html capability detection)" — the predicate writer; seize is functional once that ships.
+- DEFERRED entry "ownership-seize implementing RPC" — the historical (completed) record of the seize RPC build; its body uses "premium-control layer" terminology consistent with the SQL files. Left verbatim per the historical-entry caveat.
+- `db/030_tv_devices_can_embed.sql`, `db/031_room_seize.sql`, `db/032_venue_abstraction_schema.sql:374` — the three files.
+- `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` §9 + `docs/ROOM-AUTHORITY-MODEL.md` "The immersive-control layer" — the renamed terms in the docs.

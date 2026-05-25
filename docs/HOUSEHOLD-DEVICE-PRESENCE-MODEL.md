@@ -1,7 +1,7 @@
 # Household, Device & Presence Model
 
 Status: Adopted. This document is the complete model for users, households,
-TV devices, presence, and the premium tier. It supersedes
+TV devices, presence, and the immersive capability. It supersedes
 PHONE-AND-TV-STATE-MODEL.md.
 
 It is a companion to ROOM-SESSION-MODEL.md, ROOM-AUTHORITY-MODEL.md, and
@@ -13,7 +13,7 @@ The superseded model treated an at-home household user as the primary user,
 with everyone else as a constrained case. This model inverts that: the
 primary user is any registered Elsewhere user, with no TV device required.
 Households and TV devices are not a participation gate — they are the
-substrate for one optional premium capability.
+substrate for one optional immersive capability.
 
 ## 2. User categories
 
@@ -48,7 +48,7 @@ claimed TV devices.
   on email) is how a person is added.
 - Household membership is the entitlement axis for household-account
   spending and household management — see section 10. It is NOT the gate for
-  premium embedding — see section 9.
+  immersive embedding — see section 9.
 - A household is created when a user claims their first TV device. A
   newly-registered user has no household by default — being registered and
   being in a household are independent.
@@ -59,8 +59,8 @@ A TV device is a screen claimed to a household. Claiming a TV is what
 creates the household (for the first TV) or adds to it.
 
 In the new model the TV device's role is re-scoped: it is no longer
-required to use any app. It is the substrate for the premium tier — the
-camera-equipped screen a premium user is composited into.
+required to use any app. It is the substrate for the immersive capability
+— the camera-equipped screen an immersive user is composited into.
 
 A TV device also displays a join/QR affordance (see sections 5 and 6).
 
@@ -131,14 +131,14 @@ are documented in ROOM-AUTHORITY-MODEL.md § "Room vs. device
 authority — the three scenarios."
 
 Device authority is a peer concept to room authority. Together
-they make up the premium-control layer described in
-ROOM-AUTHORITY-MODEL.md § "The premium-control layer." See that
+they make up the immersive-control layer described in
+ROOM-AUTHORITY-MODEL.md § "The immersive-control layer." See that
 section for the layer's activation predicate, the ownership-seize
-operation (room-side), and the premium succession degrade rule.
+operation (room-side), and the immersive succession degrade rule.
 
 ## 8. Presence — "are you home?"
 
-Premium is co-presence with a camera-equipped screen. Binding proves a
+Immersive is co-presence with a camera-equipped screen. Binding proves a
 durable association with a TV; it does not prove the user is physically
 present right now. Presence is a separate, volatile fact.
 
@@ -159,37 +159,40 @@ Automatic presence detection — e.g. Bluetooth or ultrasonic proximity
 between phone and TV — would remove the need to ask. It is noted as a
 possible future enhancement, not part of this model.
 
-## 9. The premium tier
+## 9. The immersive capability
 
 Baseline tier is every registered user's full access to every app, with no
 TV device required. (See UNIFIED-APP-PLAN.md section 2.)
 
-Premium is one capability: being camera-composited into the venue, with
+Immersive is one capability: being camera-composited into the venue, with
 costume overlays. It is identical across all apps.
 
-Premium embedding follows the USER, not the user's relationship to a
-particular household. Premium activates when both of the following are
+Immersive is a property of the user's physical situation, not of the
+user's account. There is no account-level entitlement and no stored
+"has-immersive" flag. Immersive activates when both of the following are
 true:
 
-1. The user has premium (a property of their own account).
-2. They are present at a TV device — i.e. bound to it (section 5) and
-   presence declared (section 8).
+1. The user is bound (section 5) to a TV device whose `tv_devices.can_embed`
+   is true — i.e. the device has the camera + compositing pipeline to embed
+   participants into the venue.
+2. They have declared presence at that device (section 8).
 
-Whose TV it is does not matter. Any premium user, present at any TV — their
-own household's, a friend's, anywhere — is embedded. Premium embedding is
-household-permissionless: a household does not gate who may be embedded on
-its TV. (The household's control is over the room and over the screen
-binding — see ROOM-AUTHORITY-MODEL.md and ROOM-SESSION-MODEL.md — not over
-who embeds.)
+Whose TV it is does not matter. Any user, bound to any embed-capable TV
+with presence declared — their own household's, a friend's, anywhere — is
+embedded. Immersive embedding is household-permissionless: a household
+does not gate who may be embedded on its TV. (The household's control is
+over the room and over the screen binding — see ROOM-AUTHORITY-MODEL.md
+and ROOM-SESSION-MODEL.md — not over who embeds.)
 
-Premium is therefore defined by a physical situation — a premium user,
-present at a camera-equipped screen — not by household membership.
+Immersive is therefore defined entirely by a physical situation — a user
+present at an embed-capable screen — not by household membership and not
+by any account-level property.
 
-The same embedding-capable-device predicate that gates premium
-embedding (this section) also gates the room-side premium-control
-layer — see ROOM-AUTHORITY-MODEL.md § "When the premium-control
+The same embedding-capable-device predicate that gates immersive
+embedding (this section) also gates the room-side immersive-control
+layer — see ROOM-AUTHORITY-MODEL.md § "When the immersive-control
 layer is active" for the layer's room-side operations
-(ownership-seize, premium-filtered succession) and device authority.
+(ownership-seize, immersive-filtered succession) and device authority.
 
 ## 10. Purchasing — the two-wallet rule
 
@@ -209,8 +212,10 @@ The rules:
   means the visited household's wallet is unavailable to them.
 
 The HHU / guest distinction governs ONLY this wallet rule and household
-management. It does NOT gate premium embedding (see section 9). A guest who
-has premium and is present is embedded exactly like an HHU.
+management. It does NOT gate immersive embedding (see section 9). A guest
+who is bound to an embed-capable TV with presence declared is embedded
+exactly like an HHU — the predicate is device + presence, not household
+membership and not any account-level property.
 
 The broader payments / premium-paid-services model — how paid services are
 priced, delivered, and managed — is not designed. The two-wallet rule above

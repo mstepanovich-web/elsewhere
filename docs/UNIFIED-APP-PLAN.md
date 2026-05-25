@@ -10,7 +10,7 @@ Companion documents (the detailed models):
 - ROOM-AUTHORITY-MODEL.md — the manager authority model
 - ROOM-ACCESS-INVITE-MODEL.md — the room-access / invite model
 - HOUSEHOLD-DEVICE-PRESENCE-MODEL.md — households, TV devices, presence,
-  and the premium tier
+  and the immersive capability
 
 Read this document first for the whole picture; the companions for detail.
 
@@ -22,11 +22,11 @@ primary user, and a non-household user (NHHU) as the constrained case.
 This workstream inverts that. The primary user is any registered Elsewhere
 user, with no TV device required. Every app must work for that user as a
 primary participant — never relegated to a separate "audience" surface. A
-TV device becomes a premium capability layer on top of a complete
+TV device becomes an immersive capability layer on top of a complete
 experience, not a gate to it.
 
 In some situations NHHUs, or HHUs who are not at home, get a deprecated
-experience compared to a premium user present at a TV — but not a wholly
+experience compared to an immersive user present at a TV — but not a wholly
 different one.
 
 Scope: this workstream refactors KARAOKE and GAMES. Wellness and Worlds are
@@ -45,16 +45,18 @@ superseded PHONE-AND-TV-STATE-MODEL.md.
   start content, manage the experience.
 - Sees and uses all the app's core controls.
 
-### Premium tier — a premium user, present at a camera-equipped screen
+### Immersive tier — a user present at an embed-capable screen
 
 - Everything baseline, plus the camera-composite capability: being
   composited into the venue, and costume overlays.
-- Premium is exactly this one capability. It is identical across all apps.
+- Immersive is exactly this one capability. It is identical across all apps.
 
-Premium is defined by a physical situation — a premium user present at a
-camera-equipped screen — not by user class or household membership. The
-full model for households, TV devices, binding, presence, and premium
-activation is in HOUSEHOLD-DEVICE-PRESENCE-MODEL.md.
+Immersive is defined by a physical situation — a user is connected to a TV
+device whose `tv_devices.can_embed` is true AND has declared presence at
+that device. It is derived, not stored — there is no account-level
+entitlement. Whose TV it is doesn't matter; household membership doesn't
+gate it. The full model for households, TV devices, binding, presence, and
+immersive activation is in HOUSEHOLD-DEVICE-PRESENCE-MODEL.md.
 
 ### Two ways a screen is driven
 
@@ -74,9 +76,9 @@ baseline-tier watcher mode within the main app.
 
 ## 3. Locked decisions
 
-1. Premium-A is the workstream's premium tier — premium = a premium user
-   present at a camera-equipped screen, which the architecture already
-   supports. Premium-B (remote self-insertion via a phone camera) is
+1. Immersive-A is the workstream's immersive capability — a user present
+   at the TV with embed-capable hardware, which the architecture already
+   supports. Immersive-B (remote self-insertion via a phone camera) is
    deferred as a separate future feature. See section 7.
 
 2. A net-new rooms table is committed. The session entity splits into a
@@ -105,83 +107,83 @@ Two further design decisions, in the access model:
 
 ## 4. Per-app experience — the four-quadrant breakdown
 
-For karaoke and games, the experience across baseline/premium x player/
+For karaoke and games, the experience across baseline/immersive x player/
 watcher.
 
 Two framing points:
 - "Watcher" is a mode any user opts into, not a lesser tier.
-- Premium is camera-composite while performing — so a "premium watcher" has
-  the entitlement but nothing to act on; it collapses into baseline
+- Immersive is camera-composite while performing — so an "immersive watcher"
+  has the capability but nothing to act on; it collapses into baseline
   watcher. The real matrix is three live cells per app, not four.
 
 ### Karaoke — how users are placed
 
-When a user enters karaoke, they are placed by their premium/presence
-status (see HOUSEHOLD-DEVICE-PRESENCE-MODEL.md):
+When a user enters karaoke, they are placed by their immersive/presence
+state (see HOUSEHOLD-DEVICE-PRESENCE-MODEL.md):
 
-- A premium user who is present at the TV is placed as a potential singer.
-  In the manager's view they are shown distinctly, so the manager can see
-  these users can be embedded into the venue.
-- A non-premium user, or a premium user not present, is placed in audience
-  mode by default — they cannot be embedded, so they are not put in the
-  singer track automatically.
+- A user bound to an embed-capable TV with presence declared is placed as
+  a potential singer. In the manager's view they are shown distinctly, so
+  the manager can see these users can be embedded into the venue.
+- A user not bound to an embed-capable TV (or bound but not present) is
+  placed in audience mode by default — they cannot be embedded, so they
+  are not put in the singer track automatically.
 
 An audience-mode user may still ask to join the singing queue. The first
 time such a user does so, the manager is prompted with a one-time
-session-level choice: allow non-premium / not-present users to join the
+session-level choice: allow non-immersive / not-present users to join the
 queue — yes or no. If yes, such users may queue for the rest of that
 session; the manager retains the existing skip and remove controls. If no,
 they remain audience-only.
 
-### Karaoke — the premium-restricted session
+### Karaoke — the immersive-restricted session
 
-The karaoke manager may restrict singing to premium-present users for a
+The karaoke manager may restrict singing to immersive-present users for a
 session. In a restricted session:
 
-- Only premium-present users may be in the singing queue.
-- Audience-mode users (non-premium, or premium-not-present) cannot join the
-  queue at all — the one-time queue-approval prompt above does not apply;
-  the restriction overrides it.
+- Only immersive-present users may be in the singing queue.
+- Audience-mode users (non-immersive, or immersive-not-present) cannot join
+  the queue at all — the one-time queue-approval prompt above does not
+  apply; the restriction overrides it.
 - Audience-mode users retain full access to the rest of the app: they can
   search for songs, and search and view venues and costumes. They are shown
-  a message that singing is restricted to premium users, with a path to
+  a message that singing is restricted to immersive users, with a path to
   obtain a TV device.
 
 So karaoke has two manager-controlled modes: unrestricted (audience users
 may be allowed into the queue at the manager's one-time discretion) and
-restricted (singing is premium-present only).
+restricted (singing is immersive-present only).
 
 ### Karaoke — the quadrants
 
-- Baseline player — a non-premium or not-present user who has been allowed
-  into the queue: drives a screen, picks and changes venues, searches
-  songs, queues, sings. Not composited into the venue.
-- Premium player — a premium-present user: as baseline, plus composited
-  into the venue and costume overlays. Every control is identical to
-  baseline; premium adds visual presence only.
+- Baseline player — a non-immersive or not-present user who has been
+  allowed into the queue: drives a screen, picks and changes venues,
+  searches songs, queues, sings. Not composited into the venue.
+- Immersive player — an immersive-present user: as baseline, plus
+  composited into the venue and costume overlays. Every control is
+  identical to baseline; immersive adds visual presence only.
 - Baseline watcher — a user in audience mode: sees and hears the room's
   karaoke, is a room member, not in the queue. Same app, reversible mode.
   This is what replaces the old audience.html.
-- Premium watcher — no distinct experience; dormant entitlement, equals
+- Immersive watcher — no distinct experience; dormant capability, equals
   baseline watcher until the user switches to playing.
 
 ### Games
 
 - Baseline player — full games for any user; closest to games today, which
   is already TV-independent.
-- Premium player — forward-looking: camera-insertion + costumes for games
+- Immersive player — forward-looking: camera-insertion + costumes for games
   depends on venues being introduced into games, a separate future
   workstream. Empty until then by absence of the venue substrate.
 - Baseline watcher — a user in the games room who has opted to watch.
-- Premium watcher — empty (no venues yet, and watching anyway).
+- Immersive watcher — empty (no venues yet, and watching anyway).
 
 ### What the breakdown shows
 
-- "Premium watcher" is not a real quadrant in either app.
-- Premium is a thin, consistent layer — the same one capability in both
+- "Immersive watcher" is not a real quadrant in either app.
+- Immersive is a thin, consistent layer — the same one capability in both
   apps, on the player track only.
-- Karaoke's cells are describable now; games' premium column is
-  forward-looking. Karaoke is a refactor target; games' premium tier is a
+- Karaoke's cells are describable now; games' immersive column is
+  forward-looking. Karaoke is a refactor target; games' immersive tier is a
   later feature.
 
 ## 5. Implementation sequencing
@@ -222,7 +224,7 @@ Phases 3-4.
 - Karaoke is a heavy transformation — the app the workstream exists to
   change. It touches Phases 1, 2, 3, and 5.
 - Games is a moderate conformance pass — already close to the target
-  model. It does not get its premium tier in this workstream.
+  model. It does not get its immersive tier in this workstream.
 - Both share the Phase-1 schema migration. The frozen participant row
   shape keeps the ~50 control_role reader sites stable, so the churn is
   concentrated in schema and RPCs, not client read sites.
@@ -286,9 +288,9 @@ is "longest continuously-present non-audience participant" (see
 ROOM-AUTHORITY-MODEL.md). The Phase-1 rpc_session_leave rewrite must change
 this selection logic, not merely re-point its filter column.
 
-## 7. Premium-B — deferred, with no-foreclose notes
+## 7. Immersive-B — deferred, with no-foreclose notes
 
-Premium-B (a remote user composited into a venue via their own phone
+Immersive-B (a remote user composited into a venue via their own phone
 camera) is deferred. Investigation found B splits in two:
 - B-narrow (one remote singer) is close to a routing change — the karaoke
   composite pipeline already accepts an arbitrary video element, and the

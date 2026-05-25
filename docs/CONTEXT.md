@@ -18,7 +18,7 @@ The product is built around a few core ideas:
 
 - **The TV is the stage.** The TV runs `tv2.html` (idle launcher) or one of the per-app TV surfaces (e.g. `karaoke/stage.html` during karaoke). It is a passive display that reacts to phones in the room.
 - **Phones are controllers and participants.** Each phone in a household runs its own surface. For karaoke, that's `karaoke/singer.html` for active/queued/audience users.
-- **Users, devices, and households.** Every registered user is a first-class user of every app — no TV device required. A claimed TV device adds the premium capability (camera compositing into the venue) but is not a participation gate. Households exist but do not gate participation; the full model is in `docs/UNIFIED-APP-PLAN.md` and `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`.
+- **Users, devices, and households.** Every registered user is a first-class user of every app — no TV device required. An embed-capable TV device adds the immersive capability (camera compositing into the venue) but is not a participation gate. Households exist but do not gate participation; the full model is in `docs/UNIFIED-APP-PLAN.md` and `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`.
 - **Real-time everything.** State changes propagate via Supabase Realtime channels. The TV, the phones, and the manager all see the same state in <2 seconds.
 
 ---
@@ -80,11 +80,11 @@ The `control_role` distinguishes a `member` (acts on their own row only) from a 
 
 ---
 
-## Baseline and premium (the capability model)
+## Baseline and immersive (the capability model)
 
 Every registered Elsewhere user is a full, primary user of every app at the BASELINE tier — with no TV device required. Non-household users (NHHU) are first-class users, not a degraded or secondary case.
 
-PREMIUM is a single optional capability on top of baseline: being camera-composited into the venue (with costume overlays). Premium activates for a user who has premium AND is present at a camera-equipped TV. It is a property of the user plus their physical situation — not gated by household membership.
+IMMERSIVE is a single optional capability on top of baseline: being camera-composited into the venue (with costume overlays). It is derived, not stored — there is no account-level entitlement. Immersive activates when a user is connected to a TV device whose `tv_devices.can_embed` is true AND has declared presence at that device. It is a property of the user's physical situation, not of the user's account, and is not gated by household membership.
 
 This supersedes the earlier "HHU + at-home + has-TV = primary; everyone else is secondary" doctrine. The full model is in `docs/UNIFIED-APP-PLAN.md` and `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`.
 
@@ -130,7 +130,8 @@ Apple Push for the Capacitor app. Token registration on app launch (handled by `
 
 Things we don't re-litigate:
 
-- **The unified-app model is now authoritative for the user/role/audience model.** Baseline vs. premium tiers, audience-as-mode, the room/session split, and room authority are defined in the five planning docs (`docs/UNIFIED-APP-PLAN.md` and its four companions). Where this doctrine list and the planning docs disagree, the planning docs win.
+- **Observed misbehavior gets checked against `docs/DEFERRED.md` before being treated as a new bug.** Many "weird" behaviors on current surfaces are tracked debt with a known resolution phase — re-investigating one wastes a chat session. Grep DEFERRED.md for the affected surface, the visible symptom (e.g. "legacy mode", "audience", "manager UI hidden", a specific column name), or the relevant table/RPC before opening an investigation. See also the "Known-degraded surfaces" note in Current state.
+- **The unified-app model is now authoritative for the user/role/audience model.** Baseline vs. immersive capability, audience-as-mode, the room/session split, and room authority are defined in the five planning docs (`docs/UNIFIED-APP-PLAN.md` and its four companions). Where this doctrine list and the planning docs disagree, the planning docs win.
 - **Way 1 / Way 2 dual-mode:** every singer.html change preserves Way 1 fallback.
 - **`control_role` vs `participation_role`:** they're orthogonal axes, never collapsed. A manager can be queued. A member can be active.
 - **RPCs publish realtime; direct SQL UPDATEs do not.** All client-side mutations go through RPCs (`rpc_session_update_participant`, etc.) which broadcast `participant_role_changed` events. Direct SQL is for testing/admin only and connected clients won't react.
@@ -188,6 +189,10 @@ Don't put server-side dirs (`db/`, `supabase/`) into the iOS bundle — they're 
 ---
 
 ## Current state (May 2026)
+
+### Known-degraded surfaces (do not file as new bugs)
+
+The four pre-Phase-3 surfaces — `karaoke/singer.html`, `karaoke/stage.html`, `games/player.html`, `games/tv.html` — carry stale `sessions` SELECTs that reference columns dropped by db/025 (`manager_user_id`, `room_code`, `tv_device_id`). When exercised against prod they 400, `refreshSessionState()` falls into legacy mode, and `currentMyRow` stays null — manager UI hidden, control roles unrecognized, the page looks like a passive "audience" surface even for the actual manager. This is **known tracked debt, NOT a regression** — see `docs/DEFERRED.md` "schema-stale sessions SELECTs/filters on the four pre-Phase-3 surfaces". Resolves in Phase 3 (karaoke surfaces) and Phase 4 (games surfaces) of UNIFIED-APP-PLAN §5, paired with the C2 surface-side completion. Until those phases land, degraded-mode rendering on these surfaces is expected; do not file as new bugs.
 
 ### Latest shipped: admission_model_v2 W7-W10 — games admission implementation (2026-05-18 → 2026-05-19)
 - `games/player.html` at `v2.137` on `origin/main`; `games/tv.html` at `v2.101`
@@ -272,7 +277,7 @@ If a topic comes up that needs more than what's in this document, point Claude t
 | Room / session / group entity model | `docs/ROOM-SESSION-MODEL.md` |
 | Manager authority — room control + room ownership | `docs/ROOM-AUTHORITY-MODEL.md` |
 | Room-access / invite model (token-based, Edge Function) | `docs/ROOM-ACCESS-INVITE-MODEL.md` |
-| Households, TV devices, binding, presence, premium tier | `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` |
+| Households, TV devices, binding, presence, immersive capability | `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` |
 | Karaoke roles, transitions, surfaces, role-aware rendering — **partially superseded by `docs/UNIFIED-APP-PLAN.md` / `docs/ROOM-AUTHORITY-MODEL.md` / `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`** | `docs/KARAOKE-CONTROL-MODEL.md` |
 | Games roles + state machines + admission modes — **partially superseded by `docs/UNIFIED-APP-PLAN.md` / `docs/ROOM-AUTHORITY-MODEL.md` / `docs/ROOM-SESSION-MODEL.md`** | `docs/GAMES-CONTROL-MODEL.md` |
 | Phone + TV state model (claim, registration, presence) — **superseded by `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`** | `docs/PHONE-AND-TV-STATE-MODEL.md` |

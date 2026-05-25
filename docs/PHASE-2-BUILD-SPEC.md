@@ -90,7 +90,7 @@ experience over the same space.
 3. **The costume layer.** Costumes attach to *composited users*, not to
    sphere positions — so they are a separate concern from anchors. A
    reusable costume library; each venue carries a *suggested* costume
-   list; the user may pick from the full library. Premium-gated.
+   list; the user may pick from the full library. Immersive-gated.
    Rendering is app-owned. (§6.)
 
 4. **The rendering layer.** How an app draws a resolved venue and what
@@ -648,9 +648,10 @@ discovering it.
 ## 6. Costumes
 
 Costumes are pulled to the **Elsewhere level** — they are not a karaoke
-concept. Any premium app where users are composited into the venue
-(karaoke today; games and wellness later, per the rendering matrix and
-UAP's premium model) can render costumes on inserted users.
+concept. Any immersive-enabled app where users are composited into the
+venue (karaoke today; games and wellness later, per the rendering matrix
+and UAP's immersive capability model) can render costumes on inserted
+users.
 
 Model:
 - A **costume library** — every costume authored once, keyed by id. A
@@ -681,7 +682,7 @@ Model:
 Scope boundary: the shared venue layer owns the **library** and the
 **suggested-list data**. *Applying* a costume to a composited user —
 the actual overlay compositing — is part of each app's **rendering
-layer** (layer 4), is **premium-gated**, and is **not built in Phase
+layer** (layer 4), is **immersive-gated**, and is **not built in Phase
 2** (no app's rendering layer is built in Phase 2). Phase 2 builds the
 library + the suggested-list attribute + resolution; karaoke's costume
 *rendering* already exists inline and is rewired in Phase 3.

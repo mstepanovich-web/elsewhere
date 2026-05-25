@@ -4,7 +4,7 @@
 docs, is the kickoff for any new chat continuing the unified-app
 execution work. Read this FIRST, then the planning docs.
 
-**Last updated:** 2026-05-23 (premium-control + regular-user model documentation pass complete — see ROOM-AUTHORITY-MODEL.md / HOUSEHOLD-DEVICE-PRESENCE-MODEL.md / ROOM-SESSION-MODEL.md; §4 now points at §F shell-rework IMPLEMENTATION — the §F pre-write investigation already ran this session and is recorded inline)
+**Last updated:** 2026-05-23 (immersive-control + regular-user model documentation pass complete — see ROOM-AUTHORITY-MODEL.md / HOUSEHOLD-DEVICE-PRESENCE-MODEL.md / ROOM-SESSION-MODEL.md; §4 now points at §F shell-rework IMPLEMENTATION — the §F pre-write investigation already ran this session and is recorded inline)
 
 ---
 
@@ -43,8 +43,8 @@ them itself. They do not need to be pasted into Claude Code.
 
 The unified-app / NHHU-primary refactor. Goal: every registered user is a
 first-class user of every app at a baseline tier with no TV device
-required; a TV device adds a premium capability layer. This refactors
-KARAOKE and GAMES; Wellness and Worlds are greenfield.
+required; an embed-capable TV device adds an immersive capability layer.
+This refactors KARAOKE and GAMES; Wellness and Worlds are greenfield.
 
 **Documentation phase: COMPLETE.** Five planning docs written, reviewed,
 committed. Every superseded doc carries a supersession pointer. CONTEXT.md
@@ -96,7 +96,7 @@ and the §F shell session-state cluster rework shipped 2026-05-22 →
   committed `b0f8a47`, applied 2026-05-23. Push notification
   DELIVERY restored end-to-end.
 - **db/030** (`tv_devices.can_embed` column — schema half of the
-  premium-control-layer activation predicate; self-report writer
+  immersive-control-layer activation predicate; self-report writer
   deferred per DEFERRED.md): committed `2ca15a8`, applied
   2026-05-23.
 - **db/031** (new `rpc_room_seize` ownership-seize RPC per
@@ -133,7 +133,7 @@ All in docs/. Read all five after this brief:
 - `ROOM-ACCESS-INVITE-MODEL.md` — token-based invites on the dormant
   `invites` table; new Edge Function to resolve tokens.
 - `HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` — households, binding, presence,
-  premium-embedding rule. Supersedes PHONE-AND-TV-STATE-MODEL.md.
+  immersive-embedding rule. Supersedes PHONE-AND-TV-STATE-MODEL.md.
 
 ## 4. The immediate next step
 

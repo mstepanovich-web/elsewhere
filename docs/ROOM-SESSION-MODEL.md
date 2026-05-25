@@ -162,8 +162,8 @@ authority — a room is owned and managed by whoever created it, which is
 unrelated to the QR scan. Anyone may scan a TV to show a room on it.
 
 (The same QR code is also used for binding a user to a TV device for
-premium purposes — see the Household, Device & Presence Model. Binding is a
-separate purpose from display; neither creates a room or confers room
+immersive purposes — see the Household, Device & Presence Model. Binding
+is a separate purpose from display; neither creates a room or confers room
 authority.)
 
 Because a scanned screen is bound to a room, and the room has a manager,

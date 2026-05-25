@@ -41,7 +41,7 @@ of X?", anything where Claude needs the mental model but not deep specs.
 ### Unified-app / room-model work
 
 For work on the room/session model, manager authority, invites, the
-household/premium model, or the unified-app refactor:
+household/immersive model, or the unified-app refactor:
 
 ```bash
 cat ~/Downloads/elsewhere-repo/docs/CONTEXT.md \
@@ -125,7 +125,7 @@ Why:
 - **ROADMAP.md** — long-term plan, where new apps fit
 - **SESSION-5-PART-2-BREAKDOWN.md** — broader Session-5 context, multi-app patterns
 - **PHONE-AND-TV-STATE-MODEL.md** — claim/registration/presence patterns, useful for any new surface. **Superseded by HOUSEHOLD-DEVICE-PRESENCE-MODEL.md**; kept here for legacy references.
-- **HOUSEHOLD-DEVICE-PRESENCE-MODEL.md** — current households / binding / presence / premium model; the canonical version of what PHONE-AND-TV-STATE-MODEL.md used to describe.
+- **HOUSEHOLD-DEVICE-PRESENCE-MODEL.md** — current households / binding / presence / immersive model; the canonical version of what PHONE-AND-TV-STATE-MODEL.md used to describe.
 
 ### Picking up a session mid-thread (rare)
 
@@ -163,11 +163,11 @@ gap to surface.
 - `CONTEXT.md` — The kickoff doc. Mental model + doctrine + current state. Update at end of every session.
 
 ### Models (stable)
-- `UNIFIED-APP-PLAN.md` — Unified-app / NHHU-primary plan (umbrella for the room/session model, manager authority, invites, and premium tier)
+- `UNIFIED-APP-PLAN.md` — Unified-app / NHHU-primary plan (umbrella for the room/session model, manager authority, invites, and the immersive capability)
 - `ROOM-SESSION-MODEL.md` — Room / session / group entity model
 - `ROOM-AUTHORITY-MODEL.md` — Manager authority (room control + room ownership)
 - `ROOM-ACCESS-INVITE-MODEL.md` — Token-based room-access / invite model
-- `HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` — Households, TV devices, binding, presence, premium tier
+- `HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` — Households, TV devices, binding, presence, immersive capability
 - `KARAOKE-CONTROL-MODEL.md` — Roles, transitions, surfaces for karaoke. **Partially superseded by `UNIFIED-APP-PLAN.md` / `ROOM-AUTHORITY-MODEL.md` / `HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`**; karaoke-specific detail retained.
 - `GAMES-CONTROL-MODEL.md` — Games roles, admission model, per-game specs. **Partially superseded by `UNIFIED-APP-PLAN.md` / `ROOM-AUTHORITY-MODEL.md` / `ROOM-SESSION-MODEL.md`**; games-specific detail retained.
 - `ADMISSION-MODEL-V2.md` — Canonical design for games admission (two-mode model, three-role model, game-room as shared surface, §10 W1–W10 implementation scope). **Partially superseded by `ROOM-SESSION-MODEL.md` / `UNIFIED-APP-PLAN.md`**; admission-mode mechanics retained.
