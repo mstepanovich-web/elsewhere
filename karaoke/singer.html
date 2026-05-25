@@ -246,8 +246,45 @@ html,body{height:100%;overflow:hidden;background:var(--color-bg);color:var(--col
 </head>
 <body>
 
-<!-- JOIN -->
-<div id="screen-join" class="screen active">
+<!-- ──────────────────────────────────────────────────────────────────
+     Items 5/6 — KARAOKE INFO (default-active landing screen)
+     Per docs/ITEMS-5-6-BUILD-SPEC.md §5. Shown when singer.html loads
+     WITHOUT ?code=. The "Start Karaoke" CTA is the deliberate
+     session-creation action — tile-tap is navigation-only.
+     The WITH-?code= rejoin path (auto-join IIFE → doJoin) is
+     untouched and lands on screen-home via doJoin's tail.
+     ────────────────────────────────────────────────────────────────── -->
+<style>
+  #screen-karaoke-info { align-items:center; justify-content:center; gap:18px; padding:40px 28px; text-align:center; }
+  #screen-karaoke-info h1 { font-family:var(--font-display); font-size:clamp(36px,10vw,56px); color:rgba(255,220,150,.92); font-style:italic; text-shadow:0 0 50px rgba(255,180,60,.35); margin-bottom:8px; }
+  #screen-karaoke-info .kk-info-body { max-width:340px; font-size:14px; color:rgba(255,200,120,.7); line-height:1.7; letter-spacing:.02em; }
+  #screen-karaoke-info .kk-info-body strong { color:rgba(255,220,150,.92); font-weight:500; }
+  #screen-karaoke-info .kk-info-cta { display:inline-block; padding:14px 28px; background:rgba(255,180,60,.18); border:1px solid rgba(255,180,60,.55); border-radius:999px; color:rgba(255,220,150,.95); font-family:var(--font-display); font-size:18px; letter-spacing:.04em; cursor:pointer; margin-top:8px; }
+  #screen-karaoke-info .kk-info-cta:disabled { opacity:.35; cursor:not-allowed; }
+  #screen-karaoke-info .kk-info-status { font-size:11px; color:rgba(255,200,120,.55); letter-spacing:.12em; text-transform:uppercase; min-height:1.5em; }
+  #screen-karaoke-info .kk-info-no-tv { font-size:13px; color:rgba(255,200,120,.65); line-height:1.7; max-width:320px; }
+</style>
+<div id="screen-karaoke-info" class="screen active">
+  <h1>Karaoke</h1>
+  <div class="kk-info-body">
+    <p>Sing together. Your phone is the <strong>controller</strong> — song picker, mic, settings. The TV is the <strong>stage</strong>.</p>
+    <p>Tap below to start a karaoke session on your TV.</p>
+  </div>
+  <button class="kk-info-cta" id="kk-info-cta" onclick="enterKaraokeStartFlow()">Start Karaoke</button>
+  <div class="kk-info-status" id="kk-info-status"></div>
+  <!-- Mode C rendering (no TV bound). Hidden by default; revealed by
+       enterKaraokeStartFlow on absent device_key OR by an explicit
+       no-TV check at screen entry if added later. -->
+  <div class="kk-info-no-tv" id="kk-info-no-tv" style="display:none;">
+    No TV is bound to this device yet. Sign in and bind a TV from the
+    Elsewhere home, then come back here.
+  </div>
+  <div style="font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:var(--tracking-wider);color:var(--color-gold-dim);">v2.121</div>
+</div>
+
+<!-- JOIN — rejoin path (reached via ?code= URL param + auto-join IIFE).
+     No longer the default-active screen post-Items 5/6. -->
+<div id="screen-join" class="screen">
   <h1>Elsewhere</h1>
   <p>Singer control · Enter the room code<br>shown on the stage screen</p>
   <div id="join-wrap">
@@ -688,17 +725,272 @@ function showScreen(id){
 }
 
 // ── AUTO-JOIN FROM URL ──
+// Items 5/6: WITH-?code= branch is the REJOIN path — untouched.
+// WITHOUT-?code= branch: screen-karaoke-info is the new default-active
+// landing per the markup above; no programmatic switch needed. The
+// pre-Items-5/6 focus() on the join-code input is removed since
+// screen-join is no longer the landing screen.
 (()=>{
   const p=new URLSearchParams(window.location.search);
   const c=(p.get('code')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
   if(c.length>=4){
     document.getElementById('join-in').value=c;
+    // Show the join screen during the auto-join roundtrip so the user
+    // sees the room-code rendered (mirrors today's URL-coded entry UX).
+    showScreen('screen-join');
     // Signal tv2.html that Karaoke was scanned — TV will navigate to karaoke/stage.html
     try { new BroadcastChannel('elsewhere_tv_' + c).postMessage({ type: 'karaoke-scanned' }); } catch(e){}
     window.addEventListener('load',()=>setTimeout(doJoin,600));
   }
-  else document.getElementById('join-in').focus();
+  // WITHOUT-?code=: default-active screen-karaoke-info handles it.
 })();
+
+// ─── Items 5/6 — KARAOKE INFO click-through (session creation) ───────
+//
+// Per docs/ITEMS-5-6-BUILD-SPEC.md §5. The "Start Karaoke" button on
+// screen-karaoke-info fires this. Tile-tap brought the user here in
+// navigation-only mode (no session yet exists). This handler is the
+// deliberate creation action:
+//
+//   1. Read device_key from sessionStorage (set by shell tile-tap;
+//      no-TV-bound case → show Mode-C copy + abort).
+//   2. Auth precondition check.
+//   3. Resolve tv_device_id LIVE from device_key (the stage.html:5387
+//      pattern; singer.html's own fallback UX).
+//   4. ROOM RESOLUTION — look up an active room for this screen_ref.
+//      Per spec §5.5(b): reuse if exists, create if not. OQ1 closed:
+//      rpc_room_create is NOT idempotent on duplicate screen_ref
+//      (raises 23505 after 5 wasted retries — db/027:204-244 +
+//      db/025:174-176's partial-unique rooms_one_active_per_screen).
+//      So the lookup-before-create is REQUIRED, not optional. This
+//      also satisfies the cross-app-switch case where a games session
+//      ended but the room persists.
+//      - Lookup found + caller is controller → reuse.
+//      - Lookup found + caller is NOT controller → alert, abort.
+//      - Lookup not found → rpc_room_create.
+//   5. rpc_session_start with karaoke APP_MANIFEST.
+//   6. 23505 race handler (same-app rejoin to 'audience' / different-
+//      app alert / fall-through).
+//   7. publishSessionStarted + publishLaunchApp. Both moved here from
+//      index.html (where they no longer fire for karaoke post-gate).
+//      launch_app carries room.room_code → TV navigates from tv2.html
+//      to karaoke/stage.html?room=<room_code>.
+//   8. Internal transition: populate #join-in with room.room_code,
+//      showScreen('screen-join'), call doJoin(). doJoin's success
+//      path lands on screen-home. doJoin's session-join inner
+//      try/catch (singer.html:741-778) swallows the pre-existing
+//      stale-SELECT failure (rpc_session_join's stale p_session_id
+//      signature at line 758) into legacy mode and falls through to
+//      showScreen('screen-home') at singer.html:790. End state:
+//      singer UI on screen-home, in legacy mode (today's universal
+//      singer.html state; stale-SELECT fix is separate Phase-3 work
+//      tracked in DEFERRED.md, explicitly out of scope for items 5/6
+//      per spec §8).
+
+// APP_MANIFEST.karaoke values (mirror of index.html:3151-3154).
+const _KARAOKE_MANIFEST = {
+  admission_mode:  null,
+  capacity:        null,
+  ask_proximity:   true,
+  turn_completion: 'app_declared',
+};
+
+async function enterKaraokeStartFlow() {
+  const cta    = document.getElementById('kk-info-cta');
+  const status = document.getElementById('kk-info-status');
+  const noTv   = document.getElementById('kk-info-no-tv');
+
+  const setStatus = (msg) => { if (status) status.textContent = msg; };
+  const showNoTv  = ()    => { if (noTv) noTv.style.display = ''; if (cta) cta.style.display = 'none'; };
+
+  // ─── 1. device_key from sessionStorage (Mode C check) ─────────────
+  let device_key = null;
+  try { device_key = sessionStorage.getItem('elsewhere.active_tv.device_key'); } catch (_) {}
+  if (!device_key) {
+    log('enterKaraokeStartFlow: no device_key — Mode C, no TV bound', 'info');
+    showNoTv();
+    return;
+  }
+
+  // ─── 2. Auth precondition (Mode A invariant — defensive) ──────────
+  const user = window.elsewhere?.getCurrentUser?.();
+  if (!user) {
+    setStatus('Sign in to start a karaoke session.');
+    return;
+  }
+
+  cta.disabled = true;
+  setStatus('Connecting…');
+
+  // ─── 3. Resolve tv_device_id LIVE from device_key ─────────────────
+  // Adapted from stage.html:5387-5398. RLS-gated: returns the row
+  // only if the caller is a household member of that TV's household.
+  let tv_device_id = null;
+  try {
+    const { data, error } = await window.sb
+      .from('tv_devices').select('id').eq('device_key', device_key).maybeSingle();
+    if (error) throw error;
+    if (!data?.id) {
+      log('enterKaraokeStartFlow: tv_devices row not found for device_key', 'warn');
+      setStatus("Couldn't find your TV — try refreshing.");
+      cta.disabled = false;
+      return;
+    }
+    tv_device_id = data.id;
+  } catch (e) {
+    log('enterKaraokeStartFlow: tv_devices lookup failed (' + (e?.message || e) + ')', 'warn');
+    setStatus("Couldn't reach the TV — check your connection.");
+    cta.disabled = false;
+    return;
+  }
+
+  // ─── 4. Room resolution — lookup-or-create (OQ1-corrected) ────────
+  // rpc_room_create raises 23505 (after 5 wasted retries with the
+  // misleading "room_code collisions" message) when an active room
+  // already exists for this screen_ref — db/025's
+  // rooms_one_active_per_screen partial-unique index, against which
+  // db/027:204-244's retry loop is helpless because regenerating the
+  // room_code doesn't fix a screen_ref duplicate. The lookup below
+  // pre-empts that. It also satisfies spec §5.5(b)'s room-reuse
+  // requirement for the cross-app-switch case (games session ended
+  // → room persists with this caller as controller).
+  let room = null;
+  try {
+    const { data: existing, error: lookupErr } = await window.sb
+      .from('rooms')
+      .select('id, controller_user_id, room_code')
+      .eq('screen_ref', tv_device_id)
+      .is('ended_at', null)
+      .maybeSingle();
+    if (lookupErr) throw lookupErr;
+
+    if (existing) {
+      // Active room exists for this screen — reuse or refuse.
+      if (existing.controller_user_id !== user.id) {
+        // Mirrors index.html:3189-3194's non-controller alert.
+        setStatus("You aren't the manager of this room. Ask the manager to start a karaoke session.");
+        cta.disabled = false;
+        return;
+      }
+      log('enterKaraokeStartFlow: reusing existing room ' + existing.id, 'info');
+      room = existing;
+    } else {
+      // No active room — create one.
+      const { data: newRoom, error: createErr } = await window.sb.rpc('rpc_room_create', {
+        p_screen_ref: tv_device_id,
+      });
+      if (createErr) throw createErr;
+      room = newRoom;
+    }
+  } catch (e) {
+    log('enterKaraokeStartFlow: room resolution failed (' + (e?.message || e) + ')', 'err');
+    setStatus("Couldn't set up the room: " + (e?.message || 'unknown error'));
+    cta.disabled = false;
+    return;
+  }
+
+  // ─── 5. Start session — karaoke APP_MANIFEST params ───────────────
+  const { data: session, error: startErr } = await window.sb.rpc('rpc_session_start', {
+    p_room_id:         room.id,
+    p_app:             'karaoke',
+    p_admission_mode:  _KARAOKE_MANIFEST.admission_mode,
+    p_capacity:        _KARAOKE_MANIFEST.capacity,
+    p_ask_proximity:   _KARAOKE_MANIFEST.ask_proximity,
+    p_turn_completion: _KARAOKE_MANIFEST.turn_completion,
+  });
+
+  if (startErr) {
+    // ─── 6. 23505 race handler (mirrors index.html:3223-3290,
+    // collapsed to karaoke-only; internal transition instead of
+    // location.href). Per spec §F, this is a deliberate duplicate
+    // of the shell-side handler — not a shared extracted helper. ──
+    if (startErr.code === '23505') {
+      const { data: existingSession } = await window.sb
+        .from('sessions')
+        .select('id, app, room_id')
+        .eq('room_id', room.id)
+        .is('ended_at', null)
+        .maybeSingle();
+
+      if (existingSession && existingSession.app === 'karaoke') {
+        // Same-app race: convert to rejoin. Role collapses to
+        // 'audience' since app is fixed at 'karaoke'.
+        const { error: r4JoinErr } = await window.sb.rpc('rpc_session_join', {
+          p_room_id: existingSession.room_id,
+          p_participation_role: 'audience',
+        });
+
+        if (!r4JoinErr && window.publishParticipantRoleChanged) {
+          try {
+            await window.publishParticipantRoleChanged(device_key, {
+              room_id: existingSession.room_id,
+            });
+          } catch (e) {
+            console.error('[elsewhere] participant_role_changed publish failed:', e);
+          }
+        }
+
+        // Internal transition: populate #join-in with the existing
+        // room's room_code (already in scope from step 4 — room.room_code).
+        document.getElementById('join-in').value = room.room_code;
+        setStatus('Rejoining…');
+        showScreen('screen-join');
+        try { doJoin(); } catch (e) { /* doJoin handles its own errors */ }
+        return;
+      }
+
+      if (existingSession && existingSession.app !== 'karaoke') {
+        setStatus(`A ${existingSession.app} session is already active on this TV. End it from a phone in the active session, or wait for it to finish.`);
+        cta.disabled = false;
+        return;
+      }
+      // 23505 with no row found: fall through to generic error.
+    }
+    log('enterKaraokeStartFlow: rpc_session_start failed (' + (startErr.message || startErr) + ')', 'err');
+    setStatus("Couldn't start session: " + (startErr.message || 'unknown error'));
+    cta.disabled = false;
+    return;
+  }
+
+  // ─── 7. Publish session_started + launch_app ──────────────────────
+  // Per spec §5.5(c): these publishers MOVE here from index.html's
+  // handleTvRemoteTileTap (which no longer reaches them for karaoke
+  // post-gate). launch_app carries the room_code; the TV navigates
+  // from tv2.html → karaoke/stage.html?room=<room_code>.
+  try {
+    await publishSessionStarted(device_key, {
+      room_id:            room.id,
+      app:                session.app,
+      controller_user_id: room.controller_user_id,
+      room_code:          room.room_code,
+    });
+  } catch (e) {
+    console.error('[elsewhere] session_started publish failed:', e);
+  }
+  try {
+    await publishLaunchApp(device_key, 'karaoke', room.room_code);
+  } catch (e) {
+    console.error('[elsewhere] launch_app publish failed:', e);
+  }
+
+  // ─── 8. Internal transition to the active singer UI ───────────────
+  // Per spec §5.5(d). doJoin's tail does the Agora connect + mic +
+  // showScreen('screen-home') setup. doJoin reads roomCode from
+  // #join-in.value (same pattern the ?code= auto-join uses).
+  //
+  // End state: user lands on screen-home in legacy mode. doJoin's
+  // session-join inner try/catch (singer.html:741-778) catches the
+  // stale-SELECT failure at line 758's rpc_session_join (stale
+  // p_session_id signature — pre-existing debt tracked in
+  // DEFERRED.md, explicitly out of scope for items 5/6 per spec §8)
+  // and falls through to showScreen('screen-home') at line 790.
+  // This is today's universal singer.html state; items 5/6 does not
+  // change it.
+  document.getElementById('join-in').value = room.room_code;
+  setStatus('Starting…');
+  showScreen('screen-join');
+  try { doJoin(); } catch (e) { /* doJoin handles its own errors */ }
+}
 
 // ── JOIN ──
 async function doJoin(){

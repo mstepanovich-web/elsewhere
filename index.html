@@ -3171,6 +3171,28 @@
         return;
       }
 
+      // Items 5/6 — stash the bound-TV device_key BEFORE the per-app gate
+      // so both apps stash unconditionally. Karaoke needs it for the
+      // info-screen click-through (singer.html reads sessionStorage at
+      // the in-app creation action — per ITEMS-5-6-BUILD-SPEC §4 R4.3).
+      // Games behavior unchanged: the stash value is identical pre- vs.
+      // post-creation (the bound TV's device_key); only the timing
+      // differs, and no downstream games reader depends on the timing.
+      // Moved here from after rpc_session_start (was ~line 3298 pre-Items-5/6).
+      try { sessionStorage.setItem('elsewhere.active_tv.device_key', device_key); } catch (_) {}
+
+      // Items 5/6 — per-app gate (ITEMS-5-6-BUILD-SPEC §4, §6 O6.3).
+      // Karaoke: tile-tap is navigation only. Session creation moves to
+      // the new screen-karaoke-info click-through in singer.html.
+      // Games: tile-tap retains today's create-on-tap behavior until
+      // Phase 4 converts games to its own in-app creation action.
+      // The two apps convert on different phases per UAP §5 (post-amendment).
+      if (app === 'karaoke') {
+        location.href = 'karaoke/singer.html';
+        return;
+      }
+
+      // ─── Games-only from here down (until Phase 4 dissolves this block). ───
       // Post-db/026-028 two-call session-start flow:
       // 1. Resolve the room: reuse the cached room if one exists for
       //    this screen (between-apps state or pre-existing), else
@@ -3271,6 +3293,11 @@
               }
             }
 
+            // Items 5/6 — the app==='karaoke' branch below is UNREACHABLE
+            // post-gate (karaoke returns before any rpc_session_start
+            // could raise 23505). Left in place for Phase-4 symmetry;
+            // when games converts in Phase 4, this whole 23505 block
+            // and its navigation tail get removed together.
             if (app === 'karaoke') {
               location.href = 'karaoke/singer.html?code=' + encodeURIComponent(room.room_code);
             } else if (app === 'games') {
@@ -3291,11 +3318,9 @@
       }
       const session = data;
 
-      // Session 4.10.3: stash device_key so in-app pages (singer.html,
-      // audience.html, player.html) can read it for the exit_app
-      // back-nav publish. Matches pattern of PENDING_TV_CLAIM_KEY /
-      // PENDING_TV_SIGNIN_KEY sessionStorage bridges.
-      try { sessionStorage.setItem('elsewhere.active_tv.device_key', device_key); } catch (_) {}
+      // Session 4.10.3 stash moved to the top of handleTvRemoteTileTap
+      // for Items 5/6 (per ITEMS-5-6-BUILD-SPEC §4 R4.3). Value identical;
+      // timing now pre-creation rather than post-creation.
 
       // Await all broadcasts before navigating. Fire-and-forget doesn't
       // work because location.href below would unload the page before
@@ -3330,6 +3355,8 @@
         console.error('[elsewhere] launch_app publish failed:', e);
       }
 
+      // Items 5/6 — the app==='karaoke' branch is UNREACHABLE post-gate.
+      // See the same note inside the 23505 same-app rejoin branch above.
       if (app === 'karaoke') {
         location.href = 'karaoke/singer.html?code=' + encodeURIComponent(room.room_code);
       } else if (app === 'games') {
