@@ -100,6 +100,33 @@
       color: var(--color-text-dim);
     }
 
+    /* ── Web claim button + sign-in prompt (Tier 1 affordance below the QR) ── */
+    .web-claim-btn {
+      margin-top: 32px;
+      padding: 10px 22px;
+      background: transparent;
+      border: 1px solid var(--color-border-dim);
+      border-radius: var(--radius-pill);
+      color: var(--color-gold-dim);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: var(--tracking-wider);
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .web-claim-btn:hover {
+      color: var(--color-gold);
+      border-color: var(--color-gold-dim);
+    }
+    .web-claim-needs-auth {
+      margin-top: 12px;
+      max-width: 320px;
+      font-size: var(--text-xs);
+      color: var(--color-text-faint);
+      text-align: center;
+      line-height: 1.5;
+    }
+
     /* ── Sign-in meta (household name + reset link) ── */
     .signin-meta {
       font-size: var(--text-sm);
@@ -245,6 +272,11 @@
       <div class="backup-label">Or enter code manually</div>
       <div class="backup-value" id="backup-code-value">——————</div>
     </div>
+    <!-- Tier 1 — web claim entry. Visible alongside the iOS QR; same surface,
+         secondary affordance. Tap navigates to tv2-screen-claim if authed,
+         else shows the inline sign-in prompt directly below. -->
+    <button class="web-claim-btn" id="tv2-web-claim-btn" onclick="enterTv2ClaimScreen()">Set up without the app →</button>
+    <div class="web-claim-needs-auth" id="tv2-web-claim-needs-auth" style="display:none;">Sign in to Elsewhere on this browser first, then tap “Set up without the app” again.</div>
   </div>
 
   <!-- ══════════════════════════════════════════ -->
@@ -287,6 +319,58 @@
         <div class="app-name">Wellness</div>
         <div class="app-sub">Coming soon</div>
       </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- STATE 4: Web claim picker (Tier 1)        -->
+  <!-- Reached from screen-claiming via the      -->
+  <!-- "Set up without the app →" button.        -->
+  <!-- Auth-gated at entry (enterTv2ClaimScreen) -->
+  <!-- so the form is unreachable unauthed.     -->
+  <!-- ══════════════════════════════════════════ -->
+  <div class="screen" id="tv2-screen-claim" data-device-key="">
+    <div class="screen-head">
+      <div class="back-link" onclick="goTo('screen-claiming')">← Back</div>
+      <div class="page-title screen-head-title">Claim This TV</div>
+    </div>
+
+    <div class="screen-error-banner" id="tv2-tv-claim-error" style="display:none;"></div>
+
+    <div class="page-sub">Adding this TV to your household.</div>
+
+    <div class="field-group">
+      <div class="field-row">
+        <div class="field-label">TV name</div>
+        <input class="field-input"
+               id="tv2-tv-claim-display-name"
+               type="text"
+               placeholder="e.g. Living Room TV"
+               maxlength="60"
+               autocomplete="off"
+               autocapitalize="words">
+      </div>
+
+      <div class="field-row" id="tv2-tv-claim-household-row">
+        <div class="field-label">Household</div>
+        <select class="field-input" id="tv2-tv-claim-household-select" onchange="tv2OnHouseholdSelectChange()">
+          <option value="__new__">Create a new household</option>
+        </select>
+      </div>
+
+      <div class="field-row" id="tv2-tv-claim-new-household-row">
+        <div class="field-label">New household name (optional)</div>
+        <input class="field-input"
+               id="tv2-tv-claim-new-household-name"
+               type="text"
+               placeholder="e.g. The Stepanovich House"
+               maxlength="60"
+               autocomplete="off"
+               autocapitalize="words">
+      </div>
+
+      <div id="tv2-tv-claim-status"></div>
+      <button class="cta-btn" id="tv2-tv-claim-submit" onclick="tv2SubmitTvClaim()">Claim TV →</button>
     </div>
   </div>
 
@@ -586,6 +670,146 @@
       } else {
         tvLog('launch_app: unknown app "' + app + '" — ignoring');
       }
+    }
+
+    // ─── Tier 1 — Web claim entry ───────────────────────────────
+    // Ports the index.html screen-tv-claim picker onto tv2.html so a
+    // logged-in household member on a laptop can claim THIS TV as the
+    // household's Immersive TV without needing the iOS app on a second
+    // phone. Reuses index.html's claim RPC pattern verbatim
+    // (rpc_claim_tv_device / rpc_link_tv_to_existing_household).
+    //
+    // Differences from index.html's submitTvClaim:
+    //   - Auth-gated at entry: enterTv2ClaimScreen() checks the
+    //     supabase session before navigating to the picker. Unauthed
+    //     clicks show an inline "sign in first" prompt on screen-
+    //     claiming; the form is never reached without a session, so
+    //     42501 from the claim RPC is structurally unreachable.
+    //   - Post-claim tail calls renderCurrentState() to land on
+    //     screen-apps (the TV end state). index.html's submitTvClaim
+    //     ends with publishSessionHandoff + enterHomeForTv (the
+    //     phone end state) — neither applies when the claimer IS the
+    //     TV.
+    //
+    // All IDs prefixed `tv2-` to disambiguate from index.html's
+    // identical picker. The two surfaces never share a DOM at runtime;
+    // prefixing is hygiene.
+
+    async function enterTv2ClaimScreen() {
+      // Hide the inline sign-in prompt at every entry so a prior
+      // unauthed-click prompt doesn't persist into an authed click.
+      const prompt = document.getElementById('tv2-web-claim-needs-auth');
+      if (prompt) prompt.style.display = 'none';
+
+      // Auth gate — fail at the door. tv2.html has no module-scope
+      // session handle (renderCurrentState fetches fresh via
+      // window.sb.auth.getSession at each call); do the same here.
+      const { data: sessionData } = await window.sb.auth.getSession();
+      const session = sessionData?.session || null;
+      if (!session) {
+        tvLog('tv2-claim: not authenticated — showing sign-in prompt');
+        if (prompt) prompt.style.display = 'block';
+        return;
+      }
+
+      const screen = document.getElementById('tv2-screen-claim');
+      screen.dataset.deviceKey = deviceKey;  // module-scope, from getOrCreateDeviceKey()
+      document.getElementById('tv2-tv-claim-display-name').value = '';
+      document.getElementById('tv2-tv-claim-new-household-name').value = '';
+      document.getElementById('tv2-tv-claim-status').textContent = '';
+      document.getElementById('tv2-tv-claim-error').style.display = 'none';
+      document.getElementById('tv2-tv-claim-submit').disabled = false;
+      goTo('tv2-screen-claim');
+      // Populate household picker from user's existing households.
+      // RLS ensures only households the user is a member of are returned.
+      // First direct-table read on tv2.html (everything else is RPC).
+      await tv2PopulateHouseholdPicker();
+    }
+
+    async function tv2PopulateHouseholdPicker() {
+      const select = document.getElementById('tv2-tv-claim-household-select');
+      select.innerHTML = '<option value="__new__">Create a new household</option>';
+      try {
+        const { data, error } = await window.sb
+          .from('households')
+          .select('id, name')
+          .order('created_at', { ascending: true });
+        if (error) throw error;
+        (data || []).forEach(h => {
+          const opt = document.createElement('option');
+          opt.value = h.id;
+          opt.textContent = h.name || '(unnamed household)';
+          select.appendChild(opt);
+        });
+      } catch (e) {
+        // Non-fatal — user can still create a new household.
+        console.warn('[tv2-claim] households fetch failed:', e?.message || e);
+      }
+      tv2OnHouseholdSelectChange();
+    }
+
+    function tv2OnHouseholdSelectChange() {
+      const sel = document.getElementById('tv2-tv-claim-household-select');
+      const newRow = document.getElementById('tv2-tv-claim-new-household-row');
+      newRow.style.display = sel.value === '__new__' ? '' : 'none';
+    }
+
+    async function tv2SubmitTvClaim() {
+      const screen = document.getElementById('tv2-screen-claim');
+      const device_key = screen.dataset.deviceKey || '';
+      if (!device_key) {
+        tv2ShowTvClaimError('Missing device key. Reload this page and try again.');
+        return;
+      }
+      const display_name   = document.getElementById('tv2-tv-claim-display-name').value.trim() || null;
+      const householdSel   = document.getElementById('tv2-tv-claim-household-select').value;
+      const newHouseholdNm = document.getElementById('tv2-tv-claim-new-household-name').value.trim() || null;
+
+      const btn    = document.getElementById('tv2-tv-claim-submit');
+      const status = document.getElementById('tv2-tv-claim-status');
+      btn.disabled = true;
+      status.style.color = 'var(--color-text-faint)';
+      status.textContent = 'Claiming…';
+      document.getElementById('tv2-tv-claim-error').style.display = 'none';
+
+      try {
+        if (householdSel === '__new__') {
+          const { error } = await window.sb.rpc('rpc_claim_tv_device', {
+            p_device_key:      device_key,
+            p_household_name:  newHouseholdNm,
+            p_tv_display_name: display_name,
+          });
+          if (error) throw error;
+        } else {
+          const { error } = await window.sb.rpc('rpc_link_tv_to_existing_household', {
+            p_device_key:   device_key,
+            p_household_id: householdSel,
+          });
+          if (error) throw error;
+        }
+
+        // Tier 1 tail-end change (vs. index.html's submitTvClaim):
+        // DROP publishSessionHandoff + sessionStorage stash + enterHomeForTv
+        // (those are the phone-side end state — the claimer = phone case).
+        // The claimer IS the TV here: re-run renderCurrentState() so
+        // rpc_tv_is_registered now returns registered, and the existing
+        // showAppsScreen path fires, landing the laptop on screen-apps.
+        status.style.color = 'var(--color-green)';
+        status.textContent = 'Claimed — opening apps…';
+        tvLog('tv2-claim: success, re-rendering state');
+        await renderCurrentState();
+      } catch (e) {
+        tv2ShowTvClaimError(e?.message || String(e));
+        btn.disabled = false;
+      }
+    }
+
+    function tv2ShowTvClaimError(msg) {
+      const banner = document.getElementById('tv2-tv-claim-error');
+      banner.textContent = msg;
+      banner.style.display = '';
+      const status = document.getElementById('tv2-tv-claim-status');
+      status.textContent = '';
     }
 
     // ─── QR rendering (qrcodejs) ────────────────────────────────
