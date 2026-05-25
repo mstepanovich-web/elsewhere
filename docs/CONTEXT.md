@@ -278,6 +278,9 @@ If a topic comes up that needs more than what's in this document, point Claude t
 | Manager authority — room control + room ownership | `docs/ROOM-AUTHORITY-MODEL.md` |
 | Room-access / invite model (token-based, Edge Function) | `docs/ROOM-ACCESS-INVITE-MODEL.md` |
 | Households, TV devices, binding, presence, immersive capability | `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` |
+| Immersive TV — design model (Tier 0/1/2) and the three Phase 3 gates (§13) | `docs/IMMERSIVE-TV-DESIGN-MODEL.md` |
+| Build spec — items 5 & 6, session creation moves to a deliberate per-app action (karaoke = Phase 3 info-screen; games = Phase 4) | `docs/ITEMS-5-6-BUILD-SPEC.md` |
+| Build spec — Immersive TV Tier 1, the web-only claim trigger (laptop becomes the TV without iOS) | `docs/IMMERSIVE-TV-TIER-1-BUILD-SPEC.md` |
 | Karaoke roles, transitions, surfaces, role-aware rendering — **partially superseded by `docs/UNIFIED-APP-PLAN.md` / `docs/ROOM-AUTHORITY-MODEL.md` / `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`** | `docs/KARAOKE-CONTROL-MODEL.md` |
 | Games roles + state machines + admission modes — **partially superseded by `docs/UNIFIED-APP-PLAN.md` / `docs/ROOM-AUTHORITY-MODEL.md` / `docs/ROOM-SESSION-MODEL.md`** | `docs/GAMES-CONTROL-MODEL.md` |
 | Phone + TV state model (claim, registration, presence) — **superseded by `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md`** | `docs/PHONE-AND-TV-STATE-MODEL.md` |
