@@ -206,9 +206,19 @@ Order is dependency-firm; sizing is directional.
 - Phase 3 — karaoke onto the new model. Scanned-screen sessions; baseline
   players driving venues and the queue with no TV device; audience.html
   dissolved into baseline watcher mode. Depends on Phases 1 and 2.
+  Phase 3 also includes karaoke's deliberate in-app session-creation
+  action: tile-tap becomes navigation only, and a new in-app "karaoke
+  info" screen's click-through is the action that creates the session
+  — per ROOM-SESSION-MODEL.md § "Tile-tap is navigation, not session
+  creation," which the current shell code contradicts. The shell-side
+  change (removing session creation from tile-tap) is gated per-app:
+  karaoke converts here in Phase 3; games converts in Phase 4.
 - Phase 4 — games onto the new model. Conformance, not rebuild: re-anchor
   to the room/session split, adopt the unclaimed-screen path, unify
-  cross-app-switch behavior. Depends on Phase 1; independent of Phase 3.
+  cross-app-switch behavior, and games gains its own deliberate in-app
+  session-creation action (the games-side counterpart to karaoke's
+  Phase 3 change), completing the per-app removal of session creation
+  from tile-tap. Depends on Phase 1; independent of Phase 3.
 - Phase 5 — rooms / groups / cross-app movement. The user-facing room
   layer: multi-room, groups-as-saved-rooms, the cross-app move, manager/
   screen authority. Depends on Phase 1 and on Phases 3-4 existing.
