@@ -1,0 +1,876 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Elsewhere · Venue Admin</title>
+  <link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
+
+  <!--
+    Venue Admin UI — Stage 1 (skeleton + venue_defaults editor)
+    Per docs/VENUE-ADMIN-UI-A1-BUILD-SPEC.md §5.
+
+    What this surface does: lists the 26 venues; edits the 7 editable
+    venue_defaults columns (back_yaw, back_pitch, front_yaw, front_pitch,
+    camera_fov, motion jsonb, ambient jsonb); writes via the SECURITY
+    DEFINER rpc_venue_default_update (db/034). Read-only identity display
+    of skyboxId + venues.json fields per D1.
+
+    What this surface does NOT do (deferred to later stages):
+    - Audio anchor authoring (Stage 2)
+    - Audio renderer registration / in-surface live preview (Stage 2)
+    - Per-app override editing / anchor_patch (Stage 7)
+    - Costume library + suggested-costumes editor (Stage 8)
+    - Particle / spotlight / other renderer impls (Stages 3+)
+    - Creating new venues (Part 2 — post-Phase-5)
+  -->
+
+  <style>
+    /* ─── Base ────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--color-bg, #0a0908);
+      color: var(--color-text, #f1e3c0);
+      font-family: var(--font-sans, system-ui, sans-serif);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .mono { font-family: var(--font-mono, monospace); }
+
+    /* ─── Header ──────────────────────────────────────────────────── */
+    #header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--color-border, rgba(255,255,255,.08));
+      background: var(--color-bg-soft, rgba(255,255,255,.02));
+    }
+    #header .title {
+      font-family: var(--font-mono);
+      letter-spacing: .12em;
+      color: var(--color-gold, #d4b074);
+      font-size: 13px;
+    }
+    #header .user-info {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-text-faint, rgba(241,227,192,.5));
+    }
+    .admin-badge {
+      padding: 2px 8px;
+      border: 1px solid var(--color-gold);
+      color: var(--color-gold);
+      border-radius: 3px;
+      font-size: 9px;
+      letter-spacing: .15em;
+    }
+
+    /* ─── Gate cards (signin-gate, admin-gate) ────────────────────── */
+    .gate-card {
+      max-width: 480px;
+      margin: 80px auto;
+      padding: 32px;
+      text-align: center;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      background: var(--color-bg-soft);
+    }
+    .gate-card h1 {
+      font-family: var(--font-mono);
+      letter-spacing: .08em;
+      color: var(--color-gold);
+      font-size: 16px;
+      margin: 0 0 12px;
+    }
+    .gate-card p {
+      margin: 0 0 24px;
+      color: var(--color-text-faint);
+    }
+    .gate-link {
+      display: inline-block;
+      padding: 10px 24px;
+      background: var(--color-gold);
+      color: var(--color-bg);
+      border-radius: 6px;
+      text-decoration: none;
+      font-family: var(--font-mono);
+      letter-spacing: .08em;
+      font-size: 12px;
+    }
+    .gate-link:hover { background: var(--color-gold-bright, #e8c98a); }
+
+    /* ─── App layout (two-pane) ───────────────────────────────────── */
+    #app {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      height: calc(100vh - 50px);
+    }
+
+    /* ─── Sidebar ─────────────────────────────────────────────────── */
+    #sidebar {
+      overflow-y: auto;
+      border-right: 1px solid var(--color-border);
+      padding: 8px 0;
+      background: var(--color-bg-soft);
+    }
+    .sidebar-section { margin-bottom: 16px; }
+    .category-label {
+      padding: 8px 16px 6px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: .15em;
+      color: var(--color-gold-dim, rgba(212,176,116,.6));
+      text-transform: uppercase;
+    }
+    .venue-list { list-style: none; margin: 0; padding: 0; }
+    .venue-row {
+      display: grid;
+      grid-template-columns: 24px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 16px;
+      cursor: pointer;
+      border-left: 2px solid transparent;
+      font-size: 13px;
+    }
+    .venue-row:hover { background: rgba(255,255,255,.03); }
+    .venue-row.selected {
+      background: rgba(212,176,116,.08);
+      border-left-color: var(--color-gold);
+    }
+    .venue-row .icon { font-size: 16px; }
+    .venue-row .name { color: var(--color-text); }
+    .venue-row .vid {
+      font-size: 10px;
+      color: var(--color-text-faint);
+      grid-column: 2 / 3;
+      margin-top: 2px;
+    }
+    .venue-row .name-col { display: flex; flex-direction: column; }
+    .venue-row .bucket {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      letter-spacing: .1em;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .bucket-PROCEDURAL { color: #a78bd2; background: rgba(167,139,210,.1); }
+    .bucket-AUDIO-ONLY { color: #7eb5db; background: rgba(126,181,219,.1); }
+    .bucket-NO-AMBIENT { color: var(--color-text-faint); background: rgba(255,255,255,.04); }
+    .dirty-dot {
+      color: var(--color-gold);
+      font-size: 18px;
+      line-height: 0;
+      margin-left: 4px;
+    }
+
+    /* ─── Editor ──────────────────────────────────────────────────── */
+    #editor {
+      overflow-y: auto;
+      padding: 24px 32px;
+    }
+    .empty-state {
+      color: var(--color-text-faint);
+      font-style: italic;
+      padding: 60px 20px;
+      text-align: center;
+    }
+
+    .editor-header {
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .editor-header .venue-id {
+      font-size: 18px;
+      color: var(--color-gold);
+      letter-spacing: .08em;
+    }
+    .editor-header .venue-name {
+      font-size: 24px;
+      margin: 4px 0;
+      color: var(--color-text);
+    }
+    .editor-header .venue-meta {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      color: var(--color-text-faint);
+      font-size: 12px;
+      margin-bottom: 16px;
+    }
+    .skybox-preview {
+      width: 100%;
+      max-width: 480px;
+      aspect-ratio: 2/1;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      overflow: hidden;
+      background: rgba(0,0,0,.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+    .skybox-preview img { width: 100%; height: 100%; object-fit: cover; }
+    .skybox-empty { color: var(--color-text-faint); font-style: italic; }
+    .identity-note {
+      font-size: 11px;
+      color: var(--color-text-faint);
+      margin: 0;
+    }
+
+    .editor-fields {
+      display: grid;
+      gap: 16px;
+      max-width: 640px;
+    }
+    .field-group {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+    .field-group label {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--color-text-faint);
+      padding-top: 8px;
+    }
+    .field-group input,
+    .field-group textarea {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      padding: 6px 10px;
+      width: 100%;
+    }
+    .field-group input:focus,
+    .field-group textarea:focus {
+      outline: none;
+      border-color: var(--color-gold);
+    }
+    .field-group textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+    .json-error {
+      grid-column: 2 / 3;
+      color: #e07e7e;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      margin-top: 2px;
+    }
+
+    .editor-footer {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid var(--color-border);
+    }
+    .editor-footer .status {
+      flex: 1;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-text-faint);
+    }
+    .editor-footer .status.error { color: #e07e7e; }
+    .editor-footer .status.success { color: var(--color-gold); }
+    .editor-footer button,
+    .editor-footer a {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: .08em;
+      padding: 8px 14px;
+      border: 1px solid var(--color-border);
+      background: transparent;
+      color: var(--color-text);
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .editor-footer button:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+    }
+    #btn-save:not(:disabled) {
+      background: var(--color-gold);
+      color: var(--color-bg);
+      border-color: var(--color-gold);
+    }
+    #btn-preview {
+      margin-left: auto;
+    }
+
+    .audit {
+      margin-top: 24px;
+      padding-top: 12px;
+      border-top: 1px solid var(--color-border);
+      display: flex;
+      gap: 16px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--color-text-faint);
+    }
+  </style>
+</head>
+<body>
+
+  <header id="header">
+    <div class="title">VENUE ADMIN</div>
+    <div class="user-info">
+      <span id="user-display"></span>
+      <span class="admin-badge" id="admin-badge" hidden>ADMIN</span>
+    </div>
+  </header>
+
+  <!-- Gate: not signed in -->
+  <main id="signin-gate" hidden>
+    <div class="gate-card">
+      <h1>Sign in required</h1>
+      <p>Sign in to Elsewhere first, then return to this page.</p>
+      <a href="/index.html" class="gate-link">Sign in →</a>
+    </div>
+  </main>
+
+  <!-- Gate: signed in but not platform admin -->
+  <main id="admin-gate" hidden>
+    <div class="gate-card">
+      <h1>Not authorized</h1>
+      <p>This page requires platform-admin access.</p>
+    </div>
+  </main>
+
+  <!-- The main UI (admin signed in) -->
+  <main id="app" hidden>
+    <aside id="sidebar"></aside>
+    <section id="editor">
+      <div class="empty-state" id="empty-state">
+        Select a venue from the sidebar to edit.
+      </div>
+
+      <div class="editor-body" id="editor-body" hidden>
+        <header class="editor-header">
+          <div class="venue-id mono" id="ed-venue-id"></div>
+          <div class="venue-name" id="ed-venue-name"></div>
+          <div class="venue-meta">
+            <span id="ed-venue-icon"></span>
+            <span id="ed-venue-category"></span>
+          </div>
+          <div class="skybox-preview">
+            <img id="ed-skybox-img" alt="Skybox preview" hidden>
+            <div class="skybox-empty" id="ed-skybox-empty" hidden>(no skybox)</div>
+          </div>
+          <p class="identity-note">
+            Identity attributes (id, name, category, skybox) are sourced from
+            <span class="mono">venues.json</span> and are not editable here.
+          </p>
+        </header>
+
+        <div class="editor-fields">
+          <div class="field-group">
+            <label for="ed-back-yaw">back_yaw</label>
+            <input type="number" id="ed-back-yaw" step="any">
+          </div>
+          <div class="field-group">
+            <label for="ed-back-pitch">back_pitch</label>
+            <input type="number" id="ed-back-pitch" step="any">
+          </div>
+          <div class="field-group">
+            <label for="ed-front-yaw">front_yaw</label>
+            <input type="number" id="ed-front-yaw" step="any">
+          </div>
+          <div class="field-group">
+            <label for="ed-front-pitch">front_pitch</label>
+            <input type="number" id="ed-front-pitch" step="any">
+          </div>
+          <div class="field-group">
+            <label for="ed-camera-fov">camera_fov</label>
+            <input type="number" id="ed-camera-fov" step="any" placeholder="(null)">
+          </div>
+          <div class="field-group">
+            <label for="ed-motion">motion (jsonb)</label>
+            <textarea id="ed-motion" placeholder="(null)"></textarea>
+          </div>
+          <div class="json-error" id="err-motion"></div>
+          <div class="field-group">
+            <label for="ed-ambient">ambient (jsonb)</label>
+            <textarea id="ed-ambient" placeholder="(null)"></textarea>
+          </div>
+          <div class="json-error" id="err-ambient"></div>
+        </div>
+
+        <footer class="editor-footer">
+          <div class="status" id="ed-status"></div>
+          <button id="btn-discard">Discard changes</button>
+          <button id="btn-save" disabled>Save</button>
+          <a id="btn-preview" target="_blank" rel="noopener">Preview in karaoke stage →</a>
+        </footer>
+
+        <div class="audit">
+          <span>Updated: <span class="mono" id="ed-updated-at">—</span></span>
+          <span>by <span class="mono" id="ed-updated-by">—</span></span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import '/shell/auth.js';
+    import { loadVenueSettings } from '/shell/venue-settings.js';
+
+    // ─── State ──────────────────────────────────────────────────────
+    const state = {
+      user: null,
+      isAdmin: false,
+      venuesJson: null,
+      venueDefaults: new Map(),
+      selectedVenueId: null,
+      dirty: new Map(),      // venue_id -> { col: newValue, ... }
+      saving: false,
+      jsonErrors: { motion: null, ambient: null },
+    };
+
+    // Per VENUE-ADMIN-UI-A1-BUILD-SPEC §2 (locked inventory).
+    const PROCEDURAL_VENUES = new Set([
+      'stadium', 'disco', 'speakeasy', 'honkytonk', 'festival'
+    ]);
+    const NO_AMBIENT_VENUES = new Set(['default', 'vegas']);
+
+    const FIELD_NUMERIC = ['back_yaw', 'back_pitch', 'front_yaw', 'front_pitch', 'camera_fov'];
+    const FIELD_NOTNULL = ['back_yaw', 'back_pitch', 'front_yaw', 'front_pitch'];
+    const FIELD_JSON    = ['motion', 'ambient'];
+
+    // ─── Boot ───────────────────────────────────────────────────────
+    (async function boot() {
+      await waitForShell();
+      state.user = window.elsewhere?.getCurrentUser?.();
+      if (!state.user) { showPanel('signin-gate'); return; }
+
+      state.isAdmin = await checkAdmin(state.user.id);
+      if (!state.isAdmin) { showPanel('admin-gate'); return; }
+
+      document.getElementById('user-display').textContent = state.user.email || state.user.id;
+      document.getElementById('admin-badge').hidden = false;
+
+      try {
+        await loadVenues();
+      } catch (e) {
+        // Boot-time data failure is terminal — surface in admin-gate slot.
+        const card = document.querySelector('#admin-gate .gate-card');
+        card.querySelector('h1').textContent = 'Load failed';
+        card.querySelector('p').textContent = 'Could not load venues: ' + (e.message || e);
+        card.querySelector('.gate-link').hidden = true;
+        showPanel('admin-gate');
+        return;
+      }
+
+      renderSidebar();
+      wireHandlers();
+      showPanel('app');
+    })();
+
+    async function waitForShell() {
+      if (window.elsewhere?.ready) { await window.elsewhere.ready; return; }
+      await new Promise(resolve => {
+        document.addEventListener('elsewhere:sb-ready', async () => {
+          await window.elsewhere.ready;
+          resolve();
+        }, { once: true });
+      });
+    }
+
+    async function checkAdmin(userId) {
+      const { data, error } = await window.sb
+        .from('profiles')
+        .select('is_platform_admin')
+        .eq('id', userId)
+        .maybeSingle();
+      if (error) {
+        console.error('[admin-venues] is_platform_admin check failed:', error);
+        return false;
+      }
+      return data?.is_platform_admin === true;
+    }
+
+    async function loadVenues() {
+      const resp = await fetch('/venues.json', { cache: 'no-store' });
+      if (!resp.ok) throw new Error('venues.json fetch failed: ' + resp.status);
+      state.venuesJson = await resp.json();
+
+      const { defaults } = await loadVenueSettings('karaoke');
+      state.venueDefaults = new Map();
+      for (const row of (defaults || [])) {
+        state.venueDefaults.set(row.venue_id, row);
+      }
+    }
+
+    function showPanel(id) {
+      for (const panelId of ['signin-gate', 'admin-gate', 'app']) {
+        document.getElementById(panelId).hidden = (panelId !== id);
+      }
+    }
+
+    function bucketFor(venueId) {
+      if (PROCEDURAL_VENUES.has(venueId)) return 'PROCEDURAL';
+      if (NO_AMBIENT_VENUES.has(venueId)) return 'NO-AMBIENT';
+      return 'AUDIO-ONLY';
+    }
+
+    // ─── Sidebar render ─────────────────────────────────────────────
+    function renderSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.innerHTML = '';
+
+      // Group by category, in venues.json categories order. The `default`
+      // venue (category: null) gets its own ungrouped section at the top.
+      const groups = new Map();
+      groups.set(null, []);
+      for (const cat of state.venuesJson.categories) {
+        groups.set(cat.id, []);
+      }
+      for (const v of state.venuesJson.venues) {
+        const arr = groups.get(v.category ?? null) ?? groups.get(null);
+        arr.push(v);
+      }
+
+      // Render unkeyed (default) first if present.
+      const ungrouped = groups.get(null);
+      if (ungrouped && ungrouped.length) {
+        sidebar.appendChild(makeSection({ id: '_default', label: 'Default' }, ungrouped));
+      }
+      // Then each named category.
+      for (const cat of state.venuesJson.categories) {
+        const venues = groups.get(cat.id) || [];
+        if (venues.length === 0) continue;
+        sidebar.appendChild(makeSection(cat, venues));
+      }
+    }
+
+    function makeSection(cat, venues) {
+      const section = document.createElement('div');
+      section.className = 'sidebar-section';
+      section.dataset.category = cat.id;
+
+      const label = document.createElement('div');
+      label.className = 'category-label';
+      label.textContent = cat.label || cat.id;
+      section.appendChild(label);
+
+      const ul = document.createElement('ul');
+      ul.className = 'venue-list';
+      for (const v of venues) {
+        ul.appendChild(makeVenueRow(v));
+      }
+      section.appendChild(ul);
+      return section;
+    }
+
+    function makeVenueRow(venue) {
+      const li = document.createElement('li');
+      li.className = 'venue-row';
+      li.dataset.venueId = venue.id;
+
+      const icon = document.createElement('span');
+      icon.className = 'icon';
+      icon.textContent = venue.icon || '';
+
+      const nameCol = document.createElement('span');
+      nameCol.className = 'name-col';
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = venue.name;
+      const vid = document.createElement('span');
+      vid.className = 'vid mono';
+      vid.textContent = venue.id;
+      nameCol.appendChild(name);
+      nameCol.appendChild(vid);
+
+      const right = document.createElement('span');
+      right.style.display = 'flex';
+      right.style.alignItems = 'center';
+      const bucket = document.createElement('span');
+      const b = bucketFor(venue.id);
+      bucket.className = 'bucket bucket-' + b;
+      bucket.textContent = b;
+      const dot = document.createElement('span');
+      dot.className = 'dirty-dot';
+      dot.textContent = '•';
+      dot.hidden = true;
+      right.appendChild(bucket);
+      right.appendChild(dot);
+
+      li.appendChild(icon);
+      li.appendChild(nameCol);
+      li.appendChild(right);
+      li.addEventListener('click', () => selectVenue(venue.id));
+      return li;
+    }
+
+    // ─── Editor render ──────────────────────────────────────────────
+    function selectVenue(venueId) {
+      // Dirty-check current venue (per spec §5.5 — inline confirm).
+      if (state.selectedVenueId && state.selectedVenueId !== venueId
+          && state.dirty.has(state.selectedVenueId)) {
+        const ok = confirm('Discard unsaved changes to ' + state.selectedVenueId + '?');
+        if (!ok) return;
+        state.dirty.delete(state.selectedVenueId);
+        updateDirtyIndicator(state.selectedVenueId);
+      }
+      state.selectedVenueId = venueId;
+      document.querySelectorAll('.venue-row').forEach(r => {
+        r.classList.toggle('selected', r.dataset.venueId === venueId);
+      });
+      document.getElementById('empty-state').hidden = true;
+      document.getElementById('editor-body').hidden = false;
+      renderEditor(venueId);
+    }
+
+    function renderEditor(venueId) {
+      const venue  = state.venuesJson.venues.find(v => v.id === venueId);
+      const row    = state.venueDefaults.get(venueId) || {};
+      const buf    = state.dirty.get(venueId) || {};
+      const effective = (col) => Object.prototype.hasOwnProperty.call(buf, col)
+                                 ? buf[col]
+                                 : row[col];
+
+      // Identity header
+      document.getElementById('ed-venue-id').textContent = venueId;
+      document.getElementById('ed-venue-name').textContent = venue.name;
+      document.getElementById('ed-venue-icon').textContent = venue.icon || '';
+      document.getElementById('ed-venue-category').textContent = venue.category || '(no category)';
+
+      // Skybox preview
+      const img = document.getElementById('ed-skybox-img');
+      const skyEmpty = document.getElementById('ed-skybox-empty');
+      if (venue.skyboxId) {
+        img.src = '/venues/' + venue.skyboxId + '.jpg';
+        img.hidden = false;
+        skyEmpty.hidden = true;
+      } else {
+        img.hidden = true;
+        skyEmpty.hidden = false;
+      }
+
+      // Editable fields
+      setNumericInput('ed-back-yaw',    effective('back_yaw')    ?? 0);
+      setNumericInput('ed-back-pitch',  effective('back_pitch')  ?? 0);
+      setNumericInput('ed-front-yaw',   effective('front_yaw')   ?? 0);
+      setNumericInput('ed-front-pitch', effective('front_pitch') ?? 0);
+      setNumericInput('ed-camera-fov',  effective('camera_fov'));
+      setJsonInput('ed-motion',  effective('motion'));
+      setJsonInput('ed-ambient', effective('ambient'));
+
+      // Reset json error displays for this venue
+      state.jsonErrors.motion  = null;
+      state.jsonErrors.ambient = null;
+      document.getElementById('err-motion').textContent  = '';
+      document.getElementById('err-ambient').textContent = '';
+
+      // Preview link
+      document.getElementById('btn-preview').href =
+        '/karaoke/stage.html?venue=' + encodeURIComponent(venueId);
+
+      // Audit
+      document.getElementById('ed-updated-at').textContent = row.updated_at || '—';
+      document.getElementById('ed-updated-by').textContent = row.updated_by || '—';
+
+      // Status + Save button
+      updateStatusAndSaveButton();
+    }
+
+    function setNumericInput(id, value) {
+      const el = document.getElementById(id);
+      el.value = (value === null || value === undefined) ? '' : String(value);
+    }
+    function setJsonInput(id, value) {
+      const el = document.getElementById(id);
+      el.value = (value === null || value === undefined) ? '' : JSON.stringify(value, null, 2);
+    }
+
+    // ─── Field change handlers ─────────────────────────────────────
+    function onNumericChange(col) {
+      return (e) => {
+        const raw = e.target.value;
+        if (raw === '') {
+          // NOT NULL columns refuse blank — restore previous + skip dirty.
+          if (FIELD_NOTNULL.includes(col)) {
+            const orig = (state.venueDefaults.get(state.selectedVenueId) || {})[col];
+            e.target.value = String(orig ?? 0);
+            return;
+          }
+          setDirtyField(state.selectedVenueId, col, null);
+          return;
+        }
+        const num = Number(raw);
+        if (Number.isNaN(num)) return;
+        setDirtyField(state.selectedVenueId, col, num);
+      };
+    }
+
+    function onJsonChange(col) {
+      return (e) => {
+        const raw = e.target.value.trim();
+        const errEl = document.getElementById('err-' + col);
+        if (raw === '') {
+          state.jsonErrors[col] = null;
+          errEl.textContent = '';
+          setDirtyField(state.selectedVenueId, col, null);
+          updateStatusAndSaveButton();
+          return;
+        }
+        try {
+          const parsed = JSON.parse(raw);
+          state.jsonErrors[col] = null;
+          errEl.textContent = '';
+          setDirtyField(state.selectedVenueId, col, parsed);
+        } catch (err) {
+          state.jsonErrors[col] = err.message;
+          errEl.textContent = 'Invalid JSON: ' + err.message;
+        }
+        updateStatusAndSaveButton();
+      };
+    }
+
+    function setDirtyField(venueId, col, value) {
+      if (!venueId) return;
+      const orig = (state.venueDefaults.get(venueId) || {})[col];
+      const eq = jsonEqual(value, orig);
+      let buf = state.dirty.get(venueId);
+      if (eq) {
+        if (buf) {
+          delete buf[col];
+          if (Object.keys(buf).length === 0) state.dirty.delete(venueId);
+        }
+      } else {
+        if (!buf) { buf = {}; state.dirty.set(venueId, buf); }
+        buf[col] = value;
+      }
+      updateDirtyIndicator(venueId);
+      updateStatusAndSaveButton();
+    }
+
+    function jsonEqual(a, b) {
+      if (a === b) return true;
+      if (a == null && b == null) return true;
+      if (a == null || b == null) return false;
+      return JSON.stringify(a) === JSON.stringify(b);
+    }
+
+    function updateDirtyIndicator(venueId) {
+      const li = document.querySelector('.venue-row[data-venue-id="' + venueId + '"]');
+      if (!li) return;
+      li.querySelector('.dirty-dot').hidden = !state.dirty.has(venueId);
+    }
+
+    function updateStatusAndSaveButton() {
+      const venueId = state.selectedVenueId;
+      const hasDirty = !!venueId && state.dirty.has(venueId);
+      const hasJsonErr = !!(state.jsonErrors.motion || state.jsonErrors.ambient);
+      const saveBtn = document.getElementById('btn-save');
+      saveBtn.disabled = !hasDirty || hasJsonErr || state.saving;
+
+      const statusEl = document.getElementById('ed-status');
+      statusEl.classList.remove('error', 'success');
+      if (state.saving) {
+        statusEl.textContent = 'Saving…';
+      } else if (statusEl.dataset.sticky) {
+        // Leave success / error messages in place; they're cleared by next save attempt.
+      } else if (hasJsonErr) {
+        statusEl.textContent = 'Fix JSON errors to enable Save';
+        statusEl.classList.add('error');
+      } else if (hasDirty) {
+        statusEl.textContent = '(unsaved changes)';
+      } else {
+        statusEl.textContent = '';
+      }
+    }
+
+    // ─── Save / Discard ─────────────────────────────────────────────
+    async function onSave() {
+      const venueId = state.selectedVenueId;
+      if (!venueId || !state.dirty.has(venueId)) return;
+      const partial = { ...state.dirty.get(venueId) };
+
+      state.saving = true;
+      const statusEl = document.getElementById('ed-status');
+      statusEl.dataset.sticky = '';
+      statusEl.textContent = 'Saving…';
+      statusEl.classList.remove('error', 'success');
+      updateStatusAndSaveButton();
+
+      try {
+        const { data, error } = await window.sb.rpc('rpc_venue_default_update', {
+          p_venue_id: venueId,
+          p_partial:  partial,
+        });
+        if (error) throw error;
+        if (!data) throw new Error('rpc returned no row');
+
+        state.venueDefaults.set(venueId, data);
+        state.dirty.delete(venueId);
+        state.saving = false;
+        updateDirtyIndicator(venueId);
+        renderEditor(venueId);
+
+        statusEl.textContent = 'Saved';
+        statusEl.classList.add('success');
+        statusEl.dataset.sticky = '1';
+        setTimeout(() => {
+          if (statusEl.dataset.sticky === '1' && statusEl.textContent === 'Saved') {
+            statusEl.dataset.sticky = '';
+            statusEl.textContent = '';
+            statusEl.classList.remove('success');
+          }
+        }, 2000);
+      } catch (e) {
+        state.saving = false;
+        const code = e?.code ? ' [' + e.code + ']' : '';
+        statusEl.textContent = 'Save failed' + code + ': ' + (e.message || e);
+        statusEl.classList.add('error');
+        statusEl.dataset.sticky = '1';
+        updateStatusAndSaveButton();
+      }
+    }
+
+    function onDiscard() {
+      const venueId = state.selectedVenueId;
+      if (!venueId || !state.dirty.has(venueId)) return;
+      state.dirty.delete(venueId);
+      updateDirtyIndicator(venueId);
+      renderEditor(venueId);
+    }
+
+    // ─── Wire handlers ──────────────────────────────────────────────
+    function wireHandlers() {
+      document.getElementById('ed-back-yaw').addEventListener('input', onNumericChange('back_yaw'));
+      document.getElementById('ed-back-pitch').addEventListener('input', onNumericChange('back_pitch'));
+      document.getElementById('ed-front-yaw').addEventListener('input', onNumericChange('front_yaw'));
+      document.getElementById('ed-front-pitch').addEventListener('input', onNumericChange('front_pitch'));
+      document.getElementById('ed-camera-fov').addEventListener('input', onNumericChange('camera_fov'));
+      document.getElementById('ed-motion').addEventListener('input', onJsonChange('motion'));
+      document.getElementById('ed-ambient').addEventListener('input', onJsonChange('ambient'));
+
+      document.getElementById('btn-save').addEventListener('click', onSave);
+      document.getElementById('btn-discard').addEventListener('click', onDiscard);
+
+      window.addEventListener('beforeunload', (e) => {
+        if (state.dirty.size > 0) {
+          e.preventDefault();
+          e.returnValue = '';
+        }
+      });
+    }
+  </script>
+</body>
+</html>
