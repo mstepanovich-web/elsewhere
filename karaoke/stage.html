@@ -3962,7 +3962,7 @@ async function triggerSongEndRpc() {
   try { device_key = localStorage.getItem('elsewhere.tv.device_key'); } catch (_) {}
 
   try {
-    await window.sb.rpc('rpc_karaoke_song_ended', { p_session_id: currentSession.id });
+    await window.sb.rpc('rpc_karaoke_song_ended', { p_room_id: currentSession.room_id });
     log('triggerSongEndRpc: rpc_karaoke_song_ended succeeded for session ' + currentSession.id, 'info');
 
     // Publish realtime events per DECISION-AUDIT-7 B5 (caller-side publishing).
@@ -5403,13 +5403,41 @@ async function refreshSessionState() {
     return;
   }
 
-  // Active session for this TV.
+  // db/025: sessions.tv_device_id dropped — look up the active room for
+  // this screen, then the session by room_id. Two-query pattern mirrors
+  // enterKaraokeStartFlow at singer.html:858-873. The rooms ended_at IS
+  // NULL gate is safe per db/028's tier-4 invariant: rpc_session_leave
+  // is the sole writer of rooms.ended_at and ends sessions before the
+  // room atomically — every live session has a live room.
+  let room = null;
+  try {
+    const { data, error } = await window.sb
+      .from('rooms')
+      .select('id, room_code')
+      .eq('screen_ref', tv.id)
+      .is('ended_at', null)
+      .maybeSingle();
+    if (error) throw error;
+    room = data;
+  } catch (e) {
+    log('refreshSessionState: rooms query failed (' + (e?.message || e) + ') — solo mode', 'warn');
+    await resetSessionStateToSolo();
+    return;
+  }
+
+  if (!room?.id) {
+    log('refreshSessionState: no active room for this TV — solo mode', 'info');
+    await resetSessionStateToSolo();
+    return;
+  }
+
+  // Active session for this room.
   let session = null;
   try {
     const { data, error } = await window.sb
       .from('sessions')
-      .select('id, app, manager_user_id, admission_mode, capacity, room_code, started_at, current_state')
-      .eq('tv_device_id', tv.id)
+      .select('id, app, room_id, admission_mode, capacity, started_at, current_state')
+      .eq('room_id', room.id)
       .is('ended_at', null)
       .maybeSingle();
     if (error) throw error;
@@ -5422,16 +5450,21 @@ async function refreshSessionState() {
 
   if (!session) {
     // No active session — solo mode (legitimate state for direct-nav dev).
-    log('refreshSessionState: no active session for this TV — solo mode', 'info');
+    log('refreshSessionState: no active session for room ' + room.id + ' — solo mode', 'info');
     await resetSessionStateToSolo();
     return;
   }
 
-  // Participants via the new RPC (db/013).
+  // Stash room_code on the session object — the existing reader at line
+  // ~4159 (`currentSession?.room_code`) consumes it. db/025 dropped the
+  // column from sessions; we now carry it forward via the rooms join.
+  session.room_code = room.room_code;
+
+  // Participants via the new RPC (db/013, re-keyed by db/026 to p_room_id).
   let participants = [];
   try {
     const { data, error } = await window.sb
-      .rpc('rpc_session_get_participants', { p_session_id: session.id });
+      .rpc('rpc_session_get_participants', { p_room_id: session.room_id });
     if (error) throw error;
     participants = data || [];
   } catch (e) {
@@ -5752,11 +5785,19 @@ async function onExit() {
       const { data: tv } = await window.sb
         .from('tv_devices').select('id').eq('device_key', device_key).maybeSingle();
       if (tv?.id) {
-        const { data: s } = await window.sb
-          .from('sessions').select('id').eq('tv_device_id', tv.id).is('ended_at', null).maybeSingle();
-        if (s?.id) {
-          log('exit_app: session ' + s.id + ' still active — staying on stage');
-          return;
+        // db/025: sessions.tv_device_id dropped — chain via rooms.screen_ref.
+        // Both rooms.ended_at IS NULL AND sessions.ended_at IS NULL must hold
+        // to consider the session "still active" (preserves the semantic of
+        // the original eq('tv_device_id') + is('ended_at', null) pair).
+        const { data: room } = await window.sb
+          .from('rooms').select('id').eq('screen_ref', tv.id).is('ended_at', null).maybeSingle();
+        if (room?.id) {
+          const { data: s } = await window.sb
+            .from('sessions').select('id').eq('room_id', room.id).is('ended_at', null).maybeSingle();
+          if (s?.id) {
+            log('exit_app: session ' + s.id + ' still active — staying on stage');
+            return;
+          }
         }
       }
     } catch (e) {

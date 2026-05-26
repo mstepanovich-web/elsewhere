@@ -1037,23 +1037,37 @@ async function doJoin(){
       } else if (!window.sb) {
         log('Session: supabase client unavailable — legacy mode', 'warn');
       } else {
-        const { data: sessRow, error: sessErr } = await window.sb
-          .from('sessions')
+        // db/025 dropped sessions.room_code — look up the room first, then
+        // the session by room_id. Two-query pattern mirrors enterKaraokeStartFlow
+        // at singer.html:858-873.
+        const { data: room, error: roomErr } = await window.sb
+          .from('rooms')
           .select('id')
           .eq('room_code', raw)
           .is('ended_at', null)
           .maybeSingle();
-        if (sessErr) throw sessErr;
-        if (!sessRow?.id) {
-          log('Session: no active session found for room_code ' + raw + ' — legacy mode', 'info');
+        if (roomErr) throw roomErr;
+        if (!room?.id) {
+          log('Session: no active room found for room_code ' + raw + ' — legacy mode', 'info');
         } else {
-          const { error: joinErr } = await window.sb.rpc('rpc_session_join', {
-            p_session_id: sessRow.id,
-            p_participation_role: 'audience'
-          });
-          if (joinErr) throw joinErr;
-          log('Session: joined session ' + sessRow.id + ' as audience', 'ok');
-          await refreshSessionState();
+          const { data: sessRow, error: sessErr } = await window.sb
+            .from('sessions')
+            .select('id, room_id')
+            .eq('room_id', room.id)
+            .is('ended_at', null)
+            .maybeSingle();
+          if (sessErr) throw sessErr;
+          if (!sessRow?.id) {
+            log('Session: no active session for room ' + room.id + ' — legacy mode', 'info');
+          } else {
+            const { error: joinErr } = await window.sb.rpc('rpc_session_join', {
+              p_room_id: sessRow.room_id,
+              p_participation_role: 'audience'
+            });
+            if (joinErr) throw joinErr;
+            log('Session: joined session ' + sessRow.id + ' as audience', 'ok');
+            await refreshSessionState();
+          }
         }
       }
     } catch (e) {
@@ -2575,13 +2589,43 @@ async function refreshSessionState() {
     return;
   }
 
-  // Look up the session by room_code (must be still active).
+  // db/025: sessions.room_code and sessions.tv_device_id were dropped.
+  // Look up the room first (gives us room_id for the sessions filter AND
+  // screen_ref for the downstream tv_devices lookup), then the session
+  // by room_id. Two-query pattern mirrors enterKaraokeStartFlow at
+  // singer.html:858-873. The rooms ended_at IS NULL gate is safe per
+  // db/028's tier-4 invariant: rpc_session_leave is the sole writer of
+  // rooms.ended_at and ends sessions before the room atomically — every
+  // live session has a live room.
+  let room = null;
+  try {
+    const { data, error } = await window.sb
+      .from('rooms')
+      .select('id, screen_ref')
+      .eq('room_code', roomCode)
+      .is('ended_at', null)
+      .maybeSingle();
+    if (error) throw error;
+    room = data;
+  } catch (e) {
+    log('refreshSessionState: rooms query failed (' + (e?.message || e) + ') — legacy mode', 'warn');
+    await resetSessionStateToLegacy();
+    return;
+  }
+
+  if (!room?.id) {
+    log('refreshSessionState: no active room for room_code ' + roomCode + ' — legacy mode', 'info');
+    await resetSessionStateToLegacy();
+    return;
+  }
+
+  // Active session for this room.
   let session = null;
   try {
     const { data, error } = await window.sb
       .from('sessions')
-      .select('id, app, manager_user_id, admission_mode, capacity, room_code, started_at, current_state, tv_device_id')
-      .eq('room_code', roomCode)
+      .select('id, app, room_id, admission_mode, capacity, started_at, current_state')
+      .eq('room_id', room.id)
       .is('ended_at', null)
       .maybeSingle();
     if (error) throw error;
@@ -2593,19 +2637,21 @@ async function refreshSessionState() {
   }
 
   if (!session) {
-    log('refreshSessionState: no active session for room_code ' + roomCode + ' — legacy mode', 'info');
+    log('refreshSessionState: no active session for room ' + room.id + ' — legacy mode', 'info');
     await resetSessionStateToLegacy();
     return;
   }
 
-  // Look up tv_devices.device_key for realtime subscription. Singer needs the same
-  // tv_device:<device_key> topic that stage.html publishes to.
+  // Look up tv_devices.device_key for realtime subscription. Singer needs
+  // the same tv_device:<device_key> topic that stage.html publishes to.
+  // db/025 dropped sessions.tv_device_id — re-source via rooms.screen_ref
+  // (which references tv_devices.id by db/025 design).
   let device_key = null;
   try {
     const { data, error } = await window.sb
       .from('tv_devices')
       .select('device_key')
-      .eq('id', session.tv_device_id)
+      .eq('id', room.screen_ref)
       .maybeSingle();
     if (error) throw error;
     device_key = data?.device_key || null;
@@ -2614,11 +2660,11 @@ async function refreshSessionState() {
     // Continue without realtime; cold-path-only refresh.
   }
 
-  // Participants via the existing RPC (db/013).
+  // Participants via the existing RPC (db/013, re-keyed by db/026 to p_room_id).
   let participants = [];
   try {
     const { data, error } = await window.sb
-      .rpc('rpc_session_get_participants', { p_session_id: session.id });
+      .rpc('rpc_session_get_participants', { p_room_id: session.room_id });
     if (error) throw error;
     participants = data || [];
   } catch (e) {
@@ -2697,7 +2743,7 @@ async function doSelfRoleUpdate(updates) {
   }
   try {
     const params = {
-      p_session_id: currentSession.id,
+      p_room_id: currentSession.room_id,
       p_user_id: user.id,
     };
     if (updates.participation_role !== undefined) {
@@ -2957,7 +3003,7 @@ async function doMoveQueuePosition(target_user_id, direction) {
   // at target's old position simultaneously.
   try {
     const { error: err1 } = await window.sb.rpc('rpc_session_update_queue_position', {
-      p_session_id: currentSession.id,
+      p_room_id: currentSession.room_id,
       p_user_id: partner.user_id,
       p_new_position: targetPos,
     });
@@ -2966,7 +3012,7 @@ async function doMoveQueuePosition(target_user_id, direction) {
       return { ok: false, error: err1.message };
     }
     const { error: err2 } = await window.sb.rpc('rpc_session_update_queue_position', {
-      p_session_id: currentSession.id,
+      p_room_id: currentSession.room_id,
       p_user_id: target.user_id,
       p_new_position: partnerPos,
     });
@@ -3089,7 +3135,7 @@ async function handleQueuePromoteTap(user_id_encoded) {
   }
 
   const { error } = await window.sb.rpc('rpc_session_update_participant', {
-    p_session_id: currentSession.id,
+    p_room_id: currentSession.room_id,
     p_user_id: user_id,
     p_participation_role: 'active',
   });
@@ -3226,7 +3272,7 @@ async function handleSkipActiveTap(user_id_encoded) {
   }
 
   const { error } = await window.sb.rpc('rpc_karaoke_song_ended', {
-    p_session_id: currentSession.id,
+    p_room_id: currentSession.room_id,
   });
 
   if (error) {
@@ -3385,7 +3431,7 @@ async function doCrossUserRoleUpdate(updates) {
   }
   try {
     const params = {
-      p_session_id: currentSession.id,
+      p_room_id: currentSession.room_id,
       p_user_id: updates.user_id,
     };
     if (updates.participation_role !== undefined) {
