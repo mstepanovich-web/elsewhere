@@ -25,6 +25,13 @@
     - Creating new venues (Part 2 — post-Phase-5)
   -->
 
+  <!-- Shell modules. Loaded as deferred type=module side-effect scripts:
+       shell/auth.js sets window.sb + window.elsewhere; shell/venue-settings.js
+       hangs loadVenueSettings + helpers off window.elsewhere.venueSettings.
+       Matches the pattern in tv2.html / index.html / karaoke/stage.html. -->
+  <script type="module" src="shell/auth.js"></script>
+  <script type="module" src="shell/venue-settings.js"></script>
+
   <style>
     /* ─── Base ────────────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; }
@@ -339,7 +346,7 @@
     <div class="gate-card">
       <h1>Sign in required</h1>
       <p>Sign in to Elsewhere first, then return to this page.</p>
-      <a href="/index.html" class="gate-link">Sign in →</a>
+      <a href="index.html" class="gate-link">Sign in →</a>
     </div>
   </main>
 
@@ -425,9 +432,11 @@
     </section>
   </main>
 
-  <script type="module">
-    import '/shell/auth.js';
-    import { loadVenueSettings } from '/shell/venue-settings.js';
+  <script>
+    // Shell modules (shell/auth.js, shell/venue-settings.js) are loaded as
+    // type=module side-effect scripts in <head>. They register window.sb,
+    // window.elsewhere, and window.elsewhere.venueSettings — accessed below
+    // via waitForShell() and waitForVenueSettings().
 
     // ─── State ──────────────────────────────────────────────────────
     const state = {
@@ -490,6 +499,23 @@
       });
     }
 
+    // Wait for shell/venue-settings.js (loaded as a deferred module) to
+    // register its helpers on window.elsewhere.venueSettings. Verbatim port
+    // of karaoke/stage.html's waitForVenueSettings (lines 2570-2585) —
+    // proven 50ms-poll-with-5s-timeout pattern.
+    function waitForVenueSettings(timeoutMs = 5000) {
+      return new Promise(resolve => {
+        if (window.elsewhere?.venueSettings) return resolve(window.elsewhere.venueSettings);
+        const start = Date.now();
+        const tick = () => {
+          if (window.elsewhere?.venueSettings) return resolve(window.elsewhere.venueSettings);
+          if (Date.now() - start > timeoutMs) return resolve(null);
+          setTimeout(tick, 50);
+        };
+        tick();
+      });
+    }
+
     async function checkAdmin(userId) {
       const { data, error } = await window.sb
         .from('profiles')
@@ -504,11 +530,14 @@
     }
 
     async function loadVenues() {
-      const resp = await fetch('/venues.json', { cache: 'no-store' });
+      const resp = await fetch('venues.json', { cache: 'no-store' });
       if (!resp.ok) throw new Error('venues.json fetch failed: ' + resp.status);
       state.venuesJson = await resp.json();
 
-      const { defaults } = await loadVenueSettings('karaoke');
+      const vs = await waitForVenueSettings();
+      if (!vs) throw new Error('shell/venue-settings.js failed to load (window.elsewhere.venueSettings not registered after 5s)');
+
+      const { defaults } = await vs.loadVenueSettings('karaoke');
       state.venueDefaults = new Map();
       for (const row of (defaults || [])) {
         state.venueDefaults.set(row.venue_id, row);
@@ -654,7 +683,7 @@
       const img = document.getElementById('ed-skybox-img');
       const skyEmpty = document.getElementById('ed-skybox-empty');
       if (venue.skyboxId) {
-        img.src = '/venues/' + venue.skyboxId + '.jpg';
+        img.src = 'venues/' + venue.skyboxId + '.jpg';
         img.hidden = false;
         skyEmpty.hidden = true;
       } else {
@@ -679,7 +708,7 @@
 
       // Preview link
       document.getElementById('btn-preview').href =
-        '/karaoke/stage.html?venue=' + encodeURIComponent(venueId);
+        'karaoke/stage.html?venue=' + encodeURIComponent(venueId);
 
       // Audit
       document.getElementById('ed-updated-at').textContent = row.updated_at || '—';
