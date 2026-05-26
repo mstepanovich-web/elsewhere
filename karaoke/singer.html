@@ -777,15 +777,10 @@ function showScreen(id){
 //      to karaoke/stage.html?room=<room_code>.
 //   8. Internal transition: populate #join-in with room.room_code,
 //      showScreen('screen-join'), call doJoin(). doJoin's success
-//      path lands on screen-home. doJoin's session-join inner
-//      try/catch (singer.html:741-778) swallows the pre-existing
-//      stale-SELECT failure (rpc_session_join's stale p_session_id
-//      signature at line 758) into legacy mode and falls through to
-//      showScreen('screen-home') at singer.html:790. End state:
-//      singer UI on screen-home, in legacy mode (today's universal
-//      singer.html state; stale-SELECT fix is separate Phase-3 work
-//      tracked in DEFERRED.md, explicitly out of scope for items 5/6
-//      per spec §8).
+//      path lands on screen-home in full session-wired mode
+//      (currentMyRow populated). The legacy-mode degradation that
+//      items 5/6 inherited from the pre-Phase-3 stale schema was
+//      retired by commit 595e004 (db/025+026 surface catch-up).
 
 // APP_MANIFEST.karaoke values (mirror of index.html:3151-3154).
 const _KARAOKE_MANIFEST = {
@@ -978,14 +973,10 @@ async function enterKaraokeStartFlow() {
   // showScreen('screen-home') setup. doJoin reads roomCode from
   // #join-in.value (same pattern the ?code= auto-join uses).
   //
-  // End state: user lands on screen-home in legacy mode. doJoin's
-  // session-join inner try/catch (singer.html:741-778) catches the
-  // stale-SELECT failure at line 758's rpc_session_join (stale
-  // p_session_id signature — pre-existing debt tracked in
-  // DEFERRED.md, explicitly out of scope for items 5/6 per spec §8)
-  // and falls through to showScreen('screen-home') at line 790.
-  // This is today's universal singer.html state; items 5/6 does not
-  // change it.
+  // End state: user lands on screen-home in full session-wired mode
+  // (currentMyRow populated). The legacy-mode degradation items 5/6
+  // originally inherited from the pre-Phase-3 stale schema was
+  // retired by commit 595e004 (db/025+026 surface catch-up).
   document.getElementById('join-in').value = room.room_code;
   setStatus('Starting…');
   showScreen('screen-join');
