@@ -11,9 +11,9 @@
 
 ## 1. The scope, plainly
 
-Stage 1 ships a working admin surface that edits `venue_defaults` rows — the schema's per-venue base attributes (camera, motion, ambient) — backed by one new SECURITY DEFINER RPC. Stage 2 folds in: an `audio` renderer impl registered to `shell/venue-registry.js`, an audio anchor authoring panel inside the admin UI, the 19 audio-only venue translations (authored through the panel, not via a seed migration), and the two Stage-2 anchor RPCs. The in-surface live preview that Plan B's mitigation argument relies on arrives with Stage 2 — Stage 1 is the skeleton, not itself the mitigation tool; Stage 1 verifies via a link out to `karaoke/stage.html?venue=<id>` per §6 / Q3a.
+Stage 1 ships a working admin surface that edits `venue_defaults` rows — the schema's per-venue base attributes (camera, motion, ambient) — backed by one new SECURITY DEFINER RPC. Stage 2 folds in: an `audio` renderer impl registered to `shell/venue-registry.js`, an audio anchor authoring panel inside the admin UI, the 19 audio-only venue anchors seeded programmatically as part of `db/035` (the sound references are fully known from `AMBIENT_PROFILES` per §2's locked inventory — hand entry would be busywork), and the two Stage-2 anchor RPCs. The admin audio panel is a management/editing surface (and the authoring tool for FUTURE new anchors — Part 2 / post-Phase-5), NOT the bulk-import mechanism for this initial port. The in-surface live preview that Plan B's mitigation argument relies on arrives with Stage 2 — Stage 1 is the skeleton, not itself the mitigation tool; Stage 1 verifies via a link out to `karaoke/stage.html?venue=<id>` per §6 / Q3a.
 
-After Stage 2 ships, the 19 audio-only venues have authored anchor records but `karaoke/stage.html`'s read path is **unchanged** — anchors are authored-but-dormant data. Per D8 (§4), promoting anchors to load-bearing is Stage 6's job, paired with the AMBIENT_PROFILES retirement.
+After Stage 2 ships, the 19 audio-only venues have seeded anchor records but `karaoke/stage.html`'s read path is **unchanged** — anchors are authored-but-dormant data. Per D8 (§4), promoting anchors to load-bearing is Stage 6's job, paired with the AMBIENT_PROFILES retirement.
 
 ---
 
@@ -89,7 +89,7 @@ D1–D7 are cited from the A1 foundation pass. D8 is decided at spec-write time 
 
 - **D7 — db/034 ships ONE RPC.** `rpc_venue_default_update`. The two anchor RPCs (`rpc_venue_anchor_upsert`, `rpc_venue_anchor_delete`) belong to Stage 2's `db/035` migration. (Resolves Q3d for Stage 1; Stage 2 below covers its own.)
 
-- **D8 — Stage 2 is AMBIENT_PROFILES-first; ships NO `karaoke/stage.html` read-path change.** Stage 2 authors the 19 audio-only venues' anchor records and registers the audio renderer impl with the registry mechanism, but does NOT promote anchors to load-bearing in karaoke playback. The authored anchors are dormant data; karaoke continues reading from `AMBIENT_PROFILES` for the 19 audio-only venues until Stage 6 retires the AMBIENT_PROFILES path. Rationale: Stage 2's authoring + verification surface the data + UI path; switching the canonical reader is a separate decision that pairs with Stage 6's retirement, not with Stage 2's authoring. Stage 2's verification (§8.2 Check 10) compares the two paths via the audio panel's preview affordance, but does NOT switch karaoke's resolver wiring. This decision exists explicitly to prevent the Stage 2 implementation from quietly wiring a resolver and expanding scope.
+- **D8 — Stage 2 is AMBIENT_PROFILES-first; ships NO `karaoke/stage.html` read-path change.** Stage 2 seeds the 19 audio-only venues' anchor records (programmatically, via db/035 — see §7.3) and registers the audio renderer impl with the registry mechanism, but does NOT promote anchors to load-bearing in karaoke playback. The authored anchors are dormant data; karaoke continues reading from `AMBIENT_PROFILES` for the 19 audio-only venues until Stage 6 retires the AMBIENT_PROFILES path. Rationale: Stage 2's authoring + verification surface the data + UI path; switching the canonical reader is a separate decision that pairs with Stage 6's retirement, not with Stage 2's authoring. Stage 2's verification (§8.2 Check 10) compares the two paths via the audio panel's preview affordance, but does NOT switch karaoke's resolver wiring. This decision exists explicitly to prevent the Stage 2 implementation from quietly wiring a resolver and expanding scope.
 
 ---
 
@@ -390,7 +390,7 @@ commit;
 
 ---
 
-## 7. Stage 2 — audio renderer + audio anchor authoring + 19 translations
+## 7. Stage 2 — audio renderer + audio anchor authoring panel + 19-venue programmatic seed
 
 Folded into this same spec as the first vertical slice through the architecture. Stage 2 lands AFTER Stage 1's verification passes; they ship as two separate commits + verifications, not bundled.
 
@@ -433,13 +433,13 @@ For the SELECTED venue:
 
 For Stage 2, the panel exposes ONLY the `audio` type and ONLY the fields above. Anchor positional fields (`yaw_deg`, `pitch_deg`, `start_sec`, `end_sec`, `link`) are NOT exposed in the Stage 2 panel — ambient audio doesn't use them; later anchor types do. Sphere-pinned positional audio (a future feature) would extend the panel.
 
-### 7.3 The 19 audio-only venue translations
+### 7.3 The 19 audio-only venue anchors — programmatic seed
 
-Each of the 19 audio-only venues gets one new `venue_anchors` row of `type='audio'`, authored through the admin UI's Stage 2 panel:
+Each of the 19 audio-only venues gets one new `venue_anchors` row of `type='audio'`, **seeded programmatically as part of the db/035 migration** (§7.5). The row shape per anchor:
 
 ```json
 {
-  "id": "anc_<random>",
+  "id": "anc_aud_<venue_id>",
   "venue_id": "<venue_id>",
   "type": "audio",
   "yaw_deg": null,
@@ -456,11 +456,13 @@ Each of the 19 audio-only venues gets one new `venue_anchors` row of `type='audi
 }
 ```
 
-`sound_reference` is the venue_id for 18 of the 19 venues. For **kids-dino2**, `sound_reference` is `"kids-dino"` (the shared sound). This is the canonical Stage-2 pattern that authoring through the panel preserves: `payload.sound_id` is independent of the venue id, supporting sound-reuse.
+**Id convention:** stable, deterministic — `anc_aud_<venue_id>` (e.g., `anc_aud_hollywoodbowl`, `anc_aud_kids-dino2`). Deterministic ids make the seed idempotent under `ON CONFLICT DO NOTHING` per the established db/003 pattern.
 
-The 19 anchors are authored ONE AT A TIME by an admin running through the venue list during Stage 2's apply pass — NOT via a seed migration. The admin UI IS the authoring tool, per Plan B; using the UI to author the 19 also validates the UI end-to-end against real data.
+**`sound_reference` per venue:** the venue_id for 18 of the 19 venues. For **kids-dino2**, `sound_reference` is `"kids-dino"` (the shared sound). The seed encodes this exception directly; `payload.sound_id` is independent of the venue id, supporting sound-reuse for any future shared-sound case.
 
-Per D8 (§4), after all 19 anchors are authored, `AMBIENT_PROFILES` continues to be the load-bearing path in karaoke. The authored anchors are dormant data, exercisable only via the admin UI's preview button. Stage 6 promotes them later.
+**The 19 anchors are seeded programmatically via the db/035 migration's seed section — NOT hand-authored through the admin UI.** The sound references are fully known from `AMBIENT_PROFILES` (per the A1 foundation pass's locked enumeration in §2); hand-authoring 19 rows through the UI against a known data set would be busywork. The admin audio panel (§7.2) remains the management/editing surface — used for editing existing anchors, deleting them, adding NEW anchors when new venues land (a Part 2 / post-Phase-5 concern), and the play-preview affordance — but it is NOT the bulk-import path for this initial port.
+
+Per D8 (§4), after the seed lands, `AMBIENT_PROFILES` continues to be the load-bearing path in karaoke. The seeded anchors are dormant data, exercisable only via the admin UI's preview button. Stage 6 promotes them later. Stage 2 itself does NOT touch AMBIENT_PROFILES.
 
 ### 7.4 In-surface live preview
 
@@ -473,9 +475,11 @@ This is the SIMPLEST possible preview infrastructure — direct invocation of th
 
 The "Preview in karaoke stage" link from Stage 1 (§5.3 footer) remains as the fidelity-comparison affordance: admin previews via the audio renderer impl in-surface for quick iteration; full visual/audio verification opens karaoke/stage.html — where, per D8, karaoke still reads from AMBIENT_PROFILES. This means the in-surface preview reflects what Stage 6's eventual switchover will sound like; the karaoke-stage link reflects current production. The two should sound equivalent when the same sound file is referenced by both paths — Stage 2 verification (§8.2 Check 10) confirms this comparison.
 
-### 7.5 Stage 2 migration — db/035
+### 7.5 Stage 2 migration — db/035 (two RPCs + 19-row audio anchor seed)
 
-Two new RPCs:
+One migration file, three sections: the two anchor RPCs followed by the 19-row audio anchor seed. Mirrors db/003's established structure (table creation + seed inserts in one file). Atomic apply: RPCs and seed land together.
+
+**Section 1 — `rpc_venue_anchor_upsert`:**
 
 ```sql
 create function public.rpc_venue_anchor_upsert(
@@ -490,7 +494,11 @@ set search_path = public
 as $$
 ...
 $$;
+```
 
+**Section 2 — `rpc_venue_anchor_delete`:**
+
+```sql
 create function public.rpc_venue_anchor_delete(p_id text)
 returns void
 language plpgsql
@@ -501,13 +509,66 @@ as $$
 $$;
 ```
 
-Behavior structurally identical to `rpc_venue_default_update` (§6) — auth check, is_platform_admin gate, validate keys, key-exists semantics via the `?` operator. Type vocabulary validated against the `venue_anchors_type_check` CHECK constraint (defensive; the DB enforces it too).
+Both RPCs structurally identical to `rpc_venue_default_update` (§6) — auth check, is_platform_admin gate, validate keys, key-exists semantics via the `?` operator. Type vocabulary validated against the `venue_anchors_type_check` CHECK constraint (defensive; the DB enforces it too).
 
-The anchor RPC is `_upsert` (not `_update`) because anchors are CREATED through the admin UI — unlike venue_defaults rows, which are pre-seeded. The admin UI generates a fresh `id` client-side (uuid) for new anchors; the RPC INSERTs on a missing id, UPDATEs on an existing id. The silent-zero concern from the venue_defaults case doesn't apply: anchor columns are either nullable or have schema-side defaults that match the desired semantics.
+The anchor RPC is `_upsert` (not `_update`) because anchors CAN be created through the admin UI — for future new venues, for re-creation after a delete (the §8.2 Check 9 round-trip), and for the future per-app override / anchor_patch UX (Stage 7). The admin UI generates a fresh `id` client-side for new anchors via the panel; the RPC INSERTs on a missing id, UPDATEs on an existing id. The initial 19 audio anchors for the existing audio-only venues are SEEDED (Section 3 below) — they exist before any UI authoring; the `_upsert` shape simply supports the panel's lifecycle operations on top of them.
 
 The `rpc_venue_anchor_delete` body deletes by id. The schema's FK from venue_anchors to venue_defaults is `ON DELETE RESTRICT` (db/032), but that constraint guards against deleting venues with live anchors, not against deleting anchors themselves — anchor delete is unconstrained.
 
-Migration scaffolding matches db/034 (§6.6) — header comment, BEGIN/COMMIT, DROP+CREATE, GRANT, COMMENT, verification footer.
+**Section 3 — Audio anchor seed (19 rows):**
+
+Insert one `venue_anchors` row per audio-only venue from §2's locked inventory, following the row shape in §7.3. Use the established db/003 `INSERT ... ON CONFLICT DO NOTHING` pattern for idempotency:
+
+```sql
+insert into public.venue_anchors (
+  id, venue_id, type, label, payload
+) values
+  ('anc_aud_hollywoodbowl',  'hollywoodbowl',  'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"hollywoodbowl"}'::jsonb),
+  ('anc_aud_amphitheater',   'amphitheater',   'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"amphitheater"}'::jsonb),
+  ('anc_aud_colosseum',      'colosseum',      'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"colosseum"}'::jsonb),
+  ('anc_aud_drivein',        'drivein',        'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"drivein"}'::jsonb),
+  ('anc_aud_rooftop',        'rooftop',        'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"rooftop"}'::jsonb),
+  ('anc_aud_broadway',       'broadway',       'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"broadway"}'::jsonb),
+  ('anc_aud_supperclub',     'supperclub',     'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"supperclub"}'::jsonb),
+  ('anc_aud_cabaret',        'cabaret',        'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"cabaret"}'::jsonb),
+  ('anc_aud_bourbonstreet',  'bourbonstreet',  'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"bourbonstreet"}'::jsonb),
+  ('anc_aud_saloon',         'saloon',         'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"saloon"}'::jsonb),
+  ('anc_aud_spacestation',   'spacestation',   'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"spacestation"}'::jsonb),
+  ('anc_aud_enchantedforest','enchantedforest','audio', 'Ambient',
+   '{"type":"mp3","sound_id":"enchantedforest"}'::jsonb),
+  ('anc_aud_dragonlair',     'dragonlair',     'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"dragonlair"}'::jsonb),
+  ('anc_aud_kids-candy',     'kids-candy',     'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"kids-candy"}'::jsonb),
+  ('anc_aud_kids-dino',      'kids-dino',      'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"kids-dino"}'::jsonb),
+  ('anc_aud_kids-dino2',     'kids-dino2',     'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"kids-dino"}'::jsonb),    -- shared sound
+  ('anc_aud_kids-northpole', 'kids-northpole', 'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"kids-northpole"}'::jsonb),
+  ('anc_aud_kids-princess',  'kids-princess',  'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"kids-princess"}'::jsonb),
+  ('anc_aud_kids-winter',    'kids-winter',    'audio', 'Ambient',
+   '{"type":"mp3","sound_id":"kids-winter"}'::jsonb)
+on conflict (id) do nothing;
+```
+
+Per `PHASE-2-BUILD-SPEC.md` §7's "minimal seed/import path" guidance: *"the existing migration-INSERT pattern IS the path; when authored venue data first exists, a future migration uses that pattern to seed it."* The 19 audio-only venues are exactly that data — fully known from `AMBIENT_PROFILES` and ready to seed.
+
+The `enchantedforest` row uses `sound_id = "enchantedforest"` (NOT `"forest"`) per OQ-S1's resolution in §10 — matches the AMBIENT_PROFILES entry's hardcoded `playAmbientMp3('enchantedforest')` rather than the unused `soundId: "forest"` field in venues.json.
+
+**Migration scaffolding** matches db/034 (§6.6) — header comment block, BEGIN/COMMIT, DROP+CREATE per RPC, **REVOKE FROM PUBLIC + REVOKE FROM anon + GRANT TO authenticated per RPC** (per the Stage A1 verification log's Bug 2 doctrine: Supabase's `ALTER DEFAULT PRIVILEGES` auto-grants EXECUTE to anon, so REVOKE FROM PUBLIC alone is insufficient — REVOKE FROM anon is the load-bearing fix). The seed section follows the RPC sections, before COMMIT. Verification footer queries: 4 per RPC (existence + grants + INSERT check + REVOKE confirmation) plus 2 for the seed (count + per-venue sound_id correctness).
 
 ### 7.6 Out of scope for Stage 2
 
@@ -576,34 +637,75 @@ Run after db/035 + the audio renderer + admin-UI audio panel ship.
 **Check 8 — Audio renderer registered.**
 - Load `karaoke/stage.html`. DevTools console: `window.getAnchorRenderer && getAnchorRenderer('audio')` returns the impl (not null).
 
-**Check 9 — Authoring one audio anchor through the UI.**
-- In admin-venues.html, select `hollywoodbowl`. Add an audio anchor with `sound_id: "hollywoodbowl"`. Click Save.
-- Verify via SQL: one row in `venue_anchors` for `hollywoodbowl`, type=`audio`, payload contains `sound_id: "hollywoodbowl"`.
-- Click Play preview in the panel. Confirm hollywoodbowl.mp3 plays through the registered renderer.
+**Check 9 — Seed verification + admin panel round-trip.**
 
-**Check 10 — Authoring all 19 audio-only venues + path equivalence.**
-- For each of the 19 audio-only venues, author one audio anchor through the UI. (Long-running but mechanical.)
-- For **kids-dino2**, set `payload.sound_id = "kids-dino"` (the shared sound).
-- After all 19, the venue_anchors table has 19 rows of type=`audio`.
-- For 3 venues at random, compare audio playback:
-  - In admin-venues.html, click Play preview on the audio anchor — note what plays through the renderer.
-  - Open `karaoke/stage.html?venue=<id>` — note what plays through AMBIENT_PROFILES (the load-bearing path per D8).
-  - Confirm the two are sonically equivalent (same mp3 file, same loop, no audible difference).
-- For **kids-dino2**, confirm both paths play kids-dino.mp3 (the sound_id reference works on the renderer side; the existing AMBIENT_PROFILES dispatcher already handles it on the karaoke side).
+The 19 audio anchors are seeded by db/035's seed section (§7.5), not hand-authored. Check 9 verifies the seed landed correctly + that the admin audio panel's create/edit/delete + preview lifecycle works on the seeded data.
 
-**Check 11 — RPC authority gates.**
+**Step 1 — Verify the seed landed (SQL).**
+
+```sql
+-- (a) Total count
+select count(*) from public.venue_anchors where type = 'audio';
+-- Expect: 19.
+
+-- (b) Per-venue sound_id correctness
+select venue_id, payload->>'sound_id' as sound_id, label
+from public.venue_anchors
+where type = 'audio'
+order by venue_id;
+-- Expect 19 rows. For all 18 non-shared venues: sound_id = venue_id.
+-- For kids-dino2 specifically: sound_id = 'kids-dino' (the shared sound).
+-- label = 'Ambient' for all 19.
+```
+
+**Step 1(c) — Idempotency.** The whole db/035 file is safe to re-run: the RPC sections use `DROP FUNCTION IF EXISTS` and the seed uses `ON CONFLICT (id) DO NOTHING`. Verify by re-running db/035 in the SQL Editor a second time, then re-running (a) and (b) above; the audio-anchor count must stay at 19 and no row contents may change.
+
+**Step 2 — Verify path equivalence on 3 venues (random selection from the 19).**
+
+For each selected venue:
+- In admin-venues.html, select the venue. The seeded audio anchor appears in the panel. Click Play preview — note what plays through the renderer.
+- Open `karaoke/stage.html?venue=<id>` — note what plays through AMBIENT_PROFILES (the load-bearing path per D8).
+- Confirm the two are sonically equivalent (same mp3 file, same loop, no audible difference).
+
+For **kids-dino2** specifically, confirm both paths play kids-dino.mp3 (the seeded `sound_id = "kids-dino"` reference works on the renderer side; the existing AMBIENT_PROFILES dispatcher already handles it on the karaoke side via its `playAmbientMp3('kids-dino')` hardcode).
+
+**Step 3 — Admin panel round-trip on ONE venue (verifies the create/edit/delete + preview path without bulk-authoring).**
+
+- Pick one already-seeded venue (recommend hollywoodbowl — straightforward, no shared-sound case).
+- In the admin panel, **delete** the seeded audio anchor for that venue. Confirm via SQL that the row is gone:
+  ```sql
+  select count(*) from public.venue_anchors
+   where venue_id = 'hollywoodbowl' and type = 'audio';
+  -- Expect: 0.
+  ```
+- In the admin panel, **add** a new audio anchor for the same venue with `sound_id = "hollywoodbowl"`. Click Save.
+- Confirm via SQL that the row is back:
+  ```sql
+  select id, payload->>'sound_id' as sound_id
+  from public.venue_anchors
+  where venue_id = 'hollywoodbowl' and type = 'audio';
+  -- Expect: 1 row, sound_id = 'hollywoodbowl'. The id will differ
+  -- from the seed's anc_aud_hollywoodbowl (the admin UI generates
+  -- its own id) — that's expected; sound_id is what matters for
+  -- playback equivalence.
+  ```
+- Click Play preview on the new anchor; confirm hollywoodbowl.mp3 plays.
+- End state matches the seeded state functionally (one audio anchor per venue, kids-dino2 still shares kids-dino's sound).
+
+This one-venue round-trip validates the admin panel's create / save / delete / preview path without requiring 19 hand-authorings. The panel's lifecycle works on the seeded data; that's all Stage 2 needs to verify.
+
+**Check 10 — RPC authority gates.**
 - Non-admin calls rpc_venue_anchor_upsert → 42501.
 - Non-admin calls rpc_venue_anchor_delete → 42501.
 
-**Check 12 — Anchor delete.**
-- Through admin UI, delete one of the 19 anchors. Confirm via SQL it's gone. Confirm karaoke playback for that venue is UNAFFECTED (AMBIENT_PROFILES-first per D8 means deleting the dormant anchor doesn't change karaoke).
-- Re-author the deleted anchor before closing Stage 2.
+**Check 11 — D8 dormancy invariant (anchor delete unaffects karaoke).**
+- During Check 9 Step 3's delete-then-recreate sequence, separately confirm karaoke playback for the round-trip venue (hollywoodbowl) is UNAFFECTED while the anchor is absent — open `karaoke/stage.html?venue=hollywoodbowl` between the delete and the recreate, and confirm hollywoodbowl.mp3 still plays through AMBIENT_PROFILES. This verifies D8's dormancy invariant (deleting a seeded anchor doesn't change karaoke because AMBIENT_PROFILES is still the load-bearing path).
 
-**Check 13 — karaoke/stage.html read path unchanged.**
+**Check 12 — karaoke/stage.html read path unchanged.**
 - Per D8, Stage 2 ships NO changes to karaoke/stage.html's read path.
 - `git diff` between Stage-2-merge and Stage-2-merge^ on `karaoke/stage.html`: confirm zero AMBIENT_PROFILES-reader-side changes. Permitted changes are limited to the audio renderer registration (the `registerAnchorRenderer('audio', ...)` call from §7.1) — which is REGISTRATION, not a reader-path change.
 
-Stage 2 PASSES when all 6 checks pass.
+Stage 2 PASSES when all 5 checks (Checks 8 through 12) pass.
 
 ### 8.3 Per-stage result log
 
