@@ -1,21 +1,32 @@
 # Venue Admin UI — Direction Note
 
-**Status:** Pre-spec direction, not a build spec. Captures decisions for
-the future Venue Admin UI work so the eventual spec starts from them
-rather than re-deriving them. Nothing is built or scheduled by this
-document.
+> **REVISED 2026-05-26 — Plan B.** This note was originally written
+> 2026-05-25 (commit `df49366`) recording a "wrap-as-legacy, defer real
+> translation + admin UI to post-Phase-5" plan. The repo owner has
+> reversed that direction. **Plan B is now in force:** the procedural
+> venues are translated into data-driven `venue_anchors` + reusable
+> renderer impls as part of Phase 3, and the Part 1 admin UI is built
+> NOW (not deferred), serving as the authoring/preview tool that
+> mitigates the translation risk. Decisions 2 (admin UI split — Part 1
+> first, Part 2 post-Phase-5), 3 (pre-population), 4 (new-venue UI
+> scope sketch), and 5 (single UI / app selector / base+override model)
+> remain in force. Decision 1 is rewritten in §2 to record Plan B. §7
+> is new — the Plan B hybrid sequencing for the build.
 
-**Sequencing:** Post-Phase-5. This document records the decision to
-DEFER the Venue Admin UI past its earlier "Phase-2 fast-follow / before
-Phase 3" position in ROADMAP.md. Karaoke onto the venue model
-(Phase 3) proceeds without the admin UI via the wrap-as-legacy escape
-hatch described in §2.
+**Status:** Pre-spec direction, not a build spec. Captures decisions
+for the Venue Admin UI work so the eventual build spec starts from
+them rather than re-deriving them. Nothing is built or scheduled by
+this document.
+
+**Sequencing:** Part 1 (manage the existing 26 venues) is now Phase-3
+scope, built as the authoring/preview tool that mitigates the venue
+translation risk per Plan B. Part 2 (create brand-new venues, with
+asset generation) remains post-Phase-5 per Decision 2 / §3.
 
 **Companion docs:** Builds on `docs/PHASE-2-BUILD-SPEC.md` §7 (the
 original admin-UI scope sketch) and on the schema settled in
-`db/032_venue_abstraction_schema.sql`. Does not supersede §7 — it
-records the post-Phase-5 framing for what an eventual §7-style spec
-would settle.
+`db/032_venue_abstraction_schema.sql`. Does not supersede §7 — extends
+it with the Plan B sequencing.
 
 ---
 
@@ -49,79 +60,100 @@ records the *shape* of decisions a future spec author starts from.
 
 ---
 
-## 2. Decision 1 — Venue migration approach: wrap-as-legacy, defer real
-translation to post-Phase-5
+## 2. Decision 1 — Venue migration approach: real translation now,
+admin UI as the authoring/preview tool
 
 **Venue inventory and what migrates how.** Of the 26 total venues in
 `venues.json`:
 
-- **~23 have `AMBIENT_PROFILES` entries** in `karaoke/stage.html:4584–4994`,
-  split into:
-  - **10 venues with bespoke procedural effect code** — wrapped as
-    legacy renderers in this approach. The 10 are: `default`, `stadium`,
-    `disco`, `space`, `speakeasy`, `honkytonk`, `festival`, `forest`,
-    `dragonlair`, `underwater`. Two of these — `stadium` and `speakeasy`
-    — also have separate 3D effect builders
-    (`buildStadiumEffects3D` / `buildSpeakeasyEffects3D` in
-    `karaoke/stage.html:2856–2940`); those 3D builders are wrapped the
-    same way as the `anim()` functions, not as additional venues.
-  - **13 audio-only entries** with `anim: null` and just
-    `playAmbientMp3('<venue>')` — mechanical SQL migration.
-- **~3 venues have no `AMBIENT_PROFILES` entry at all** — the
+- **~10 venues with bespoke procedural effect code** in
+  `karaoke/stage.html:4584–4994`'s `AMBIENT_PROFILES`, plus the 2
+  Three.js 3D effect builders for `stadium` and `speakeasy` in
+  `karaoke/stage.html:2848–2940`. These are translated into reusable
+  renderer impls registered via
+  `shell/venue-registry.js:registerAnchorRenderer(type, impl)`, plus
+  per-venue `venue_anchors` rows that reference those impls with
+  parameters. Each bespoke `anim()` function decomposes into one or
+  more typed anchors (`spotlight`, `particle`, `audio`, etc. per the
+  vocabulary in `db/032_venue_abstraction_schema.sql:254–258`).
+
+- **~13 audio-only `AMBIENT_PROFILES` entries** (with `anim: null` and
+  just `playAmbientMp3('<venue>')`). Migrate mechanically via a SQL
+  seed migration: one `venue_anchors` row of `type='audio'` per venue,
+  plus one shared `audio` renderer impl. This is the simplest type and
+  the first vertical slice (§7).
+
+- **~3 venues with no `AMBIENT_PROFILES` entry at all.** The
   `AMBIENT_PROFILES[venueId] || null` fallback at line 4998 returns
-  null silently.
+  null silently. No migration needed — they remain silent under the
+  venue layer.
 
-So: **10 + 13 + ~3 = 26.** The 10 and the 13 are disjoint sets; stadium
-and speakeasy are members of the 10, not a separate group.
+**Inventory is approximate; exact per-venue classification to be
+locked by the Stage 1 build spec.** The bucket sizes above are from a
+quick `AMBIENT_PROFILES` + `venues.json` scan. An awk classification
+during the Phase 3 scoping pass suggested ~9 procedural rather than
+~10 and ~2 audio-only rather than ~13 — a delta large enough to
+matter for sizing. The Phase 3 scoping report's §6 flag 4 named this
+gap and asked for *"a one-pass enumeration during A1 spec-writing to
+lock the exact count and the per-venue type list"*; the Stage 1 build
+spec (§7) performs that pass. The three buckets are believed disjoint
+— stadium and speakeasy are members of the procedural set, with
+their 3D effect builders riding alongside the canvas-2D anim functions
+rather than as additional venues — and disjointness is confirmed by
+the same enumeration. The 26-venue total in `venues.json` is exact
+(31 `id` entries minus 5 category ids).
 
-Phase 3 adopts the venue model via two paths, neither of which requires
-the admin UI:
+**The translation runs through the admin UI, not around it.** The
+Part 1 admin UI (per Decision 2 / §3) is built FIRST as the
+authoring/preview surface; the procedural-to-data translation then
+proceeds per type, with each venue authored as `venue_anchors` rows
+via the UI rather than via SQL or seed migrations. The UI provides:
 
-- **The 10 procedural effect venues.** Wrapped as-is — the bespoke
-  `AMBIENT_PROFILES[venueId].anim()` functions and the 3D effect
-  builders for stadium and speakeasy stay as live JavaScript, registered
-  to the renderer registry (`shell/venue-registry.js`) as single per-venue
-  "legacy" implementations. **Visual fidelity is bit-for-bit
-  preserved.** No payload contracts are baked in; no anchor records are
-  authored. The procedural code keeps running; the registry mechanism
-  becomes the dispatch surface but the contents are still procedural
-  underneath.
+- A read/write surface for `venue_defaults`, `venue_anchors`,
+  per-app `<app>_venue_settings`, and `venue_suggested_costumes`
+  (per Decision 2 / §3).
+- A live-preview affordance so each venue's translated rendering can
+  be compared visually against its procedural ancestor.
+- Per-type authoring forms keyed to each registered renderer impl
+  (so payload shapes settle empirically as each impl is built).
 
-- **The 13 audio-only entries.** Migrate mechanically via a single SQL
-  migration that inserts 13 `venue_anchors` rows of `type='audio'`,
-  one per venue, with a stable minimal payload shape
-  (`{file: 'venueX'}` or similar — exact shape settled by the migration
-  author against the renderer impl). This is the only data-driven
-  portion of Phase 3's venue work.
+The hybrid sequencing for this work — admin UI skeleton first, then
+per-type vertical slices that build a renderer impl + its UI panel
++ translate the venues that use that type — is recorded in §7.
 
-The ~3 venues with no `AMBIENT_PROFILES` entry require no migration —
-they have no procedural code to wrap and no audio to translate. They
-remain "silent" under the venue layer just as they are silent today.
-
-**Post-Phase-5 translation work** — the real procedural-to-data
-translation, where each anim function decomposes into reusable
-renderer impls + parameterized anchor records — is paired with the
-admin UI. Authoring those records with a working preview affordance is
-the lower-risk path; authoring them by hand without one risks baking
-in premature payload contracts (the risk surfaced in this session's
-read).
+**Why this is the mitigation, not the risk.** The risk in the
+translation is the per-type payload STRUCTURE (which knobs a renderer
+exposes, what the `payload` jsonb shape is, what's shared vs.
+per-venue) — see Decision 3 / §4. Authoring those structures by hand
+without a visual feedback loop risks baking in premature contracts;
+authoring them THROUGH the admin UI keeps the iteration loop tight
+and the resulting payload shapes empirical against real venue data.
+The admin UI is the IDE for the translation work, not a downstream
+consumer of it.
 
 **What this commits to:**
-- Phase 3 ships karaoke functionally on the new venue layer.
-- The 10 procedural effect venues (two of which — stadium and
-  speakeasy — also have 3D effect builders wrapped the same way)
-  remain on procedural code behind the registry.
-- The renderer-API contract (per
-  `shell/venue-registry.js:63–72`, deliberately unspecified in Phase 2)
-  is settled post-Phase-5 by the admin UI's authoring pass, not by
-  Phase 3.
 
-**What this defers:**
-- The reusable-renderer-impl decomposition (concerns the 10
-  procedural venues).
-- The per-venue payload-shape decisions.
-- The visual-iteration loop that would have been the admin UI's value
-  for those decisions.
+- Phase 3 ships karaoke on the new venue layer with **real**
+  data-driven anchor records, not wrapped procedural code.
+- The Part 1 admin UI ships as Phase-3 scope, before / during /
+  alongside the translation per §7.
+- `AMBIENT_PROFILES` and `addVenueEffects3D` are retired from
+  `karaoke/stage.html` once every procedural venue has a data-driven
+  equivalent that renders visually identically.
+- The renderer-API contract (per
+  `shell/venue-registry.js:63–72`, deliberately unspecified in Phase
+  2) is settled empirically across §7's per-type stages, not by a
+  speculative spec.
+
+**What this does NOT commit to:**
+
+- The Part 2 admin UI (create brand-new venues, with asset generation
+  pipelines per Decision 4 / §5) — remains post-Phase-5.
+- A specific per-type payload schema. Each type's `payload` shape is
+  settled in its own per-type build spec (§7's Stages 3–5).
+- A specific component tree, validation rules, or RPC surface for the
+  admin UI itself. Those land in the admin-UI build spec, written
+  next.
 
 ---
 
@@ -162,18 +194,19 @@ forcing function for a new venue.
 ## 4. Decision 3 — Pre-population: existing values carry over; structure
 is the risk, not values
 
-When the post-Phase-5 translation converts the 10 procedural effect
-venues from wrapped legacy renderers into data + reusable renderer
-impls, **the existing parameter values carry over into the authored
-anchor records.** Beam counts, sweep timings, GSAP easing curves,
+When the Phase-3 translation converts the 10 procedural effect venues
+from `AMBIENT_PROFILES` / `addVenueEffects3D` code into data + reusable
+renderer impls (§7), **the existing parameter values carry over into
+the authored anchor records.** Beam counts, sweep timings, GSAP easing curves,
 particle counts, hue values, alpha ranges, audio file references —
 all of these are already in the procedural code and become the
 starting values for the migrated records.
 
 **Migrated venues come over pre-populated and visually identical** to
-their procedural ancestors, by construction. The admin UI then becomes
-the surface for iterating those values against the renderer impls
-that took over from the procedural functions.
+their procedural ancestors, by construction — the admin UI's live
+preview (Decision 1 / §2) is the verification surface. After initial
+authoring, the admin UI continues as the surface for iterating those
+values against the renderer impls.
 
 **The risk in the translation is NOT the values** — those are already
 written and observable in the live procedural code. **The risk is the
@@ -313,7 +346,73 @@ against the schema rows that actually exist at spec time.
 
 ---
 
-## 7. Open items for the eventual spec
+## 7. Plan B hybrid sequencing — admin UI skeleton first, then
+per-type vertical slices
+
+The translation arc (Decision 1 / §2) and the admin UI build (Decision
+2 / §3) interleave per anchor type. Sequencing is:
+
+**Stage 1 — Admin UI skeleton + `venue_defaults` editor.** Single page
+(`admin-venues.html` or similar, no build step per CLAUDE.md). Reads
+all venues, edits `venue_defaults` columns (`camera_fov`, `motion`
+jsonb, `ambient` jsonb, the 4 existing yaw/pitch columns). Backed by
+new SECURITY DEFINER RPCs in a new migration (`db/034`-ish), gated by
+`is_platform_admin`. No anchor editing yet; jsonb columns edited as
+text initially. **First shippable: admin can edit existing venue
+defaults via UI instead of "Set View Coordinates" + SQL.**
+
+**Stage 2 — `audio` renderer impl + audio anchor authoring panel +
+13 audio-only venues translated.** First vertical slice with real data
+flowing UI → DB → registry → renderer → karaoke. Validates the
+end-to-end architecture against the easiest type.
+
+**Stage 3 — `particle` renderer impl + particle authoring panel +
+~6 venues' particle effects translated.** Highest-risk structural
+decision lives here — the particle vocabulary may need per-sub-shape
+discrimination (`point-cloud`, `emitter`, `directional-rain`). The
+admin UI's live preview makes the iteration tractable.
+
+**Stage 4 — `spotlight` renderer impl + spotlight authoring panel +
+stadium/disco/speakeasy spotlights translated.** Includes the
+translation of the 2 Three.js 3D builders for stadium and speakeasy.
+Three.js + canvas-2D variants likely both expressible through one
+spotlight type with a renderer-side mode parameter.
+
+**Stage 5 — Remaining types** (`callout`, `pin`, `video`,
+`link-hotspot`) + leftover venues. Long tail; ships per opportunity.
+
+**Stage 6 — Retire `AMBIENT_PROFILES` + `addVenueEffects3D` from
+`karaoke/stage.html`.** Pure deletion + verification: every procedural
+venue must render visually identically through the data-driven path
+before its procedural branch is removed. Net ~−1500 LOC from
+`stage.html`.
+
+**Stage 7 — Per-app override editor (`anchor_patch` UX).** The
+karaoke-specific override surface from `karaoke_venue_settings`. Lower
+priority than Stages 1–6; ships in any order after Stage 1.
+
+**Stage 8 — Costume library + suggested-costumes editor.** Consumes
+the Phase-3 costume seed migration described in
+`PHASE-2-BUILD-SPEC.md` §6 (the migration that seeds `costumes` from
+the existing `DEEPAR_EFFECTS` list + relocates `.deepar` files from
+`karaoke/effects/` to `/costumes/`). Ships when karaoke's costume
+rendering is rewired.
+
+**Each stage is a propose-pause build cycle.** Stage 1 has its own
+build spec (written first, citing this note as the direction).
+Stages 2–4 each get a per-type addendum or mini-spec — the renderer
+impl + its payload contract + the UI panel + the per-venue
+translations all live in one document per type. Stages 5–8 are
+lighter; each is a propose-pause when its time comes.
+
+**Verification per stage.** Each translated venue must render visually
+identically to its procedural ancestor (Stage 6's deletion is the
+final verification). The admin UI's live preview is the iteration
+loop; manual visual comparison + spot-checks are the PASS criteria.
+
+---
+
+## 8. Open items for the eventual spec
 
 Items deliberately not settled here. The spec answers each by
 inspecting the schema and live data at spec-writing time:
@@ -334,12 +433,11 @@ inspecting the schema and live data at spec-writing time:
   investigation precedes part (b)'s spec; this direction doesn't
   prejudge the outcome.
 
-- **O5 — Migration affordance for the 10 procedural venues.** When the
-  post-Phase-5 admin UI authors records that supersede the wrapped
-  legacy renderers, does the wrapping wrapper retire automatically
-  per venue (cutover), or stay in place as a fallback (parallel
-  authoring), or get a per-venue toggle? Decision lands with the
-  admin UI's own integration story, not in this direction note.
+- **O5 — Per-stage verification protocol.** §7 says each translated
+  venue must render visually identically. What constitutes acceptable
+  "identical" — pixel-comparison, frame-rate-equivalent, human
+  spot-check? Decision lands per-type with the renderer-impl build
+  spec.
 
 - **O6 — Costume library authoring** is part of Part (a) per
   PHASE-2-BUILD-SPEC.md §7 but not detailed in this direction note;
@@ -348,7 +446,7 @@ inspecting the schema and live data at spec-writing time:
 
 ---
 
-## 8. References + dependencies
+## 9. References + dependencies
 
 - `docs/PHASE-2-BUILD-SPEC.md` §7 — the original Phase-2-fast-follow
   scope sketch for the admin UI. This direction note builds on §7
@@ -357,20 +455,17 @@ inspecting the schema and live data at spec-writing time:
   the costume library and per-venue suggested lists, and editing
   per-app override patches") remains the working scope for Part (a).
 - `docs/PHASE-2-BUILD-SPEC.md` §5.4 "Phase-3 translation cost" — the
-  procedural-to-data translation flagged for Phase 3, now deferred to
-  post-Phase-5 via Decision 1's wrap-as-legacy escape hatch.
+  procedural-to-data translation flagged for Phase 3. Plan B (this
+  note's revised Decision 1 / §2) executes that translation in Phase
+  3 via the §7 hybrid sequencing, through the admin UI.
 - `docs/UNIFIED-APP-PLAN.md` §5 — phase sequencing authority. **No
-  UAP §5 amendment is required for this direction note.** UAP §5
-  governs the numbered phases of the unified-app workstream
-  (Phase 0 → Phase 5, then wellness/worlds greenfield). The Venue
-  Admin UI is not a numbered phase — it has been a Phase-2
-  fast-follow in ROADMAP framing, and this note reclassifies it to
-  post-Phase-5 work. Both positions sit *outside* §5's named-phase
-  scope, so neither the previous framing nor this deferral touches
-  §5's text. (Contrast with the earlier propose-pause amendment that
-  added Items 5/6 to §5's Phase 3 and Phase 4 entries: that
-  amendment WAS required because Items 5/6 are named scope WITHIN
-  Phase 3 and Phase 4. This note has no analogous edit to make.)
+  UAP §5 amendment is required for this direction note's revised
+  Plan B framing.** UAP §5 governs the numbered phases; the Venue
+  Admin UI is not a numbered phase, and the venue translation work
+  itself is implicit in *"Phase 3 — karaoke onto the new model"*
+  (made explicit by `PHASE-2-BUILD-SPEC.md` §5.4 "Phase-3 translation
+  cost"). Plan B doesn't add a new phase or rename an existing one;
+  it sequences work within Phase 3's existing scope.
 - `db/032_venue_abstraction_schema.sql` — the schema this UI edits.
   Especially "Design decision 2" (per-app overrides via
   `<app>_venue_settings`) and the `venue_anchors` payload comment
@@ -389,39 +484,44 @@ inspecting the schema and live data at spec-writing time:
 - `venues.json` — the 26-venue inventory Part (a) scopes against.
 - `CLAUDE.md` "Adding a venue" — the file-naming / folder convention
   Part (b)'s asset-generation pipeline targets.
-- ROADMAP.md (current Active section) — the venue admin UI is
-  currently described there as Phase-2 fast-follow / pre-Phase-3.
-  This direction note implies a ROADMAP edit (move it from Active
-  to post-Phase-5); that edit is OUT OF SCOPE for this document and
-  ships separately.
+- ROADMAP.md (Active section) — the venue admin UI is described as
+  Phase-2 fast-follow with a "before Phase 3 karaoke rewire" sequencing
+  lean. Plan B locks that lean and reframes it as Phase-3 scope
+  (the admin UI mitigates Phase 3's translation risk). A small
+  companion ROADMAP edit lands with this revision; see §10 below.
 
 ---
 
-## 9. Implications worth flagging
+## 10. Implications worth flagging
 
-- **ROADMAP.md Active section needs updating.** Currently lists the
-  Venue admin UI as Phase-2 fast-follow with a "before Phase 3 karaoke
-  rewire" lean. Once this direction note is committed, the ROADMAP
-  Active section should move to "Phase 3 — karaoke onto the new
-  model" (with the wrap-as-legacy approach noted) and the admin UI
-  moves to a post-Phase-5 Queued or Future entry. That edit is a
-  separate propose-pause doc-edit task.
+- **ROADMAP.md Active section updates lightly.** The existing entry
+  ("Venue admin UI — Phase 2 fast-follow") is already Plan-B-shaped:
+  it sequences admin UI before Phase 3 karaoke rewire and names the
+  translation as Phase 3 scope. The companion edit (proposed
+  alongside this revision) drops the "(revisitable)" hedge from the
+  sequencing lean, explicitly names Plan B, and cross-references this
+  note's §7 sequencing.
 
-- **Phase 3's karaoke build spec gains a new bullet.** When written,
-  the Phase 3 karaoke build spec must explicitly call out the
-  wrap-as-legacy approach for the 10 procedural venues + the
-  mechanical migration for the 13 audio-only entries, AND must NOT
-  attempt the data-driven translation for the procedural venues.
-  Calling that out in the spec prevents a future Phase-3 author from
-  re-discovering the translation cost and accidentally taking it on.
+- **The first admin-UI build spec is the next deliverable.** It
+  covers Stage 1 + folds in Stage 2 (audio renderer + 13 audio-only
+  venues as the first vertical slice). Stages 3–5 get per-type
+  addenda. The build spec cites this note as the direction it
+  executes against.
 
-- **No db migration is implied by this direction note.** The schema
-  in db/032 is already settled and applied; nothing in this document
-  requires schema change. The admin UI eventually authors against
-  the existing schema.
+- **No db migration is implied by this direction note.** Plan B's
+  migrations are scheduled per stage (`db/034` for Stage 1's admin
+  RPCs, possibly a small audio-seed migration in Stage 2, no further
+  schema migrations expected — db/032's existing tables cover the
+  full venue model).
 
 - **No code change is implied by this direction note.** Pre-spec
   planning artifact only.
+
+- **The `df49366` history is preserved as background.** The
+  wrap-as-legacy reasoning recorded in that commit's version of §2 is
+  a useful counterfactual for future readers asking "why didn't we
+  defer the admin UI?" — the answer is in `git show df49366`. The
+  reversal rationale is in this note's status header.
 
 ---
 

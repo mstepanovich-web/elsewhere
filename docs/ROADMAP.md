@@ -6,12 +6,13 @@ High-level session pipeline so we don't lose context between sessions. Updated a
 
 ## Active session
 
-**Venue admin UI — Phase 2 fast-follow (UAP §5 / spec §7)**
+**Venue admin UI Part 1 + venue translation — Phase 3 scope, Plan B (UAP §5 / spec §7)**
 
-Phase 2 of the unified-app refactor (the venue abstraction's data layer + resolver + anchor renderer registry mechanism) shipped 2026-05-24 — see "Unified-app workstream — Phase 2: Venue abstraction" in the Completed section below for full commits + verified-prod state. Phases 3, 4, 5 follow per `docs/UNIFIED-APP-PLAN.md` §5. The active entry now is the **venue admin UI fast-follow** — the editing surface that fills the (currently dormant) Phase-2 tables with real content: anchors, motion, ambient, costume library + per-venue suggested lists, per-app overrides.
+Phase 2 of the unified-app refactor (the venue abstraction's data layer + resolver + anchor renderer registry mechanism) shipped 2026-05-24 — see "Unified-app workstream — Phase 2: Venue abstraction" in the Completed section below for full commits + verified-prod state. Phases 3, 4, 5 follow per `docs/UNIFIED-APP-PLAN.md` §5. The active entry combines the **Part 1 admin UI (manage the existing 26 venues)** with the **venue translation** (procedural `AMBIENT_PROFILES` + `addVenueEffects3D` → data-driven `venue_anchors` + reusable renderer impls per `docs/VENUE-ADMIN-UI-DIRECTION.md` §7's hybrid sequencing). Part 2 (create brand-new venues, with asset-generation pipelines) remains post-Phase-5 per VENUE-ADMIN-UI-DIRECTION.md §3 / Decision 2.
 
-- **Authoritative spec:** `docs/PHASE-2-BUILD-SPEC.md` §7 (the admin UI scope decision). Settled as a Phase-2 fast-follow rather than bundled into Phase 2 — bundling would have roughly doubled the phase; the abstraction is independently valuable and the UI fills it.
-- **Sequencing lean (revisitable):** admin UI BEFORE Phase 3 karaoke rewire, on risk-isolation grounds. Phase 3 will translate karaoke's procedural `AMBIENT_PROFILES` + `addVenueEffects3D` into registry implementations + `venue_anchors` records (spec §5.4 "Phase-3 translation cost"). Doing that translation with a working admin UI that can author the target data is lower-risk than building the translation while the writer-path is still a future thing. Lean is revisitable if a forcing function emerges (e.g., a karaoke regression that needs the translation immediately).
+- **Authoritative direction:** `docs/VENUE-ADMIN-UI-DIRECTION.md` (Plan B revision, 2026-05-26). Reverses the earlier wrap-as-legacy framing recorded in `df49366`; see that note's status header for the rationale.
+- **Authoritative spec for §7's Stage 1:** to be written next, against `docs/PHASE-2-BUILD-SPEC.md` §7 (the original admin UI scope) + VENUE-ADMIN-UI-DIRECTION.md §7 (the hybrid sequencing). Per-type addenda follow for Stages 3–5 (particle, spotlight, remaining types).
+- **Sequencing — locked by Plan B:** admin UI skeleton first, then per-type vertical slices that build renderer impl + UI panel + translate the venues that use that type. Audio first (13 venues, easiest), particle next (6 venues, broadest), spotlight after (3 venues + 3D builders). `AMBIENT_PROFILES` + `addVenueEffects3D` retire from `karaoke/stage.html` once every procedural venue has a data-driven equivalent that renders visually identically. Detail in VENUE-ADMIN-UI-DIRECTION.md §7.
 - **Status:** Not started. Spec §7 describes the surface ("editing camera/motion/ambient, authoring and positioning anchors, managing the costume library and per-venue suggested lists, and editing per-app override patches"). No execution brief yet; this entry is the placeholder.
 - **Estimated:** TBD per session planning. Substantial — the UI is the largest single piece in the Phase-2-and-fast-follow arc.
 - **Scope per the spec:** the editing surface itself + the SECURITY DEFINER RPCs that gate its writes (per repo doctrine; spec §4.5 + §7 boundary). Does NOT rewire karaoke (Phase 3) and does NOT integrate games (Phase 4).
@@ -49,7 +50,7 @@ Phase 2 of the unified-app refactor (the venue abstraction's data layer + resolv
 
 ### Session 9 — Audience.html unification (NHHU → HHU UI merge)
 
-> **UAP §5 phase mapping:** Phase 3 (karaoke onto the new model). Phase 1 and Phase 2 of the workstream are complete (see Completed section); the immediate next step is the venue admin UI fast-follow (Active section above); Phase 3 follows per the current sequencing lean. **Spec §12 bullets 3 (DEFERRED cluster 6-sub-entry disposition) and 4 (INFRA.md / CLAUDE.md updates) ride with Phase 3** — both describe karaoke operational behavior, which only changes when Phase 3 rewires karaoke. They remain tracked in spec §12.
+> **UAP §5 phase mapping:** Phase 3 (karaoke onto the new model). Phase 1 and Phase 2 of the workstream are complete; the immediate next Phase-3 work is the Part 1 venue admin UI + venue translation (Active section above) per Plan B; Session 9 (audience.html dissolved) follows that as the next Phase-3 piece. **Spec §12 bullets 3 (DEFERRED cluster 6-sub-entry disposition) and 4 (INFRA.md / CLAUDE.md updates) ride with Phase 3** — both describe karaoke operational behavior, which only changes when Phase 3 rewires karaoke. They remain tracked in spec §12.
 
 - **Why:** Current parallel UI codebases (audience.html for NHHU, singer.html/index.html for HHU) compound complexity with every feature added. Post-Session-5 work to absorb audience.html into the HHU app as a parameterized NHHU view. Same UI fabric for both populations, conditional rendering hides TV-required features.
 - **Status:** Keystone for further platform work — until this lands, NHHU conversion funnel + games venues + wellness all fight against the audience-vs-singer split.
@@ -64,7 +65,7 @@ Phase 2 of the unified-app refactor (the venue abstraction's data layer + resolv
 
 ### Session 11 — Audience-to-NHHU conversion path (user-acquisition funnel)
 
-> **UAP §5 phase mapping:** Phase 3+ (sister UX/funnel layer to karaoke surface work). Phase 1 and Phase 2 of the workstream are complete (see Completed section); the immediate next step is the venue admin UI fast-follow (Active section above); Phase 3 follows. This work rides with Phase 3.
+> **UAP §5 phase mapping:** Phase 3+ (sister UX/funnel layer to karaoke surface work). Phase 1 and Phase 2 of the workstream are complete; the immediate next Phase-3 work is the Part 1 venue admin UI + venue translation (Active section above) per Plan B; Session 11 lands after Session 9 (audience.html dissolved). This work rides with Phase 3.
 
 - **Why:** Convert passive audience members into registered users. Phase 1 placeholder may ship in Session 5 (minimal Elsewhere home for NHHU returning from audience deep link, with "go back" + "explore Elsewhere" options). Full conversion funnel (sign-up, app downloads, game launchers) is post-Session-5.
 - **Status:** User-acquisition strategy. Sister item to Session 9 unification — listed in same § 5.4-5.5 vicinity but distinct scope (UX/funnel work vs. structural UI rework).
