@@ -64,30 +64,40 @@ Two paths depending on whether the Tier 1 §8 cleanup has been run:
   hard-reload (`Cmd-Shift-R`) to bypass cache. If still failing,
   abort and investigate the deploy.
 
-### Known-broken affordance you may hit
+### ⚠️ Proximity is BROKEN — do not depend on it (read before running)
 
-- **Proximity prompt non-functional** — `index.html`'s "Are you at
-  home?" banner's "Yes, I'm at home" button does nothing (Deferred
-  Item 3 from the Tier 1 §8 result log, `docs/SESSION-LOGS/TIER-1-V8-VERIFICATION-LOG.md`).
-  This may interact with Mode A/B detection and is called out in
-  Check 4. Workaround: write `sessionStorage` directly via DevTools
-  console (steps in Check 4 setup).
+The "Are you at home?" proximity prompt is **non-functional and
+non-persistent**. Specifically:
 
-### Proximity default — why Check 1 is runnable
+- `setProximityAnswer()` does NOT persist across page reloads — the
+  prompt re-fires every time the user reloads `index.html`. (Confirmed
+  empirically; per-tab sessionStorage write appears to be wiped on
+  boot, root cause untraced.)
+- "Yes, I'm at home" button does nothing observable.
+- "Don't ask again" button does nothing observable.
 
-The "Are you at home?" prompt is broken (can't record a "yes"), but
-this does **NOT** block the karaoke flow. `getHomeMode()` returns `'A'`
-when no proximity answer is cached (`index.html:2113-2114` — the
-comment "'yes' OR null (unanswered) both render as Mode A — default-yes
-per state model" sits above the `return 'A'` at line 2116; the
-`return 'B'` at line 2112 fires only when the cached answer is
-strictly `'no'`). So a signed-in household member on a bound TV with
-no proximity answer lands in Mode A, and the karaoke tile-tap
-navigates normally.
+**This does NOT block any check in this runbook.** Mode A is the
+default when no proximity answer is cached, and `getHomeMode()`
+returns `'A'` for both `'yes'` AND `null` (unanswered) — see
+`index.html:2104-2118`, the comment *"'yes' OR null (unanswered)
+both render as Mode A — default-yes per state model"* sits directly
+above the `return 'A'` at line 2116. Mode B is reached ONLY when
+the cached answer is the literal string `'no'`.
 
-Mode B is reached ONLY by an explicit `'no'` — which is why Check 4
-needs the DevTools workaround below to force it. Checks 1, 2, 3, 5
-all run on the natural Mode A default; no workaround needed for them.
+**Discipline for verification:**
+
+- **DO NOT** rely on tapping "Yes, I'm at home" — it does nothing.
+- **DO NOT** rely on `setProximityAnswer()` from DevTools persisting
+  across a reload — it does not.
+- **DO** simply ignore the proximity banner. The karaoke tile is
+  active and tappable from the default state on every reload.
+- For Check 4 (Mode B silent no-op): proximity being broken means
+  Mode B cannot be reliably reached from the UI at all. Check 4 is
+  no longer a live procedure — it is satisfied by code inspection.
+  See §5 for the revised setup.
+
+Checks 1, 2, 3, 5 all run on the natural Mode A default — ignore the
+banner if it appears. Check 4 is code-verified per §5.
 
 ---
 
@@ -196,7 +206,9 @@ Karaoke" creates the session + publishes `launch_app`; TV navigates to
 - Window B: `index.html` on phone or second browser profile, signed in
   as Mike, on `screen-home` bound to the same TV (auto-bound via
   `enterYourTvsFlow`'s n=1 branch, or selected via the n=2 picker).
-  The home tile-grid should be visible.
+  The home tile-grid should be visible. The "Are you at home?" banner
+  may also appear — **ignore it** per §0's proximity discipline.
+  Default Mode A makes the karaoke tile tappable regardless.
 
 ### Steps
 
@@ -513,95 +525,80 @@ games tile-tap will create a session.
 
 ## 5. Check 4 — Mode B (proximity = no) silent no-op
 
+**Status: NOT reliably runnable live. Verify by code inspection
+instead. Low-stakes.**
+
 **Goal:** Confirm karaoke tile-tap in Mode B remains a silent no-op
 (unchanged from pre-Items-5/6 behavior per spec §4 last sub-bullet).
 
-### Mode B reachability — known issue
+### Why this check is not reliably runnable
 
-Per the Tier 1 §8 result log's Deferred Item 3: **the "Are you at
-home?" proximity prompt is non-functional.** Specifically the "Yes,
-I'm at home" button does nothing. Whether the "No, I'm not" button
-works was not verified during the §8 run — it MAY work, but treat as
-unconfirmed.
+Mode B is reached only by a cached `'no'` proximity answer for the
+bound TV — and per §0's proximity discipline, proximity is broken:
+`setProximityAnswer()` does not persist, the banner's "Yes" and
+"Don't ask again" buttons are observably non-functional, and the
+"No, I'm not" button's in-session effect is unverified and depends
+on the same broken API. There is no reliable route into Mode B from
+the UI today. Earlier revisions of this runbook documented a
+DevTools-write-then-reload workaround; that workaround relies on
+sessionStorage persistence across reload, which is exactly the
+behavior the proximity bug breaks, so it does not work either.
 
-### Reaching Mode B reliably — DevTools workaround
+Rather than dress unreliability up as a procedure, treat this check
+as code-verified.
 
-The reliable path is to write the proximity answer directly into
-sessionStorage:
+### How to satisfy Check 4's intent — code inspection
 
-1. Window B: open DevTools (Cmd-Opt-I), Console tab.
-2. Get the bound TV's `tv_device_id` — this is the **`tv_devices.id`
-   UUID** (e.g. `a7047be5-3cf0-4fd5-a066-44f8f533d436`), NOT the
-   `device_key` (e.g. `f7b250cf-7e28-4645-9601-d3e48d27bf95`). The
-   two are both UUIDs and easily confused; the proximity cache keys
-   on `tv_device_id`. Read it via:
-   ```js
-   document.getElementById('screen-home').dataset.tvDeviceId
-   ```
-   Capture this UUID.
+Mode B's karaoke silent-no-op is one line, untouched since long
+before Items 5/6:
 
-3. Write the 'no' answer — PRIMARY path uses the real shell API:
-   ```js
-   setProximityAnswer(document.getElementById('screen-home').dataset.tvDeviceId, 'no')
-   ```
-   `setProximityAnswer` is defined at `index.html:2080` and is
-   console-reachable (top-level function in the non-module script).
-   It is a thin wrapper around the sessionStorage write below — using
-   the real API removes any room for key-format error.
-
-   FALLBACK path (raw write, equivalent — use only if the function
-   call above fails for any reason):
-   ```js
-   sessionStorage.setItem('elsewhere.proximity.' + document.getElementById('screen-home').dataset.tvDeviceId, 'no')
-   ```
-   Verbatim of the wrapper's body — prefix `'elsewhere.proximity.'`
-   + tv_device_id, value `'no'`.
-
-4. Reload the page (regular reload, NOT hard-reload — preserve
-   sessionStorage).
-5. Verify Mode B by typing in the console:
-   ```js
-   getHomeMode()
-   // Expect: 'B'
-   ```
-   `getHomeMode` is defined at `index.html:2104` as a top-level function
-   declaration in the non-module `<script>` block — it is reachable
-   from the console. If it returns 'A' or 'C', the cached 'no' isn't
-   being read (likely the wrong UUID was used — verify you pasted
-   tv_device_id, NOT device_key); do not proceed until 'B' is
-   confirmed.
-
-### Steps
-
-6. Window B is on `screen-home` (Mode B). Tap the **Karaoke** tile
-   (🎤).
-7. **Observation — silent no-op.** Expect:
-   - NO navigation (Window B stays on `screen-home`)
-   - NO alert, no toast, no error
-   - LOG (if visible) shows no realtime publish
-
-This is the pre-Items-5/6 behavior at `index.html:2985`
-(`if (app === 'karaoke') return; // silent no-op`), unchanged by this
-build.
-
-### Cleanup after Check 4
-
-```js
-clearProximityAnswer(document.getElementById('screen-home').dataset.tvDeviceId)
 ```
-(or the equivalent raw `sessionStorage.removeItem('elsewhere.proximity.' + …)`).
+index.html:2985    if (app === 'karaoke') return; // silent no-op
+```
 
-Reload. Confirm `getHomeMode()` returns 'A' again before Check 5.
+That line is inside `handleHomeTileTap`'s Mode B branch (the
+`if (mode === 'B')` arm at `index.html:2984`). Check 4's intent is
+satisfied by confirming the line still says exactly that and that
+no build in scope has touched its enclosing function.
+
+To verify:
+
+```bash
+# Confirm the line is present and unchanged
+grep -n "if (app === 'karaoke') return" index.html
+# Expect: 2985:      if (app === 'karaoke') return; // silent no-op
+# (line number may shift in future edits; the content match is what matters)
+
+# Confirm no commit in this build's scope touched the line
+git log --oneline -- index.html | head -10
+# Inspect each entry; expect zero changes to handleHomeTileTap's
+# Mode B branch since the Session 5 work that established it.
+```
+
+If both checks pass, Mode B's no-op behavior is preserved by
+construction (the code path that produces it is unchanged) and
+Check 4 is satisfied without a live run.
 
 ### Check 4 PASS criteria
 
-- Tile-tap in Mode B produces no navigation, no alert, no toast.
+- `index.html:~2985` still reads `if (app === 'karaoke') return; // silent no-op`
+- The enclosing `handleHomeTileTap` function's Mode B branch is
+  unchanged in the current build's diff.
 
 ### Check 4 FAIL conditions
 
-- Karaoke tile-tap in Mode B navigates to anywhere — Mode B's silent
-  no-op was unintentionally changed by this build (it shouldn't have
-  been — `index.html:2985`'s line is untouched per git diff).
+- The line at `~2985` has been removed or altered, OR the enclosing
+  Mode B branch (`if (mode === 'B')` arm) has been modified in a
+  way that changes the karaoke-tap behavior. Both are red flags
+  that need investigation regardless of whether Mode B is reachable
+  in the UI.
+
+### When Check 4 can be promoted to live
+
+When proximity is fixed (`setProximityAnswer` persists across
+reloads — tracked separately under DEFERRED Item 3 from the Tier 1
+§8 log), restore a live procedure here. Until then, code inspection
+is the honest pass criterion.
 
 ---
 
