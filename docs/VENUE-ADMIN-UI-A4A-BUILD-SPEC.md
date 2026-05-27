@@ -120,11 +120,19 @@ semantics.
 
   fragment "color":
     one of:
-      { "mode": "fixed",     "value": "rgb(255,255,255)" }              // RGB only — alpha is NEVER inside the color string
-      { "mode": "hue_range", "range": [0,360], "sat": 100, "lit": 65 }  // alpha-less; hsla string built at draw time
-    Spotlight kinds use BOTH modes — stadium beams hue-palette
-    (Partition I hue array per beam), festival lasers hue-formula
-    (i*60), speakeasy shafts fixed RGB.
+      { "mode": "fixed", "value": "rgb(255,255,255)" }                 // RGB only — alpha is NEVER inside the color string
+    The color fragment carries a single shared color across all items
+    of an anchor. For kinds with per-item color variation (swept-beam-2d
+    and pulsed-laser, both hue-driven), the color fragment is OMITTED;
+    per-item color comes from the top-level `hues` array (§1.6
+    count:N pattern) combined with shared `geometry.sat_pct` /
+    `geometry.lit_pct`. The hue_range mode is reserved for future
+    kinds that need range-distributed hues per item — A4a does not
+    use it (A3 particle.js uses hue_range for disco mirror-ball
+    point-cloud + festival confetti directional-emitter, but those
+    are particle kinds, not spotlight kinds).
+    Of A4a's three kinds, only light-shaft carries a color fragment
+    (fixed RGB amber).
   fragment "modulator" (optional, cite A3 spec §1.6):
     Inherited by reference from docs/VENUE-ADMIN-UI-A3-BUILD-SPEC.md
     §1.6. Shape: single binding object OR array of binding objects,
@@ -168,13 +176,20 @@ Canonical case: stadium count:4. Source: karaoke/stage.html:4593-4666.
   "stagger_ms": 800,                             // beams start staggered
   // Geometry — shared linear gradient trapezoid:
   "geometry": {
+    "pivot": "top-center",                       // c.translate(ambientW/2, 0) — pivot at top-center of canvas
     "top_width_px": 12,                          // c.moveTo(-6,0) → c.lineTo(6,0)
     "bottom_width_norm": 1.0,                    // c.lineTo(±ambientW*0.5, ambientH)
     "height_norm": 1.0,                          // gradient runs full canvas height
     "sat_pct": 80,                               // hsla saturation
-    "lit_pct": 95                                // hsla lightness
+    "lit_pct": 95,                               // hsla lightness
+    "gradient_stops": [
+      { "at": 0,   "alpha_mult": 1.0 },          // c.createLinearGradient(0,0,0,ambientH).addColorStop(0, alpha)
+      { "at": 0.5, "alpha_mult": 0.4 },          // .addColorStop(0.5, alpha*0.4)
+      { "at": 1,   "alpha_mult": 0.0 }           // .addColorStop(1, 0)
+    ]
   },
-  "color": { "mode": "hue_range", "use_per_beam_array": true },  // explicit: hues array drives per-beam color, sat/lit shared
+  // No color fragment — hue-driven kind uses top-level `hues` array
+  // (§1.6 count:N pattern) + shared geometry.sat_pct/lit_pct. See §1.2.
   // No modulator for A4a per D5
 }
 
@@ -194,7 +209,7 @@ karaoke/stage.html:4844-4916.
   // Per-laser arrays (length = count) per §1.6:
   "hues": [0, 60, 120, 180, 240, 300],           // i*60
   "angle_init": [1.1, 0.96, 0.82, 0.68, 0.54, 0.40],  // π*0.35 - i*0.14
-  "drift_speeds": [0.005, -0.005, 0.005, -0.005, 0.005, -0.005],  // (i%2 ? 1 : -1) * 0.005
+  "drift_speeds": [-0.005, 0.005, -0.005, 0.005, -0.005, 0.005],  // (i%2 ? 1 : -1) * 0.005 — i=0 evaluates 0%2=0 (falsy)→-1, so negative-first
   "base_widths_px": [3, 5, 3, 5, 3, 5],          // 3 + (i%2)*2
   // Shared scalars across all lasers:
   "bpm": 128,                                    // 469ms per beat
@@ -206,15 +221,22 @@ karaoke/stage.html:4844-4916.
   "attack_ease": "power3.out",                   // GSAP-equivalent per §3.5
   "decay_ms": 380,                               // gsap.to duration: 0.38
   "decay_ease": "power2.in",
+  "first_pulse_offset_beats": 0.5,               // setTimeout(beatPulse, BEAT * 0.5) — first pulse fires half a beat after start
   // Geometry — bottom-pivot rotated rect with linear gradient:
   "geometry": {
     "pivot": "bottom-center",                    // c.translate(ambientW/2, ambientH)
     "emit_direction": "up",                      // gradient axis 0,0,0,-ambientH
     "height_norm": 1.0,                          // fillRect(-w/2, -ambientH, w, ambientH)
     "sat_pct": 100,
-    "lit_pct": 65
+    "lit_pct": 65,
+    "gradient_stops": [
+      { "at": 0,   "alpha_mult": 1.0 },          // .addColorStop(0, alpha)
+      { "at": 0.6, "alpha_mult": 0.3 },          // .addColorStop(0.6, alpha*0.3)
+      { "at": 1,   "alpha_mult": 0.0 }           // .addColorStop(1, 0)
+    ]
   },
-  "color": { "mode": "hue_range", "use_per_laser_array": true },
+  // No color fragment — hue-driven kind uses top-level `hues` array
+  // (§1.6 count:N pattern) + shared geometry.sat_pct/lit_pct. See §1.2.
   // No modulator for A4a per D5
 }
 
@@ -245,7 +267,11 @@ karaoke/stage.html:4762-4827.
     "pivot": "top",                              // top edge at y=0
     "top_inset_factor": 0.3,                     // c.moveTo(s.x - s.width*0.3, 0)
     "bottom_outset_factor": 1.0,                 // c.lineTo(s.x ± s.width, ambientH*0.7)
-    "height_norm": 0.7                           // ambientH*0.7
+    "height_norm": 0.7,                          // ambientH*0.7
+    "gradient_stops": [
+      { "at": 0, "alpha_mult": 1.0 },            // .addColorStop(0, rgba(...,alpha))
+      { "at": 1, "alpha_mult": 0.0 }             // .addColorStop(1, rgba(...,0))
+    ]
   },
   "color": { "mode": "fixed", "value": "rgb(255,210,140)" },
   // No modulator for A4a per D5
