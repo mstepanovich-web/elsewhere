@@ -1474,7 +1474,7 @@ Until then, the deferral is harmless — the kind doesn't need to exist if no an
 
 **Deferred in:** Venue Admin UI Stage A3 (spec §1.6 + §7)
 **Deferred on:** 2026-05-27
-**Priority:** Medium — required before particle anchors become load-bearing (Stage 6 / Block B); also surfaces at Stage A4 (spotlight)
+**Priority:** Medium — required before karaoke's read path switches to the registry (Stage A7, which retires AMBIENT_PROFILES + implements the modulator system); A4 and A4.5 surface the binding need but use preview-oscillator heuristics, not real drivers
 **Area:** Shell / cross-cutting (drives particles AND spotlights)
 **Status:** Deferred
 
@@ -1493,7 +1493,7 @@ A real cross-cutting modulator system that:
 - Replaces particle.js's `PREVIEW_OSCILLATORS` map with a registry-resolved driver lookup. The preview fallback (`DEFAULT_OSCILLATOR = () => 1.0`) stays as a safety net for unknown names.
 - Provides the same scalars to the spotlight renderer (Stage A4). Festival's lasers + strobe are modulated by an analogous beat-pulse pattern; that renderer will bind the same modulator names.
 
-The exact API shape is a Stage A4 design question — bundle the design work with A4 since spotlights surface the same need.
+The exact API shape is a Stage A7 design question — A7 is the stage that builds the drivers (A4 and A4.5 surface the binding need by binding the same modulator names but use preview-oscillator heuristics, not real drivers).
 
 #### When to pick this up
 
