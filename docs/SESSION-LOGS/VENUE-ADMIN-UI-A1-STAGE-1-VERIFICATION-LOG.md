@@ -1,7 +1,7 @@
 # Venue Admin UI Stage A1 (Stage 1) — Verification Result Log
 
 **Commit verified:** `9cf4b70` (Stage A1 — db/034 + admin-venues.html) + `606674f` (path-pattern fix applied after initial Check 1 failure; see Bug 1 below)
-**Migration applied to prod:** `db/034_venue_default_update_rpc.sql` on 2026-05-26 via Supabase SQL Editor (recorded in `db/MIGRATIONS_APPLIED.md` row 41)
+**Migration applied to prod:** `db/034_venue_default_update_rpc.sql` on 2026-05-26 via Supabase SQL Editor (recorded in `db/MIGRATIONS_APPLIED.md` row 42; was row 41 at A1 log commit time — shifted when db/035's row was inserted above it post-Stage-A2)
 **Run date:** 2026-05-26
 **Environment:** prod GitHub Pages (https://mstepanovich-web.github.io/elsewhere/) + prod Supabase
 **Verifier:** Mike Stepanovich, signed-in as platform admin (UID `8984755f-9534-437a-a2a7-2aeba06c7e9d`)
@@ -130,7 +130,7 @@ Diff: +37 / −8 LOC. No behavior change beyond fixing the 404s; the RPC call sh
 
 **Why this was missed pre-deploy:** The build spec's §6.5 *("anon does NOT get execute — admin actions require sign-in")* and §8.1 Check 5's expectation (`anon_authed = false`) implicitly assumed PostgreSQL's PUBLIC-default mechanism. The spec author (me, during the propose-pause cycle) didn't know about Supabase's `ALTER DEFAULT PRIVILEGES` direct-grant configuration; the build spec's REVOKE FROM PUBLIC was correct in PostgreSQL-vanilla terms but insufficient in Supabase. The same class of issue — Supabase-specific platform behavior that diverges from PostgreSQL-vanilla expectations and isn't visible from the schema surface — has been documented in CLAUDE.md before: the `--no-verify-jwt` requirement on Edge Function deploys (CLAUDE.md line 167; described there as a "real footgun"). The mechanisms differ but the lesson is the same: Supabase's platform configuration sometimes diverges from PostgreSQL-vanilla expectations, and the divergence isn't visible until apply time.
 
-The full diagnostic walk is captured in `db/MIGRATIONS_APPLIED.md` row 41's Notes column (the "Grant surface — two REVOKEs + one GRANT" paragraph).
+The full diagnostic walk is captured in `db/MIGRATIONS_APPLIED.md` row 42's Notes column (db/034's row; was row 41 at A1 log commit time — shifted when db/035's row was inserted above it post-Stage-A2). The "Grant surface — two REVOKEs + one GRANT" paragraph is in that row's Notes.
 
 ---
 
