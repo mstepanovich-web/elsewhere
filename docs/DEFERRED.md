@@ -1395,6 +1395,239 @@ Pair with Stage A3 (the next Plan-B vertical slice) since that stage will alread
 
 ---
 
+### Deferred: `admin-venues.html` has no logout / account-switch control
+
+**Deferred in:** Venue Admin UI Stage A3 verification (Check 15 round-trip)
+**Deferred on:** 2026-05-27
+**Priority:** Medium — a non-admin user is fully stuck and must switch browsers
+**Area:** Admin surfaces
+**Status:** Deferred
+
+#### Context
+
+`admin-venues.html` has no logout or account-switch control. The page inherits whatever Supabase session is in browser localStorage. When a non-admin session is present it shows "Not authorized" with no recourse.
+
+The obvious console workaround — running `window.sb.auth.signOut()` from devtools — does NOT work from the Not-Authorized state. `window.sb` is not reliably exposed on that page; the page appears to bail before wiring the Supabase client. So a non-admin user is fully stuck and must switch browsers (or open an incognito window) to recover their session.
+
+Hit during A3 Check 15 (admin panel round-trip verification).
+
+#### What's deferred
+
+Add a sign-out control that is available even on the Not-Authorized screen, not gated behind the authorized UI. The control needs its own Supabase client wiring (independent of the authorized-UI boot path) so it works from the Not-Authorized state. Likely shape: an always-visible header sign-out button + a separate minimal Supabase client init that runs before the admin check, so `signOut()` is available regardless of which gate is active.
+
+#### When to pick this up
+
+Pair with the next admin-surface stage (Stage A4 — particle 3D / spotlight, or whichever stage next touches admin-venues.html) or as a standalone small fix when the next non-admin lockout happens. Cheap fix; the layering is the only design question (a separate auth bootstrap module, or inline minimal init).
+
+#### Related
+
+- A3 verification Check 15 — where the gap surfaced
+- `admin-venues.html` `admin-gate` panel (the trap) and the boot sequence that bails before exposing `window.sb` on that path
+- `docs/VENUE-ADMIN-UI-A3-BUILD-SPEC.md` §4 — admin panel scope (the spec did not include sign-out / auth UI in A3's deliverable surface)
+
+---
+
+### Deferred: P1 / drifting-cloud 4th particle kind
+
+**Deferred in:** Venue Admin UI Stage A3 (spec §1.7 + §7)
+**Deferred on:** 2026-05-27
+**Priority:** Low — additive when needed; A3's 4 in-scope effects don't require this kind
+**Area:** Schema — particle anchor kind vocabulary
+**Status:** Deferred
+
+#### Context
+
+The A3 foundation pass pressure-tested the 3-kind set (point-cloud / directional-emitter / volumetric) against all 8 procedural 2D particle effects in `karaoke/stage.html`. The pressure-test identified a 4th uncovered pattern, provisionally named **drifting-cloud**: a cloud of particles that is eternal-twinkling (like point-cloud) BUT has linear spatial drift with edge-WRAP (not die-and-respawn). The distinguishing feature is wrap-around behavior vs traverse-and-die.
+
+Two ghost venues exhibit P1: `space` (starfield drifting left with single-axis wrap, karaoke/stage.html:4737-4759) and `forest` (fireflies drifting omnidirectionally with 4-edge wrap + composite render, karaoke/stage.html:4918-4931). Neither is in the 26-venue inventory; both are dead procedural code that Stage 6 will clean up.
+
+None of A3's 4 in-scope effects (stadium point-cloud, disco point-cloud-polar, speakeasy volumetric, festival directional-emitter) exhibit P1. A3 deliberately did not implement the 4th kind, on the principle that adding a kind without a real consumer makes the spec wider than the implementation can validate.
+
+#### What's deferred
+
+A 4th `payload.kind` value `drifting-cloud` with its own schema fragment in §1:
+- Similar to point-cloud (fixed-count particles, optional twinkle, eternal lifetime)
+- Plus `velocity_range: {vx:[min,max], vy:[min,max]}` for per-particle drift
+- Plus `wrap_axes: 'x' | 'y' | 'both'` for edge-wrap behavior
+- Plus an extension to the `render` fragment for composite renders (core + glow) as in the forest case
+
+Renderer dispatch adds one arm in `particleAnchorRenderer`'s switch (`shell/venue-renderers/particle.js`). Spec §1 amendment + particle.js extension + admin panel kind-selector addition; all additive (no breakage to existing 3 kinds, since the discriminator is `payload.kind`).
+
+#### When to pick this up
+
+When either:
+- A venue in the 26-venue inventory needs the drift+wrap+twinkle pattern (none currently does), OR
+- Stage 6 / a ghost-venue revival begins translating the space / forest procedural code, OR
+- A new venue design calls for the pattern (the kind is a useful primitive — slow-drift starfield, lazy bubble-field, etc.)
+
+Until then, the deferral is harmless — the kind doesn't need to exist if no anchor uses it.
+
+#### Related
+
+- `docs/VENUE-ADMIN-UI-A3-BUILD-SPEC.md` §1.7 — the P1 deferral acknowledged in the spec
+- A3 foundation pass pressure-test (this session) — the 8-effect mapping that surfaced P1
+- Ghost venue procedural code at `karaoke/stage.html:4737-4759` (space) and `karaoke/stage.html:4918-4931` (forest)
+
+---
+
+### Deferred: venue modulator system
+
+**Deferred in:** Venue Admin UI Stage A3 (spec §1.6 + §7)
+**Deferred on:** 2026-05-27
+**Priority:** Medium — required before particle anchors become load-bearing (Stage 6 / Block B); also surfaces at Stage A4 (spotlight)
+**Area:** Shell / cross-cutting (drives particles AND spotlights)
+**Status:** Deferred
+
+#### Context
+
+A3's particle payloads record modulator BINDINGS in the form `{name: <string>, target: <particle property>}` (or arrays of such bindings per the §1.6 amendment). Stadium binds `{name:"crowd_brightness", target:"alpha"}`; disco binds two — `{name:"beat_scale", target:"size"}` + `{name:"beat_brightness", target:"alpha"}`. These bindings name the venue-level scalar a particle's property should track.
+
+A3 does NOT build the modulator SYSTEM. The real venue-level GSAP-driven scalars (stadium's `crowdState.brightness` cheer-swell loop at karaoke/stage.html:4615-4625; disco's `beatState.scale` and `beatState.brightness` from the 120bpm pulse loop at karaoke/stage.html:4683-4694) currently live INSIDE the procedural `AMBIENT_PROFILES` venue closures. They're not exposed through the registry or any shell-level surface.
+
+For A3's admin preview, `shell/venue-renderers/particle.js` ships with a `PREVIEW_OSCILLATORS` map (`crowd_brightness` → continuous sine [0.6, 1.4] period 10s; `beat_scale` / `beat_brightness` → half-rectified sines at 2Hz with amplitudes matching source GSAP targets). These approximate the GSAP dynamics so the preview canvas looks alive, but they are HEURISTICS, not the real driver. An unknown modulator name falls back to a constant `1.0` (no modulation).
+
+#### What's deferred
+
+A real cross-cutting modulator system that:
+- Exposes venue-level GSAP-driven scalars (or whatever the eventual implementation uses) through a registry-level API — likely `registerModulatorDriver(name, fn)` in `shell/venue-registry.js`, paired with a per-venue activation lifecycle (`activateModulators(venueId)` / `deactivateModulators(venueId)`).
+- Replaces particle.js's `PREVIEW_OSCILLATORS` map with a registry-resolved driver lookup. The preview fallback (`DEFAULT_OSCILLATOR = () => 1.0`) stays as a safety net for unknown names.
+- Provides the same scalars to the spotlight renderer (Stage A4). Festival's lasers + strobe are modulated by an analogous beat-pulse pattern; that renderer will bind the same modulator names.
+
+The exact API shape is a Stage A4 design question — bundle the design work with A4 since spotlights surface the same need.
+
+#### When to pick this up
+
+When particle anchors transition from dormant to load-bearing — i.e. Stage 6 (the AMBIENT_PROFILES retirement, where karaoke's read path consults the registry-resolved renderer instead of the procedural closures). At that point the registry needs the real modulator values, not preview heuristics. Stage A4 (spotlight) will surface the same need; design and ship together.
+
+#### Related
+
+- `docs/VENUE-ADMIN-UI-A3-BUILD-SPEC.md` §1.6 — modulator field shape (the binding A3 records)
+- `docs/VENUE-ADMIN-UI-A3-BUILD-SPEC.md` §3.3 + §7 — A3 explicitly defers this; the §3.3 CLR-5 breadcrumb points at particle.js's preview oscillator
+- `shell/venue-renderers/particle.js` — the `PREVIEW_OSCILLATORS` map to be replaced
+- `karaoke/stage.html:4615-4625` (stadium `crowdState`) + `karaoke/stage.html:4683-4694` (disco `beatState`) — where the real GSAP modulator state currently lives, inside per-venue closures
+- Stage A4 (spotlight, future) — will bind the same modulator names; surfaces this need at the same time
+
+---
+
+### Deferred: particle panel validates JSON well-formedness only, not §1 schema shape
+
+**Deferred in:** Venue Admin UI Stage A3 (spec §4 + §7)
+**Deferred on:** 2026-05-27
+**Priority:** Low — acceptable per A3 since the admin surface is platform-admin-only and the renderer degrades gracefully on schema-shape mismatches
+**Area:** Admin surfaces — admin-venues.html particle panel
+**Status:** Deferred
+
+#### Context
+
+The particle anchor authoring panel in `admin-venues.html` validates the JSON textareas only for well-formedness (`JSON.parse()` success). A textarea containing `[1, 2]` parses successfully whether it lands in `x_range` (correct shape) or `velocity_range` (wrong shape — should be `{vx:[a,b], vy:[c,d]}`).
+
+When the admin saves or previews a payload with a well-formed-but-wrong-shape field, the panel accepts it. The renderer (`shell/venue-renderers/particle.js`) reads the payload at runtime and uses default fallbacks for misshaped fields — e.g. `velocity_range: [1, 2]` causes `velRange.vx` (and `velRange.vy`) to be `undefined`, particles spawn with `vx = pickInRange(undefined, 0) = 0`. The effect renders something (often visibly broken) rather than throwing, so the admin notices the visual error and fixes the payload.
+
+Acceptable for A3 per the panel's admin-only scope: the only authors are platform admins iterating against a live preview canvas. The visual feedback loop catches schema-shape errors before they're saved to prod.
+
+#### What's deferred
+
+A pre-save / pre-preview validator that checks each field against the §1 schema. Likely shape: a `validateParticlePayload(payload)` function that walks the kind-discriminated schema and produces field-keyed errors:
+
+- `x_range` must be `[number, number]` with `0 <= x_range[0] < x_range[1] <= 1`
+- `velocity_range` must be `{vx: [number, number], vy: [number, number]}`
+- `polar` (when `position_layout === 'polar-projected'`) must include `center, dist_range, vertical_squash, rotation_velocity`
+- `modulator` must be a `{name, target}` object OR an array of such
+- `color` must match one of the two color-fragment shapes
+- ... etc. per the §1 schema
+
+Save and Preview gates check the errors array before proceeding (parallel to how `readParticlePayloadFromRow` already collects JSON-parse errors).
+
+Could be extracted as `shell/venue-renderers/particle-schema.js` if the renderer wants to use it too (defensive runtime validation alongside the panel's pre-save validation).
+
+#### When to pick this up
+
+When EITHER:
+- The admin surface widens to non-platform-admin authors (e.g. a "venue designer" role per-app), OR
+- The renderer's graceful-fallback behavior produces confusing-enough visuals that the admin can't reliably distinguish schema-shape errors from design intent, OR
+- A non-trivial number of payloads land in prod with schema-shape bugs that the visual check missed
+
+Until one of those, the well-formedness check + graceful renderer is the right level for an admin-only iteration tool.
+
+#### Related
+
+- `docs/VENUE-ADMIN-UI-A3-BUILD-SPEC.md` §4.2 — per-kind form (the panel surface this would validate)
+- `docs/VENUE-ADMIN-UI-A3-BUILD-SPEC.md` §1 — the schema this would validate against
+- `admin-venues.html` — `readParticlePayloadFromRow` (the parse + JSON-well-formedness check that would be extended) and `onParticleAnchorSave` / `onPlayParticlePreview` (the save/preview gates that would consume the errors array)
+- `shell/venue-renderers/particle.js` — the graceful-fallback consumer
+
+---
+
+### Deferred: disco `rotation_velocity` (and other seeded velocity/rate values) reads visually fast at seed value
+
+**Deferred in:** Venue Admin UI Stage A3 verification (Check 16)
+**Deferred on:** 2026-05-27
+**Priority:** Low — venue-tuning question, not a renderer bug
+**Area:** Venue payloads / future Admin UI Part 2 tuning workflow
+**Status:** Deferred
+
+#### Context
+
+disco's `anc_par_disco` payload carries `polar.rotation_velocity = 0.012` rad/frame (~8.7s per revolution at 60fps), byte-faithfully transcribed from `karaoke/stage.html`'s disco procedural code at line 4709. During A3 Check 16 verification, the polar mirror-ball rotation read as visually fast — faster than the source's intent feels.
+
+This is NOT a renderer correctness bug. CLR-7 (polar `dist_range` normalization against `max(canvas.width, canvas.height)`) was verified correct in Check 16. The renderer honors the seeded value faithfully. CLR-8 canvas-clip behaves as designed.
+
+This is a **venue tuning question**: does the seeded value (transcribed from procedural code) feel right for production? The procedural code's value was set in the original venue authoring; whether it remains right for the data-driven path is a separate question — particularly since the original procedural rendering ran inside karaoke's full panorama context (with parallax, ambient effects, etc.) while A3's bounded admin preview surfaces it on a smaller canvas where motion reads differently.
+
+#### What's deferred
+
+A real-time payload-editing workflow in the admin UI where an admin can tune values while watching the LIVE venue render (not the bounded preview canvas — the actual karaoke/stage.html or its A4+ equivalent). The admin would adjust `polar.rotation_velocity` (and other tunable parameters) and see the effect in the production rendering context, then save when the value feels right.
+
+May apply to other seeded velocity/rate values across the other 3 particle anchors:
+- **festival** confetti `velocity_range.vy: [0.4, 1.6]` (fall speed) — byte-faithful from `karaoke/stage.html:4907`
+- **speakeasy** smoke `size_growth_rate: 0.2`, `fade_rate: 0.00015`, `velocity_range.vy: [-0.45, -0.10]` — byte-faithful from `karaoke/stage.html:4791-4794`
+- **stadium** phone-lights `twinkle_phase_speed_range: [0.008, 0.033]` — byte-faithful from `karaoke/stage.html:4632`
+
+None of these were retuned in A3 — all 4 payloads ship byte-faithful from source. The question is whether any of these values benefit from in-context retuning once the admin UI gains the in-situ tuning surface.
+
+#### When to pick this up
+
+**Admin UI Part 2** (post-A8) when the surface gains in-situ tuning workflows. Per `docs/VENUE-ADMIN-UI-DIRECTION.md` §3 / Decision 2, Part 2 is post-Phase-5 — that's the natural home for a real-time tuning UI.
+
+OR earlier if a stakeholder review of a venue in prod surfaces specific values that need retuning. In that case, the retuning happens as a one-off direct SQL UPDATE on `public.venue_anchors` (the same pattern as the seed-id restore in A3 verification cleanup), gated on the visual-correctness review that surfaces the issue.
+
+#### Related
+
+- A3 Check 16 finding (`docs/SESSION-LOGS/VENUE-ADMIN-UI-A3-VERIFICATION-LOG.md` — this verification log)
+- `shell/venue-renderers/particle.js` — the renderer that faithfully honors these values
+- `karaoke/stage.html` lines 4709 (disco rotation), 4791-4794 (speakeasy smoke), 4632 (stadium twinkle), 4907 (festival confetti) — the procedural sources the values were transcribed from
+- `docs/VENUE-ADMIN-UI-DIRECTION.md` §3 / Decision 2 — Admin UI Part 2 scope (where the in-situ tuning workflow lives)
+- Future Admin UI Part 2 spec (not yet written)
+
+---
+
+### Deferred: A3 build spec internal references to spotlight as "Stage A5" should be "Stage A4"
+
+**Deferred in:** A3 closeout (Stage A3 verification log finding)
+**Deferred on:** 2026-05-27
+**Priority:** Low — documentation drift only, no functional impact
+**Area:** Spec docs
+**Status:** Deferred
+
+#### Context
+
+`docs/VENUE-ADMIN-UI-A3-BUILD-SPEC.md` contains ~6-8 references to spotlight as "Stage A5" across §§0.2, 6, 7, etc. These predate the A3 spec's own write-up and miscounted from Direction §7's authoritative staging, which calls spotlight **Stage 4** (not 5). Verified during A3 closeout when the verification log's Conclusion needed to cite the correct stage identity for "what's next" — Direction §7 is authoritative; A3 spec is the drift.
+
+#### What's deferred
+
+A find-and-replace pass over `docs/VENUE-ADMIN-UI-A3-BUILD-SPEC.md` replacing "Stage A5", "A5 (spotlight…", "A5's Three.js…" etc. with the corresponding A4 reference. Trivial mechanical change; deferred only because it's out of scope for the A3 closeout (docs-only commit recording what shipped, not retroactive spec hygiene).
+
+#### When to pick this up
+
+Next time the A3 spec is touched for any reason (rare, since A3 has shipped) — fold the rename into that commit. Or as a one-off cleanup commit when convenient.
+
+#### Related
+
+- `docs/SESSION-LOGS/VENUE-ADMIN-UI-A3-VERIFICATION-LOG.md` Conclusion + numbering note (the closeout finding)
+- `docs/VENUE-ADMIN-UI-DIRECTION.md` §7 (authoritative staging)
+
+---
+
 ## Venues integration (post-Session-5)
 
 Cluster of items surfaced during Session 5 Part 2b scope review that resolve when venues-as-cross-app-service work begins (see "Venues as cross-app service (games, wellness, future apps)" entry above for the parent refactor). All six are architectural or design-clarification items, not bugs — they capture decisions deferred from Session 5 that affect games visual parity, proximity semantics, and participant lifecycle cleanup.
