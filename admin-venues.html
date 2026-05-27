@@ -31,6 +31,7 @@
        Matches the pattern in tv2.html / index.html / karaoke/stage.html. -->
   <script type="module" src="shell/auth.js"></script>
   <script type="module" src="shell/venue-settings.js"></script>
+  <script type="module" src="shell/venue-renderers/audio.js"></script>
 
   <style>
     /* ─── Base ────────────────────────────────────────────────────── */
@@ -329,6 +330,93 @@
       font-size: 10px;
       color: var(--color-text-faint);
     }
+
+    /* ─── Audio anchor panel (Stage 2) ─────────────────────────────── */
+    .anchor-panel {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid var(--color-border);
+    }
+    .anchor-panel-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .anchor-panel-header h2 {
+      font-family: var(--font-mono);
+      letter-spacing: .08em;
+      font-size: 14px;
+      color: var(--color-gold);
+      margin: 0;
+      flex: 1;
+    }
+    .anchor-panel-header button {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 6px 12px;
+      border: 1px solid var(--color-border);
+      background: transparent;
+      color: var(--color-text);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .anchor-list { list-style: none; margin: 0; padding: 0; }
+    .anchor-row {
+      padding: 12px;
+      margin-bottom: 8px;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      background: rgba(255,255,255,.02);
+    }
+    .anchor-row.dirty { border-color: var(--color-gold); }
+    .anchor-id-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .anchor-id { font-size: 11px; color: var(--color-text-faint); }
+    .anchor-dirty-dot { color: var(--color-gold); font-size: 18px; line-height: 0; }
+    .anchor-field-row {
+      display: grid; grid-template-columns: 100px 1fr; gap: 8px;
+      align-items: center; margin-bottom: 6px;
+    }
+    .anchor-field-row label {
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--color-text-faint);
+    }
+    .anchor-field-row input[type="text"] {
+      background: var(--color-bg); border: 1px solid var(--color-border);
+      border-radius: 4px; color: var(--color-text);
+      font-family: var(--font-mono); font-size: 12px; padding: 4px 8px;
+    }
+    .anchor-row-actions {
+      display: flex; gap: 8px; margin-top: 8px;
+    }
+    .anchor-row-actions button {
+      font-family: var(--font-mono); font-size: 10px;
+      padding: 4px 10px; border: 1px solid var(--color-border);
+      background: transparent; color: var(--color-text);
+      border-radius: 4px; cursor: pointer;
+    }
+    .anchor-row-actions button:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-anchor-save:not(:disabled) {
+      background: var(--color-gold); color: var(--color-bg);
+      border-color: var(--color-gold);
+    }
+    .btn-anchor-delete { color: #e07e7e; }
+    .anchor-empty {
+      color: var(--color-text-faint); font-style: italic;
+      padding: 16px; text-align: center;
+    }
+    .anchor-limit-note {
+      color: var(--color-text-faint); font-style: italic;
+      padding: 8px 12px; font-size: 12px;
+      border: 1px dashed var(--color-border); border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .anchor-status {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--color-text-faint); margin-top: 4px;
+    }
+    .anchor-status.error { color: #e07e7e; }
+    .anchor-status.success { color: var(--color-gold); }
   </style>
 </head>
 <body>
@@ -428,6 +516,21 @@
           <span>Updated: <span class="mono" id="ed-updated-at">—</span></span>
           <span>by <span class="mono" id="ed-updated-by">—</span></span>
         </div>
+
+        <section class="anchor-panel" id="audio-anchor-panel">
+          <header class="anchor-panel-header">
+            <h2>Audio anchors</h2>
+            <button id="btn-add-audio-anchor" type="button">+ Add audio anchor</button>
+            <button id="btn-stop-preview" type="button">⏹ Stop preview</button>
+          </header>
+          <div class="anchor-limit-note" id="audio-anchor-limit-note" hidden>
+            This venue already has an audio anchor. Edit or delete the existing anchor to change the sound.
+          </div>
+          <ul class="anchor-list" id="audio-anchor-list"></ul>
+          <div class="anchor-empty" id="audio-anchor-empty" hidden>
+            No audio anchors yet for this venue. Click "+ Add audio anchor" to create one.
+          </div>
+        </section>
       </div>
     </section>
   </main>
@@ -449,6 +552,12 @@
       saving: false,
       jsonErrors: { motion: null, ambient: null },
     };
+
+    // Stage 2 — audio anchor state
+    state.anchors      = new Map();   // venueId -> array of saved anchor rows
+    state.anchorDirty  = new Map();   // anchorId -> { col: value, ... }
+    state.anchorNew    = new Map();   // anchorId (client-generated) -> { venue_id }
+    state.anchorErrors = new Map();   // anchorId -> last error message
 
     // Per VENUE-ADMIN-UI-A1-BUILD-SPEC §2 (locked inventory).
     const PROCEDURAL_VENUES = new Set([
@@ -649,12 +758,12 @@
     // ─── Editor render ──────────────────────────────────────────────
     function selectVenue(venueId) {
       // Dirty-check current venue (per spec §5.5 — inline confirm).
-      if (state.selectedVenueId && state.selectedVenueId !== venueId
-          && state.dirty.has(state.selectedVenueId)) {
-        const ok = confirm('Discard unsaved changes to ' + state.selectedVenueId + '?');
+      // Stage 2: dirty includes both venue_defaults edits AND audio anchor edits.
+      const outgoingId = state.selectedVenueId;
+      if (outgoingId && outgoingId !== venueId && venueHasAnyDirty(outgoingId)) {
+        const ok = confirm('Discard unsaved changes to ' + outgoingId + '?');
         if (!ok) return;
-        state.dirty.delete(state.selectedVenueId);
-        updateDirtyIndicator(state.selectedVenueId);
+        discardAllForVenue(outgoingId);
       }
       state.selectedVenueId = venueId;
       document.querySelectorAll('.venue-row').forEach(r => {
@@ -663,6 +772,37 @@
       document.getElementById('empty-state').hidden = true;
       document.getElementById('editor-body').hidden = false;
       renderEditor(venueId);
+      // Stage 2 — load + render the audio anchor panel.
+      loadAndRenderAudioPanel(venueId);
+    }
+
+    // Combined dirty check across venue_defaults editor + audio anchors.
+    function venueHasAnyDirty(venueId) {
+      if (state.dirty.has(venueId)) return true;
+      if (!venueId) return false;
+      // Any pending-new anchor for this venue?
+      for (const [, info] of state.anchorNew) {
+        if (info.venue_id === venueId) return true;
+      }
+      // Any dirty saved anchor for this venue?
+      const venueAnchors = state.anchors.get(venueId) || [];
+      for (const a of venueAnchors) {
+        if (state.anchorDirty.has(a.id)) return true;
+      }
+      return false;
+    }
+
+    function discardAllForVenue(venueId) {
+      state.dirty.delete(venueId);
+      updateDirtyIndicator(venueId);
+      // Clear all anchor-dirty + pending-new for this venue.
+      const venueAnchors = state.anchors.get(venueId) || [];
+      for (const a of venueAnchors) {
+        state.anchorDirty.delete(a.id);
+      }
+      for (const [id, info] of state.anchorNew) {
+        if (info.venue_id === venueId) state.anchorNew.delete(id);
+      }
     }
 
     function renderEditor(venueId) {
@@ -880,6 +1020,326 @@
       renderEditor(venueId);
     }
 
+    // ─── Stage 2: Audio anchor panel ────────────────────────────────
+
+    async function loadAndRenderAudioPanel(venueId) {
+      if (!venueId) return;
+      // Stop any preview audio when switching venues.
+      try { window.elsewhere?.audioRenderer?.stopAll?.(); } catch (_) {}
+      // Load if not cached.
+      if (!state.anchors.has(venueId)) {
+        const vs = await waitForVenueSettings();
+        if (!vs) {
+          renderAudioPanel(venueId);  // render empty
+          return;
+        }
+        try {
+          const rows = await vs.loadVenueAnchors({ venueId, type: 'audio' });
+          state.anchors.set(venueId, rows || []);
+        } catch (e) {
+          console.error('[admin-venues] loadVenueAnchors failed:', e);
+          state.anchors.set(venueId, []);
+        }
+      }
+      renderAudioPanel(venueId);
+    }
+
+    function renderAudioPanel(venueId) {
+      const listEl  = document.getElementById('audio-anchor-list');
+      const emptyEl = document.getElementById('audio-anchor-empty');
+      listEl.innerHTML = '';
+
+      const savedRows = state.anchors.get(venueId) || [];
+      // Render saved anchors first
+      for (const anchor of savedRows) {
+        listEl.appendChild(makeAnchorRow(anchor, /*pending*/ false));
+      }
+      // Then pending-new anchors for this venue
+      for (const [pendingId, info] of state.anchorNew) {
+        if (info.venue_id === venueId) {
+          listEl.appendChild(makeAnchorRow({
+            id: pendingId, venue_id: venueId, type: 'audio',
+            payload: { type: 'mp3', sound_id: '' }, label: '', is_broken: false,
+          }, /*pending*/ true));
+        }
+      }
+
+      const count = audioAnchorCount(venueId);
+      emptyEl.hidden = count > 0;
+      applyAddAudioAnchorButtonState(venueId);
+    }
+
+    function audioAnchorCount(venueId) {
+      const saved = (state.anchors.get(venueId) || []).length;
+      let pending = 0;
+      for (const [, info] of state.anchorNew) {
+        if (info.venue_id === venueId) pending++;
+      }
+      return saved + pending;
+    }
+
+    function applyAddAudioAnchorButtonState(venueId) {
+      const btn     = document.getElementById('btn-add-audio-anchor');
+      const limitEl = document.getElementById('audio-anchor-limit-note');
+      const count   = audioAnchorCount(venueId);
+      if (count >= 1) {
+        btn.hidden = true;
+        limitEl.hidden = false;
+      } else {
+        btn.hidden = false;
+        limitEl.hidden = true;
+      }
+    }
+
+    function makeAnchorRow(anchor, isPending) {
+      const li = document.createElement('li');
+      li.className = 'anchor-row';
+      li.dataset.anchorId = anchor.id;
+      li.dataset.pending  = isPending ? '1' : '0';
+
+      const isDirty = state.anchorDirty.has(anchor.id) || isPending;
+      if (isDirty) li.classList.add('dirty');
+
+      // Initial values: anchorDirty buffer overrides anchor's saved values
+      const buf = state.anchorDirty.get(anchor.id) || {};
+      const effectiveSoundId = ('sound_id' in buf)
+        ? buf.sound_id
+        : (anchor.payload?.sound_id || '');
+      const effectiveLabel   = ('label' in buf) ? buf.label : (anchor.label || '');
+      const effectiveBroken  = ('is_broken' in buf) ? buf.is_broken : !!anchor.is_broken;
+
+      li.innerHTML = `
+        <div class="anchor-id-row">
+          <span class="anchor-id mono">${escapeHTML(anchor.id)}${isPending ? ' (pending)' : ''}</span>
+          <span class="anchor-dirty-dot"${isDirty ? '' : ' hidden'}>•</span>
+        </div>
+        <div class="anchor-field-row">
+          <label>sound_id</label>
+          <input type="text" class="anchor-sound-id" data-field="sound_id" value="${escapeAttr(effectiveSoundId)}">
+        </div>
+        <div class="anchor-field-row">
+          <label>label</label>
+          <input type="text" class="anchor-label" data-field="label" value="${escapeAttr(effectiveLabel)}">
+        </div>
+        <div class="anchor-field-row">
+          <label>is_broken</label>
+          <input type="checkbox" class="anchor-broken" data-field="is_broken"${effectiveBroken ? ' checked' : ''}>
+        </div>
+        <div class="anchor-row-actions">
+          <button type="button" class="btn-play-preview">▶ Play preview</button>
+          <button type="button" class="btn-anchor-save"${isDirty && effectiveSoundId ? '' : ' disabled'}>Save</button>
+          ${isPending
+            ? '<button type="button" class="btn-anchor-cancel">Cancel</button>'
+            : '<button type="button" class="btn-anchor-delete">Delete</button>'}
+        </div>
+        <div class="anchor-status" data-status></div>
+      `;
+      return li;
+    }
+
+    function escapeHTML(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+      ));
+    }
+    function escapeAttr(s) { return escapeHTML(s); }
+
+    // Field-change tracking — uses delegated event listeners on the list.
+    function onAnchorFieldInput(event) {
+      const target = event.target;
+      if (!target.matches('input[data-field]')) return;
+      const row = target.closest('.anchor-row');
+      if (!row) return;
+      const anchorId = row.dataset.anchorId;
+      const field    = target.dataset.field;
+      const value    = (target.type === 'checkbox') ? target.checked : target.value;
+      setAnchorDirtyField(anchorId, field, value);
+      updateAnchorRowUI(row, anchorId);
+    }
+
+    function setAnchorDirtyField(anchorId, field, value) {
+      // Compare against original (saved row or pending-new placeholder)
+      const savedAnchors = state.anchors.get(state.selectedVenueId) || [];
+      const original = savedAnchors.find(a => a.id === anchorId);
+      const isPending = state.anchorNew.has(anchorId);
+
+      // For pending anchors, every field is "dirty" until saved
+      // (there's nothing to compare against — the row is new)
+      if (isPending) {
+        const buf = state.anchorDirty.get(anchorId) || {};
+        buf[field] = value;
+        state.anchorDirty.set(anchorId, buf);
+        return;
+      }
+
+      const origValue = (field === 'sound_id')
+        ? (original?.payload?.sound_id || '')
+        : (original?.[field] ?? (field === 'is_broken' ? false : ''));
+
+      let buf = state.anchorDirty.get(anchorId);
+      if (jsonEqual(value, origValue)) {
+        if (buf) {
+          delete buf[field];
+          if (Object.keys(buf).length === 0) state.anchorDirty.delete(anchorId);
+        }
+      } else {
+        if (!buf) { buf = {}; state.anchorDirty.set(anchorId, buf); }
+        buf[field] = value;
+      }
+    }
+
+    function updateAnchorRowUI(row, anchorId) {
+      const isPending = state.anchorNew.has(anchorId);
+      const buf       = state.anchorDirty.get(anchorId);
+      const isDirty   = !!buf || isPending;
+      row.classList.toggle('dirty', isDirty);
+      row.querySelector('.anchor-dirty-dot').hidden = !isDirty;
+
+      // Save enabled only when dirty AND sound_id is non-empty.
+      const soundIdInput = row.querySelector('input[data-field="sound_id"]');
+      const hasSoundId   = soundIdInput && soundIdInput.value.trim().length > 0;
+      row.querySelector('.btn-anchor-save').disabled = !(isDirty && hasSoundId);
+    }
+
+    async function onAnchorSave(anchorId) {
+      const venueId   = state.selectedVenueId;
+      const isPending = state.anchorNew.has(anchorId);
+      const buf       = state.anchorDirty.get(anchorId);
+      if (!buf && !isPending) return;
+
+      // Build the partial. sound_id wraps back into payload; other fields are direct.
+      const partial = {};
+      const allKeys = new Set(Object.keys(buf || {}));
+      if (isPending) {
+        // For pending, we need a complete-enough partial.
+        // The DB requires type for INSERT; we always supply it.
+        partial.type = 'audio';
+        const soundId = (buf?.sound_id || '').trim();
+        if (!soundId) {
+          showAnchorStatus(anchorId, 'sound_id required', 'error');
+          return;
+        }
+        partial.payload   = { type: 'mp3', sound_id: soundId };
+        if ('label' in buf)     partial.label     = buf.label;
+        if ('is_broken' in buf) partial.is_broken = buf.is_broken;
+      } else {
+        // For an edit, wrap sound_id back into payload if it changed,
+        // preserving any other payload keys.
+        const savedAnchors = state.anchors.get(venueId) || [];
+        const original = savedAnchors.find(a => a.id === anchorId);
+        if ('sound_id' in (buf || {})) {
+          partial.payload = {
+            ...(original?.payload || {}),
+            type: 'mp3',
+            sound_id: buf.sound_id,
+          };
+          allKeys.delete('sound_id');
+        }
+        for (const k of allKeys) partial[k] = buf[k];
+      }
+
+      showAnchorStatus(anchorId, 'Saving…', null);
+      try {
+        const { data, error } = await window.sb.rpc('rpc_venue_anchor_upsert', {
+          p_id:       anchorId,
+          p_venue_id: venueId,
+          p_partial:  partial,
+        });
+        if (error) throw error;
+        if (!data) throw new Error('rpc returned no row');
+
+        // Update local cache
+        const savedAnchors = state.anchors.get(venueId) || [];
+        if (isPending) {
+          savedAnchors.push(data);
+          state.anchorNew.delete(anchorId);
+        } else {
+          const idx = savedAnchors.findIndex(a => a.id === anchorId);
+          if (idx >= 0) savedAnchors[idx] = data; else savedAnchors.push(data);
+        }
+        state.anchors.set(venueId, savedAnchors);
+        state.anchorDirty.delete(anchorId);
+        renderAudioPanel(venueId);
+        // Toast on the (now-rebuilt) row
+        showAnchorStatus(data.id, 'Saved', 'success');
+        setTimeout(() => clearAnchorStatus(data.id), 2000);
+      } catch (e) {
+        const code = e?.code ? ' [' + e.code + ']' : '';
+        showAnchorStatus(anchorId, 'Save failed' + code + ': ' + (e.message || e), 'error');
+      }
+    }
+
+    async function onAnchorDelete(anchorId) {
+      const venueId = state.selectedVenueId;
+      const savedAnchors = state.anchors.get(venueId) || [];
+      const anchor = savedAnchors.find(a => a.id === anchorId);
+      const soundLabel = anchor?.payload?.sound_id || anchorId;
+      const ok = confirm('Delete audio anchor "' + soundLabel + '" for ' + venueId + '?');
+      if (!ok) return;
+      showAnchorStatus(anchorId, 'Deleting…', null);
+      try {
+        const { error } = await window.sb.rpc('rpc_venue_anchor_delete', { p_id: anchorId });
+        if (error) throw error;
+        state.anchors.set(venueId, savedAnchors.filter(a => a.id !== anchorId));
+        state.anchorDirty.delete(anchorId);
+        renderAudioPanel(venueId);
+      } catch (e) {
+        const code = e?.code ? ' [' + e.code + ']' : '';
+        showAnchorStatus(anchorId, 'Delete failed' + code + ': ' + (e.message || e), 'error');
+      }
+    }
+
+    function onAnchorCancel(anchorId) {
+      state.anchorNew.delete(anchorId);
+      state.anchorDirty.delete(anchorId);
+      renderAudioPanel(state.selectedVenueId);
+    }
+
+    function onAddAudioAnchor() {
+      const venueId = state.selectedVenueId;
+      if (!venueId) return;
+      if (audioAnchorCount(venueId) >= 1) return;  // defensive (button should be hidden)
+      // Client-generated id — namespace distinct from seed's anc_aud_<venue_id>
+      const newId = 'anc_' + (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '_' + Math.random().toString(36).slice(2)));
+      state.anchorNew.set(newId, { venue_id: venueId });
+      // Seed the dirty buffer with type=audio so save is meaningful
+      state.anchorDirty.set(newId, { sound_id: '', label: '', is_broken: false });
+      renderAudioPanel(venueId);
+    }
+
+    function onPlayPreview(rowEl) {
+      const anchorId = rowEl.dataset.anchorId;
+      const soundId  = rowEl.querySelector('input[data-field="sound_id"]').value.trim();
+      if (!soundId) {
+        showAnchorStatus(anchorId, 'sound_id required to preview', 'error');
+        return;
+      }
+      // Build a temporary anchor object from the row's current state
+      // (dirty/pending state takes precedence over saved state).
+      const anchor = { id: anchorId, payload: { type: 'mp3', sound_id: soundId } };
+      try { window.elsewhere?.audioRenderer?.audioAnchorRenderer?.(anchor); }
+      catch (e) { showAnchorStatus(anchorId, 'Preview failed: ' + (e.message || e), 'error'); }
+    }
+
+    function onStopPreview() {
+      try { window.elsewhere?.audioRenderer?.stopAll?.(); } catch (_) {}
+    }
+
+    function showAnchorStatus(anchorId, msg, kind) {
+      const row = document.querySelector('.anchor-row[data-anchor-id="' + anchorId + '"]');
+      if (!row) return;
+      const statusEl = row.querySelector('.anchor-status');
+      statusEl.textContent = msg;
+      statusEl.classList.remove('error', 'success');
+      if (kind) statusEl.classList.add(kind);
+    }
+    function clearAnchorStatus(anchorId) {
+      const row = document.querySelector('.anchor-row[data-anchor-id="' + anchorId + '"]');
+      if (!row) return;
+      row.querySelector('.anchor-status').textContent = '';
+      row.querySelector('.anchor-status').classList.remove('error', 'success');
+    }
+
     // ─── Wire handlers ──────────────────────────────────────────────
     function wireHandlers() {
       document.getElementById('ed-back-yaw').addEventListener('input', onNumericChange('back_yaw'));
@@ -893,8 +1353,28 @@
       document.getElementById('btn-save').addEventListener('click', onSave);
       document.getElementById('btn-discard').addEventListener('click', onDiscard);
 
+      // Stage 2 — audio anchor panel wiring (event delegation on the list)
+      document.getElementById('btn-add-audio-anchor').addEventListener('click', onAddAudioAnchor);
+      document.getElementById('btn-stop-preview').addEventListener('click', onStopPreview);
+      const listEl = document.getElementById('audio-anchor-list');
+      listEl.addEventListener('input', onAnchorFieldInput);
+      listEl.addEventListener('change', onAnchorFieldInput);  // catches checkbox
+      listEl.addEventListener('click', (e) => {
+        const row = e.target.closest('.anchor-row');
+        if (!row) return;
+        const anchorId = row.dataset.anchorId;
+        if (e.target.matches('.btn-play-preview'))  return onPlayPreview(row);
+        if (e.target.matches('.btn-anchor-save'))   return onAnchorSave(anchorId);
+        if (e.target.matches('.btn-anchor-delete')) return onAnchorDelete(anchorId);
+        if (e.target.matches('.btn-anchor-cancel')) return onAnchorCancel(anchorId);
+      });
+
       window.addEventListener('beforeunload', (e) => {
-        if (state.dirty.size > 0) {
+        // Extended per Stage 2: includes audio anchor dirty state.
+        const anyDirty = state.dirty.size > 0
+                      || state.anchorDirty.size > 0
+                      || state.anchorNew.size > 0;
+        if (anyDirty) {
           e.preventDefault();
           e.returnValue = '';
         }
