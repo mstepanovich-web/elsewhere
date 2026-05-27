@@ -373,23 +373,54 @@ discrimination (`point-cloud`, `emitter`, `directional-rain`). The
 admin UI's live preview makes the iteration tractable.
 
 **Stage 4 — `spotlight` renderer impl + spotlight authoring panel +
-stadium/disco/speakeasy spotlights translated.** Includes the
+stadium/festival/speakeasy spotlights translated.** Includes the
 translation of the 2 Three.js 3D builders for stadium and speakeasy.
-Three.js + canvas-2D variants likely both expressible through one
-spotlight type with a renderer-side mode parameter.
+Three.js + canvas-2D variants both expressible through one spotlight
+type with a renderer-side mode parameter (the `payload.context` field
+introduced in A3). Also absorbs the 3D particle paths deferred from
+A3's spec §0.2 re-staging (stadium 2000 THREE.Points phone-lights +
+speakeasy 60 sphere-mesh smoke) — the 3D rendering context is solved
+once by whoever is already in the Three.js builders. **Note:** the
+original §7 text named stadium/disco/speakeasy; A3's foundation pass
+clarified that disco's only spotlight-shaped effect is the floor-flash,
+which is overlay-class (not spotlight) — see Stage 4.5. Festival's
+lasers are in scope; festival's downbeat strobe is overlay-class and
+defers to Stage 4.5.
+
+**Stage 4.5 — `overlay` renderer impl + overlay authoring panel +
+disco floor-flash + festival strobe translated.** A new anchor type
+for screen-space visual overlays that aren't directional light
+sources, informative markers, or particulate matter. Covers
+gradient/rectangle/polygon screen overlays modulated by venue
+scalars. The forcing function: A3's foundation pass surfaced that
+disco's floor-flash has no home in the existing type vocabulary
+(A3 spec §0.3 named "future callout/overlay type" but did not
+schedule it); A4 surfaces festival's strobe in the same shape.
+Stage 4.5 schedules that type explicitly. Adding `overlay` to the
+db/032 vocabulary CHECK constraint is part of this stage's migration.
 
 **Stage 5 — Remaining types** (`callout`, `pin`, `video`,
 `link-hotspot`) + leftover venues. Long tail; ships per opportunity.
 
-**Stage 6 — Retire `AMBIENT_PROFILES` + `addVenueEffects3D` from
-`karaoke/stage.html`.** Pure deletion + verification: every procedural
-venue must render visually identically through the data-driven path
-before its procedural branch is removed. Net ~−1500 LOC from
-`stage.html`.
-
-**Stage 7 — Per-app override editor (`anchor_patch` UX).** The
+**Stage 6 — Per-app override editor (`anchor_patch` UX).** The
 karaoke-specific override surface from `karaoke_venue_settings`. Lower
-priority than Stages 1–6; ships in any order after Stage 1.
+priority than Stages 1–5/7; ships in any order after Stage 1.
+
+**Stage 7 — Switch karaoke to the data-driven path; retire
+`AMBIENT_PROFILES` + `addVenueEffects3D` from `karaoke/stage.html`;
+implement the venue modulator system.** Three-part stage, in order:
+(1) switch karaoke's read path to consult the registry-resolved
+renderer instead of the procedural closures (this is what earlier
+docs referred to as "Block B" — it is part of Stage 7, not a separate
+downstream stage); (2) verify every venue renders visually identically
+through the data-driven path before any procedural code is removed;
+(3) delete `AMBIENT_PROFILES` (including the 4 ghost venue keys —
+space, forest, underwater, dead-dragonlair — which are dead procedural
+code with no live consumers) and `addVenueEffects3D` in the same pass.
+This stage also implements the venue modulator system — the real
+registry-resolved drivers that replace particle.js + spotlight.js's
+preview-oscillator heuristics, which the dormant stages don't need but
+the canonical read-path does. Net ~−1500 LOC from `stage.html`.
 
 **Stage 8 — Costume library + suggested-costumes editor.** Consumes
 the Phase-3 costume seed migration described in

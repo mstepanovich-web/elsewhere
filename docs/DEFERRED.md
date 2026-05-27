@@ -1497,7 +1497,26 @@ The exact API shape is a Stage A4 design question — bundle the design work wit
 
 #### When to pick this up
 
-When particle anchors transition from dormant to load-bearing — i.e. Stage 6 (the AMBIENT_PROFILES retirement, where karaoke's read path consults the registry-resolved renderer instead of the procedural closures). At that point the registry needs the real modulator values, not preview heuristics. Stage A4 (spotlight) will surface the same need; design and ship together.
+Stage A7 — the AMBIENT_PROFILES retirement / read-path-switch /
+modulator-system implementation stage per Direction §7 (updated
+2026-05-27). The original framing in this entry said "design and
+ship together with Stage A4" — A4's foundation pass corrected this:
+A4 (and A4.5 overlay, when it ships) SURFACE the same modulator
+binding needs by binding the same modulator names that A3 particles
+bind (`crowd_brightness`, `beat_scale`, `beat_brightness`, plus
+A4's festival beat-pulse). But A4 / A4.5 use the same preview-
+oscillator heuristics from `shell/venue-renderers/particle.js` —
+they do not build real drivers.
+
+A7 builds the drivers because A7 is the stage that promotes the
+registry path to canonical (karaoke's read path consults the
+registry instead of the procedural closures). At that point
+preview-oscillator heuristics are no longer sufficient — real
+registry-resolved drivers must reproduce stadium's `crowdState`
+cheer-swell, disco's `beatState` 120bpm pulse, and any festival
+beat-pulse equivalent A4 surfaces. Until A7, the dormant data path
+runs against preview heuristics; the procedural path remains
+load-bearing.
 
 #### Related
 
@@ -1625,6 +1644,195 @@ Next time the A3 spec is touched for any reason (rare, since A3 has shipped) —
 
 - `docs/SESSION-LOGS/VENUE-ADMIN-UI-A3-VERIFICATION-LOG.md` Conclusion + numbering note (the closeout finding)
 - `docs/VENUE-ADMIN-UI-DIRECTION.md` §7 (authoritative staging)
+
+---
+
+### Deferred: `overlay` anchor type scheduled as Stage A4.5
+
+**Deferred in:** A4 foundation pass (2026-05-27)
+**Deferred on:** 2026-05-27
+**Priority:** Medium — unblocks A7's AMBIENT_PROFILES retirement for disco
+**Area:** Venue migration / anchor type vocabulary
+**Status:** Deferred — scheduled as Stage A4.5 per Direction §7
+
+#### Context
+
+A3 spec §0.3 named disco's floor-flash gradient as "a future
+callout/overlay type, not A3" but did not schedule that future type
+into the A1–A8 staging. A3 closeout shipped without filing this gap as
+a DEFERRED entry. The A4 foundation pass surfaced that festival's
+downbeat strobe has the same shape (screen-space visual overlay, not
+a directional light source / particle / informative marker), and
+that A7's `AMBIENT_PROFILES` retirement cannot proceed for disco until
+the floor-flash has a data-driven home.
+
+The "callout/overlay" framing in A3 §0.3 was imprecise — callout is
+an informative marker at a position; overlay is a screen-space visual
+layer. They are distinct types.
+
+#### What's deferred
+
+A dedicated stage (A4.5) that ships:
+
+- A new `overlay` value in the db/032 `venue_anchors_type_check`
+  CHECK constraint (extending the existing 7-type vocabulary to 8).
+- A corresponding entry in db/035's `v_known_types` array (matching
+  the CHECK constraint).
+- `shell/venue-renderers/overlay.js` — a self-contained renderer
+  module sibling to `audio.js` / `particle.js` / `spotlight.js`,
+  following the same registration + `{stop}` handle pattern.
+- The overlay payload schema using A3's `payload.kind` discriminator
+  pattern. Initial kinds (to be locked by A4.5's foundation pass):
+  `full-screen-flash` (festival strobe), `bottom-band-gradient`
+  (disco floor-flash). Possibly additional kinds as the foundation
+  pass surfaces them.
+- An overlay authoring panel in `admin-venues.html` mirroring A3's
+  particle panel structure (kind-discriminated form, bounded preview
+  canvas, lifecycle, PREVENT or PERMIT multi-anchor rule TBD).
+- A seed migration (db/0XX) translating disco's floor-flash and
+  festival's strobe into `type='overlay'` anchors.
+- The one-line `<script>` tag registering overlay.js in
+  `karaoke/stage.html` (D8-permitted per A2 Check 12 / A3 Check 18
+  precedent).
+
+Modulator bindings (the `{name, target}` shape from A3 §1.6) apply
+unchanged — disco floor-flash binds `beat_brightness` → `alpha`;
+festival strobe binds a beat-pulse → `alpha`.
+
+#### When to pick this up
+
+After Stage A4 ships and its closeout completes. A4.5 is its own
+propose-pause cycle, sequenced between A4 and A5 per the updated
+Direction §7.
+
+#### Related
+
+- `docs/VENUE-ADMIN-UI-DIRECTION.md` §7 (updated) — the staging that
+  schedules A4.5
+- `docs/VENUE-ADMIN-UI-A3-BUILD-SPEC.md` §0.3 — the original "future
+  callout/overlay type" framing this entry corrects
+- `karaoke/stage.html` — disco floor-flash procedural source
+  (around line 4669-4732 within `AMBIENT_PROFILES.disco`); festival
+  strobe procedural source (around line 4847-4902 within
+  `AMBIENT_PROFILES.festival`)
+- `db/032_venue_abstraction_schema.sql` lines 253-258 —
+  `venue_anchors_type_check` CHECK constraint to extend
+- `db/035_audio_anchor_rpcs_and_seed.sql` — `v_known_types` array to
+  extend
+- DEFERRED entry "venue modulator system" — A4.5 binds the same
+  modulators as spotlight + particle; same registry-resolved-drivers
+  dependency
+
+---
+
+### Deferred: ghost venue keys deleted during Stage A7 retirement pass
+
+**Deferred in:** A4 foundation pass (2026-05-27)
+**Deferred on:** 2026-05-27
+**Priority:** Low — bundled with A7's deletion pass; no standalone work
+**Area:** Venue migration / Stage A7 scope
+**Status:** Deferred — scoped into A7 explicitly
+
+#### Context
+
+The 4 ghost venues (space, forest, underwater, dead-dragonlair) have
+procedural 2D particle code in `karaoke/stage.html`'s
+`AMBIENT_PROFILES`, and at least one (space) has procedural overlay
+code. None of the 4 ghosts are in the 26-venue inventory in
+`venues.json` — they are dead procedural code with no live consumers.
+
+A3 spec §6 named them as "Stage 6 cleanup territory" (under A3's
+internal numbering where retirement was Stage 6 — see the existing
+"A3 build spec internal references to spotlight as 'Stage A5'"
+DEFERRED entry for the numbering drift). Under the updated Direction
+§7 staging, the retirement is Stage A7.
+
+Filing this as an explicit scoping decision so the A7 spec author
+doesn't have to re-derive it.
+
+#### What's deferred
+
+During Stage A7's deletion pass — when `AMBIENT_PROFILES` and
+`addVenueEffects3D` are removed from `karaoke/stage.html` — the 4
+ghost venue keys (`space`, `forest`, `underwater`, `dead-dragonlair`)
+are deleted in the same commit. They have no data-driven equivalent
+because they have no consumer; no migration needed.
+
+Side effect: this closes the existing "P1 / drifting-cloud 4th
+particle kind" DEFERRED entry (the P1 pattern was identified in
+space + forest, both ghosts deleted by this pass — no remaining
+consumer for a P1 kind).
+
+#### When to pick this up
+
+A7's deletion pass. No standalone work.
+
+#### Related
+
+- `docs/VENUE-ADMIN-UI-DIRECTION.md` §7 (updated) — Stage A7 scope
+  names ghost deletion explicitly
+- `docs/VENUE-ADMIN-UI-A3-BUILD-SPEC.md` §6 — original "Stage 6
+  cleanup territory" framing
+- DEFERRED entry "P1 / drifting-cloud 4th particle kind" — closed
+  by this pass
+- `karaoke/stage.html` `AMBIENT_PROFILES` — contains the 4 ghost
+  keys to delete
+
+---
+
+### Deferred: "Block B" karaoke read-path switch is part of Stage A7
+
+**Deferred in:** A4 foundation pass (2026-05-27)
+**Deferred on:** 2026-05-27
+**Priority:** Low — terminology clarification only, no scope change
+**Area:** Venue migration / Stage A7 scope
+**Status:** Deferred — terminology consolidated into A7
+
+#### Context
+
+`docs/ROADMAP.md` and `docs/EXECUTION-HANDOFF.md` reference a "Block
+B" downstream of the A1–A8 stages: "the karaoke reader-path rewire
+that retires `karaoke/stage.html`'s inline venue code." The
+relationship between Block B and A7 (Direction §7's retirement
+stage) was ambiguous in the existing docs.
+
+A4 foundation pass confirmed that Block B and A7's read-path-switch
+substep are the same work — you cannot retire `AMBIENT_PROFILES`
+without first switching karaoke's read path to consult the registry.
+A7's spec describes a three-part stage: (1) switch read path, (2)
+verify visual identity per venue, (3) delete procedural code. Step
+(1) IS Block B.
+
+#### What's deferred
+
+Mechanical doc updates removing the "Block B" framing in favor of
+A7's three-part scope:
+
+- `docs/ROADMAP.md` — replace "Block B follows" framing with "A7
+  includes the read-path switch as its step 1."
+- `docs/EXECUTION-HANDOFF.md` — same replacement wherever "Block B"
+  appears.
+- Any other doc using the "Block B" term — replace with reference
+  to A7's step 1.
+
+Trivial mechanical pass; deferred only because it's out of scope for
+the staging-update commit (which lands Direction §7's structural
+change). Lands during A7's spec drafting or any earlier doc-currency
+pass that touches the affected files.
+
+#### When to pick this up
+
+Opportunistically — fold into any doc-currency commit that touches
+ROADMAP or EXECUTION-HANDOFF, or A7's spec drafting if that comes
+first.
+
+#### Related
+
+- `docs/VENUE-ADMIN-UI-DIRECTION.md` §7 (updated) — A7 scope now
+  names the read-path switch as step 1 explicitly
+- `docs/ROADMAP.md` — currently contains the "Block B" framing
+- `docs/EXECUTION-HANDOFF.md` — currently contains the "Block B"
+  framing
 
 ---
 
