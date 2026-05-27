@@ -635,7 +635,7 @@ Stage 1 PASSES when all 7 checks pass. Failures get diagnosed per propose-pause 
 Run after db/035 + the audio renderer + admin-UI audio panel ship.
 
 **Check 8 — Audio renderer registered.**
-- Load `karaoke/stage.html`. DevTools console: `window.getAnchorRenderer && getAnchorRenderer('audio')` returns the impl (not null).
+- Load `karaoke/stage.html`. DevTools console: `window.elsewhere.anchorRegistry.getAnchorRenderer('audio')` returns the impl (not null). The registry is exposed on `window.elsewhere.anchorRegistry` per `shell/venue-registry.js:236-239`, not as a bare `window.getAnchorRenderer` global.
 
 **Check 9 — Seed verification + admin panel round-trip.**
 
