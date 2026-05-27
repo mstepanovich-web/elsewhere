@@ -1303,6 +1303,98 @@ When `admission_model_v2`-era docs are next referenced for a new game integratio
 
 ---
 
+### Deferred: Anon-grant defense-in-depth sweep across SECURITY DEFINER RPCs
+
+**Deferred in:** Venue Admin UI Stage A1 verification (post-`f610039`)
+**Deferred on:** 2026-05-26
+**Priority:** Low — defense-in-depth alignment; no actual exposure
+**Area:** Schema — RPC grant surface
+**Status:** Deferred
+
+#### Context
+
+Stage A1's verification of db/034 (`rpc_venue_default_update`) discovered that Supabase's `ALTER DEFAULT PRIVILEGES` configuration direct-grants `EXECUTE` to `anon` (and to `authenticated` + `service_role`) on every newly created function in `public`. The standard PostgreSQL-vanilla `REVOKE EXECUTE ... FROM PUBLIC` clause is a no-op against this — it removes the PUBLIC pseudo-role grant that wasn't there to begin with, leaving the direct anon grant intact. The load-bearing revoke is `REVOKE EXECUTE ... FROM anon`. Full diagnostic walk in `docs/SESSION-LOGS/VENUE-ADMIN-UI-A1-STAGE-1-VERIFICATION-LOG.md` Bug 2 + `db/MIGRATIONS_APPLIED.md` db/034 row's Notes column.
+
+**No data exposure window from this:** every existing RPC's first executable check raises `42501` for `auth.uid() IS NULL`, blocking anon at runtime regardless of grant-level state. This is alignment work — making the grant surface match the function's runtime intent — not a remediation of a real exposure. A `\dp public.rpc_*` audit by a security reviewer would show anon-with-EXECUTE on dozens of functions, contradicting the apparent admin/authenticated-only design intent.
+
+#### What's deferred
+
+A sweep migration that issues `REVOKE EXECUTE ON FUNCTION public.<name>(args) FROM anon` for every SECURITY DEFINER RPC in db/006+ where anon access is not intended. The pattern is db/034 + db/035's revoke-block (both REVOKE FROM PUBLIC + REVOKE FROM anon, with explicit GRANT to authenticated where needed). Static-verifiable: query `has_function_privilege('anon', oid, 'EXECUTE')` returning `false` for the touched RPCs.
+
+#### When to pick this up
+
+Bundle with a future SECURITY DEFINER RPC migration (next one shipped will be db/036+ as part of Stage A3 or later) — fold the sweep into the same migration's "housekeeping" section. Standalone is also clean: a single migration that touches no behavior, just grants. Don't pair with feature work that touches RPC bodies; keep the diff readable.
+
+#### Related
+
+- `db/MIGRATIONS_APPLIED.md` db/034 row Notes column (the diagnostic walk)
+- `docs/SESSION-LOGS/VENUE-ADMIN-UI-A1-STAGE-1-VERIFICATION-LOG.md` Bug 2 + "Broader defense-in-depth flag" subsection
+- CLAUDE.md line 167 (`--no-verify-jwt`) — same class of Supabase-vs-PostgreSQL-vanilla divergence
+- db/034 + db/035 (the template revoke-blocks)
+
+---
+
+### Deferred: `karaoke/singer.html:1010` reads orphan element id `stat-w`
+
+**Deferred in:** Venue Admin UI Stage A1 verification (surfaced incidentally)
+**Deferred on:** 2026-05-26
+**Priority:** Low — never throws in practice (path is gated by `if(!agoraClient) return;`); cleanup hygiene
+**Area:** Karaoke — singer.html
+**Status:** Deferred
+
+#### Context
+
+`karaoke/singer.html:1010` reads `document.getElementById('stat-w').textContent = n` where `n = agoraClient.remoteUsers.length`. The element with id `stat-w` does not exist in `singer.html` (a `grep -n stat-w karaoke/singer.html` returns exactly the line-1010 read site; no matching `id="stat-w"` element anywhere in the file). The function is gated by `if(!agoraClient) return;` immediately above, and other `.textContent` writes at lines 1011–1012 (`perf-w`, `aud-cnt`) target elements that DO exist — so under normal load `stat-w` would null-deref before the live writes ever ran, and the function would throw. The path appears to be dead in practice (the watcher-count display likely renders via `perf-w` / `aud-cnt` only, with `stat-w` left over from an older surface variant) — confirm before deleting.
+
+#### What's deferred
+
+Either:
+- (a) Delete the line-1010 `stat-w` read site (if confirmed dead and no `stat-w` element will ever be re-added).
+- (b) Add the missing `<span id="stat-w">` element if the watcher-count IS intended to render there (less likely — the `perf-w` / `aud-cnt` lines already cover the same data).
+
+Pick (a) by default; bundle with the next karaoke surface cleanup pass.
+
+#### When to pick this up
+
+Pair with a Phase-3 karaoke surface pass — Stage A8 / Block B will already be touching `karaoke/singer.html` and `karaoke/stage.html`. Don't ship as a one-line standalone commit; fold into a larger cleanup.
+
+#### Related
+
+- Surfaced during Stage A1 verification grep work; not a Plan-B finding, just incidental
+
+---
+
+### Deferred: `admin-venues.html` lacks a version stamp / `v2.NN` badge
+
+**Deferred in:** Venue Admin UI Stage A2 (post-`9d58a8d` / `a1a02e3`)
+**Deferred on:** 2026-05-26
+**Priority:** Low — convention compliance; not user-facing
+**Area:** Admin surfaces
+**Status:** Deferred
+
+#### Context
+
+CLAUDE.md "Versioning" doctrine: "Every page renders a `v2.NN` badge (search for `v2.88` to find them all). … When you ship a change, bump every `v2.NN` string in files you touched and any peer files that share the badge." `admin-venues.html` (introduced Stage A1, extended Stage A2) ships without one. The page is admin-only and not user-facing, so the visible-affordance argument is weak — but the doctrine's value is uniform shippability tracking ("which version of admin-venues.html am I looking at" when the next bug report comes in). Mike asked for one to be added.
+
+#### What's deferred
+
+Add a `v2.NN` badge to `admin-venues.html` matching the convention used in `tv2.html` / `index.html` / `karaoke/singer.html`. Either:
+- (a) Reuse the shell `v2.NN` numbering (the page is shell-adjacent and ships alongside `shell/venue-renderers/*.js`); on a `shell/...` change, bump both together.
+- (b) Give it its own independent stamp (matching the per-surface-independent stamps doctrine).
+
+Pick (a) if the admin surface is conceptually shell — which it currently is (writes to the same RPCs the runtime resolver reads from, lives at repo root alongside `tv2.html` / `index.html`).
+
+#### When to pick this up
+
+Pair with Stage A3 (the next Plan-B vertical slice) since that stage will already touch `admin-venues.html` to add the particle anchor authoring panel — fold the badge in at the same time. Standalone is fine if it slips A3.
+
+#### Related
+
+- CLAUDE.md "Versioning" — the badge convention
+- `docs/VENUE-ADMIN-UI-A1-BUILD-SPEC.md` §5.1 — Stage A1's file scope; the badge wasn't in the original surface layout decisions
+
+---
+
 ## Venues integration (post-Session-5)
 
 Cluster of items surfaced during Session 5 Part 2b scope review that resolve when venues-as-cross-app-service work begins (see "Venues as cross-app service (games, wellness, future apps)" entry above for the parent refactor). All six are architectural or design-clarification items, not bugs — they capture decisions deferred from Session 5 that affect games visual parity, proximity semantics, and participant lifecycle cleanup.

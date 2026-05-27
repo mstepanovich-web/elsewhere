@@ -202,7 +202,12 @@ Order is dependency-firm; sizing is directional.
 - Phase 2 — venue extraction. Pull venue rendering out of the karaoke
   stage into a shared shell renderer; make the venue registry cross-app.
   Prerequisite for "navigate venues" being a baseline experience in any
-  app. Can overlap Phase 1.
+  app. Can overlap Phase 1. **Closed 2026-05-24:** as-built design in
+  `docs/PHASE-2-BUILD-SPEC.md` (revision 3 at close), which broadened
+  Phase 2 from a literal panorama-extraction into a complete cross-app
+  venue abstraction; see that spec's §1 for the supersession of the
+  original three-part DEFERRED breakdown ("Venues as cross-app service").
+  The abstraction ships dormant — no live consumer until Phase 3.
 - Phase 3 — karaoke onto the new model. Scanned-screen sessions; baseline
   players driving venues and the queue with no TV device; audience.html
   dissolved into baseline watcher mode. Depends on Phases 1 and 2.
@@ -212,7 +217,20 @@ Order is dependency-firm; sizing is directional.
   — per ROOM-SESSION-MODEL.md § "Tile-tap is navigation, not session
   creation," which the current shell code contradicts. The shell-side
   change (removing session creation from tile-tap) is gated per-app:
-  karaoke converts here in Phase 3; games converts in Phase 4.
+  karaoke converts here in Phase 3; games converts in Phase 4. **Plan B
+  amendment (2026-05-26):** Phase 3 also folds in the **venue translation**
+  (procedural `AMBIENT_PROFILES` + `addVenueEffects3D` in
+  `karaoke/stage.html` → data-driven `venue_anchors` + reusable shell
+  renderer impls) AND the **Part-1 admin UI** (`admin-venues.html`,
+  manage the existing 26 venues) as the authoring/preview tool that
+  mitigates the translation risk. Authoritative sequencing:
+  `docs/VENUE-ADMIN-UI-DIRECTION.md` (Plan B, reverses the earlier
+  wrap-as-legacy framing) + `docs/VENUE-ADMIN-UI-A1-BUILD-SPEC.md` §7
+  (the A1–A8 staging — audio first, then particle, then spotlight,
+  then `AMBIENT_PROFILES` retirement; followed by Block B's karaoke
+  reader-path rewire). Part 2 of the admin UI (create brand-new venues
+  with asset-generation pipelines) remains post-Phase-5 per Decision 2
+  of VENUE-ADMIN-UI-DIRECTION.md §3.
 - Phase 4 — games onto the new model. Conformance, not rebuild: re-anchor
   to the room/session split, adopt the unclaimed-screen path, unify
   cross-app-switch behavior, and games gains its own deliberate in-app

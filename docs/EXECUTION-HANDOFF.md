@@ -4,7 +4,7 @@
 docs, is the kickoff for any new chat continuing the unified-app
 execution work. Read this FIRST, then the planning docs.
 
-**Last updated:** 2026-05-23 (immersive-control + regular-user model documentation pass complete — see ROOM-AUTHORITY-MODEL.md / HOUSEHOLD-DEVICE-PRESENCE-MODEL.md / ROOM-SESSION-MODEL.md; §4 now points at §F shell-rework IMPLEMENTATION — the §F pre-write investigation already ran this session and is recorded inline)
+**Last updated:** 2026-05-27 (documentation catch-up pass for Phase-2 close + interim fixups + Phase-3/Plan-B Stage A1+A2 ship. Phase 2 — the cross-app venue abstraction — closed 2026-05-24 (db/032 + shell/venue-settings.js generalization + shell/venue-registry.js; spec `docs/PHASE-2-BUILD-SPEC.md`). Phase 3 is in progress under Plan B per `docs/VENUE-ADMIN-UI-DIRECTION.md` 2026-05-26 revision (`c076f12`), with Stages A1 (`9cf4b70`) and A2 (`9d58a8d`) of `docs/VENUE-ADMIN-UI-A1-BUILD-SPEC.md` §7 shipped against prod. §2 enumerates the post-Phase-1 deliverables and current status; §4 names the next deliverable.)
 
 ---
 
@@ -116,6 +116,29 @@ and the §F shell session-state cluster rework shipped 2026-05-22 →
 Phase 1 is closed. iOS bundle is current through `bf45b2c` (this
 session's close).
 
+**Post-Phase-1 / pre-Phase-2 fixups: COMPLETE.** Three deliverables landed between Phase-1 close and the Phase-2 venue work, listed in commit order:
+
+- **Karaoke schema catch-up to the room-keyed RPC surface** (`595e004`, 2026-05-23 → 2026-05-24): `karaoke/singer.html` + `karaoke/stage.html` brought current with db/025 + db/026's column changes (stripped the stale `manager_user_id` / `room_code` / `tv_device_id` reads + re-pointed RPC call sites to the room-keyed signatures). The "schema-stale SELECTs on the four pre-Phase-3 surfaces" debt in DEFERRED.md is now **closed on the karaoke half**; the games half (`games/player.html`, `games/tv.html`) still rides Phase 4. Verification log: `docs/SESSION-LOGS/KARAOKE-SCHEMA-CATCHUP-595e004-VERIFICATION-LOG.md` (committed `964c541`). The runbook proximity-step fix landed alongside in `6c4406b`; stale legacy-mode comments superseded in `6f907b0`.
+- **Items 5/6 — karaoke session-creation moved to a deliberate in-app action** (`6663ff5`, 2026-05-24): tile-tap now navigates, not creates; a new in-app karaoke info screen's click-through is the session-creation action, matching `ROOM-SESSION-MODEL.md` § "Tile-tap is navigation, not session creation." Karaoke half only — games converts in Phase 4 per UAP §5. Verification runbook + result in `7b7994b` + `b48b978`.
+- **Tier 1 — web-only Immersive TV claim trigger on tv2.html** (`e33a658`, 2026-05-24): the schema half of the C1 self-report writer for `tv_devices.can_embed`. Closes the user-visible half of the C1-self-report DEFERRED entry; the camera + compositing-pipeline detection half remains active. Verification runbook + result in `d395de9` + `fae3600`.
+
+These three were preceded by the **premium → immersive capability rename** (`11499c2`) and the **Immersive TV design model** doc + Items 5/6 / Tier 1 build specs (`5df7097`), and followed by the **UAP §5 amendment** folding session-creation UX into Phases 3 + 4 (`fef9d4d`).
+
+**Phase 2 — the venue abstraction: COMPLETE (shipped 2026-05-24).** Phase 2 per `docs/UNIFIED-APP-PLAN.md` §5 is "venue extraction — pull venue rendering out of the karaoke stage into a shared shell renderer; make the venue registry cross-app." The Phase-2 build spec at `docs/PHASE-2-BUILD-SPEC.md` (revision 3 at close) **broadened that scope from a literal code-lift into the construction of a complete cross-app venue abstraction** — see the spec's §1 for the supersession of the original three-part DEFERRED breakdown ("Venues as cross-app service"). The abstraction shipped **dormant** — built, tested in isolation, no live consumer until Phase 3.
+
+- **`docs/PHASE-2-BUILD-SPEC.md`** committed `0b91206` (with DEFERRED supersession + ROADMAP active-entry update).
+- **db/032** (venue-abstraction schema — `venues` / `venue_anchors` / `venue_defaults` / `costumes` tables + their RLS + read RPCs; additive + dormant): committed `a254993`, applied 2026-05-24.
+- **`shell/venue-settings.js` generalization** (venue attribute + anchor resolver per spec §5; replaces the prior view-coordinate-only helper): committed `d5ca112`.
+- **`shell/venue-registry.js`** (anchor renderer registry mechanism per spec §5.4; `window.elsewhere.anchorRegistry.{registerAnchorRenderer, getAnchorRenderer}`): committed `a62d1e9`.
+- **Phase-2 close** — spec revision 3 + ROADMAP completion: `f619a57`.
+
+**Phase 3 — karaoke onto the new model: IN PROGRESS under Plan B.** Phase 3 per UAP §5 is "karaoke onto the new model: scanned-screen sessions; baseline players driving venues and the queue with no TV device; audience.html dissolved into baseline watcher mode." Plan B (`docs/VENUE-ADMIN-UI-DIRECTION.md` 2026-05-26 revision, `c076f12`) folds the **venue translation** (procedural `AMBIENT_PROFILES` + `addVenueEffects3D` in `karaoke/stage.html` → data-driven `venue_anchors` + reusable shell renderer impls) AND the **Part-1 admin UI** (`admin-venues.html`, manage the existing 26 venues) into Phase 3 as part of the karaoke rewire — both serving as authoring/preview infrastructure that mitigates the translation risk. Plan A (wrap-as-legacy, defer translation + admin UI to post-Phase-5; `df49366`) was reversed 2026-05-26. The Plan-B build spec is `docs/VENUE-ADMIN-UI-A1-BUILD-SPEC.md` (commit `cf2585c`, revised `8187c5d` + `647c31b`); §7 of that spec is the authoritative A1–A8 staging.
+
+- **Stage A1 (admin UI skeleton + venue_defaults editor + db/034 `rpc_venue_default_update`)**: committed `9cf4b70`; path bug fix `606674f`; verification log `f610039`. db/034 applied to prod 2026-05-26.
+- **Stage A2 (audio renderer impl + audio anchor authoring panel + 19-venue audio seed + db/035 `rpc_venue_anchor_upsert` / `rpc_venue_anchor_delete`)**: committed `9d58a8d`; verification log + A1 row-number correction `a1a02e3`. db/035 applied to prod 2026-05-26. One-row prod hazard (hollywoodbowl anchor id divergence from seed id) resolved via SQL UPDATE before the A2 log committed.
+
+Stages A3–A8 (particle renderer, spotlight renderer, remaining anchor types, AMBIENT_PROFILES retirement, per-app override editor, costume editor) are queued per spec §7 and not yet started. Block B (the karaoke reader-path rewire that retires `karaoke/stage.html`'s inline venue code) follows A8 per spec §7.
+
 The current immediate next step is named in §4.
 
 ## 3. The five planning docs — the design
@@ -137,43 +160,23 @@ All in docs/. Read all five after this brief:
 
 ## 4. The immediate next step
 
-**Phase-1 close is complete.** Everything §4 previously named as upcoming has shipped this session. Specifically:
+**Phase 3 / Plan B Stage A1+A2 are shipped and verified.** db/034 + db/035 + `admin-venues.html` + `shell/venue-renderers/audio.js` + the one-line `karaoke/stage.html` registration are live in prod. The admin UI is the working write path for `venue_defaults` edits and for audio anchor authoring across the 19 audio-only venues per the spec's §2 inventory. Both stages verified against prod with zero outstanding bugs at A2-log-commit time. See `docs/SESSION-LOGS/VENUE-ADMIN-UI-A1-STAGE-1-VERIFICATION-LOG.md` (`f610039`) and `docs/SESSION-LOGS/VENUE-ADMIN-UI-A1-STAGE-2-VERIFICATION-LOG.md` (`a1a02e3`) for the per-check evidence.
 
-**§F shell session-state cluster rework — complete.** The ~13-site client-side migration enumerated in `docs/PHASE-1-BUILD-SPEC.md` §F shipped across three commits: Part 2 nested-cache reshape (`d790703`), Part 1 RPC call-site re-point (`c270800`), version bump to v2.138 (`58b36c3`). The shell now reads the nested `{ session, room }` cache populated from db/025-028's room-keyed RPCs. All four shell call sites for `rpc_session_start`, `rpc_session_leave`, `rpc_session_reclaim_manager`, and `rpc_session_admin_reclaim` are on the new room-keyed signatures.
+**The immediate next step is Stage A3 per `docs/VENUE-ADMIN-UI-A1-BUILD-SPEC.md` §7's hybrid sequencing.** Stage A3 is the **particle renderer + particle anchor authoring** vertical slice — the broadest type by venue count (~6 venues currently use particle effects via `AMBIENT_PROFILES` / `addVenueEffects3D`). The pattern set in A2 (renderer impl in `shell/venue-renderers/<type>.js`, registered via `window.elsewhere.anchorRegistry.registerAnchorRenderer`, with a matching authoring panel + per-type seed in a new `db/036_*.sql` migration) carries forward. Stage A3 ships as its own propose-pause cycle.
 
-**Phase-1 post-work 8-item sequence — complete:**
+Stage A8 retires `AMBIENT_PROFILES` + `addVenueEffects3D` from `karaoke/stage.html` once every procedural venue has a data-driven equivalent. Block B follows: the karaoke reader-path rewire that switches `karaoke/stage.html` from its inline venue code onto the shell renderer + registry, completing the Phase-3 karaoke half.
 
-1. **iOS bundle sync** — `~/sync-app.sh` + `npx cap sync ios` run this session; bundle captures through commit `bf45b2c`. See "Bundle hygiene" below.
-2. **Phase-1.1 dead-code cleanup** — `generateRoomCode()` removed from `index.html` (commit `daeff0b`). The `is_session_*` compat-wrapper drop was deferred (DEFERRED.md entry retained — pending zero-caller grep confirmation).
-3. **iOS notification-payload audit** — confirmed the iOS app reads nothing from `notif.data` today; field-name choice is moot for the app, `room_id` chosen for future-proofing. Recorded in DEFERRED.md (commit `5eb8258`).
-4. **C3 — `fire_promotion_push` trigger recreation.** db/029 written and applied to prod 2026-05-23 (commits `b0f8a47` migration, `89a629e` bookkeeping). Push DELIVERY restored; tap-routing remains unbuilt (separate active DEFERRED entry).
-5. **C1 — `tv_devices.can_embed` column (schema half).** db/030 written and applied to prod 2026-05-23 (commits `2ca15a8` migration, `fd553ac` bookkeeping). C1 re-scoped to self-report-path-only; that half remains active.
-6. **C5 — `rpc_room_seize` ownership-seize RPC.** db/031 written and applied to prod 2026-05-23 (commits `b654f91` migration, `cbd2783` bookkeeping). RPC SHIPPED and correct; refuses every seize attempt in prod until a `tv_devices.can_embed = true` row exists (i.e., until C1's self-report half lands).
-7. **C2 shell-half — realtime publisher payload rename.** The 4 shell publisher call sites in `index.html` renamed (`session_id` → `room_id`; `manager_user_id` → `controller_user_id` at the one `publishSessionStarted` caller); `shell/realtime.js` doc-comments updated to match (commit `a5ed589`). The 18 surface call sites ride Phase 3/4 surface migration (separate active DEFERRED entry).
-8. **Tile-badge spec — UNIFIED-APP-PLAN §10.** Per-user per-app shell tile-state spec written, with signal vocabulary (4 signals), data sources, precedence, and phase-buildability table. `docs/PHONE-AND-TV-STATE-MODEL.md`'s tile-state section marked superseded (commit `bf45b2c`).
+**Still-active downstream items — tracked in `docs/DEFERRED.md`, NOT blocking Stage A3:**
 
-**Push + prod state.** 10 commits pushed this session; `origin/main` at `bf45b2c`. db/029, db/030, db/031 all applied to prod via Supabase SQL Editor and recorded in `db/MIGRATIONS_APPLIED.md`.
-
-**Bundle hygiene.** iOS bundle is current through `bf45b2c` as of this session's close. `~/sync-app.sh` + `npx cap sync ios` was re-run this session after the 10-commit push; the sync output confirmed `index.html` and `shell/realtime.js` (the C2 shell-half rename in `a5ed589`) copied into `ios/App/App/public/`. The only outstanding iOS step is an Xcode rebuild + install on the test device before any iOS-side verification of the C2 rename — that's the normal deferred-rebuild step, not a missing sync. No functional regression expected from C2 (zero subscriber dependence on the renamed fields).
-
-**The immediate next step is Phase 2 per `docs/UNIFIED-APP-PLAN.md` §5: venue extraction.** Pull venue rendering out of the karaoke stage into a shared shell renderer; make the venue registry cross-app. The three-part work breakdown already exists in `docs/DEFERRED.md` entry "Venues as cross-app service (games, wellness, future apps)" (filed 2026-04-23; cross-referenced by `docs/ROADMAP.md`):
-
-1. Extract 360° panorama rendering from `karaoke/stage.html` into `shell/venue-renderer.js` (or similar). Three.js setup, texture loading, transition UX. Keep karaoke's ambient effects separate (that's a separate DEFERRED "shell/venue-effects.js" entry from PHASE1-NOTES).
-2. Games integration: each game's blockade image becomes a venue entry in `venues.json` with product tag `'games'`. Session-wide venue selection (manager/host picks one venue for the whole game). Games pages consume the shared renderer.
-3. Phase-2 follow-up (per the DEFERRED entry): DeepAR camera insertion for player/participant presence in games — the same technique karaoke uses for singers.
-
-Trigger per the DEFERRED entry: either wellness app start, OR games visual parity priority. The entry's "When to pick this up" note suggests bundling with wellness; standalone is also clean if games visual parity becomes urgent first. Phase 2 "can overlap Phase 1" per §5; with Phase 1 complete, Phase 2 starts unblocked.
-
-**Still-active downstream items — tracked in `docs/DEFERRED.md`, NOT blocking Phase 2:**
-
-- **C1 self-report half** — `tv_devices.can_embed` schema is in place; the writer (camera + compositing-pipeline detection in `tv2.html` + claim flow + claim-RPC update) is not built. Until it lands, every row reads `can_embed = false` and C5's ownership-seize RPC refuses every attempt. Blocked on the compositing pipeline not yet existing as code.
-- **C2 surface-side completion** — 18 publisher call sites in `karaoke/singer.html` (×7), `karaoke/stage.html` (×2), and `games/player.html` (×9) still send pre-rename `session_id`. Rides Phase 3/4 surface migration. Pair with the schema-stale-SELECT cleanup below.
-- **Schema-stale `sessions` SELECTs on the four pre-Phase-3 surfaces** — 7 sites across singer/stage/player/games-tv reference columns (`manager_user_id`, `room_code`, `tv_device_id`) that db/025 dropped. Would 400 against prod if exercised; not surfaced as a live regression because the surface flows haven't been exercised since db/025 applied 2026-05-21. Must land before any user-facing test of those flows.
+- **C1 self-report half (camera + compositing-pipeline detection)** — Tier 1 (`e33a658`) closed the user-visible half of the `tv_devices.can_embed` self-report writer. The camera + compositing-pipeline detection half is not yet built; until it lands, the C5 ownership-seize RPC continues to refuse seize attempts in prod.
+- **C2 surface-side completion — games half** — 9 publisher call sites in `games/player.html` still send pre-rename `session_id`. Karaoke half closed via `595e004`. Rides Phase 4 surface migration.
+- **Schema-stale `sessions` SELECTs — games half** — 4 sites across `games/player.html` + `games/tv.html` reference columns dropped by db/025. Karaoke half closed via `595e004`. Resolves with Phase 4 per UAP §5.
+- **Anon-grant defense-in-depth sweep** — new DEFERRED entry filed this catch-up (see DEFERRED diff below); ref A1 verification log `f610039` Bug 2.
 - **C4 — HH-admin administrative actions without engagement transition** — future enhancement; current uniform-engagement behavior is correct for the primary use case.
 
-Other open items recorded in `docs/DEFERRED.md` (latent realtime contract drift, dead `publishManagerChanged`, unbuilt push-tap-routing, the `is_session_*` compat-wrapper drop, the low-prominence room-code-entry UI affordance, etc.) are individually tracked there. None blocks Phase 2.
+**Push + prod state.** All Phase-2 + Phase-3-Plan-B-A1+A2 commits pushed; `origin/main` at `a1a02e3` at this catch-up's start.
 
-**§2 also refreshed this commit.** Per §6's "update section 2 and section 4 at end of each execution session" instruction, §2's stale db-migration enumeration (which previously stopped at db/028) is brought current to db/031 in this same commit, and §2's now-obsolete "next step is the §F rework" line is rewritten to point at §4 generically. Both §2 and §4 reflect this session's close.
+**Bundle hygiene.** iOS Capacitor bundle status was current through `bf45b2c` at Phase-1-close; **drift since then is the post-Phase-2 + Plan-B-A1+A2 cluster, none of which touches native concerns** (push, Capacitor plugins, fullscreen). Mobile Safari has been the verification target throughout. The session-closing-ritual sync per CLAUDE.md is pending whenever the next session ships user-facing web changes that warrant native verification; the Plan-B work to date is admin-surface-only (the karaoke reader path is untouched until Block B), so the deferred sync is intentional rather than missed. When Stage A8 / Block B land — the points that actually change `karaoke/stage.html`'s reader path — that's the natural sync trigger.
 
 ## 5. Review discipline
 
