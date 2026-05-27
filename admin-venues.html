@@ -1992,8 +1992,17 @@
         rowEl.querySelector('.btn-play-particle-preview').hidden = true;
         rowEl.querySelector('.btn-replay-particle-preview').hidden = false;
 
+        // "Preview ended" soft-timeout is only meaningful for kinds that
+        // produce one-shot effects which drain to an empty canvas. Per
+        // §1.1, point-cloud is eternal by kind definition — particles
+        // never die, so the label would lie. Only directional-emitter
+        // and volumetric with respawn !== true genuinely end. Gating on
+        // kind first, respawn second.
         let endedTimerId = null;
-        if (payload.respawn !== true) {
+        const isOneShotKind =
+          payload.kind === 'directional-emitter' ||
+          payload.kind === 'volumetric';
+        if (isOneShotKind && payload.respawn !== true) {
           endedTimerId = setTimeout(() => {
             const label = rowEl.querySelector('.particle-preview-ended-label');
             if (label) label.hidden = false;
