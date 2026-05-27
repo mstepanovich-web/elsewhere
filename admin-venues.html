@@ -7,21 +7,31 @@
   <link rel="stylesheet" href="https://mstepanovich-web.github.io/elsewhere/elsewhere-theme.css">
 
   <!--
-    Venue Admin UI — Stage 1 (skeleton + venue_defaults editor)
-    Per docs/VENUE-ADMIN-UI-A1-BUILD-SPEC.md §5.
+    Venue Admin UI — Stage A3 (skeleton + venue_defaults editor +
+                                audio anchor panel + particle anchor panel)
+    Per docs/VENUE-ADMIN-UI-A1-BUILD-SPEC.md §5  (Stage A1 — skeleton),
+        docs/VENUE-ADMIN-UI-A1-BUILD-SPEC.md §7  (Stage A2 — audio panel),
+        docs/VENUE-ADMIN-UI-A3-BUILD-SPEC.md §4  (Stage A3 — particle panel).
 
-    What this surface does: lists the 26 venues; edits the 7 editable
-    venue_defaults columns (back_yaw, back_pitch, front_yaw, front_pitch,
-    camera_fov, motion jsonb, ambient jsonb); writes via the SECURITY
-    DEFINER rpc_venue_default_update (db/034). Read-only identity display
-    of skyboxId + venues.json fields per D1.
+    What this surface does:
+    - Lists the 26 venues; edits the 7 editable venue_defaults columns
+      (back_yaw, back_pitch, front_yaw, front_pitch, camera_fov,
+      motion jsonb, ambient jsonb); writes via the SECURITY DEFINER
+      rpc_venue_default_update (db/034).
+    - Authors audio anchors (Stage A2): one type='audio' anchor per
+      venue with payload {type:'mp3', sound_id}; writes via
+      rpc_venue_anchor_upsert / rpc_venue_anchor_delete (db/035).
+    - Authors particle anchors (Stage A3): one type='particle' anchor
+      per venue with kind-discriminated payload (point-cloud /
+      directional-emitter / volumetric); same RPCs as audio. Includes
+      a bounded 2D-canvas preview surface driven by
+      shell/venue-renderers/particle.js.
+    - Read-only identity display of skyboxId + venues.json fields per D1.
 
     What this surface does NOT do (deferred to later stages):
-    - Audio anchor authoring (Stage 2)
-    - Audio renderer registration / in-surface live preview (Stage 2)
-    - Per-app override editing / anchor_patch (Stage 7)
-    - Costume library + suggested-costumes editor (Stage 8)
-    - Particle / spotlight / other renderer impls (Stages 3+)
+    - Spotlight / 3D-particle / other renderer impls (Stage A5+)
+    - Per-app override editing / anchor_patch (Stage A7)
+    - Costume library + suggested-costumes editor (Stage A8)
     - Creating new venues (Part 2 — post-Phase-5)
   -->
 
@@ -32,6 +42,7 @@
   <script type="module" src="shell/auth.js"></script>
   <script type="module" src="shell/venue-settings.js"></script>
   <script type="module" src="shell/venue-renderers/audio.js"></script>
+  <script type="module" src="shell/venue-renderers/particle.js"></script>
 
   <style>
     /* ─── Base ────────────────────────────────────────────────────── */
@@ -417,12 +428,116 @@
     }
     .anchor-status.error { color: #e07e7e; }
     .anchor-status.success { color: var(--color-gold); }
+
+    /* ─── Version stamp (Stage A3) ────────────────────────────────── */
+    .version-stamp {
+      display: inline-block;
+      margin-left: 8px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--color-text-faint);
+      letter-spacing: .05em;
+    }
+
+    /* ─── Particle anchor panel (Stage A3) ─────────────────────────── */
+    /* Most styles reuse .anchor-panel / .anchor-row / .anchor-field-row
+       from the audio panel above. Particle-specific additions: */
+
+    .particle-kind-section,
+    .particle-shared-section {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-left: 2px solid var(--color-border);
+      background: rgba(255,255,255,.02);
+    }
+    .particle-kind-section h4,
+    .particle-shared-section h4 {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--color-gold-dim, rgba(212,176,116,.6));
+      margin: 0 0 8px;
+    }
+    .particle-shared-section h4 {
+      color: var(--color-text-faint);
+    }
+
+    .particle-field-row {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 8px;
+      align-items: start;
+      margin-bottom: 6px;
+    }
+    .particle-field-row label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-text-faint);
+      padding-top: 4px;
+    }
+    .particle-field-row input[type="number"],
+    .particle-field-row input[type="text"],
+    .particle-field-row select {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 4px 8px;
+    }
+    .particle-field-row input[type="checkbox"] {
+      margin-top: 6px;
+    }
+    .particle-field-row textarea {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 4px 8px;
+      min-height: 56px;
+      resize: vertical;
+      width: 100%;
+    }
+
+    .particle-preview-canvas-wrap {
+      position: relative;
+      margin: 12px 0;
+      border: 1px dashed var(--color-border);
+      border-radius: 6px;
+      background: rgba(0,0,0,.4);
+      width: 100%;
+      max-width: 480px;
+    }
+    .particle-preview-canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 2/1;
+      background: transparent;
+    }
+    .particle-preview-ended-label {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: .1em;
+      color: var(--color-text-faint);
+      background: rgba(0,0,0,.7);
+      padding: 4px 8px;
+      border-radius: 4px;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
 
   <header id="header">
-    <div class="title">VENUE ADMIN</div>
+    <div class="title">VENUE ADMIN <span class="version-stamp">v2.138</span></div>
     <div class="user-info">
       <span id="user-display"></span>
       <span class="admin-badge" id="admin-badge" hidden>ADMIN</span>
@@ -531,6 +646,21 @@
             No audio anchors yet for this venue. Click "+ Add audio anchor" to create one.
           </div>
         </section>
+
+        <section class="anchor-panel" id="particle-anchor-panel">
+          <header class="anchor-panel-header">
+            <h2>Particle anchors</h2>
+            <button id="btn-add-particle-anchor" type="button">+ Add particle anchor</button>
+            <button id="btn-stop-particle-preview" type="button">⏹ Stop all previews</button>
+          </header>
+          <div class="anchor-limit-note" id="particle-anchor-limit-note" hidden>
+            This venue already has a particle anchor. Edit or delete the existing anchor to change the effect.
+          </div>
+          <ul class="anchor-list" id="particle-anchor-list"></ul>
+          <div class="anchor-empty" id="particle-anchor-empty" hidden>
+            No particle anchors yet for this venue. Click "+ Add particle anchor" to create one.
+          </div>
+        </section>
       </div>
     </section>
   </main>
@@ -558,6 +688,62 @@
     state.anchorDirty  = new Map();   // anchorId -> { col: value, ... }
     state.anchorNew    = new Map();   // anchorId (client-generated) -> { venue_id }
     state.anchorErrors = new Map();   // anchorId -> last error message
+
+    // Stage A3 — particle anchor state
+    //
+    // Note: state.anchors / state.anchorDirty / state.anchorNew (above) are
+    // audio-specific despite their generic names (legacy A2 naming).
+    // The particle equivalents are scoped with the "particle" prefix to
+    // avoid name collision without disturbing A2's call sites.
+    //
+    // Dirty tracking divergence: audio uses field-level dirty (Map<id, {col:val}>)
+    // because its 3 fields are simple scalars. Particle uses anchor-level dirty
+    // (Set<id>) because payloads have too many nested fields to diff cleanly;
+    // the panel reconstructs the full payload from form state at save/preview time.
+    state.particleAnchors      = new Map();   // venueId -> array of saved particle anchor rows
+    state.particleAnchorDirty  = new Set();   // anchorId — presence = dirty
+    state.particleAnchorNew    = new Map();   // pendingAnchorId -> { venue_id }
+    state.particlePreviewState = new Map();   // anchorId -> { stopFn, endedTimerId }
+
+    const PARTICLE_KINDS = ['point-cloud', 'directional-emitter', 'volumetric'];
+
+    // Starter payload for "+ Add particle anchor" — produces a minimally-valid
+    // anchor of the requested kind that the user then edits.
+    function defaultParticlePayloadForKind(kind) {
+      switch (kind) {
+        case 'point-cloud':
+          return {
+            kind: 'point-cloud', context: '2d-canvas',
+            position_layout: 'cartesian',
+            x_range: [0, 1], y_range: [0, 1],
+            count: 50, size: 2, alpha: 1.0,
+            color: { mode: 'fixed', value: 'rgb(255,255,255)' },
+            render: { shape: 'circle', mode: 'solid' },
+          };
+        case 'directional-emitter':
+          return {
+            kind: 'directional-emitter', context: '2d-canvas',
+            spawn_edge: 'top', count: 50,
+            velocity_range: { vx: [-1, 1], vy: [0.5, 1.5] },
+            size_range: [2, 6], respawn: false,
+            color: { mode: 'hue_range', range: [0, 360], sat: 100, lit: 60 },
+            render: { shape: 'rect', mode: 'solid' },
+          };
+        case 'volumetric':
+          return {
+            kind: 'volumetric', context: '2d-canvas',
+            spawn_region: { x: [0, 1], y: [0.5, 1] }, count: 20,
+            velocity_range: { vx: [-0.2, 0.2], vy: [-0.5, -0.1] },
+            size_init_range: [20, 50], size_growth_rate: 0.2,
+            fade_rate: 0.0002, alpha_init_range: [0.02, 0.06],
+            respawn: false,
+            color: { mode: 'fixed', value: 'rgb(200,200,200)' },
+            render: { shape: 'circle', mode: 'gradient' },
+          };
+        default:
+          return { kind: 'point-cloud', context: '2d-canvas', count: 0 };
+      }
+    }
 
     // Per VENUE-ADMIN-UI-A1-BUILD-SPEC §2 (locked inventory).
     const PROCEDURAL_VENUES = new Set([
@@ -774,20 +960,30 @@
       renderEditor(venueId);
       // Stage 2 — load + render the audio anchor panel.
       loadAndRenderAudioPanel(venueId);
+      // Stage A3 — load + render the particle anchor panel.
+      loadAndRenderParticlePanel(venueId);
     }
 
-    // Combined dirty check across venue_defaults editor + audio anchors.
+    // Combined dirty check across venue_defaults editor + audio anchors + particle anchors.
     function venueHasAnyDirty(venueId) {
       if (state.dirty.has(venueId)) return true;
       if (!venueId) return false;
-      // Any pending-new anchor for this venue?
+      // Any pending-new audio anchor for this venue?
       for (const [, info] of state.anchorNew) {
         if (info.venue_id === venueId) return true;
       }
-      // Any dirty saved anchor for this venue?
+      // Any dirty saved audio anchor for this venue?
       const venueAnchors = state.anchors.get(venueId) || [];
       for (const a of venueAnchors) {
         if (state.anchorDirty.has(a.id)) return true;
+      }
+      // Stage A3 — particle anchor dirty state
+      for (const [, info] of state.particleAnchorNew) {
+        if (info.venue_id === venueId) return true;
+      }
+      const venueParticles = state.particleAnchors.get(venueId) || [];
+      for (const a of venueParticles) {
+        if (state.particleAnchorDirty.has(a.id)) return true;
       }
       return false;
     }
@@ -795,13 +991,26 @@
     function discardAllForVenue(venueId) {
       state.dirty.delete(venueId);
       updateDirtyIndicator(venueId);
-      // Clear all anchor-dirty + pending-new for this venue.
+      // Clear audio anchor dirty + pending-new for this venue.
       const venueAnchors = state.anchors.get(venueId) || [];
       for (const a of venueAnchors) {
         state.anchorDirty.delete(a.id);
       }
       for (const [id, info] of state.anchorNew) {
         if (info.venue_id === venueId) state.anchorNew.delete(id);
+      }
+      // Stage A3 — clear particle anchor dirty + pending-new + active previews
+      const venueParticles = state.particleAnchors.get(venueId) || [];
+      for (const a of venueParticles) {
+        state.particleAnchorDirty.delete(a.id);
+        stopParticlePreview(a.id);
+      }
+      for (const [id, info] of state.particleAnchorNew) {
+        if (info.venue_id === venueId) {
+          stopParticlePreview(id);
+          state.particleAnchorNew.delete(id);
+          state.particleAnchorDirty.delete(id);
+        }
       }
     }
 
@@ -1340,6 +1549,495 @@
       row.querySelector('.anchor-status').classList.remove('error', 'success');
     }
 
+    // ─── Stage A3: Particle anchor panel ────────────────────────────
+
+    async function loadAndRenderParticlePanel(venueId) {
+      if (!venueId) return;
+      stopAllParticlePreviews();
+      if (!state.particleAnchors.has(venueId)) {
+        const vs = await waitForVenueSettings();
+        if (!vs) {
+          renderParticlePanel(venueId);
+          return;
+        }
+        try {
+          const rows = await vs.loadVenueAnchors({ venueId, type: 'particle' });
+          state.particleAnchors.set(venueId, rows || []);
+        } catch (e) {
+          console.error('[admin-venues] loadVenueAnchors (particle) failed:', e);
+          state.particleAnchors.set(venueId, []);
+        }
+      }
+      renderParticlePanel(venueId);
+    }
+
+    function renderParticlePanel(venueId) {
+      const listEl  = document.getElementById('particle-anchor-list');
+      const emptyEl = document.getElementById('particle-anchor-empty');
+      listEl.innerHTML = '';
+
+      const savedRows = state.particleAnchors.get(venueId) || [];
+      for (const anchor of savedRows) {
+        listEl.appendChild(makeParticleAnchorRow(anchor, /*pending*/ false));
+      }
+      for (const [pendingId, info] of state.particleAnchorNew) {
+        if (info.venue_id === venueId) {
+          listEl.appendChild(makeParticleAnchorRow({
+            id: pendingId, venue_id: venueId, type: 'particle',
+            payload: defaultParticlePayloadForKind('point-cloud'),
+            label: 'Particles', is_broken: false,
+          }, /*pending*/ true));
+        }
+      }
+
+      const count = particleAnchorCount(venueId);
+      emptyEl.hidden = count > 0;
+      applyAddParticleAnchorButtonState(venueId);
+    }
+
+    function particleAnchorCount(venueId) {
+      const saved = (state.particleAnchors.get(venueId) || []).length;
+      let pending = 0;
+      for (const [, info] of state.particleAnchorNew) {
+        if (info.venue_id === venueId) pending++;
+      }
+      return saved + pending;
+    }
+
+    function applyAddParticleAnchorButtonState(venueId) {
+      const btn     = document.getElementById('btn-add-particle-anchor');
+      const limitEl = document.getElementById('particle-anchor-limit-note');
+      const count   = particleAnchorCount(venueId);
+      btn.hidden    = (count >= 1);
+      limitEl.hidden = !(count >= 1);
+    }
+
+    function makeParticleAnchorRow(anchor, isPending) {
+      const li = document.createElement('li');
+      li.className = 'anchor-row';
+      li.dataset.anchorId = anchor.id;
+      li.dataset.pending  = isPending ? '1' : '0';
+      const isDirty = state.particleAnchorDirty.has(anchor.id) || isPending;
+      if (isDirty) li.classList.add('dirty');
+
+      const payload = anchor.payload || {};
+      const kind = payload.kind || 'point-cloud';
+      li.innerHTML = renderParticleAnchorRowHTML(anchor, payload, kind, isPending, isDirty);
+      return li;
+    }
+
+    function renderParticleAnchorRowHTML(anchor, payload, kind, isPending, isDirty) {
+      const opt    = (val, cur) => `value="${val}"${val === cur ? ' selected' : ''}`;
+      const jsonOr = (v, fallback) => escapeAttr(v !== undefined && v !== null
+        ? JSON.stringify(v, null, 2)
+        : (fallback === undefined ? '' : JSON.stringify(fallback, null, 2)));
+
+      const sizeFieldValue = Array.isArray(payload.size_range)
+        ? JSON.stringify(payload.size_range)
+        : (typeof payload.size === 'number' ? JSON.stringify(payload.size) : '');
+
+      return `
+        <div class="anchor-id-row">
+          <span class="anchor-id mono">${escapeHTML(anchor.id)}${isPending ? ' (pending)' : ''}</span>
+          <span class="anchor-dirty-dot"${isDirty ? '' : ' hidden'}>•</span>
+        </div>
+
+        <div class="particle-field-row">
+          <label>kind</label>
+          <select data-field="kind">
+            ${PARTICLE_KINDS.map(k => `<option ${opt(k, kind)}>${k}</option>`).join('')}
+          </select>
+        </div>
+        <div class="particle-field-row">
+          <label>label</label>
+          <input type="text" data-field="label" value="${escapeAttr(anchor.label || 'Particles')}">
+        </div>
+        <div class="particle-field-row">
+          <label>count</label>
+          <input type="number" data-field="count" value="${payload.count ?? ''}" min="1" step="1">
+        </div>
+
+        <div class="particle-kind-section" data-kind-section="point-cloud"${kind === 'point-cloud' ? '' : ' hidden'}>
+          <h4>point-cloud fields</h4>
+          <div class="particle-field-row">
+            <label>position_layout</label>
+            <select data-field="position_layout">
+              <option ${opt('cartesian', payload.position_layout || 'cartesian')}>cartesian</option>
+              <option ${opt('polar-projected', payload.position_layout)}>polar-projected</option>
+            </select>
+          </div>
+          <div data-pl-section="cartesian"${(payload.position_layout || 'cartesian') === 'cartesian' ? '' : ' hidden'}>
+            <div class="particle-field-row">
+              <label>x_range (JSON)</label>
+              <textarea data-field="x_range">${jsonOr(payload.x_range, [0,1])}</textarea>
+            </div>
+            <div class="particle-field-row">
+              <label>y_range (JSON)</label>
+              <textarea data-field="y_range">${jsonOr(payload.y_range, [0,1])}</textarea>
+            </div>
+          </div>
+          <div data-pl-section="polar-projected"${payload.position_layout === 'polar-projected' ? '' : ' hidden'}>
+            <div class="particle-field-row">
+              <label>polar (JSON)</label>
+              <textarea data-field="polar">${jsonOr(payload.polar, { center:[0.5,0.5], dist_range:[0,0.5], vertical_squash:1.0, rotation_velocity:0 })}</textarea>
+            </div>
+          </div>
+          <div class="particle-field-row">
+            <label>size or size_range</label>
+            <textarea data-field="size_or_size_range" placeholder='1.4   or   [1, 5]'>${escapeAttr(sizeFieldValue)}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>twinkle_phase_speed_range (JSON, optional)</label>
+            <textarea data-field="twinkle_phase_speed_range" placeholder="(omit for no twinkle)">${escapeAttr(payload.twinkle_phase_speed_range ? JSON.stringify(payload.twinkle_phase_speed_range) : '')}</textarea>
+          </div>
+        </div>
+
+        <div class="particle-kind-section" data-kind-section="directional-emitter"${kind === 'directional-emitter' ? '' : ' hidden'}>
+          <h4>directional-emitter fields</h4>
+          <div class="particle-field-row">
+            <label>spawn_edge</label>
+            <select data-field="spawn_edge">
+              ${['top','bottom','left','right'].map(e => `<option ${opt(e, payload.spawn_edge || 'top')}>${e}</option>`).join('')}
+            </select>
+          </div>
+          <div class="particle-field-row">
+            <label>velocity_range (JSON)</label>
+            <textarea data-field="velocity_range">${jsonOr(payload.velocity_range, { vx:[-1,1], vy:[0.4,1.6] })}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>size_range (JSON)</label>
+            <textarea data-field="size_range">${jsonOr(payload.size_range, [2,6])}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>rotation (JSON, optional)</label>
+            <textarea data-field="rotation" placeholder="(omit for no rotation)">${escapeAttr(payload.rotation ? JSON.stringify(payload.rotation, null, 2) : '')}</textarea>
+          </div>
+        </div>
+
+        <div class="particle-kind-section" data-kind-section="volumetric"${kind === 'volumetric' ? '' : ' hidden'}>
+          <h4>volumetric fields</h4>
+          <div class="particle-field-row">
+            <label>spawn_region (JSON)</label>
+            <textarea data-field="spawn_region">${jsonOr(payload.spawn_region, { x:[0,1], y:[0.5,1] })}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>velocity_range (JSON)</label>
+            <textarea data-field="velocity_range">${jsonOr(payload.velocity_range, { vx:[-0.2,0.2], vy:[-0.5,-0.1] })}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>size_init_range (JSON)</label>
+            <textarea data-field="size_init_range">${jsonOr(payload.size_init_range, [20,50])}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>size_growth_rate</label>
+            <input type="number" data-field="size_growth_rate" value="${payload.size_growth_rate ?? ''}" step="any" placeholder="(omit for no growth)">
+          </div>
+          <div class="particle-field-row">
+            <label>fade_rate</label>
+            <input type="number" data-field="fade_rate" value="${payload.fade_rate ?? ''}" step="any" placeholder="(omit for no fade)">
+          </div>
+          <div class="particle-field-row">
+            <label>alpha_init_range (JSON, optional)</label>
+            <textarea data-field="alpha_init_range" placeholder="(omit to use scalar alpha)">${escapeAttr(payload.alpha_init_range ? JSON.stringify(payload.alpha_init_range) : '')}</textarea>
+          </div>
+        </div>
+
+        <div class="particle-shared-section">
+          <h4>Shared</h4>
+          <div class="particle-field-row">
+            <label>alpha</label>
+            <input type="number" data-field="alpha" value="${payload.alpha ?? ''}" step="any" min="0" max="1" placeholder="1.0 (default)">
+          </div>
+          <div class="particle-field-row">
+            <label>color (JSON)</label>
+            <textarea data-field="color">${jsonOr(payload.color, { mode:'fixed', value:'rgb(255,255,255)' })}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>render (JSON)</label>
+            <textarea data-field="render">${jsonOr(payload.render, { shape:'circle', mode:'solid' })}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>turbulence (JSON, optional)</label>
+            <textarea data-field="turbulence" placeholder='(none — example: {"strength": 0.02})'>${escapeAttr(payload.turbulence ? JSON.stringify(payload.turbulence) : '')}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>modulator (JSON, optional)</label>
+            <textarea data-field="modulator" placeholder='(none — single object or array of {name,target})'>${escapeAttr(payload.modulator ? JSON.stringify(payload.modulator, null, 2) : '')}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>respawn</label>
+            <input type="checkbox" data-field="respawn"${payload.respawn ? ' checked' : ''}>
+          </div>
+        </div>
+
+        <div class="particle-preview-canvas-wrap">
+          <canvas class="particle-preview-canvas" width="480" height="240"></canvas>
+          <div class="particle-preview-ended-label" hidden>Preview ended — click Replay</div>
+        </div>
+
+        <div class="anchor-row-actions">
+          <button type="button" class="btn-play-particle-preview">▶ Play preview</button>
+          <button type="button" class="btn-replay-particle-preview" hidden>↻ Replay</button>
+          <button type="button" class="btn-anchor-save">Save</button>
+          ${isPending
+            ? '<button type="button" class="btn-anchor-cancel">Cancel</button>'
+            : '<button type="button" class="btn-anchor-delete">Delete</button>'}
+        </div>
+        <div class="anchor-status" data-status></div>
+      `;
+    }
+
+    function onParticleAnchorFieldInput(event) {
+      if (!event.target.matches('[data-field]')) return;
+      const row = event.target.closest('.anchor-row');
+      if (!row) return;
+      const anchorId = row.dataset.anchorId;
+      state.particleAnchorDirty.add(anchorId);
+      row.classList.add('dirty');
+      row.querySelector('.anchor-dirty-dot').hidden = false;
+
+      const field = event.target.dataset.field;
+      if (field === 'kind') {
+        row.querySelectorAll('[data-kind-section]').forEach(s => {
+          s.hidden = (s.dataset.kindSection !== event.target.value);
+        });
+      } else if (field === 'position_layout') {
+        row.querySelectorAll('[data-pl-section]').forEach(s => {
+          s.hidden = (s.dataset.plSection !== event.target.value);
+        });
+      }
+    }
+
+    // Read form fields into a payload. Returns { payload, errors } —
+    // particle uses anchor-level dirty (not field-level), so the
+    // full payload is reconstructed from form state at save/preview time.
+    function readParticlePayloadFromRow(row) {
+      const errors = [];
+      const getEl = (name) => row.querySelector(`[data-field="${name}"]`);
+      const getStr = (name) => getEl(name)?.value ?? '';
+      const getBool = (name) => !!getEl(name)?.checked;
+      function getNum(name) {
+        const el = getEl(name);
+        const raw = el?.value?.trim() ?? '';
+        if (raw === '') return undefined;
+        const n = Number(raw);
+        return Number.isNaN(n) ? undefined : n;
+      }
+      function getJSON(name) {
+        const el = getEl(name);
+        const raw = el?.value?.trim() ?? '';
+        if (raw === '') return undefined;
+        try { return JSON.parse(raw); }
+        catch (e) { errors.push({ field: name, message: e.message }); return undefined; }
+      }
+
+      const kind = getStr('kind') || 'point-cloud';
+      const payload = { kind, context: '2d-canvas' };
+
+      const count = getNum('count');
+      if (count !== undefined) payload.count = count;
+
+      if (kind === 'point-cloud') {
+        const layout = getStr('position_layout') || 'cartesian';
+        payload.position_layout = layout;
+        if (layout === 'cartesian') {
+          const xR = getJSON('x_range'); if (xR !== undefined) payload.x_range = xR;
+          const yR = getJSON('y_range'); if (yR !== undefined) payload.y_range = yR;
+        } else {
+          const polar = getJSON('polar'); if (polar !== undefined) payload.polar = polar;
+        }
+        const sizeJson = getJSON('size_or_size_range');
+        if (sizeJson !== undefined) {
+          if (Array.isArray(sizeJson)) payload.size_range = sizeJson;
+          else if (typeof sizeJson === 'number') payload.size = sizeJson;
+          else errors.push({ field: 'size_or_size_range', message: 'expected number or [min,max] array' });
+        }
+        const twinkle = getJSON('twinkle_phase_speed_range');
+        if (twinkle !== undefined) payload.twinkle_phase_speed_range = twinkle;
+      } else if (kind === 'directional-emitter') {
+        payload.spawn_edge = getStr('spawn_edge') || 'top';
+        const vr  = getJSON('velocity_range'); if (vr  !== undefined) payload.velocity_range = vr;
+        const sr  = getJSON('size_range');     if (sr  !== undefined) payload.size_range     = sr;
+        const rot = getJSON('rotation');       if (rot !== undefined) payload.rotation       = rot;
+      } else if (kind === 'volumetric') {
+        const region = getJSON('spawn_region');     if (region !== undefined) payload.spawn_region    = region;
+        const vr     = getJSON('velocity_range');   if (vr     !== undefined) payload.velocity_range  = vr;
+        const sir    = getJSON('size_init_range');  if (sir    !== undefined) payload.size_init_range = sir;
+        const sgr    = getNum('size_growth_rate');  if (sgr    !== undefined) payload.size_growth_rate = sgr;
+        const fr     = getNum('fade_rate');         if (fr     !== undefined) payload.fade_rate       = fr;
+        const air    = getJSON('alpha_init_range'); if (air    !== undefined) payload.alpha_init_range = air;
+      }
+
+      const alpha = getNum('alpha'); if (alpha !== undefined) payload.alpha = alpha;
+      const color = getJSON('color'); if (color !== undefined) payload.color = color;
+      const render = getJSON('render'); if (render !== undefined) payload.render = render;
+      const turbulence = getJSON('turbulence'); if (turbulence !== undefined) payload.turbulence = turbulence;
+      const modulator = getJSON('modulator'); if (modulator !== undefined) payload.modulator = modulator;
+      if (getEl('respawn')) payload.respawn = getBool('respawn');
+
+      return { payload, errors };
+    }
+
+    async function onParticleAnchorSave(anchorId) {
+      const venueId = state.selectedVenueId;
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (!row) return;
+
+      const { payload, errors } = readParticlePayloadFromRow(row);
+      if (errors.length > 0) {
+        showAnchorStatus(anchorId, 'Fix JSON errors: ' + errors.map(e => e.field).join(', '), 'error');
+        return;
+      }
+
+      const labelVal = row.querySelector('[data-field="label"]')?.value ?? 'Particles';
+      const isPending = state.particleAnchorNew.has(anchorId);
+      const partial = { type: 'particle', payload, label: labelVal };
+
+      showAnchorStatus(anchorId, 'Saving…', null);
+      try {
+        const { data, error } = await window.sb.rpc('rpc_venue_anchor_upsert', {
+          p_id:       anchorId,
+          p_venue_id: venueId,
+          p_partial:  partial,
+        });
+        if (error) throw error;
+        if (!data) throw new Error('rpc returned no row');
+
+        const savedAnchors = state.particleAnchors.get(venueId) || [];
+        if (isPending) {
+          savedAnchors.push(data);
+          state.particleAnchorNew.delete(anchorId);
+        } else {
+          const idx = savedAnchors.findIndex(a => a.id === anchorId);
+          if (idx >= 0) savedAnchors[idx] = data; else savedAnchors.push(data);
+        }
+        state.particleAnchors.set(venueId, savedAnchors);
+        state.particleAnchorDirty.delete(anchorId);
+        stopParticlePreview(anchorId);
+        renderParticlePanel(venueId);
+
+        showAnchorStatus(data.id, 'Saved', 'success');
+        setTimeout(() => clearAnchorStatus(data.id), 2000);
+      } catch (e) {
+        const code = e?.code ? ' [' + e.code + ']' : '';
+        showAnchorStatus(anchorId, 'Save failed' + code + ': ' + (e.message || e), 'error');
+      }
+    }
+
+    async function onParticleAnchorDelete(anchorId) {
+      const venueId = state.selectedVenueId;
+      const savedAnchors = state.particleAnchors.get(venueId) || [];
+      const anchor = savedAnchors.find(a => a.id === anchorId);
+      const kindLabel = anchor?.payload?.kind || anchorId;
+      const ok = confirm('Delete particle anchor (kind: ' + kindLabel + ') for ' + venueId + '?');
+      if (!ok) return;
+      showAnchorStatus(anchorId, 'Deleting…', null);
+      try {
+        const { error } = await window.sb.rpc('rpc_venue_anchor_delete', { p_id: anchorId });
+        if (error) throw error;
+        stopParticlePreview(anchorId);
+        state.particleAnchors.set(venueId, savedAnchors.filter(a => a.id !== anchorId));
+        state.particleAnchorDirty.delete(anchorId);
+        renderParticlePanel(venueId);
+      } catch (e) {
+        const code = e?.code ? ' [' + e.code + ']' : '';
+        showAnchorStatus(anchorId, 'Delete failed' + code + ': ' + (e.message || e), 'error');
+      }
+    }
+
+    function onParticleAnchorCancel(anchorId) {
+      stopParticlePreview(anchorId);
+      state.particleAnchorNew.delete(anchorId);
+      state.particleAnchorDirty.delete(anchorId);
+      renderParticlePanel(state.selectedVenueId);
+    }
+
+    function onAddParticleAnchor() {
+      const venueId = state.selectedVenueId;
+      if (!venueId) return;
+      if (particleAnchorCount(venueId) >= 1) return;
+      const newId = 'anc_' + (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '_' + Math.random().toString(36).slice(2)));
+      state.particleAnchorNew.set(newId, { venue_id: venueId });
+      state.particleAnchorDirty.add(newId);
+      renderParticlePanel(venueId);
+    }
+
+    // Preview lifecycle. The 8000ms soft-timeout for the "Preview ended"
+    // label is a heuristic for respawn:false effects (festival ~5s,
+    // speakeasy ~7s) — false positives are harmless because the user
+    // can Replay anyway. respawn:true effects skip the timeout.
+    const PARTICLE_PREVIEW_ENDED_THRESHOLD_MS = 8000;
+
+    function onPlayParticlePreview(rowEl) {
+      const anchorId = rowEl.dataset.anchorId;
+      const canvasEl = rowEl.querySelector('.particle-preview-canvas');
+      if (!canvasEl) return;
+
+      const { payload, errors } = readParticlePayloadFromRow(rowEl);
+      if (errors.length > 0) {
+        showAnchorStatus(anchorId, 'Fix JSON before preview: ' + errors.map(e => e.field).join(', '), 'error');
+        return;
+      }
+      stopParticlePreview(anchorId);
+
+      const anchor = { id: anchorId, payload };
+      try {
+        const handle = window.elsewhere?.particleRenderer?.particleAnchorRenderer?.(
+          anchor, { canvas: canvasEl }
+        );
+        if (!handle || typeof handle.stop !== 'function') {
+          showAnchorStatus(anchorId, 'Preview failed — renderer returned no handle', 'error');
+          return;
+        }
+        rowEl.querySelector('.btn-play-particle-preview').hidden = true;
+        rowEl.querySelector('.btn-replay-particle-preview').hidden = false;
+
+        let endedTimerId = null;
+        if (payload.respawn !== true) {
+          endedTimerId = setTimeout(() => {
+            const label = rowEl.querySelector('.particle-preview-ended-label');
+            if (label) label.hidden = false;
+          }, PARTICLE_PREVIEW_ENDED_THRESHOLD_MS);
+        }
+
+        state.particlePreviewState.set(anchorId, { stopFn: handle.stop, endedTimerId });
+      } catch (e) {
+        showAnchorStatus(anchorId, 'Preview failed: ' + (e.message || e), 'error');
+      }
+    }
+
+    function onReplayParticlePreview(rowEl) {
+      const anchorId = rowEl.dataset.anchorId;
+      stopParticlePreview(anchorId);
+      const label = rowEl.querySelector('.particle-preview-ended-label');
+      if (label) label.hidden = true;
+      onPlayParticlePreview(rowEl);
+    }
+
+    function stopParticlePreview(anchorId) {
+      const st = state.particlePreviewState.get(anchorId);
+      if (!st) return;
+      try { st.stopFn?.(); } catch (_) {}
+      if (st.endedTimerId !== null && st.endedTimerId !== undefined) clearTimeout(st.endedTimerId);
+      state.particlePreviewState.delete(anchorId);
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (row) {
+        row.querySelector('.btn-play-particle-preview').hidden = false;
+        row.querySelector('.btn-replay-particle-preview').hidden = true;
+        const label = row.querySelector('.particle-preview-ended-label');
+        if (label) label.hidden = true;
+      }
+    }
+
+    function stopAllParticlePreviews() {
+      for (const anchorId of Array.from(state.particlePreviewState.keys())) {
+        stopParticlePreview(anchorId);
+      }
+    }
+    function onStopAllParticlePreviews() {
+      stopAllParticlePreviews();
+    }
+
     // ─── Wire handlers ──────────────────────────────────────────────
     function wireHandlers() {
       document.getElementById('ed-back-yaw').addEventListener('input', onNumericChange('back_yaw'));
@@ -1369,11 +2067,30 @@
         if (e.target.matches('.btn-anchor-cancel')) return onAnchorCancel(anchorId);
       });
 
+      // Stage A3 — particle anchor panel wiring (event delegation on the list)
+      document.getElementById('btn-add-particle-anchor').addEventListener('click', onAddParticleAnchor);
+      document.getElementById('btn-stop-particle-preview').addEventListener('click', onStopAllParticlePreviews);
+      const particleListEl = document.getElementById('particle-anchor-list');
+      particleListEl.addEventListener('input',  onParticleAnchorFieldInput);
+      particleListEl.addEventListener('change', onParticleAnchorFieldInput);
+      particleListEl.addEventListener('click', (e) => {
+        const row = e.target.closest('.anchor-row');
+        if (!row) return;
+        const anchorId = row.dataset.anchorId;
+        if (e.target.matches('.btn-play-particle-preview'))   return onPlayParticlePreview(row);
+        if (e.target.matches('.btn-replay-particle-preview')) return onReplayParticlePreview(row);
+        if (e.target.matches('.btn-anchor-save'))             return onParticleAnchorSave(anchorId);
+        if (e.target.matches('.btn-anchor-delete'))           return onParticleAnchorDelete(anchorId);
+        if (e.target.matches('.btn-anchor-cancel'))           return onParticleAnchorCancel(anchorId);
+      });
+
       window.addEventListener('beforeunload', (e) => {
-        // Extended per Stage 2: includes audio anchor dirty state.
+        // Extended per Stage A3: includes particle anchor dirty state.
         const anyDirty = state.dirty.size > 0
                       || state.anchorDirty.size > 0
-                      || state.anchorNew.size > 0;
+                      || state.anchorNew.size > 0
+                      || state.particleAnchorDirty.size > 0
+                      || state.particleAnchorNew.size > 0;
         if (anyDirty) {
           e.preventDefault();
           e.returnValue = '';
