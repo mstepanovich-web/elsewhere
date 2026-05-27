@@ -94,20 +94,41 @@ schema and have each kind reference them — do not re-declare per kind.
 
   fragment "color":
     one of:
-      { "mode": "fixed",     "value": "rgba(255,255,255,0.7)" }
-      { "mode": "hue_range", "range": [0,360], "sat": 100, "lit": 65 }
+      { "mode": "fixed",     "value": "rgb(255,255,255)" }                // RGB only — alpha is NEVER inside the color string
+      { "mode": "hue_range", "range": [0,360], "sat": 100, "lit": 65 }    // already alpha-less
   fragment "render":
     { "shape": "circle" | "rect", "mode": "solid" | "stroke" | "gradient",
       "line_width": <number, only when mode=stroke> }
   fragment "turbulence":
     { "strength": <number> }   // per-frame velocity random-walk magnitude;
                                // absent = no turbulence
-  fragment "modulator" (optional, see §1.4):
-    { "name": <string>, "target": <particle property name> }
+  fragment "modulator" (optional, see §1.6):
+    one of:
+      { "name": <string>, "target": <particle property name> }                            // single binding
+      [ { "name": <string>, "target": <p> }, { "name": <string>, "target": <p> }, ... ]   // array of bindings
+    A single object is semantically equivalent to a one-element array; the
+    renderer handles both forms uniformly.
 
 Single shared scalar fields usable by any kind: count (int),
 size or size_range, fade_rate (number; absent = no fade), respawn (bool;
-default false).
+default false), alpha (number; default 1.0), alpha_init_range ([min, max];
+per-particle alpha distribution at spawn — when present, takes precedence
+over alpha for spawn-time alpha assignment).
+
+Alpha model — uniform across all kinds. Alpha is ALWAYS its own field,
+never embedded in the color string. The renderer combines alpha sources
+as follows:
+  - if alpha_init_range is present, each particle's spawn-time alpha is
+    drawn from this range (per-particle dynamic alpha; volumetric uses
+    this);
+  - else, each particle's spawn-time alpha is the scalar alpha field
+    (default 1.0);
+  - fade_rate (if present) decrements that per-particle alpha each frame;
+  - a modulator targeting "alpha" multiplies the per-frame alpha;
+  - the final alpha is clamped to [0,1] at draw time.
+This model applies to every kind. Color fragments carry RGB only. The
+exact alpha-combination formula for point-cloud (which adds twinkle) is
+in §3.3's renderer contract.
 
 §1.3 — point-cloud schema
 {
@@ -115,20 +136,21 @@ default false).
   "context": "2d-canvas",
   "position_layout": "cartesian" | "polar-projected",
   // cartesian (stadium):
-  "x_range": [0,1], "y_range": [0.08,0.60],   // normalized to canvas
+  "x_range": [0,1], "y_range": [0.08,0.60],   // normalized to canvas width/height respectively
   // polar-projected (disco) — used INSTEAD of x_range/y_range:
   "polar": {
-    "center": [0.5, 0.30],          // normalized canvas center
-    "dist_range": [<min>,<max>],    // normalized radial distance
-    "vertical_squash": 0.4,         // ellipse projection factor
-    "rotation_velocity": 0.012      // radians/frame on the shared accumulator
+    "center": [0.5, 0.30],          // normalized [x, y] — x against canvas.width, y against canvas.height
+    "dist_range": [<min>,<max>],    // normalized radial distance against max(canvas.width, canvas.height) — matches the procedural source's Math.max(ambientW, ambientH) basis
+    "vertical_squash": 0.4,         // ellipse projection factor (y-scale on sin term)
+    "rotation_velocity": 0.012      // radians/frame on the shared rotation accumulator
   },
   "count": 400,
   "size": 1.4,                                  // or "size_range":[a,b]
-  "twinkle_phase_speed_range": [0.008, 0.033],
-  "color": <color fragment>,
+  "twinkle_phase_speed_range": [0.008, 0.033],  // OPTIONAL — when absent, renderer skips internal twinkle (disco has no twinkle; rotation + modulator are its motion + dynamics)
+  "alpha": 0.7,                                 // optional shared field (§1.2); default 1.0
+  "color": <color fragment>,                    // RGB only per §1.2
   "render": <render fragment>,                  // typically circle/solid
-  "modulator": <modulator fragment, optional>
+  "modulator": <modulator fragment, optional>   // single object or array (§1.2 / §1.6)
 }
 position_layout is the ONLY internal branch in A3's schema. cartesian uses
 x_range/y_range; polar-projected uses the polar object instead. The
@@ -162,29 +184,45 @@ present, no turbulence, no fade_rate, respawn:false.
   "velocity_range": { "vx":[-0.2,0.2], "vy":[-0.45,-0.1] },
   "size_init_range": [20,65],
   "size_growth_rate": 0.2,                       // optional; absent=no growth
-  "fade_rate": 0.00015,
+  "fade_rate": 0.00015,                          // per-particle alpha decrement per frame; combines with alpha_init_range per §1.2 alpha model
+  "alpha_init_range": [0.015, 0.065],            // optional shared field (§1.2); per-particle alpha at spawn — takes precedence over scalar alpha when present
   "turbulence": <turbulence fragment, optional>,
   "respawn": false,                              // bool, default false
-  "color": <color fragment>,
+  "color": <color fragment>,                     // RGB only per §1.2 (speakeasy: { "mode": "fixed", "value": "rgb(210,190,160)" })
   "render": <render fragment>                    // speakeasy: circle/gradient
 }
 speakeasy 2D smoke is the canonical case: region spawn, mild upward
 velocity, size_growth_rate present, fade_rate present, turbulence present,
-respawn:false, render gradient.
+respawn:false, render gradient, alpha_init_range present (per-particle
+alpha distribution that fade_rate decrements toward zero per the §1.2
+alpha model).
 
 §1.6 — The modulator field (Q5 resolution)
 Some procedural effects read a venue-level GSAP-driven scalar
 (stadium's crowdState.brightness, disco's beatState.scale). A3 does NOT
 build the modulator SYSTEM — that is a cross-cutting concern (it drives
 spotlights too) and belongs to a later integration stage. A3 only records
-the BINDING:
+the BINDING.
+
+The modulator field accepts a single binding object OR an array of
+binding objects, since some effects bind multiple modulators at once
+(disco modulates BOTH size via beat_scale AND alpha via beat_brightness):
   "modulator": { "name": "crowd_brightness", "target": "alpha" }
   "modulator": { "name": "beat_scale",       "target": "size"  }
+  "modulator": [
+    { "name": "beat_scale",      "target": "size"  },
+    { "name": "beat_brightness", "target": "alpha" }
+  ]
+A single object is semantically equivalent to a one-element array; the
+renderer handles both forms uniformly. Stadium binds one (alpha); disco
+binds two (size + alpha).
+
 name is an opaque string (the renderer does not resolve it to a real
 driver in A3). target names the particle property the scalar modulates —
-required, because stadium modulates alpha and disco modulates size.
-For A3's dormant preview, the renderer drives the named modulator with a
-simple built-in oscillator so the preview looks alive. Real modulator
+required, because the same modulator name can drive different particle
+properties on different anchors. Targets used in A3: "alpha", "size".
+For A3's dormant preview, the renderer drives each named modulator with
+a simple built-in oscillator so the preview looks alive. Real modulator
 wiring is deferred. See §7 (DEFERRED) — "venue modulator system."
 
 §1.7 — Known uncovered pattern: P1 (drift + wrap + twinkle)
@@ -272,6 +310,11 @@ The renderer is given a particle anchor (the venue_anchors row) and a
 A2's audio renderer returned a { stop } handle; particle's renderer
 returns an equivalent teardown handle. Define the exact handle shape in
 the implementation proposal.
+
+The exact point-cloud alpha formula — how the §1.2 alpha model combines
+with twinkle phase, the modulator targeting alpha, and the [0,1] clamp —
+is specified in the §9 item 3 particle.js implementation proposal,
+alongside the kind-dispatch logic.
 
 §3.4 — Directory
 particle.js goes in the existing shell/venue-renderers/ directory
