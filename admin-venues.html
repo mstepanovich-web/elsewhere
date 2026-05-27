@@ -532,12 +532,109 @@
       border-radius: 4px;
       pointer-events: none;
     }
+
+    /* ─── Spotlight anchor panel (Stage A4a) ───────────────────────── */
+    /* Most styles reuse .anchor-panel / .anchor-row / .anchor-field-row
+       from the audio panel + the .particle-* preview pattern above.
+       Spotlight-specific additions mirror particle-* but prefixed
+       spotlight-* so per-kind dispatch logic can target separately. */
+
+    .spotlight-kind-section,
+    .spotlight-shared-section {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-left: 2px solid var(--color-border);
+      background: rgba(255,255,255,.02);
+    }
+    .spotlight-kind-section h4,
+    .spotlight-shared-section h4 {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--color-gold-dim, rgba(212,176,116,.6));
+      margin: 0 0 8px;
+    }
+    .spotlight-shared-section h4 {
+      color: var(--color-text-faint);
+    }
+
+    .spotlight-field-row {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 8px;
+      align-items: start;
+      margin-bottom: 6px;
+    }
+    .spotlight-field-row label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-text-faint);
+      padding-top: 4px;
+    }
+    .spotlight-field-row input[type="number"],
+    .spotlight-field-row input[type="text"],
+    .spotlight-field-row select {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 4px 8px;
+    }
+    .spotlight-field-row textarea {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 4px 8px;
+      min-height: 56px;
+      resize: vertical;
+      width: 100%;
+    }
+
+    /* Per-item array fields: highlight when length-vs-count mismatches.
+       The validation surfaces the error inline; this class toggles via
+       readSpotlightPayloadFromRow validation pass. */
+    .spotlight-field-row textarea.array-length-mismatch {
+      border-color: var(--color-danger, #c44);
+      box-shadow: 0 0 0 1px var(--color-danger, #c44);
+    }
+    .spotlight-field-row .array-length-note {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--color-text-faint);
+      margin-top: 2px;
+    }
+    .spotlight-field-row .array-length-note.mismatch {
+      color: var(--color-danger, #c44);
+    }
+
+    .spotlight-preview-canvas-wrap {
+      position: relative;
+      margin: 12px 0;
+      border: 1px dashed var(--color-border);
+      border-radius: 6px;
+      background: rgba(0,0,0,.4);
+      width: 100%;
+      max-width: 480px;
+    }
+    .spotlight-preview-canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 2/1;
+      background: transparent;
+    }
   </style>
 </head>
 <body>
 
   <header id="header">
-    <div class="title">VENUE ADMIN <span class="version-stamp">v2.138</span></div>
+    <div class="title">VENUE ADMIN <span class="version-stamp">v2.139</span></div>
     <div class="user-info">
       <span id="user-display"></span>
       <span class="admin-badge" id="admin-badge" hidden>ADMIN</span>
@@ -661,6 +758,18 @@
             No particle anchors yet for this venue. Click "+ Add particle anchor" to create one.
           </div>
         </section>
+
+        <section class="anchor-panel" id="spotlight-anchor-panel">
+          <header class="anchor-panel-header">
+            <h2>Spotlight anchors</h2>
+            <button id="btn-add-spotlight-anchor" type="button">+ Add spotlight anchor</button>
+            <button id="btn-stop-all-spotlight-previews" type="button">⏹ Stop all previews</button>
+          </header>
+          <ul class="anchor-list" id="spotlight-anchor-list"></ul>
+          <div class="anchor-empty" id="spotlight-anchor-empty" hidden>
+            No spotlight anchors yet for this venue. Click "+ Add spotlight anchor" to create one.
+          </div>
+        </section>
       </div>
     </section>
   </main>
@@ -705,6 +814,16 @@
     state.particleAnchorNew    = new Map();   // pendingAnchorId -> { venue_id }
     state.particlePreviewState = new Map();   // anchorId -> { stopFn, endedTimerId }
 
+    // ─── Stage A4a — spotlight anchor state ─────────────────────────
+    state.spotlightAnchors       = new Map();   // venueId -> array of saved spotlight anchor rows (mirrors state.particleAnchors)
+    state.spotlightAnchorDirty   = new Set();   // anchorId — presence = dirty (mirrors A3 pattern: Set, not Map)
+    state.spotlightAnchorNew     = new Map();   // pendingAnchorId -> { venue_id }
+    state.spotlightPreviewState  = new Map();   // anchorId -> { stopFn }
+    //   No endedTimerId in spotlight preview state — A4a's three kinds
+    //   (swept-beam-2d, pulsed-laser, light-shaft) are all eternal, so
+    //   no "preview ended" affordance is needed, unlike A3's
+    //   directional-emitter one-shot kind.
+
     const PARTICLE_KINDS = ['point-cloud', 'directional-emitter', 'volumetric'];
 
     // Starter payload for "+ Add particle anchor" — produces a minimally-valid
@@ -742,6 +861,106 @@
           };
         default:
           return { kind: 'point-cloud', context: '2d-canvas', count: 0 };
+      }
+    }
+
+    const SPOTLIGHT_KINDS = ['swept-beam-2d', 'pulsed-laser', 'light-shaft'];
+
+    // Starter payload for "+ Add spotlight anchor" — produces a
+    // minimally-valid anchor of the requested kind that the user then
+    // edits. Values mirror the spec §1.3-1.5 canonical cases
+    // (stadium / festival / speakeasy) so the default preview shows a
+    // working effect immediately. Per spec §1 amendment d50cbc9: hue-
+    // driven kinds (swept-beam-2d, pulsed-laser) omit the color
+    // fragment; light-shaft retains it.
+    function defaultSpotlightPayloadForKind(kind) {
+      switch (kind) {
+        case 'swept-beam-2d':
+          return {
+            kind: 'swept-beam-2d',
+            context: '2d-canvas',
+            count: 4,
+            hues:       [220, 200, 240, 180],
+            angle_init: [-0.375, -0.125, 0.125, 0.375],
+            base_alpha_range: [0.08, 0.14],
+            sweep_target_range: [-0.425, 0.425],
+            sweep_alpha_range:  [0.06, 0.16],
+            sweep_duration_range_ms: [1500, 4000],
+            sweep_ease: 'power1.inOut',
+            stagger_ms: 800,
+            geometry: {
+              pivot: 'top-center',
+              top_width_px: 12,
+              bottom_width_norm: 1.0,
+              height_norm: 1.0,
+              sat_pct: 80,
+              lit_pct: 95,
+              gradient_stops: [
+                { at: 0,   alpha_mult: 1.0 },
+                { at: 0.5, alpha_mult: 0.4 },
+                { at: 1,   alpha_mult: 0.0 },
+              ],
+            },
+          };
+        case 'pulsed-laser':
+          return {
+            kind: 'pulsed-laser',
+            context: '2d-canvas',
+            count: 6,
+            hues:           [0, 60, 120, 180, 240, 300],
+            angle_init:     [1.099557, 0.959557, 0.819557, 0.679557, 0.539557, 0.399557],
+            drift_speeds:   [-0.005, 0.005, -0.005, 0.005, -0.005, 0.005],
+            base_widths_px: [3, 5, 3, 5, 3, 5],
+            bpm: 128,
+            drift_range: 1.507964,
+            base_alpha: 0.35,
+            peak_alpha: 0.85,
+            peak_width_mult: 2.5,
+            attack_ms: 60,
+            attack_ease: 'power3.out',
+            decay_ms: 380,
+            decay_ease: 'power2.in',
+            first_pulse_offset_beats: 0.5,
+            geometry: {
+              pivot: 'bottom-center',
+              emit_direction: 'up',
+              height_norm: 1.0,
+              sat_pct: 100,
+              lit_pct: 65,
+              gradient_stops: [
+                { at: 0,   alpha_mult: 1.0 },
+                { at: 0.6, alpha_mult: 0.3 },
+                { at: 1,   alpha_mult: 0.0 },
+              ],
+            },
+          };
+        case 'light-shaft':
+          return {
+            kind: 'light-shaft',
+            context: '2d-canvas',
+            count: 3,
+            x_init_norm: [0.25, 0.50, 0.75],
+            base_alpha_range: [0.04, 0.08],
+            width_range_px:   [60, 100],
+            drift_distance_px: 80,
+            drift_alpha_range: [0.03, 0.09],
+            drift_duration_range_ms: [4000, 8000],
+            drift_stagger_max_ms: 2000,
+            drift_ease: 'sine.inOut',
+            geometry: {
+              pivot: 'top',
+              top_inset_factor: 0.3,
+              bottom_outset_factor: 1.0,
+              height_norm: 0.7,
+              gradient_stops: [
+                { at: 0, alpha_mult: 1.0 },
+                { at: 1, alpha_mult: 0.0 },
+              ],
+            },
+            color: { mode: 'fixed', value: 'rgb(255,210,140)' },
+          };
+        default:
+          return { kind: 'swept-beam-2d', context: '2d-canvas', count: 0 };
       }
     }
 
@@ -962,6 +1181,8 @@
       loadAndRenderAudioPanel(venueId);
       // Stage A3 — load + render the particle anchor panel.
       loadAndRenderParticlePanel(venueId);
+      // Stage A4a — load + render the spotlight anchor panel.
+      loadAndRenderSpotlightPanel(venueId);
     }
 
     // Combined dirty check across venue_defaults editor + audio anchors + particle anchors.
@@ -984,6 +1205,14 @@
       const venueParticles = state.particleAnchors.get(venueId) || [];
       for (const a of venueParticles) {
         if (state.particleAnchorDirty.has(a.id)) return true;
+      }
+      // Stage A4a — spotlight anchor dirty state (mirror of A3 pattern)
+      for (const [, info] of state.spotlightAnchorNew) {
+        if (info.venue_id === venueId) return true;
+      }
+      const venueSpotlights = state.spotlightAnchors.get(venueId) || [];
+      for (const a of venueSpotlights) {
+        if (state.spotlightAnchorDirty.has(a.id)) return true;
       }
       return false;
     }
@@ -1010,6 +1239,19 @@
           stopParticlePreview(id);
           state.particleAnchorNew.delete(id);
           state.particleAnchorDirty.delete(id);
+        }
+      }
+      // Stage A4a — clear spotlight anchor dirty + pending-new + active previews
+      const venueSpotlights = state.spotlightAnchors.get(venueId) || [];
+      for (const a of venueSpotlights) {
+        state.spotlightAnchorDirty.delete(a.id);
+        stopSpotlightPreview(a.id);
+      }
+      for (const [id, info] of state.spotlightAnchorNew) {
+        if (info.venue_id === venueId) {
+          stopSpotlightPreview(id);
+          state.spotlightAnchorNew.delete(id);
+          state.spotlightAnchorDirty.delete(id);
         }
       }
     }
@@ -2047,6 +2289,642 @@
       stopAllParticlePreviews();
     }
 
+
+    // ═══════════════════════════════════════════════════════════════
+    // Stage A4a — Spotlight anchor panel (mirror of A3 particle panel)
+    // ═══════════════════════════════════════════════════════════════
+    //
+    // PERMIT multi-anchor per spec §4.5 / D2 — "+ Add" stays visible
+    // regardless of current count. PREVENT (A2/A3) is intentionally
+    // diverged.
+    //
+    // count:N per-item arrays per spec §1.6 — payloads carry arrays of
+    // length `count` (e.g. stadium.hues[4], festival.angle_init[6]);
+    // arrays are rendered as JSON textareas with inline length-vs-count
+    // validation that surfaces mismatch styling via .array-length-mismatch.
+    //
+    // Renderer access via window.elsewhere.spotlightRenderer (spec §3.2
+    // publication); preview-state shape simpler than A3 — no endedTimerId
+    // because A4a's three kinds are all eternal.
+
+    function markSpotlightAnchorDirty(anchorId) {
+      state.spotlightAnchorDirty.add(anchorId);
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (!row) return;
+      row.classList.add('dirty');
+      const dot = row.querySelector('.anchor-dirty-dot');
+      if (dot) dot.hidden = false;
+      row.querySelector('.btn-anchor-save')?.removeAttribute('disabled');
+      row.querySelector('.btn-anchor-cancel')?.removeAttribute('disabled');
+    }
+
+    function spotlightAnchorCount(venueId) {
+      const listEl = document.getElementById('spotlight-anchor-list');
+      if (!listEl) return 0;
+      return Array.from(listEl.querySelectorAll('.anchor-row'))
+        .filter(r => r.dataset.venueId === venueId).length;
+    }
+
+    function applyAddSpotlightAnchorButtonState(venueId) {
+      // PERMIT per spec §4.5 / D2 — multi-anchor authoring allowed.
+      // "+ Add" remains available regardless of current count. Deliberate
+      // divergence from A2/A3 which PREVENT. Future venues may layer
+      // multiple spotlight effects; speakeasy gains a 2nd in A4b.
+      const btn = document.getElementById('btn-add-spotlight-anchor');
+      if (btn) btn.hidden = false;
+      // No anchor-limit-note element in spotlight panel (omitted by design).
+    }
+
+    async function loadAndRenderSpotlightPanel(venueId) {
+      const listEl = document.getElementById('spotlight-anchor-list');
+      const emptyEl = document.getElementById('spotlight-anchor-empty');
+      if (!listEl) return;
+      listEl.innerHTML = '';
+      const vs = await waitForVenueSettings();
+      if (!vs) {
+        emptyEl.hidden = false;
+        return;
+      }
+      try {
+        const anchors = await vs.loadVenueAnchors({ venueId, type: 'spotlight' });
+        state.spotlightAnchors.set(venueId, anchors || []);
+        renderSpotlightPanel(venueId, anchors);
+      } catch (e) {
+        console.warn('loadVenueAnchors(spotlight) failed:', e);
+        state.spotlightAnchors.set(venueId, []);
+        emptyEl.hidden = false;
+        emptyEl.textContent = 'Failed to load spotlight anchors: ' + (e.message || e);
+      }
+      applyAddSpotlightAnchorButtonState(venueId);
+    }
+
+    function renderSpotlightPanel(venueId, anchors) {
+      const listEl  = document.getElementById('spotlight-anchor-list');
+      const emptyEl = document.getElementById('spotlight-anchor-empty');
+      listEl.innerHTML = '';
+      const liveAnchors = (anchors || []).filter(a => a.venue_id === venueId);
+      const pendingForVenue = Array.from(state.spotlightAnchorNew.entries())
+        .filter(([_id, info]) => info.venue_id === venueId);
+
+      const totalCount = liveAnchors.length + pendingForVenue.length;
+      emptyEl.hidden = totalCount > 0;
+
+      liveAnchors.forEach(a => listEl.appendChild(makeSpotlightAnchorRow(a, false)));
+      pendingForVenue.forEach(([pendingId, info]) => {
+        const stub = {
+          id: pendingId, venue_id: info.venue_id,
+          type: 'spotlight', label: 'Spotlights',
+          payload: defaultSpotlightPayloadForKind(SPOTLIGHT_KINDS[0]),
+        };
+        listEl.appendChild(makeSpotlightAnchorRow(stub, true));
+      });
+      applyAddSpotlightAnchorButtonState(venueId);
+    }
+
+    function makeSpotlightAnchorRow(anchor, isPending) {
+      const li = document.createElement('li');
+      li.className = 'anchor-row';
+      li.dataset.anchorId = anchor.id;
+      li.dataset.venueId  = anchor.venue_id;
+      li.dataset.pending  = isPending ? '1' : '0';
+      const isDirty = state.spotlightAnchorDirty.has(anchor.id) || isPending;
+      if (isDirty) li.classList.add('dirty');
+
+      const payload = anchor.payload || {};
+      const kind = payload.kind || 'swept-beam-2d';
+      li.innerHTML = renderSpotlightAnchorRowHTML(anchor, payload, kind, isPending, isDirty);
+      return li;
+    }
+
+    function renderSpotlightAnchorRowHTML(anchor, payload, kind, isPending, isDirty) {
+      const anchorId = anchor.id;
+      const opt = (val, cur) => `value="${val}"${val === cur ? ' selected' : ''}`;
+      return `
+        <div class="anchor-id-row">
+          <span class="anchor-id mono">${escapeHTML(anchor.id)}${isPending ? ' (pending)' : ''}</span>
+          <span class="anchor-dirty-dot"${isDirty ? '' : ' hidden'}>•</span>
+        </div>
+
+        <div class="spotlight-field-row">
+          <label>kind</label>
+          <select class="fld-kind" data-field="kind">
+            ${SPOTLIGHT_KINDS.map(k => `<option ${opt(k, kind)}>${k}</option>`).join('')}
+          </select>
+        </div>
+        <div class="spotlight-field-row">
+          <label>label</label>
+          <input class="fld-label" type="text" data-field="label" value="${escapeAttr(anchor.label || 'Spotlights')}">
+        </div>
+        <div class="spotlight-field-row">
+          <label>count</label>
+          <input class="fld-count" type="number" min="1" step="1" data-field="count" value="${payload.count ?? ''}">
+        </div>
+
+        ${renderSpotlightKindSection(kind, payload)}
+        ${renderSpotlightSharedSection(payload, kind)}
+
+        <div class="spotlight-preview-canvas-wrap">
+          <canvas class="spotlight-preview-canvas" width="480" height="240"></canvas>
+        </div>
+        <div class="anchor-row-controls">
+          <button class="btn-play-spotlight-preview"   type="button">▶ Preview</button>
+          <button class="btn-replay-spotlight-preview" type="button" hidden>⟳ Replay</button>
+          <button class="btn-anchor-save"   type="button" ${isDirty ? '' : 'disabled'}>Save</button>
+          <button class="btn-anchor-cancel" type="button" ${isDirty ? '' : 'disabled'}>Cancel</button>
+          <button class="btn-anchor-delete" type="button">Delete</button>
+        </div>
+        <div class="anchor-row-status" data-status-for="${anchorId}"></div>
+      `;
+    }
+
+    function renderSpotlightKindSection(kind, payload) {
+      const count = payload.count ?? 0;
+      const opt = (val, cur) => `value="${val}"${val === cur ? ' selected' : ''}`;
+      const easeOpts = (cur) => ['power1.inOut','power2.in','power3.out','sine.inOut']
+        .map(e => `<option ${opt(e, cur)}>${e}</option>`).join('');
+      const perItemNote = `expected length: ${count} (matches count)`;
+
+      switch (kind) {
+        case 'swept-beam-2d':
+          return `
+        <section class="spotlight-kind-section">
+          <h4>swept-beam-2d</h4>
+          <div class="spotlight-field-row">
+            <label>hues (per-item)</label>
+            <div>
+              <textarea data-field="hues" data-array data-per-item rows="1">${escapeAttr(JSON.stringify(payload.hues ?? []))}</textarea>
+              <div class="array-length-note">${perItemNote}</div>
+            </div>
+          </div>
+          <div class="spotlight-field-row">
+            <label>angle_init (per-item)</label>
+            <div>
+              <textarea data-field="angle_init" data-array data-per-item rows="1">${escapeAttr(JSON.stringify(payload.angle_init ?? []))}</textarea>
+              <div class="array-length-note">${perItemNote}</div>
+            </div>
+          </div>
+          <div class="spotlight-field-row">
+            <label>base_alpha_range</label>
+            <textarea data-field="base_alpha_range" data-array rows="1">${escapeAttr(JSON.stringify(payload.base_alpha_range ?? []))}</textarea>
+          </div>
+          <div class="spotlight-field-row">
+            <label>sweep_target_range</label>
+            <textarea data-field="sweep_target_range" data-array rows="1">${escapeAttr(JSON.stringify(payload.sweep_target_range ?? []))}</textarea>
+          </div>
+          <div class="spotlight-field-row">
+            <label>sweep_alpha_range</label>
+            <textarea data-field="sweep_alpha_range" data-array rows="1">${escapeAttr(JSON.stringify(payload.sweep_alpha_range ?? []))}</textarea>
+          </div>
+          <div class="spotlight-field-row">
+            <label>sweep_duration_range_ms</label>
+            <textarea data-field="sweep_duration_range_ms" data-array rows="1">${escapeAttr(JSON.stringify(payload.sweep_duration_range_ms ?? []))}</textarea>
+          </div>
+          <div class="spotlight-field-row">
+            <label>sweep_ease</label>
+            <select data-field="sweep_ease">${easeOpts(payload.sweep_ease)}</select>
+          </div>
+          <div class="spotlight-field-row">
+            <label>stagger_ms</label>
+            <input type="number" min="0" step="1" data-field="stagger_ms" value="${payload.stagger_ms ?? ''}">
+          </div>
+        </section>`;
+
+        case 'pulsed-laser':
+          return `
+        <section class="spotlight-kind-section">
+          <h4>pulsed-laser</h4>
+          <div class="spotlight-field-row">
+            <label>hues (per-item)</label>
+            <div>
+              <textarea data-field="hues" data-array data-per-item rows="1">${escapeAttr(JSON.stringify(payload.hues ?? []))}</textarea>
+              <div class="array-length-note">${perItemNote}</div>
+            </div>
+          </div>
+          <div class="spotlight-field-row">
+            <label>angle_init (per-item)</label>
+            <div>
+              <textarea data-field="angle_init" data-array data-per-item rows="2">${escapeAttr(JSON.stringify(payload.angle_init ?? []))}</textarea>
+              <div class="array-length-note">${perItemNote}</div>
+            </div>
+          </div>
+          <div class="spotlight-field-row">
+            <label>drift_speeds (per-item)</label>
+            <div>
+              <textarea data-field="drift_speeds" data-array data-per-item rows="1">${escapeAttr(JSON.stringify(payload.drift_speeds ?? []))}</textarea>
+              <div class="array-length-note">${perItemNote}</div>
+            </div>
+          </div>
+          <div class="spotlight-field-row">
+            <label>base_widths_px (per-item)</label>
+            <div>
+              <textarea data-field="base_widths_px" data-array data-per-item rows="1">${escapeAttr(JSON.stringify(payload.base_widths_px ?? []))}</textarea>
+              <div class="array-length-note">${perItemNote}</div>
+            </div>
+          </div>
+          <div class="spotlight-field-row">
+            <label>bpm</label>
+            <input type="number" min="20" max="300" step="1" data-field="bpm" value="${payload.bpm ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>drift_range</label>
+            <input type="number" step="0.000001" data-field="drift_range" value="${payload.drift_range ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>base_alpha</label>
+            <input type="number" min="0" max="1" step="0.001" data-field="base_alpha" value="${payload.base_alpha ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>peak_alpha</label>
+            <input type="number" min="0" max="1" step="0.001" data-field="peak_alpha" value="${payload.peak_alpha ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>peak_width_mult</label>
+            <input type="number" min="0" step="0.1" data-field="peak_width_mult" value="${payload.peak_width_mult ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>attack_ms</label>
+            <input type="number" min="0" step="1" data-field="attack_ms" value="${payload.attack_ms ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>attack_ease</label>
+            <select data-field="attack_ease">${easeOpts(payload.attack_ease)}</select>
+          </div>
+          <div class="spotlight-field-row">
+            <label>decay_ms</label>
+            <input type="number" min="0" step="1" data-field="decay_ms" value="${payload.decay_ms ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>decay_ease</label>
+            <select data-field="decay_ease">${easeOpts(payload.decay_ease)}</select>
+          </div>
+          <div class="spotlight-field-row">
+            <label>first_pulse_offset_beats</label>
+            <input type="number" min="0" step="0.1" data-field="first_pulse_offset_beats" value="${payload.first_pulse_offset_beats ?? ''}">
+          </div>
+        </section>`;
+
+        case 'light-shaft':
+          return `
+        <section class="spotlight-kind-section">
+          <h4>light-shaft</h4>
+          <div class="spotlight-field-row">
+            <label>x_init_norm (per-item)</label>
+            <div>
+              <textarea data-field="x_init_norm" data-array data-per-item rows="1">${escapeAttr(JSON.stringify(payload.x_init_norm ?? []))}</textarea>
+              <div class="array-length-note">${perItemNote}</div>
+            </div>
+          </div>
+          <div class="spotlight-field-row">
+            <label>base_alpha_range</label>
+            <textarea data-field="base_alpha_range" data-array rows="1">${escapeAttr(JSON.stringify(payload.base_alpha_range ?? []))}</textarea>
+          </div>
+          <div class="spotlight-field-row">
+            <label>width_range_px</label>
+            <textarea data-field="width_range_px" data-array rows="1">${escapeAttr(JSON.stringify(payload.width_range_px ?? []))}</textarea>
+          </div>
+          <div class="spotlight-field-row">
+            <label>drift_distance_px</label>
+            <input type="number" min="0" step="1" data-field="drift_distance_px" value="${payload.drift_distance_px ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>drift_alpha_range</label>
+            <textarea data-field="drift_alpha_range" data-array rows="1">${escapeAttr(JSON.stringify(payload.drift_alpha_range ?? []))}</textarea>
+          </div>
+          <div class="spotlight-field-row">
+            <label>drift_duration_range_ms</label>
+            <textarea data-field="drift_duration_range_ms" data-array rows="1">${escapeAttr(JSON.stringify(payload.drift_duration_range_ms ?? []))}</textarea>
+          </div>
+          <div class="spotlight-field-row">
+            <label>drift_stagger_max_ms</label>
+            <input type="number" min="0" step="1" data-field="drift_stagger_max_ms" value="${payload.drift_stagger_max_ms ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>drift_ease</label>
+            <select data-field="drift_ease">${easeOpts(payload.drift_ease)}</select>
+          </div>
+        </section>`;
+
+        default:
+          return `<section class="spotlight-kind-section"><h4>unknown kind: ${escapeHTML(kind)}</h4></section>`;
+      }
+    }
+
+    function renderSpotlightSharedSection(payload, kind) {
+      const geomJson = escapeAttr(JSON.stringify(payload.geometry ?? {}, null, 2));
+      const colorBlock = kind === 'light-shaft'
+        ? `
+          <div class="spotlight-field-row">
+            <label>color</label>
+            <textarea data-field="color" data-object rows="2">${escapeAttr(JSON.stringify(payload.color ?? {}, null, 2))}</textarea>
+          </div>`
+        : `
+          <!-- color OMITTED for hue-driven kinds per spec §1.2 amendment d50cbc9. -->`;
+      return `
+        <section class="spotlight-shared-section">
+          <h4>Shared</h4>
+          <div class="spotlight-field-row">
+            <label>geometry (incl. gradient_stops)</label>
+            <textarea data-field="geometry" data-object rows="10">${geomJson}</textarea>
+          </div>${colorBlock}
+        </section>`;
+    }
+
+    function onSpotlightAnchorFieldInput(event) {
+      const target = event.target;
+      if (!target.matches('[data-field]')) return;
+      const row = target.closest('.anchor-row');
+      if (!row) return;
+      const anchorId = row.dataset.anchorId;
+      markSpotlightAnchorDirty(anchorId);
+
+      const fieldName = target.dataset.field;
+
+      // Kind selector: re-render the row from a fresh default payload of
+      // the new kind. The user's other-kind edits are lost — A4a accepts
+      // this trade per the proposal (kind switches are rare in practice).
+      // (NB: A3's particle panel uses hide/show via [data-kind-section]
+      // toggles; A4a's proposal locked re-render — different from A3.)
+      if (fieldName === 'kind') {
+        const newKind = target.value;
+        const freshPayload = defaultSpotlightPayloadForKind(newKind);
+        const labelEl = row.querySelector('.fld-label');
+        const newHTML = renderSpotlightAnchorRowHTML(
+          { id: anchorId, venue_id: row.dataset.venueId, label: labelEl ? labelEl.value : 'Spotlights' },
+          freshPayload, newKind,
+          state.spotlightAnchorNew.has(anchorId),
+          true
+        );
+        row.innerHTML = newHTML;
+        return;
+      }
+
+      // Per-item array textareas: surface inline length-vs-count check.
+      if (target.matches('textarea[data-array][data-per-item]')) {
+        validateSpotlightArrayLengthInline(row, target);
+      }
+      if (fieldName === 'count') {
+        // count changed — re-run the length check on every per-item textarea.
+        row.querySelectorAll('textarea[data-array][data-per-item]').forEach(ta => {
+          validateSpotlightArrayLengthInline(row, ta);
+        });
+      }
+    }
+
+    function validateSpotlightArrayLengthInline(row, ta) {
+      const countInput = row.querySelector('.fld-count');
+      const expectedCount = parseInt(countInput?.value ?? '0', 10);
+      // The label-note lives in the same parent wrapper as the textarea.
+      const note = ta.parentElement?.querySelector('.array-length-note');
+      let actualLen = null;
+      try {
+        const parsed = JSON.parse(ta.value);
+        if (Array.isArray(parsed)) actualLen = parsed.length;
+      } catch (_) { /* JSON parse failure — flagged on save */ }
+      if (actualLen !== null && actualLen !== expectedCount) {
+        ta.classList.add('array-length-mismatch');
+        if (note) {
+          note.classList.add('mismatch');
+          note.textContent = `expected length: ${expectedCount} (got ${actualLen})`;
+        }
+      } else {
+        ta.classList.remove('array-length-mismatch');
+        if (note) {
+          note.classList.remove('mismatch');
+          note.textContent = `expected length: ${expectedCount} (matches count)`;
+        }
+      }
+    }
+
+    function readSpotlightPayloadFromRow(row) {
+      const payload = {};
+      const errors = [];
+
+      const kind  = row.querySelector('.fld-kind')?.value;
+      const count = parseInt(row.querySelector('.fld-count')?.value ?? '0', 10);
+      payload.kind    = kind;
+      payload.context = '2d-canvas';
+      payload.count   = count;
+
+      // Scalar number inputs.
+      row.querySelectorAll('input[type="number"][data-field]').forEach(el => {
+        if (el.dataset.field === 'count') return;
+        const n = Number(el.value);
+        if (Number.isNaN(n)) errors.push({ field: el.dataset.field, message: 'not a number' });
+        else payload[el.dataset.field] = n;
+      });
+
+      // Select inputs (ease enums + kind already handled).
+      row.querySelectorAll('select[data-field]').forEach(el => {
+        if (el.dataset.field === 'kind') return;
+        payload[el.dataset.field] = el.value;
+      });
+
+      // Array textareas.
+      row.querySelectorAll('textarea[data-array][data-field]').forEach(ta => {
+        try {
+          payload[ta.dataset.field] = JSON.parse(ta.value);
+        } catch (e) {
+          errors.push({ field: ta.dataset.field, message: 'JSON parse failed: ' + e.message });
+        }
+      });
+
+      // Object textareas (geometry, color).
+      row.querySelectorAll('textarea[data-object][data-field]').forEach(ta => {
+        try {
+          payload[ta.dataset.field] = JSON.parse(ta.value);
+        } catch (e) {
+          errors.push({ field: ta.dataset.field, message: 'JSON parse failed: ' + e.message });
+        }
+      });
+
+      // Per-item array length check.
+      const lengthErrors = validateSpotlightPayloadArrayLengths(payload).errors;
+      errors.push(...lengthErrors);
+
+      const labelEl = row.querySelector('.fld-label');
+      const label = labelEl ? labelEl.value : 'Spotlights';
+
+      return { payload, label, errors };
+    }
+
+    function validateSpotlightPayloadArrayLengths(payload) {
+      const errors = [];
+      const count = payload.count;
+      const perItemFields = {
+        'swept-beam-2d': ['hues', 'angle_init'],
+        'pulsed-laser':  ['hues', 'angle_init', 'drift_speeds', 'base_widths_px'],
+        'light-shaft':   ['x_init_norm'],
+      };
+      const fields = perItemFields[payload.kind] || [];
+      for (const f of fields) {
+        const arr = payload[f];
+        if (!Array.isArray(arr)) {
+          errors.push({ field: f, message: 'not an array' });
+          continue;
+        }
+        if (arr.length !== count) {
+          errors.push({ field: f, message: `length ${arr.length} !== count ${count}` });
+        }
+      }
+      return { valid: errors.length === 0, errors };
+    }
+
+    async function onSpotlightAnchorSave(anchorId) {
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (!row) return;
+      const venueId = row.dataset.venueId;
+      const { payload, label, errors } = readSpotlightPayloadFromRow(row);
+      if (errors.length > 0) {
+        showAnchorStatus(
+          anchorId,
+          'Fix before save: ' + errors.map(e => e.field + ' (' + e.message + ')').join('; '),
+          'error'
+        );
+        return;
+      }
+      try {
+        const isPending = state.spotlightAnchorNew.has(anchorId);
+        const argId = isPending ? null : anchorId;
+        const { data, error } = await window.sb.rpc('rpc_venue_anchor_upsert', {
+          p_id:        argId,
+          p_venue_id:  venueId,
+          p_type:      'spotlight',
+          p_label:     label,
+          p_yaw_deg:   null,
+          p_pitch_deg: null,
+          p_start_sec: null,
+          p_end_sec:   null,
+          p_link:      null,
+          p_payload:   payload,
+          p_is_broken: false,
+        });
+        if (error) {
+          showAnchorStatus(anchorId, 'Save failed: ' + error.message, 'error');
+          return;
+        }
+        state.spotlightAnchorDirty.delete(anchorId);
+        state.spotlightAnchorNew.delete(anchorId);
+        showAnchorStatus(anchorId, 'Saved.', 'ok');
+        // Reload the panel to surface server-assigned ids for new anchors.
+        await loadAndRenderSpotlightPanel(venueId);
+      } catch (e) {
+        showAnchorStatus(anchorId, 'Save error: ' + (e.message || e), 'error');
+      }
+    }
+
+    async function onSpotlightAnchorDelete(anchorId) {
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (!row) return;
+      const venueId = row.dataset.venueId;
+      const isPending = state.spotlightAnchorNew.has(anchorId);
+      if (!isPending && !window.confirm('Delete this spotlight anchor?')) return;
+
+      stopSpotlightPreview(anchorId);
+
+      if (isPending) {
+        // Discard pending (never saved). Just remove from state + DOM.
+        state.spotlightAnchorNew.delete(anchorId);
+        state.spotlightAnchorDirty.delete(anchorId);
+        await loadAndRenderSpotlightPanel(venueId);
+        return;
+      }
+
+      try {
+        const { error } = await window.sb.rpc('rpc_venue_anchor_delete', { p_id: anchorId });
+        if (error) {
+          showAnchorStatus(anchorId, 'Delete failed: ' + error.message, 'error');
+          return;
+        }
+        state.spotlightAnchorDirty.delete(anchorId);
+        await loadAndRenderSpotlightPanel(venueId);
+      } catch (e) {
+        showAnchorStatus(anchorId, 'Delete error: ' + (e.message || e), 'error');
+      }
+    }
+
+    function onSpotlightAnchorCancel(anchorId) {
+      stopSpotlightPreview(anchorId);
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      const venueId = row?.dataset.venueId || state.selectedVenueId;
+      state.spotlightAnchorNew.delete(anchorId);
+      state.spotlightAnchorDirty.delete(anchorId);
+      loadAndRenderSpotlightPanel(venueId);
+    }
+
+    function onAddSpotlightAnchor() {
+      const venueId = state.selectedVenueId;
+      if (!venueId) return;
+      // PERMIT — no count gate (unlike A2/A3 PREVENT which short-circuit
+      // when count >= 1). Multi-anchor authoring is the schema invariant
+      // per spec §4.5 / D2.
+      const newId = 'anc_' + (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '_' + Math.random().toString(36).slice(2)));
+      state.spotlightAnchorNew.set(newId, { venue_id: venueId });
+      state.spotlightAnchorDirty.add(newId);
+      loadAndRenderSpotlightPanel(venueId);
+    }
+
+    function onPlaySpotlightPreview(rowEl) {
+      const anchorId = rowEl.dataset.anchorId;
+      const canvasEl = rowEl.querySelector('.spotlight-preview-canvas');
+      if (!canvasEl) return;
+      const { payload, errors } = readSpotlightPayloadFromRow(rowEl);
+      if (errors.length > 0) {
+        showAnchorStatus(
+          anchorId,
+          'Fix before preview: ' + errors.map(e => e.field + (e.message ? ` (${e.message})` : '')).join('; '),
+          'error'
+        );
+        return;
+      }
+      stopSpotlightPreview(anchorId);
+      const anchor = { id: anchorId, payload };
+      try {
+        const handle = window.elsewhere?.spotlightRenderer?.spotlightAnchorRenderer?.(
+          anchor, { canvas: canvasEl }
+        );
+        if (!handle || typeof handle.stop !== 'function') {
+          showAnchorStatus(anchorId, 'Preview failed — renderer returned no handle', 'error');
+          return;
+        }
+        state.spotlightPreviewState.set(anchorId, { stopFn: handle.stop });
+        rowEl.querySelector('.btn-play-spotlight-preview').hidden   = true;
+        rowEl.querySelector('.btn-replay-spotlight-preview').hidden = false;
+      } catch (e) {
+        showAnchorStatus(anchorId, 'Preview error: ' + (e.message || e), 'error');
+      }
+    }
+
+    function onReplaySpotlightPreview(rowEl) {
+      const anchorId = rowEl.dataset.anchorId;
+      stopSpotlightPreview(anchorId);
+      onPlaySpotlightPreview(rowEl);
+    }
+
+    function stopSpotlightPreview(anchorId) {
+      const st = state.spotlightPreviewState.get(anchorId);
+      if (!st) return;
+      try { st.stopFn?.(); } catch (_) {}
+      state.spotlightPreviewState.delete(anchorId);
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (row) {
+        const playBtn   = row.querySelector('.btn-play-spotlight-preview');
+        const replayBtn = row.querySelector('.btn-replay-spotlight-preview');
+        if (playBtn)   playBtn.hidden   = false;
+        if (replayBtn) replayBtn.hidden = true;
+      }
+    }
+
+    function stopAllSpotlightPreviews() {
+      for (const anchorId of Array.from(state.spotlightPreviewState.keys())) {
+        stopSpotlightPreview(anchorId);
+      }
+    }
+
+    function onStopAllSpotlightPreviews() {
+      stopAllSpotlightPreviews();
+    }
+
+
     // ─── Wire handlers ──────────────────────────────────────────────
     function wireHandlers() {
       document.getElementById('ed-back-yaw').addEventListener('input', onNumericChange('back_yaw'));
@@ -2093,13 +2971,32 @@
         if (e.target.matches('.btn-anchor-cancel'))           return onParticleAnchorCancel(anchorId);
       });
 
+      // Stage A4a — spotlight anchor panel wiring (event delegation on the list)
+      document.getElementById('btn-add-spotlight-anchor').addEventListener('click', onAddSpotlightAnchor);
+      document.getElementById('btn-stop-all-spotlight-previews').addEventListener('click', onStopAllSpotlightPreviews);
+      const spotlightListEl = document.getElementById('spotlight-anchor-list');
+      spotlightListEl.addEventListener('input',  onSpotlightAnchorFieldInput);
+      spotlightListEl.addEventListener('change', onSpotlightAnchorFieldInput);
+      spotlightListEl.addEventListener('click', (e) => {
+        const row = e.target.closest('.anchor-row');
+        if (!row) return;
+        const anchorId = row.dataset.anchorId;
+        if (e.target.matches('.btn-play-spotlight-preview'))   return onPlaySpotlightPreview(row);
+        if (e.target.matches('.btn-replay-spotlight-preview')) return onReplaySpotlightPreview(row);
+        if (e.target.matches('.btn-anchor-save'))              return onSpotlightAnchorSave(anchorId);
+        if (e.target.matches('.btn-anchor-delete'))            return onSpotlightAnchorDelete(anchorId);
+        if (e.target.matches('.btn-anchor-cancel'))            return onSpotlightAnchorCancel(anchorId);
+      });
+
       window.addEventListener('beforeunload', (e) => {
-        // Extended per Stage A3: includes particle anchor dirty state.
+        // Extended per Stage A4a: includes spotlight anchor dirty state.
         const anyDirty = state.dirty.size > 0
                       || state.anchorDirty.size > 0
                       || state.anchorNew.size > 0
                       || state.particleAnchorDirty.size > 0
-                      || state.particleAnchorNew.size > 0;
+                      || state.particleAnchorNew.size > 0
+                      || state.spotlightAnchorDirty.size > 0
+                      || state.spotlightAnchorNew.size > 0;
         if (anyDirty) {
           e.preventDefault();
           e.returnValue = '';
