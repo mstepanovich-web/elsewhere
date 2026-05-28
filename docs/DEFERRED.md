@@ -4843,3 +4843,349 @@ Before any client code path can call `rpc_room_seize`. That call path activates 
 - DEFERRED entry "ownership-seize implementing RPC" — the historical (completed) record of the seize RPC build; its body uses "premium-control layer" terminology consistent with the SQL files. Left verbatim per the historical-entry caveat.
 - `db/030_tv_devices_can_embed.sql`, `db/031_room_seize.sql`, `db/032_venue_abstraction_schema.sql:374` — the three files.
 - `docs/HOUSEHOLD-DEVICE-PRESENCE-MODEL.md` §9 + `docs/ROOM-AUTHORITY-MODEL.md` "The immersive-control layer" — the renamed terms in the docs.
+
+
+### Deferred: A4b 3D phone-lights modulator synthesis decision
+
+**Deferred in:** Phase 3 / Plan B Stage A4a closeout
+**Deferred on:** 2026-05-28
+**Priority:** Medium — must resolve before A4b ships; informs A7's driver-registry inventory
+**Area:** Schema / spec — venue admin UI Stage A4b
+**Status:** Deferred
+
+#### Context
+
+A3 ships a stadium 2D phone-lights particle anchor that binds the modulator `crowd_brightness` to alpha (the source's GSAP-driven `crowdState.brightness` scalar). A4b will ship a stadium 3D phone-lights particle anchor (absorbed from A3 §0.2 deferral — the 2000 `THREE.Points` in `buildStadiumEffects3D`). The question: does the 3D anchor bind the same `crowd_brightness` modulator to its material opacity for parity, even though the procedural source uses `Math.sin(frame * 0.04)` (frame-counter sin, NOT an external scalar)?
+
+The A4 foundation pass §7 identified this as the only modulator binding A4 surfaces beyond what A3 already covers. A4a deliberately shipped modulator-free per D5 — every animated value in A4a's three spotlight kinds is kind-internal payload (BPM, sweep duration ranges, attack/decay envelope, etc.); no external scalars. A4b is the first stage where a synthesized binding question lands.
+
+#### What's deferred
+
+The structural decision: do A4b's 3D anchors carry modulator bindings that don't exist in the procedural source, for conceptual parity with A3's 2D anchors?
+
+- **Stadium 3D phone-lights** — source uses frame-counter sin for material opacity. Conceptually equivalent to A3 stadium 2D phone-lights' crowd-brightness alpha modulation. Bind `crowd_brightness` for parity, even though synthesized.
+- **Speakeasy 3D candles** — source uses `Math.random()` flicker every 4 frames. No clean modulator equivalent; the random flicker is the kind's defining motion. Probably no modulator binding.
+- **Speakeasy 3D smoke** — source uses per-mesh life-cycle counter. Internal to the particle, not external. Probably no modulator binding.
+
+The decision affects A7's driver-registry inventory: every modulator name A4b introduces becomes a name A7 must implement.
+
+#### Options when picking up
+
+- **Posture Y-variant (recommended by A4a closeout):** synthesize `crowd_brightness` binding on the stadium 3D phone-lights anchor for parity with A3. Document the synthesis decision in A4b's spec §7. A7 implements `crowd_brightness` once (single driver, used by both 2D + 3D phone-lights anchors).
+- **Posture X (pure source-fidelity):** no modulator binding on the 3D anchor; the renderer drives material opacity via internal frame counter. A7 has nothing to wire for 3D phone-lights. Diverges from A3's 2D binding (asymmetric across the conceptually-paired anchors).
+- **Defer to A4b spec cycle:** decide during A4b's foundation pass when the full A4b inventory is in view.
+
+#### When to pick this up
+
+A4b foundation pass. The decision feeds into A4b's payload schema for the absorbed 3D particle anchors.
+
+#### Related
+
+- `docs/SESSION-LOGS/2026-05-27-A4a-verification-result.md` — A4a verification log, entry (a) in closeout list.
+- `docs/VENUE-ADMIN-UI-A4A-BUILD-SPEC.md` §1.2 (modulator fragment per A3 §1.6 reference), §7.1 anticipated DEFERRED #1.
+- `karaoke/stage.html:2861-2882` — the procedural stadium 3D phone-lights code with the frame-counter sin.
+- A4 foundation pass §7 (modulator bindings — what A4 surfaces for A7).
+
+
+### Deferred: PERMIT multi-anchor structural UI evolution (panel needs anchor-list pattern for A4b)
+
+**Deferred in:** Phase 3 / Plan B Stage A4a closeout
+**Deferred on:** 2026-05-28
+**Priority:** Medium — required before A4b ships speakeasy's 2nd spotlight anchor
+**Area:** admin-venues.html — spotlight authoring panel
+**Status:** Deferred
+
+#### Context
+
+A4a's spotlight panel ships PERMIT multi-anchor per spec §4.5 / D2 (mirror of A2/A3 PREVENT — diverges intentionally because future venues may layer effects). The "+ Add" button stays visible regardless of count. But A4a's three in-scope venues each have exactly 1 spotlight anchor, so the panel UI was never exercised against multi-anchor reality.
+
+A4b ships speakeasy's `point-light` candle anchor (the 40 3D `THREE.Points` candles) — speakeasy will then have BOTH a `light-shaft` (A4a-shipped) AND a `point-light` (A4b-new) spotlight anchor. The current panel pattern ("one anchor per panel, kind selector swaps the form section") doesn't work cleanly with two anchors of different kinds in the same venue.
+
+#### What's deferred
+
+Restructuring the spotlight panel UI for true multi-anchor authoring. Likely shape:
+
+- The panel surfaces a list of anchor rows, one row per anchor.
+- Each row carries its own kind selector + form section + preview surface.
+- "+ Add" appends a new pending row (same `state.spotlightAnchorNew` + `state.spotlightAnchorDirty` semantics, but extended to handle N concurrent pending+saved rows).
+- The per-anchor preview surface needs to coexist with other anchors' preview surfaces — N RAF loops + N canvas elements active concurrently (resource implication: N concurrent RAFs is fine for ≤10 anchors; bookkeeping cost is the bigger issue).
+
+A3's particle panel already has anchor-row scaffolding (it just uses PREVENT to limit count to 1). Some of that infrastructure can be reused.
+
+#### Options when picking up
+
+- **Build the anchor-list pattern in A4b alongside the new kinds.** Cleanest; A4b's panel work is already substantial.
+- **Build the anchor-list pattern as a separate refactor before A4b.** Isolates the UI restructuring from the new-kinds work; harder to motivate without the speakeasy point-light case live.
+- **Hack A4b to ship with PREVENT for point-light specifically.** Buys time but violates D2 and creates a kind-specific guardrail that wasn't there before. Not recommended.
+
+#### When to pick this up
+
+During A4b implementation. The panel restructuring is part of A4b's scope, not a pre-A4b refactor.
+
+#### Related
+
+- `docs/VENUE-ADMIN-UI-A4A-BUILD-SPEC.md` §4.5 (PERMIT rule); §7.2 anticipated DEFERRED #2.
+- `admin-venues.html` `renderSpotlightPanel` (currently iterates `liveAnchors` + `pendingForVenue` already — most of the multi-anchor list infrastructure is already in place; the form-section side is the gap).
+- A4 foundation pass §6 (multi-anchor policy decisions).
+
+
+### Deferred: GSAP-equivalent motion accuracy verification gap
+
+**Deferred in:** Phase 3 / Plan B Stage A4a closeout
+**Deferred on:** 2026-05-28
+**Priority:** Low — pre-emptive verification gap; manifests only at Stage A7
+**Area:** shell/venue-renderers/spotlight.js — animation correctness
+**Status:** Deferred
+
+#### Context
+
+A4a's spotlight renderer reproduces GSAP timelines (stadium beams' `sweepBeam` recursive tween, festival lasers' `beatPulse` attack→decay chain, speakeasy shafts' `driftShaft` recursive tween) using pure-JS ease functions (`power1.inOut`, `power2.in`, `power3.out`, `sine.inOut`) matching GSAP's naming verbatim. The reconstruction is mathematically equivalent within IEEE 754 double-precision (≥ 1e-15 across t∈[0,1]) but A7's read-path switch is the first time the renderer-driven path runs in production karaoke alongside (eventually instead of) the procedural GSAP-driven path.
+
+A4a's admin-preview verification (Check 22) confirmed each kind renders visually correctly in the bounded admin canvas. But:
+- Admin canvas is 480×240; karaoke ambient canvas is window-sized.
+- Admin preview runs for seconds at a time during verification; karaoke sessions run for tens of minutes.
+- Side-by-side comparison against the procedural GSAP code wasn't performed (would require running both paths concurrently in the same browser — not in A4a's verification scope).
+
+#### What's deferred
+
+Cross-validation of the renderer's motion against the procedural GSAP code:
+
+- **Timing accumulator drift over long sessions.** The renderer uses `performance.now()` deltas + per-tween `start_time_ms` recording. GSAP uses its own ticker internally. Different time-source implementations could accumulate drift differently over 30+ minute sessions.
+- **Ease-curve asymmetry near t=0/t=1.** The pure-JS implementations match GSAP's source for the curves used, but boundary-condition handling (clamp behavior, exact-1 vs near-1 evaluation) could differ subtly.
+- **Multi-field tween synchronization.** The renderer's single tween record carries multiple `fields` mutated by the same eased t. GSAP's gsap.to also tweens multiple properties in lockstep, but its internal scheduling may differ.
+
+#### Options when picking up
+
+- **Side-by-side comparison test at A7.** When A7's read-path switch ships, run karaoke/stage.html with the procedural path active alongside admin-venues.html with the renderer-driven preview path, side-by-side. Compare visually for a 5-minute window per kind.
+- **Pre-emptive ease function unit tests.** Build a tiny test harness that compares EASE_FNS[name](t) against GSAP-evaluated control points across t∈[0, 0.25, 0.5, 0.75, 1] for each named curve. Sanity check.
+- **Defer until divergence surfaces.** Only act if Stage A7's verification or post-A7 user reports show visible motion divergence.
+
+#### When to pick this up
+
+Stage A7 verification cycle. The renderer paths run dormant until then; visible divergence cannot manifest before A7.
+
+#### Related
+
+- `docs/SESSION-LOGS/2026-05-27-A4a-verification-result.md` entry (c) in closeout list.
+- `docs/VENUE-ADMIN-UI-A4A-BUILD-SPEC.md` §3.5 (GSAP-equivalent motion contract); §7.3 anticipated DEFERRED #3.
+- `shell/venue-renderers/spotlight.js` §1 (EASE_FNS definitions) + §2 (advanceTween implementation).
+
+
+### Deferred: §9 step 4 proposal-vs-A3-implementation drift cluster (3 mid-verification fixes)
+
+**Deferred in:** Phase 3 / Plan B Stage A4a closeout
+**Deferred on:** 2026-05-28
+**Priority:** Medium — process improvement for future propose-pause stages (A4b, A5+)
+**Area:** Spec authoring process — propose-pause discipline
+**Status:** Deferred (fixes shipped; the process improvement is the deferred item)
+
+#### Context
+
+Three distinct bugs were caught mid-verification of A4a, all attributable to the same root cause: the §9 step 4 admin-venues.html spotlight panel proposal described expected behavior in English without explicitly enumerating call shapes + DOM-selector dependencies against A3's actual implementation. The three findings:
+
+1. **Spec §4.7 specified `karaoke/stage.html` script tag but not the `admin-venues.html` equivalent.** A3 quietly loads `particle.js` at `admin-venues.html:45` (and `audio.js` at line 44) because that's where the preview path consumes `window.elsewhere.particleRenderer`. A4a's proposal didn't extrapolate; the spotlight.js tag was added only to karaoke/stage.html. Fixed at `0b2dec0`.
+2. **`onSpotlightAnchorSave` was drafted from the spec's "individual column params" framing.** The proposal said "call `rpc_venue_anchor_upsert` with the anchor's column values" — implementation followed by enumerating 11 separate `p_*` params. But db/035's RPC signature is exactly 3 args (`p_id`, `p_venue_id`, `p_partial`), with `p_partial` being a jsonb of column→value pairs. A3's call at admin-venues.html:1695 uses the correct shape. Fixed at `2056a72`.
+3. **Status element class invented as `.anchor-row-status` doesn't match A3's `showAnchorStatus` `.anchor-status` selector.** The §9 step 4 proposal invented `<div class="anchor-row-status" data-status-for="${anchorId}">`; A3 uses `<div class="anchor-status">` and `showAnchorStatus` selects `.anchor-status`. The mismatch would have caused `statusEl.textContent = msg` to throw "Cannot set property 'textContent' of null" on every Save attempt. Fixed at `2056a72`.
+
+All three bugs were fixable mid-verification in standalone commits; A4a shipped functionally clean. But the PROCESS gap is generalizable.
+
+#### What's deferred
+
+Adding a "verify call shape against existing RPC signatures + verify DOM class names against existing utility selectors" pass to the propose-pause discipline before locking any future stage's panel proposal.
+
+The A3 source file is the authoritative pattern reference. The spec's English description is a planning document, not a binding API contract. When a future proposal says "the panel calls the upsert RPC" or "the panel surfaces status messages," the implementer should look at A3's actual code for the call shape + selector pattern, not the spec's English paraphrase.
+
+#### Options when picking up
+
+- **Add a verification step to the propose-pause cycle template.** Insert "verify against A3 patterns" as an explicit gate between the proposal-locking step and the implementation step. Documented in a future doc-cleanup pass.
+- **Add to `docs/VENUE-ADMIN-UI-DIRECTION.md` § propose-pause guidance.** A short note: "For panel-shape proposals, verify call shapes + DOM selectors against existing renderer-shipped patterns (A2/A3 admin-venues.html sections) before locking."
+- **Build a checklist file `docs/PROPOSE-PAUSE-CHECKLIST.md`.** Itemized verification gates for each propose-pause cycle. Overkill if only A4b is left in this workstream.
+
+Recommendation: short note in Direction §propose-pause guidance + reference from A4b's spec when it lands.
+
+#### When to pick this up
+
+Before A4b's §9 step 4 proposal locks. The process improvement most directly affects A4b's panel proposal (which inherits A4a's pattern + extends to 3D preview).
+
+#### Related
+
+- `docs/SESSION-LOGS/2026-05-27-A4a-verification-result.md` "Bugs caught this stage" — full diagnostic + fix details.
+- Commits `0b2dec0` + `2056a72` — the three mid-verification fixes.
+- `admin-venues.html:1695-1699` (A3 RPC call shape) + `admin-venues.html:1780-1786` (A3 showAnchorStatus selector) — the authoritative patterns.
+
+
+### Deferred: Spotlight panel kind-switch re-renders (A3 uses hide/show)
+
+**Deferred in:** Phase 3 / Plan B Stage A4a closeout
+**Deferred on:** 2026-05-28
+**Priority:** Low — UX-only divergence; functional behavior is correct
+**Area:** admin-venues.html — spotlight panel kind dispatch
+**Status:** Deferred
+
+#### Context
+
+When a user changes the kind in A4a's spotlight panel kind selector, `onSpotlightAnchorFieldInput` re-renders the entire row from a fresh default payload of the new kind via `renderSpotlightAnchorRowHTML`. The user's edits to other-kind fields are lost (replaced by defaults of the new kind). This was the locked behavior in §9 step 4 proposal §g.
+
+A3's particle panel uses a different pattern: `renderParticleAnchorRowHTML` emits ALL kind sections at once with `[data-kind-section="<kind>"]` attributes; `onParticleAnchorFieldInput` toggles each section's `hidden` attribute based on the new kind value (admin-venues.html:2018-2026). This preserves field state across kind switches — switching from point-cloud → directional-emitter → back to point-cloud restores the user's point-cloud edits.
+
+#### What's deferred
+
+Restructuring A4a's spotlight panel to use A3's hide/show pattern for kind switching:
+
+- `renderSpotlightAnchorRowHTML` emits all 3 kind sections (`swept-beam-2d`, `pulsed-laser`, `light-shaft`) with `[data-kind-section="<kind>"]` markers.
+- Initial render hides non-current sections via the `hidden` attribute.
+- `onSpotlightAnchorFieldInput` on kind change toggles `hidden` across sections; doesn't re-render.
+- `readSpotlightPayloadFromRow` reads only from the visible kind section (or carries fields from all sections; either works as long as the read is unambiguous about which kind's fields apply).
+
+Trade: panel HTML is ~3× larger per row (3 kind sections vs 1); kind switches are instant + preserve state.
+
+#### Options when picking up
+
+- **Refactor as a standalone admin-venues.html commit.** Small, contained change.
+- **Bundle with A4b's panel restructuring** (PERMIT multi-anchor / anchor-list pattern — separate DEFERRED entry above). Both touch the same panel-rendering code path.
+- **Leave as-is.** Functional. Kind switches discard state, but kind switches are rare in practice (admin typically picks a kind once during anchor creation, then edits within it).
+
+Recommendation: bundle with A4b panel restructuring (both touch the same code).
+
+#### When to pick this up
+
+During A4b implementation, alongside the anchor-list multi-anchor restructuring.
+
+#### Related
+
+- `docs/SESSION-LOGS/2026-05-27-A4a-verification-result.md` entry (e) in closeout list.
+- `admin-venues.html` `onParticleAnchorFieldInput` (lines 2008-2027) — the A3 hide/show precedent.
+- `admin-venues.html` `onSpotlightAnchorFieldInput` (in the A4a block) — the re-render implementation to refactor.
+
+
+### Deferred: Spotlight + particle panel button styling + "Stop all previews" placement
+
+**Deferred in:** Phase 3 / Plan B Stage A4a closeout
+**Deferred on:** 2026-05-28
+**Priority:** Low — UI polish, no functional impact
+**Area:** admin-venues.html — both particle (A3) + spotlight (A4a) anchor panels
+**Status:** Deferred
+
+#### Context
+
+A4a's spotlight panel buttons (Preview, Replay, Save, Cancel, Delete) carry low-contrast default browser styling that's inconsistent with the project's overall dark theme + the other admin-venues panels (which inherit theme-ish styling via `.anchor-panel-header` and the shared anchor-row CSS). The visual inconsistency was noticed during A4a Check 22 (per-kind preview). Same issue applies to A3's particle panel buttons — the contrast / sizing / spacing was suboptimal there too but never filed.
+
+A related UX issue: "Stop all previews" sits in the panel header (top of the panel) while individual preview controls (Preview / Replay) live at the bottom of each anchor row. When the panel has multiple expanded anchor rows, the user previewing the bottom row has to scroll back to the panel header to access Stop. This affects A4a (PERMIT — multi-anchor will be more common) more than A3 (PREVENT — single anchor per panel) but applies to both.
+
+#### What's deferred
+
+Two related polish items:
+
+1. **Button visual consistency.** Style spotlight + particle panel buttons against the theme: dark background, gold-tinted text, hover states. Match `.anchor-panel-header` button styling for consistency.
+2. **Per-row Stop affordance + global Stop relocation.** Either (a) add a per-row Stop button alongside Preview/Replay, OR (b) move the global "Stop all previews" to a sticky position (panel footer / floating action), OR (c) both.
+
+#### Options when picking up
+
+- **Bundle with A4b panel restructuring.** The panel UI gets a significant overhaul in A4b for multi-anchor + 3D preview; folding button polish in keeps it contained.
+- **Standalone admin-venues.html polish commit.** Quick wins; can ship anytime.
+- **Defer indefinitely.** Admin UI is admin-only; polish is low priority.
+
+Recommendation: bundle with A4b panel restructuring.
+
+#### When to pick this up
+
+A4b implementation cycle, or anytime before Admin UI Part 2 widens the surface.
+
+#### Related
+
+- `docs/SESSION-LOGS/2026-05-27-A4a-verification-result.md` entry (f) in closeout list.
+- A3 + A4a panel CSS in `admin-venues.html` (the `.particle-*` + `.spotlight-*` selector blocks).
+
+
+### Deferred: Missing per-row Stop button on preview (spotlight + particle panels)
+
+**Deferred in:** Phase 3 / Plan B Stage A4a closeout
+**Deferred on:** 2026-05-28
+**Priority:** Low — UX-only; the global "Stop all" already provides functional stop
+**Area:** admin-venues.html — both particle (A3) + spotlight (A4a) preview lifecycle
+**Status:** Deferred
+
+#### Context
+
+Current preview pattern in both A3 particle and A4a spotlight panels:
+- Per-row: Preview button → on click, becomes Replay button (Preview hidden).
+- Panel header: "Stop all previews" button — global kill switch.
+
+There's no per-row Stop affordance. Users who want to stop one preview (e.g. to compare against a non-previewing anchor's static state) must use the global Stop, which kills all active previews on the panel.
+
+#### What's deferred
+
+Add a per-row Stop button alongside Preview/Replay:
+
+```
+[▶ Preview] [⟳ Replay (hidden)] [⏹ Stop (hidden)] [Save] [Cancel] [Delete]
+```
+
+State transitions:
+- Idle: Preview visible; Replay + Stop hidden.
+- Playing: Preview hidden; Replay + Stop visible.
+- Click Replay: stop current preview, start fresh; same Playing state.
+- Click Stop: stop current preview; back to Idle state.
+
+Single-line behavior change in `onPlay*Preview` (show Stop button) + `stop*Preview` (hide Stop button); plus a new click handler dispatching to `stop*Preview` per row.
+
+#### Options when picking up
+
+- **Bundle with the kind-switch refactor (entry above) + button styling (entry above) as one panel polish commit.** Three related UI-quality items.
+- **Standalone commit.** Quick.
+- **Defer indefinitely.** Global Stop is functional; per-row Stop is incremental.
+
+Recommendation: bundle the three panel-polish entries above.
+
+#### When to pick this up
+
+A4b implementation cycle, or alongside other panel polish work.
+
+#### Related
+
+- `docs/SESSION-LOGS/2026-05-27-A4a-verification-result.md` entry (g) in closeout list.
+- `admin-venues.html` `onPlaySpotlightPreview` / `stopSpotlightPreview` (A4a block) + `onPlayParticlePreview` / `stopParticlePreview` (A3 block).
+
+
+### Deferred: A4a mid-implementation findings — proposal-drift refinements (resolved during implementation)
+
+**Deferred in:** Phase 3 / Plan B Stage A4a closeout
+**Deferred on:** 2026-05-28
+**Priority:** Documentation / completeness — the items themselves were RESOLVED during A4a implementation; this entry exists for inventory-completeness
+**Area:** admin-venues.html — A4a spotlight panel implementation
+**Status:** Resolved in A4a implementation (`f167ec6`)
+
+#### Context
+
+Three findings surfaced during A4a implementation (not verification — during the actual coding step §9 step 5) where the §9 step 4 proposal diverged from A3's actual implementation. All three were corrected inline in commit `f167ec6` without needing a separate fix commit. Recorded here for the full A4a deferred inventory + for future propose-pause discipline cross-reference.
+
+These are sibling to the verification-time findings filed in the "§9 step 4 proposal-vs-A3-implementation drift cluster" entry above (which covers the THREE bugs caught after the implementation commit landed — script tag, RPC signature, status class).
+
+#### What was deferred (resolved in implementation)
+
+1. **`state.spotlightAnchorDirty` was `new Map()` in the proposal; A3 uses `new Set()`.** The §9 step 4 proposal had `markSpotlightAnchorDirty(anchorId)` using `.set(anchorId, {})` Map syntax. Re-reading A3's `state.particleAnchorDirty = new Set()` with `.add()` semantics caught this — `.set()` doesn't exist on Set, would have thrown at runtime. Corrected to Set semantics in the shipped implementation.
+
+2. **Pending-id pattern alignment.** §9 step 4 proposal used `pendingId = 'pending_spot_' + Math.random().toString(36).slice(2, 10)`. A3 uses `'anc_' + (crypto.randomUUID ? crypto.randomUUID() : ...)`. Adopted A3's pattern: pending and saved anchors share the `anc_` prefix.
+
+3. **`state.spotlightAnchors` Map cache added beyond original proposal.** A3's `venueHasAnyDirty` + `discardAllForVenue` use a `state.particleAnchors` cache to iterate saved-anchor dirty state per venue. The §9 step 4 proposal didn't include this; cross-venue dirty detection would have been broken without it. Added the cache + populated in `loadAndRenderSpotlightPanel` + extended `venueHasAnyDirty` + `discardAllForVenue` to use it.
+
+#### What's deferred
+
+Nothing — all three resolved in `f167ec6`. This entry exists for:
+- Closeout-inventory completeness (the user's brief listed these as (h) in the §7 closeout list).
+- Cross-reference from MIGRATIONS_APPLIED.md's `db/037` row (which mentions these inline).
+- Future propose-pause cycles: the "verify against A3 patterns" gate should explicitly include "state Map vs Set semantics" and "cache pattern parity" checks alongside the RPC-shape + DOM-selector checks called out in the drift-cluster entry above.
+
+#### Options when picking up
+
+N/A — resolved. Future propose-pause cycles should add the parity checks listed above to their pre-implementation review.
+
+#### When to pick this up
+
+The process-improvement implication (parity-check checklist) is covered by the §9 step 4 drift-cluster entry above. This entry is closed for action.
+
+#### Related
+
+- `docs/SESSION-LOGS/2026-05-27-A4a-verification-result.md` entry (h) in closeout list.
+- `db/MIGRATIONS_APPLIED.md` `db/037` row — full mid-implementation finding text.
+- DEFERRED entry above: "§9 step 4 proposal-vs-A3-implementation drift cluster (3 mid-verification fixes)" — the post-implementation sibling of these mid-implementation findings.

@@ -387,6 +387,32 @@ which is overlay-class (not spotlight) — see Stage 4.5. Festival's
 lasers are in scope; festival's downbeat strobe is overlay-class and
 defers to Stage 4.5.
 
+**Sub-staged into A4a + A4b (2026-05-27).** Stage 4 was sub-staged in
+planning chat 2026-05-27 because A4 surface is 1.5–2× A3's; the 3D
+preview is genuinely new architectural territory (`admin-venues.html`
+has zero Three.js code today); sub-staging isolates the 3D-preview-
+surface risk to A4b so 2D spotlights can ship on the A3 precedent.
+
+- **Stage A4a — 2D-canvas spotlight only. ✓ Shipped 2026-05-27.** Three
+  kinds (`swept-beam-2d`, `pulsed-laser`, `light-shaft`); three
+  anchors (stadium 4-beam count:4; festival 6-laser count:6; speakeasy
+  3-shaft count:3); PERMIT multi-anchor rule per spec §4.5 / D2 (diverges
+  from A2/A3 PREVENT). GSAP-equivalent motion via 4 pure-JS ease
+  functions (`power1.inOut`, `power2.in`, `power3.out`, `sine.inOut`).
+  Spec `docs/VENUE-ADMIN-UI-A4A-BUILD-SPEC.md`; verification log
+  `docs/SESSION-LOGS/2026-05-27-A4a-verification-result.md`; migration
+  `db/037_spotlight_anchor_seed.sql`.
+- **Stage A4b — 3D spotlight + 3D particle extension + new Three.js
+  admin preview surface. Queued.** Stadium 4 cone meshes + speakeasy
+  40 candle Points as new spotlight kinds (`swept-beam-3d`,
+  `point-light` — siblings to A4a's 2D kinds, not branches). Stadium
+  2000 phone-lights + speakeasy 60 sphere-mesh smoke as 3D particle
+  paths (extends `particle.js` or introduces sibling kinds
+  `point-cloud-3d` / `volumetric-3d` — A4b spec decides). New Three.js
+  preview surface in `admin-venues.html` (scaffolding: scene + camera
+  + renderer + RAF loop — admin-venues.html currently has zero
+  Three.js). A4b ships as its own propose-pause cycle.
+
 **Stage 4.5 — `overlay` renderer impl + overlay authoring panel +
 disco floor-flash + festival strobe translated.** A new anchor type
 for screen-space visual overlays that aren't directional light
