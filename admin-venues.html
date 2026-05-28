@@ -2434,7 +2434,7 @@
           <button class="btn-anchor-cancel" type="button" ${isDirty ? '' : 'disabled'}>Cancel</button>
           <button class="btn-anchor-delete" type="button">Delete</button>
         </div>
-        <div class="anchor-row-status" data-status-for="${anchorId}"></div>
+        <div class="anchor-status"></div>
       `;
     }
 
@@ -2783,30 +2783,30 @@
         );
         return;
       }
+      // p_partial jsonb pattern matching A3 (db/035 RPC signature is 3 args:
+      // p_id, p_venue_id, p_partial). 'type' included always — RPC requires
+      // it for INSERT (NOT NULL column), accepts it as no-op on UPDATE.
+      // is_broken omitted — column default (false) handles INSERT path.
+      const partial = { type: 'spotlight', payload, label };
+      showAnchorStatus(anchorId, 'Saving…', null);
       try {
-        const isPending = state.spotlightAnchorNew.has(anchorId);
-        const argId = isPending ? null : anchorId;
         const { data, error } = await window.sb.rpc('rpc_venue_anchor_upsert', {
-          p_id:        argId,
-          p_venue_id:  venueId,
-          p_type:      'spotlight',
-          p_label:     label,
-          p_yaw_deg:   null,
-          p_pitch_deg: null,
-          p_start_sec: null,
-          p_end_sec:   null,
-          p_link:      null,
-          p_payload:   payload,
-          p_is_broken: false,
+          p_id:       anchorId,
+          p_venue_id: venueId,
+          p_partial:  partial,
         });
         if (error) {
           showAnchorStatus(anchorId, 'Save failed: ' + error.message, 'error');
           return;
         }
+        if (!data) {
+          showAnchorStatus(anchorId, 'Save failed: rpc returned no row', 'error');
+          return;
+        }
         state.spotlightAnchorDirty.delete(anchorId);
         state.spotlightAnchorNew.delete(anchorId);
         showAnchorStatus(anchorId, 'Saved.', 'ok');
-        // Reload the panel to surface server-assigned ids for new anchors.
+        // Reload the panel to surface server-assigned ids + canonical data.
         await loadAndRenderSpotlightPanel(venueId);
       } catch (e) {
         showAnchorStatus(anchorId, 'Save error: ' + (e.message || e), 'error');
