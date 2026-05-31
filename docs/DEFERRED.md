@@ -5189,3 +5189,237 @@ The process-improvement implication (parity-check checklist) is covered by the �
 - `docs/SESSION-LOGS/2026-05-27-A4a-verification-result.md` entry (h) in closeout list.
 - `db/MIGRATIONS_APPLIED.md` `db/037` row — full mid-implementation finding text.
 - DEFERRED entry above: "§9 step 4 proposal-vs-A3-implementation drift cluster (3 mid-verification fixes)" — the post-implementation sibling of these mid-implementation findings.
+
+---
+
+### Deferred: A4a verification protocol gap — Gate 8a shipped without exercising 2D spotlight rendering
+
+**Deferred in:** Phase 3 / Plan B Stage A4b closeout
+**Deferred on:** 2026-05-31
+**Priority:** Process improvement — sibling to the §9 step 4 drift-cluster entry above
+**Area:** Verification protocols across all panel-standardization or comment-block edits
+**Status:** Active — protocol-gap mitigation pending
+
+#### Context
+
+A4b verification (specifically Cluster 1.2 stadium load) surfaced an L2984 backtick trap in `renderSpotlightAnchorRowHTML`'s template literal that broke 2D spotlight rendering on any venue with a 2D spotlight anchor (stadium, festival, speakeasy/light-shaft). The trap was introduced during A4a's Gate 8a panel-standardization retrofit and shipped to prod because A4a verification did not load a venue with a 2D spotlight anchor *after* 8a landed. The L2984 fix landed mid-verification (`42c501e`) and unbroke the panel.
+
+#### What's deferred
+
+Adopt "load each venue × each anchor type" as a baseline verification check in future protocols, especially after panel-standardization or comment-block edits. The check costs ~3 minutes per panel surface; the bug cost ~30 minutes of triage. Parity with the existing §9 step 4 "verify call shapes against existing RPC signatures + DOM class names against utility selectors" pass — this entry adds the venue-coverage dimension.
+
+#### Options when picking up
+
+1. Add as a baseline section to future per-stage verification specs (e.g., A4.5 spec § verification): "Per-stage protocol baseline — load each affected venue × each affected anchor type before the per-check sweep."
+2. Add as a CLAUDE.md doctrine line: "After any panel-standardization, comment-block, or HTML-template edit on admin-venues.html, the per-stage verification spec must include a baseline 'load each panel × each anchor type' check."
+
+#### When to pick this up
+
+At the foundation pass for Stage 4.5 (the next per-stage spec). Locking the protocol baseline into the next spec is the cheapest path; CLAUDE.md edit is a sibling option.
+
+#### Related
+
+- `docs/SESSION-LOGS/2026-05-31-A4b-verification-result.md` — Bug 1 (L2984 backtick trap)
+- A4b commit `42c501e` — the mid-verification fix
+- A4a closing log `docs/SESSION-LOGS/2026-05-27-A4a-verification-result.md` — Gate 8a comment-block context
+
+---
+
+### Deferred: Registry vocabulary extension for `spotlight-3d` / `particle-3d` keys
+
+**Deferred in:** Phase 3 / Plan B Stage A4b closeout
+**Deferred on:** 2026-05-31
+**Priority:** Decision required before Stage A7 — read-path switch will hit the same vocabulary boundary
+**Area:** `shell/venue-registry.js` known-types vocabulary
+**Status:** Active — decision pending
+
+#### Context
+
+A4b's Gate 5 D-dispatch revision (recorded in `docs/VENUE-ADMIN-UI-A4B-BUILD-SPEC.md` §0.3 + §4.1 amendment) registered the 3D renderer modules under DISTINCT registry keys (`'spotlight-3d'`, `'particle-3d'`) rather than extending the registry's API to support `(type, context)` composite keys. The decision was the smaller-surface choice: the only future consumer of the registry is the A7 read-path switch, which can derive the lookup key from the row as `key = anchor.payload.context === '3d-three' ? anchor.type + '-3d' : anchor.type`. Admin preview uses `window.elsewhere.*3dRenderer` globals directly (not the registry).
+
+But `shell/venue-registry.js:165`'s known-types check (per spec §3.2 + db/032 CHECK) does NOT include the `-3d`-suffixed keys, so registration warnings fire on every page load: "registerAnchorRenderer: 'spotlight-3d' is not in the known anchor type vocabulary…".
+
+#### What's deferred
+
+Two options, both viable:
+- **(a) Extend the known-types list in `shell/venue-registry.js`** to include `'spotlight-3d'` and `'particle-3d'` as accepted registry keys. Keeps the warning system meaningful for catching genuinely-unknown keys.
+- **(b) Accept the warnings permanently** as part of the registry-key / DB-type split. The registry-key vocabulary is a superset of the DB `type` column vocabulary (the `-3d` suffix is registry-key only, not a schema-level type). Document this in a comment near the warning emission.
+
+#### Options when picking up
+
+Option (a) is the smaller code change (~3 lines extending an array literal). Option (b) is the cleaner architectural framing (registry keys and DB types are decoupled, the `-3d` suffix is a renderer-resolution detail). The decision affects A7's read-path switch directly — A7 will derive the lookup key per the formula above and either path produces a clean resolution.
+
+#### When to pick this up
+
+Before Stage A7 — A7's read-path switch hits the same boundary. Earlier-than-A7 is fine if a small admin-UI polish commit happens between now and A7.
+
+#### Related
+
+- `shell/venue-registry.js:165` — the warn emission site
+- `docs/VENUE-ADMIN-UI-A4B-BUILD-SPEC.md` §0.3 D-dispatch row, §4.1 amendment
+- `db/032_venue_abstraction_schema.sql` — the `venue_anchors_type_check` constraint vocabulary (unchanged by A4b — the `-3d` suffix is registry-key only)
+
+---
+
+### Deferred: Pages-deploy-via-API pattern documentation
+
+**Deferred in:** Phase 3 / Plan B Stage A4b closeout
+**Deferred on:** 2026-05-31
+**Priority:** Doc / convenience — saves manual web-UI clicks on every future branch-deploy verification cycle
+**Area:** CLAUDE.md or a sibling doc — verification-cycle tooling
+**Status:** Active — pattern validated, not yet codified
+
+#### Context
+
+A4b verification used a branch-deploy approach instead of local dev (Mike's local-dev auth was blocked: Supabase magic links hardcoded to prod URL, localhost workaround too friction-heavy). The approach: switch GitHub Pages source from main to `a4b-verify` via the REST API (`gh api -X PUT /repos/.../pages`), trigger a build via `POST /pages/builds`, poll until `built`, run verification against the live URL, then revert Pages to main at closeout via the same API. The full sequence is reusable for any future verification cycle that needs branch-source isolation without local-dev setup.
+
+#### What's deferred
+
+Codify the pattern in CLAUDE.md or a sibling doc as a "verified-branch-deploy pattern". Should include the four commands (PUT source, POST builds, poll, PUT source back), the fallback for repos with `build_type: workflow` (vs `legacy`), and the recommendation to schedule the Pages revert as a closeout task so the branch source doesn't accidentally persist.
+
+#### Options when picking up
+
+1. Add a section to CLAUDE.md "Commands" or "Doctrine" — short snippet referencing the `gh api` calls.
+2. Add a dedicated `docs/VERIFIED-BRANCH-DEPLOY.md` doc with the full pattern, including the four shell snippets + polling pattern + revert task. Cross-reference from CLAUDE.md.
+
+#### When to pick this up
+
+At the next verification cycle that needs branch-source isolation. The pattern is already validated by A4b — codifying it just saves the next adopter from re-deriving it.
+
+#### Related
+
+- A4b session transcript — the original pattern derivation
+- `gh api` invocations in the A4b session — the canonical command shapes
+
+---
+
+### Deferred: Cross-context canvas contamination (Chrome GPU-pressure hypothesis)
+
+**Deferred in:** Phase 3 / Plan B Stage A4b closeout
+**Deferred on:** 2026-05-31
+**Priority:** Browser-internal, mitigation applied — re-investigate if it re-emerges
+**Area:** `admin-venues.html` preview handlers + Chrome canvas implementation
+**Status:** Symptom-resolved; root cause documented as hypothesis
+
+#### Context
+
+A4b verification surfaced an order-dependent bug: hard-reload → ▶ Play a 3D spotlight preview → ■ Stop → ▶ Play a 2D spotlight preview → 2D preview fails with `spotlight.js:331 spotlight: ctx.canvas has no 2D rendering context` (`canvas.getContext('2d')` returned null on the 2D canvas). The 2D canvas is in a separate row, separate wrap, with a separate class — `rowEl.querySelector('.spotlight-preview-canvas')` from the 2D handler finds it; the 3D handler never touches it.
+
+**Three plausible contamination mechanisms ruled out by static analysis:**
+
+1. **`spotlight.js` canvas acquisition** — uses `ctx.canvas` only (no `document.querySelector`, no fallback). The renderer cannot grab the wrong canvas; whatever onPlay passes in is what gets `getContext('2d')` called on it.
+2. **`stopAllOther3dPreviews` teardown chain** — iterates only `state.spotlight3dPreviewState` + `state.particle3dPreviewState`. `st.canvasEl` in those Maps is set exclusively by 3D Play handlers to freshly-created 3D canvases (`document.createElement('canvas')` + `className = 'spotlight-3d-preview-canvas'`). No code path stores a 2D canvas reference in those Maps; teardown only touches 3D canvases.
+3. **Three.js r128 WebGLRenderer source** — minified bundle has ZERO `querySelector` / `getElementsByTagName` / `getElementById` calls (verified by `curl` of the CDN `three.min.js` + `grep`). Constructor uses `parameters.canvas` if provided; otherwise creates a fresh canvas via `createElementNS`. Internal helper canvases (`xt` for texture image conversion, `P` for texture resizing) are held module-level and never inserted into the page DOM.
+
+Mike's DOM diagnostic confirmed scoping is correct: before-Play and after-3D-Stop both show the 2D canvas remains under `anc_spot_stadium` with its 2D class, untouched. The 3D path never reaches the 2D canvas at the DOM level.
+
+#### Working hypothesis (unverified)
+
+Chrome's hardware-accelerated 2D canvas implementation (Skia GL backend) shares GPU resource accounting with WebGL contexts. Prior WebGL allocation can cause subsequent `getContext('2d')` calls to be refused under GPU pressure even after the WebGL context is disposed and the canvas is removed from the DOM. The order-dependency (3D Play first → 2D Play fails) is the fingerprint of this class of bugs in Chrome's canvas implementation.
+
+#### Mitigations applied in A4b commit `6c269fe`
+
+1. **Defensive fresh-canvas-per-Play lifecycle on all four preview handlers** (2D+3D spotlight, 2D+3D particle). Each `getContext('2d')` call happens on a fresh DOM element with no prior history. Mirrors the 3D handlers' lifecycle from Fix 1-redo onto the 2D handlers.
+2. **`willReadFrequently: true` on every 2D `getContext` call** in `spotlight.js` (3 sites — handleSweptBeam2d, handlePulsedLaser, handleLightShaft) and `particle.js` (1 site). Hints Chrome to use software/CPU backing for the 2D canvas instead of Skia GL — directly counters the GPU pressure mechanism.
+
+Symptom-resolved. Mike re-tested the order-dependent path after the commit landed — clean.
+
+#### What's deferred
+
+Root cause is browser-internal and not fixable from JS. The hypothesis remains unverified. Re-investigate if it re-emerges, especially during:
+
+- The unified-app migration (Session 9 — `audience.html` unification into the HHU app) when these canvases get touched differently and the panel render path may change.
+- Any future stage that adds another preview surface alongside the existing five.
+
+#### Options when picking up
+
+If it re-emerges, in-browser debugging with `chrome://gpu-internals` exposed during the bug repro could confirm the GPU resource-pressure mechanism directly. The pattern to watch for: GPU process holding canvas backing surfaces past the JS-level dispose; Skia GL backend's resource pool capacity exhausted while WebGL contexts are still alive.
+
+#### When to pick this up
+
+If a symptom re-emerges. The defensive mitigations should hold against the documented order-dependency; a new failure mode would indicate the hypothesis is wrong or partial.
+
+#### Related
+
+- A4b commit `6c269fe` — mitigations applied
+- `docs/SESSION-A4B-VERIFICATION-PAUSE.md` §1.6 item 4 — pause-doc pointer
+- `docs/SESSION-LOGS/2026-05-31-A4b-verification-result.md` — Bug 4 detail
+
+---
+
+### Deferred: C1.5 — RPC gate refuses non-admin verification carry-over
+
+**Deferred in:** Phase 3 / Plan B Stage A4b closeout
+**Deferred on:** 2026-05-31
+**Priority:** Carry-over verification — re-run when next session touches auth/gate code
+**Area:** `admin-venues.html` boot section + `shell/auth.js` is_platform_admin gate
+**Status:** Active — verification carry-over
+
+#### Context
+
+A4b's verification protocol included C1.5 (verify RPC gate refuses non-admin user accessing `admin-venues.html`). The check was not run during A4b verification because:
+
+1. `admin-venues.html` has no sign-out affordance (see "Deferred: A4b verification UX bundle" entry below, item "no-sign-out"). Switching to the non-admin test account requires signing out via a different Elsewhere surface (the shell `index.html`).
+2. The friction of the sign-out workaround was higher than the verification value given that A4b modified zero auth/gate code — verified by grep, the modified files in A4b were admin-venues.html lifecycle handlers + CSS + 2 renderer module `getContext` lines, none in `shell/auth.js` or admin-venues.html's boot/gate section at L1171+.
+
+Risk of A4b breaking the platform-admin gate is therefore effectively zero. Mike's call to defer accepted the no-touched-code reasoning.
+
+#### What's deferred
+
+Re-run C1.5 (or the analogous gate check for the next session's scope) at the next session that involves auth-adjacent surfaces — Stage 6 (per-app override editor) is admin-permissions-adjacent and a natural pre-req for verifying the gate behavior end-to-end.
+
+#### Options when picking up
+
+1. Fix the no-sign-out finding (the UX bundle entry below) first — sign-out affordance on admin-venues.html makes the gate check a 30-second flow.
+2. Use the shell `index.html` sign-out as the work-around path.
+
+Option 1 is cheaper if it lands at the same time as the per-app override editor; Option 2 works any time.
+
+#### When to pick this up
+
+At Stage 6 (per-app override editor) or any earlier session that touches auth/gate code. Whichever comes first.
+
+#### Related
+
+- `docs/SESSION-A4B-VERIFICATION-PAUSE.md` §1.6 item 5 — pause-doc pointer
+- `docs/SESSION-LOGS/2026-05-31-A4b-verification-result.md` — C1.5 deferral note
+- `docs/VENUE-ADMIN-UI-A4A-BUILD-SPEC.md` §8 Check 23 — A4a's analogous gate check (the precedent verification protocol)
+
+---
+
+### Deferred: A4b verification UX bundle — 4 admin-panel polish findings
+
+**Deferred in:** Phase 3 / Plan B Stage A4b closeout
+**Deferred on:** 2026-05-31
+**Priority:** Polish — none block A4b; all worth filing for the admin-UI polish workstream
+**Area:** `admin-venues.html` save status, button placement, sign-out, save-flow
+**Status:** Active — bundle of 4 small findings
+
+#### Context
+
+Surfaced during A4b's Cluster 2 testing (preview / save / persist across all 5 panels). None block A4b; all warrant filing for the admin-UI polish workstream that ships either with Stage 6 (per-app override editor — admin-UI-adjacent) or as a small standalone polish commit.
+
+#### What's deferred
+
+**(a) `'ok'` vs `'success'` class drift on Save success status.** `showAnchorStatus(anchorId, 'Saved', kind)` accepts a `kind` class. CSS defines `.anchor-status.error` (red, `#e07e7e`) and `.anchor-status.success` (gold, `var(--color-gold)`) only. Five save handlers exist; three pass `'success'` correctly (audio L1938, particle 2D L2728, particle 3D L4741), but BOTH spotlight handlers pass `'ok'` (A4a 2D L3719, A4b 3D L4641). `.anchor-status.ok` has no CSS rule, so the success text falls back to `var(--color-text-faint)` — visually distinct from the gold success state of the other panels. **Fix is trivial:** `'ok'` → `'success'` at L3719 + L4641. Held during A4b triage to keep the focused commit clean.
+
+**(b) Stop-button location inconsistency.** The per-row ■ Stop button position relative to ▶ Play / ↻ Replay / Save differs between panels: audio Stop is at the row-top-right outside `.anchor-row-actions`; spotlight 2D / particle 2D / 3D have Stop in the action row alongside Save. The audio panel's Stop predates the canonical `.anchor-row-actions` pattern. Worth a panel-standardization unification pass.
+
+**(c) No sign-out affordance on `admin-venues.html`.** The admin badge is the only header element; no logout link. To switch accounts, admin must navigate to a different Elsewhere surface (the shell `index.html`) and sign out from there. Minor friction for the admin's own workflow; significant friction for "verify as non-admin" testing cycles (see DEFERRED entry "C1.5 — RPC gate refuses non-admin verification carry-over" above). Trivial addition — sign-out link near the admin badge.
+
+**(d) Save-flow behavioral inconsistencies across panels (beyond the class drift).** Save behavior visually differs across panels in ways beyond the `'ok'`/`'success'` class drift; exact behavior delta worth documenting more precisely the next time a save sequence is exercised side-by-side across audio + particle + spotlight. Pending more detailed repro from the next verification cycle; recording here as a pointer.
+
+#### Options when picking up
+
+- Bundle (a) + (b) + (c) as a single small panel-polish commit. Each is independently small; bundle keeps the diff coherent.
+- (d) needs a fresh side-by-side save-sequence pass before it can be specified — either record during the next verification cycle, or schedule a 15-minute focused pass on it.
+
+#### When to pick this up
+
+Before Stage 6 (per-app override editor), since (c)'s sign-out fix is a pre-req for any auth-adjacent testing (see C1.5 carry-over above). Earlier is fine — these are all low-risk small commits.
+
+#### Related
+
+- `docs/SESSION-A4B-VERIFICATION-PAUSE.md` §1.6 item 6 — pause-doc pointer
+- `docs/SESSION-LOGS/2026-05-31-A4b-verification-result.md` — Bugs section + Conclusion's carry-over note
+- A4b `showAnchorStatus` at admin-venues.html:2002 — the helper that takes the `kind` class
