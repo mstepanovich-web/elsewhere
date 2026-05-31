@@ -3936,6 +3936,23 @@
         return null;
       }
 
+      // Replace the canvas with a fresh clone BEFORE constructing the
+      // WebGLRenderer. tearDownPreview3d's forceContextLoss() permanently
+      // severs the WebGL context attached to a canvas DOM node; reusing
+      // the same canvas on a subsequent Play yields a lost context whose
+      // getShaderPrecisionFormat returns null, which crashes Three.js's
+      // WebGLRenderer constructor with "Cannot read properties of null
+      // (reading 'precision')". A cloned canvas inherits width/height
+      // attrs + className via cloneNode(false) and has no prior GL
+      // context. Pre-write audit confirmed no other code holds refs to
+      // the preview canvas DOM nodes (no ResizeObserver, no event
+      // listeners, no module-level caches) — the swap is safe. The
+      // returned `canvasEl` is the FRESH one; callers must use it (the
+      // outer-scope canvasEl reference is stale after this point).
+      const freshCanvas = canvasEl.cloneNode(false);
+      canvasEl.parentNode.replaceChild(freshCanvas, canvasEl);
+      canvasEl = freshCanvas;
+
       // Derive deterministic dimensions BEFORE constructing the renderer.
       // Avoids the "black preview" failure mode where an attribute-less canvas
       // returns browser-default 300×150 (wrong aspect for the CSS's 2:1 sizing)
@@ -3958,7 +3975,7 @@
       const camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 2000);
       positionCameraForKind(camera, kind);
 
-      return { webglRenderer, scene, camera };
+      return { webglRenderer, scene, camera, canvasEl };
     }
 
     /**
@@ -4294,7 +4311,11 @@
         showAnchorStatus(anchorId, 'Preview failed — Three.js CDN not loaded', 'error');
         return;
       }
-      const { webglRenderer, scene, camera } = ctx;
+      // Destructure with rename: createPreviewContext3d cloned canvasEl
+      // (Fix 1, 2026-05-31); the outer-scope canvasEl is detached. Use
+      // freshCanvasEl for st storage so future references (DevTools
+      // inspection, future helpers) reach the live DOM node.
+      const { webglRenderer, scene, camera, canvasEl: freshCanvasEl } = ctx;
 
       const anchor = { id: anchorId, type: 'spotlight', label, payload };
       let handle;
@@ -4315,7 +4336,8 @@
 
       const st = {
         rafId: null,
-        webglRenderer, scene, camera, handle, canvasEl,
+        webglRenderer, scene, camera, handle,
+        canvasEl: freshCanvasEl,
         disposed: false,
       };
       state.spotlight3dPreviewState.set(anchorId, st);
@@ -4391,7 +4413,11 @@
         showAnchorStatus(anchorId, 'Preview failed — Three.js CDN not loaded', 'error');
         return;
       }
-      const { webglRenderer, scene, camera } = ctx;
+      // Destructure with rename: createPreviewContext3d cloned canvasEl
+      // (Fix 1, 2026-05-31); the outer-scope canvasEl is detached. Use
+      // freshCanvasEl for st storage so future references reach the live
+      // DOM node. Mirrors the spotlight handler's pattern.
+      const { webglRenderer, scene, camera, canvasEl: freshCanvasEl } = ctx;
 
       const anchor = { id: anchorId, type: 'particle', label, payload };
       let handle;
@@ -4412,7 +4438,8 @@
 
       const st = {
         rafId: null,
-        webglRenderer, scene, camera, handle, canvasEl,
+        webglRenderer, scene, camera, handle,
+        canvasEl: freshCanvasEl,
         disposed: false,
       };
       state.particle3dPreviewState.set(anchorId, st);
