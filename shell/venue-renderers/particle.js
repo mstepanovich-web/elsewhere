@@ -528,7 +528,7 @@ export function particleAnchorRenderer(anchor, ctx) {
     return { stop: () => {} };
   }
 
-  const c = canvas.getContext('2d');
+  const c = canvas.getContext('2d', { willReadFrequently: true });   // A4b triage 2026-05-31: hint Chrome to back this canvas with software (CPU) instead of Skia GL, dodging the GPU-resource-pressure cross-context contamination (see SESSION-A4B-VERIFICATION-PAUSE.md §1.6 item 4)
   if (!c) {
     console.warn('[particle-renderer] could not get 2d context', anchor);
     return { stop: () => {} };

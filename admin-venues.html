@@ -519,6 +519,7 @@
       background: rgba(0,0,0,.4);
       width: 100%;
       max-width: 480px;
+      aspect-ratio: 2/1;
     }
     .particle-preview-canvas {
       display: block;
@@ -629,6 +630,7 @@
       background: rgba(0,0,0,.4);
       width: 100%;
       max-width: 480px;
+      aspect-ratio: 2/1;
     }
     .spotlight-preview-canvas {
       display: block;
@@ -2781,8 +2783,8 @@
 
     function onPlayParticlePreview(rowEl) {
       const anchorId = rowEl.dataset.anchorId;
-      const canvasEl = rowEl.querySelector('.particle-preview-canvas');
-      if (!canvasEl) return;
+      const wrapEl   = rowEl.querySelector('.particle-preview-canvas-wrap');
+      if (!wrapEl) return;
 
       const { payload, errors } = readParticlePayloadFromRow(rowEl);
       if (errors.length > 0) {
@@ -2790,6 +2792,17 @@
         return;
       }
       stopParticlePreview(anchorId);
+
+      // Canvas lifecycle parity (A4b triage 2026-05-31): see spotlight 2D
+      // handler for the full rationale. Mirrors the 3D onPlay lifecycle
+      // and the spotlight 2D handler above. Belt-and-suspenders against
+      // Chrome hardware-accel GPU-pressure cross-context contamination.
+      wrapEl.querySelectorAll('canvas').forEach(c => c.remove());
+      const canvasEl = document.createElement('canvas');
+      canvasEl.className = 'particle-preview-canvas';
+      canvasEl.width  = 480;
+      canvasEl.height = 240;
+      wrapEl.appendChild(canvasEl);
 
       const anchor = { id: anchorId, payload };
       try {
@@ -2821,7 +2834,7 @@
           }, PARTICLE_PREVIEW_ENDED_THRESHOLD_MS);
         }
 
-        state.particlePreviewState.set(anchorId, { stopFn: handle.stop, endedTimerId });
+        state.particlePreviewState.set(anchorId, { stopFn: handle.stop, endedTimerId, canvasEl });
       } catch (e) {
         showAnchorStatus(anchorId, 'Preview failed: ' + (e.message || e), 'error');
       }
@@ -2840,6 +2853,9 @@
       if (!st) return;
       try { st.stopFn?.(); } catch (_) {}
       if (st.endedTimerId !== null && st.endedTimerId !== undefined) clearTimeout(st.endedTimerId);
+      // Lifecycle parity (A4b triage 2026-05-31): remove canvas — see
+      // stopSpotlightPreview for the full rationale.
+      try { st.canvasEl?.remove?.(); } catch (_) {}
       state.particlePreviewState.delete(anchorId);
       const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
       if (row) {
@@ -3766,8 +3782,8 @@
 
     function onPlaySpotlightPreview(rowEl) {
       const anchorId = rowEl.dataset.anchorId;
-      const canvasEl = rowEl.querySelector('.spotlight-preview-canvas');
-      if (!canvasEl) return;
+      const wrapEl   = rowEl.querySelector('.spotlight-preview-canvas-wrap');
+      if (!wrapEl) return;
       const { payload, errors } = readSpotlightPayloadFromRow(rowEl);
       if (errors.length > 0) {
         showAnchorStatus(
@@ -3778,6 +3794,22 @@
         return;
       }
       stopSpotlightPreview(anchorId);
+
+      // Canvas lifecycle parity (A4b triage, 2026-05-31): fresh canvas per
+      // Play sidesteps the GPU-resource-pressure cross-context contamination
+      // documented in docs/SESSION-A4B-VERIFICATION-PAUSE.md §1.6 item 4 —
+      // Chrome's hardware-accelerated canvas allocator can refuse
+      // getContext('2d') after a prior WebGL context allocation, even
+      // after the WebGL context was disposed. Fresh DOM canvas per Play
+      // makes each 2D allocation independent of prior state. Mirrors the
+      // 3D onPlay lifecycle.
+      wrapEl.querySelectorAll('canvas').forEach(c => c.remove());
+      const canvasEl = document.createElement('canvas');
+      canvasEl.className = 'spotlight-preview-canvas';
+      canvasEl.width  = 480;
+      canvasEl.height = 240;
+      wrapEl.appendChild(canvasEl);
+
       const anchor = { id: anchorId, payload };
       try {
         const handle = window.elsewhere?.spotlightRenderer?.spotlightAnchorRenderer?.(
@@ -3787,7 +3819,7 @@
           showAnchorStatus(anchorId, 'Preview failed — renderer returned no handle', 'error');
           return;
         }
-        state.spotlightPreviewState.set(anchorId, { stopFn: handle.stop });
+        state.spotlightPreviewState.set(anchorId, { stopFn: handle.stop, canvasEl });
         rowEl.querySelector('.btn-play-spotlight-preview').hidden   = true;
         rowEl.querySelector('.btn-replay-spotlight-preview').hidden = false;
         rowEl.querySelector('.btn-stop-spotlight-preview').hidden   = false;
@@ -3806,6 +3838,10 @@
       const st = state.spotlightPreviewState.get(anchorId);
       if (!st) return;
       try { st.stopFn?.(); } catch (_) {}
+      // Lifecycle parity (A4b triage 2026-05-31): remove canvas from DOM
+      // so the next Play allocates a fresh element. Wrap's aspect-ratio
+      // CSS holds the bordered box shape stable while the wrap is empty.
+      try { st.canvasEl?.remove?.(); } catch (_) {}
       state.spotlightPreviewState.delete(anchorId);
       const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
       if (row) {
@@ -3910,7 +3946,7 @@
      */
     function previewFovForKind(kind) {
       switch (kind) {
-        case 'swept-beam-3d':  return 60;
+        case 'swept-beam-3d':  return 90;   // A4b triage 2026-05-31: 60° → 90° (panorama-center POV needs wide FOV; see positionCameraForKind below)
         case 'point-light':    return 55;
         case 'point-cloud-3d': return 50;
         case 'volumetric-3d':  return 65;
@@ -3926,22 +3962,39 @@
      * (where applicable) — keep visual parity between admin preview and stage.
      */
     function positionCameraForKind(camera, kind) {
+      // A4b triage 2026-05-31 — Fix 2 camera framing. Original values
+      // placed the camera at distance 5-18 from origin, but the source
+      // anchor geometry lives at sphere_radius 80-490 (cones, candles,
+      // smoke) — entirely outside the camera frustum. Updated values
+      // are MATH-DERIVED not visually confirmed; Mike eyeballs each and
+      // we iterate any off-frame.
       switch (kind) {
         case 'swept-beam-3d':
-          camera.position.set(0, 8, 18);
-          camera.lookAt(0, 4, 0);
+          // Cones at sphere_radius=380, clustered near +Y (phi 0.12-0.15).
+          // Camera at origin matches karaoke's panorama-center POV; looks
+          // straight up at the cone cluster via the 90° FOV from
+          // previewFovForKind.
+          camera.position.set(0, 0, 0);
+          camera.lookAt(0, 380, 0);
           break;
         case 'point-light':
-          camera.position.set(0, 2, 6);
-          camera.lookAt(0, 1, 0);
+          // 40 candles in a flat ring r=80-330 at y=-120 to -80.
+          // External viewpoint, camera high and forward, looking down.
+          camera.position.set(0, 80, 350);
+          camera.lookAt(0, -100, 0);
           break;
         case 'point-cloud-3d':
+          // UNCHANGED — Mike confirms the phone-lights render correctly
+          // from this near-origin POV (point sprites visible at any
+          // distance via sizeAttenuation).
           camera.position.set(0, 1.5, 5);
           camera.lookAt(0, 1, 0);
           break;
         case 'volumetric-3d':
-          camera.position.set(0, 3, 7);
-          camera.lookAt(0, 1, 0);
+          // 60 smoke spheres r=50-350, y range ≈ -196 to +24 + drift up.
+          // External viewpoint far enough to see the drifting volume.
+          camera.position.set(0, 50, 450);
+          camera.lookAt(0, -50, 0);
           break;
         default:
           camera.position.set(0, 5, 12);
