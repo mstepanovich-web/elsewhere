@@ -56,7 +56,7 @@ Stadium's spotlight panel crashed on load with `TypeError: kind is not a functio
 
 ### 1.6 DEFERRED items surfaced (file at closeout)
 
-Four items for `docs/DEFERRED.md` at the A4b closeout commit:
+Six items for `docs/DEFERRED.md` at the A4b closeout commit:
 
 1. **A4a verification protocol gap.** Gate 8a panel standardization shipped without exercising 2D spotlight rendering. The L2984 backtick trap was discoverable on any venue with a 2D spotlight (stadium, festival, speakeasy/light-shaft) but A4a verification didn't load one. Mitigation: include "load each venue × each anchor type" as a baseline in future verification protocols, and run it after any panel-standardization or comment-block edit.
 2. **Registry vocabulary extension.** `shell/venue-registry.js:165` warns that `'spotlight-3d'` and `'particle-3d'` are not in the known anchor type vocabulary (spec §3.2 + db/032 CHECK). Registration accepted per Gate 5's distinct-keys revision but warning fires on every load. Two options: (a) extend the known-types list in venue-registry.js to include the `-3d`-suffixed registry keys, or (b) accept the warning permanently as part of the registry-key / DB-type split. Decision needed before A7 hits the same vocabulary boundary on the read-path switch.
@@ -75,6 +75,14 @@ Four items for `docs/DEFERRED.md` at the A4b closeout commit:
    - `willReadFrequently: true` on every 2D `getContext` call in `spotlight.js` and `particle.js`, hinting Chrome to use software/CPU backing for the 2D canvas instead of Skia GL — directly counters the GPU pressure mechanism.
 
    Mitigations are sufficient for the symptom. Root cause is browser-internal and not fixable from JS. **Future work:** if this re-emerges (especially during the unified-app migration when these canvases get touched differently), in-browser debugging with `chrome://gpu-internals` exposed could confirm the GPU resource-pressure mechanism directly. Filing for awareness.
+
+5. **C1.5 verification (RPC gate non-admin refuse) — deferred.** A4b modified zero auth/gate code (verified by grep: the modified files are `admin-venues.html` lifecycle handlers + CSS + 2 renderer module `getContext` lines, none in `shell/auth.js` or `admin-venues.html`'s boot/gate section at L1171+). Risk of A4b breaking the platform-admin gate is effectively zero. Verification not run due to sign-out friction (admin-venues.html has no sign-out affordance, see UX bundle below). Acceptable per the no-touched-code reasoning. Re-verify at next session that involves auth-adjacent changes.
+
+6. **A4b verification UX bundle (4 findings).** Surfaced during Cluster 2 testing. None block A4b; all worth filing for the admin-UI polish workstream.
+   - **`'ok'` vs `'success'` class drift on Save success status.** `showAnchorStatus(anchorId, 'Saved', kind)` accepts a `kind` class. CSS defines `.anchor-status.error` (red, `#e07e7e`) and `.anchor-status.success` (gold, `var(--color-gold)`) only. Five save handlers exist; three pass `'success'` correctly (audio L1938, particle 2D L2728, particle 3D L4741), but BOTH spotlight handlers pass `'ok'` (A4a 2D L3719, A4b 3D L4641). `.anchor-status.ok` has no CSS rule, so the success text falls back to `var(--color-text-faint)` — visually distinct from the gold success state of the other panels. **Fix is trivial:** `'ok'` → `'success'` at L3719 + L4641. Held during A4b triage to keep the focused commit clean. File at closeout.
+   - **Stop-button location inconsistency.** The per-row ■ Stop button position relative to ▶ Play / ↻ Replay / Save differs between panels (audio Stop is at the row-top-right outside `.anchor-row-actions`; spotlight 2D / particle 2D / 3D have Stop in the action row alongside Save). The audio panel's Stop predates the canonical `.anchor-row-actions` pattern. Worth a panel-standardization unification pass post-A4b.
+   - **No sign-out affordance on admin-venues.html.** The admin badge is the only header element; no logout link. To switch accounts, admin must navigate to a different Elsewhere surface (the shell `index.html`) and sign out from there. Minor friction for the admin's own workflow; significant friction for any future "verify as non-admin" testing cycle (see DEFERRED item 5 above). Trivial addition — sign-out link near the admin badge.
+   - **Save-differs: behaviorally inconsistent save flow across panels.** Mike noted that save behavior visually differs across panels in ways beyond the `'ok'`/`'success'` class drift — exact behavior delta worth documenting more precisely the next time a save sequence is exercised side-by-side across audio + particle + spotlight. Pending more detailed repro from the next verification cycle; recording here as a pointer.
 
 ### 1.7 Closeout sequence when verification passes
 
