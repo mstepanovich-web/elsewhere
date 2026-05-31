@@ -326,7 +326,7 @@ function randIn(min, max) {
 function handleSweptBeam2d(anchor, ctx) {
   const payload = anchor.payload;
   const canvas = ctx.canvas;
-  const c = canvas.getContext('2d');
+  const c = canvas.getContext('2d', { willReadFrequently: true });   // A4b triage 2026-05-31: hint Chrome to back this canvas with software (CPU) instead of Skia GL, dodging the GPU-resource-pressure cross-context contamination (see SESSION-A4B-VERIFICATION-PAUSE.md §1.6 item 4)
   if (!c) {
     console.warn('spotlight: ctx.canvas has no 2D rendering context');
     return { stop: () => {} };
@@ -500,7 +500,7 @@ function handleSweptBeam2d(anchor, ctx) {
 function handlePulsedLaser(anchor, ctx) {
   const payload = anchor.payload;
   const canvas = ctx.canvas;
-  const c = canvas.getContext('2d');
+  const c = canvas.getContext('2d', { willReadFrequently: true });   // A4b triage 2026-05-31: hint Chrome to back this canvas with software (CPU) instead of Skia GL, dodging the GPU-resource-pressure cross-context contamination (see SESSION-A4B-VERIFICATION-PAUSE.md §1.6 item 4)
   if (!c) {
     console.warn('spotlight: ctx.canvas has no 2D rendering context');
     return { stop: () => {} };
@@ -686,7 +686,7 @@ function handlePulsedLaser(anchor, ctx) {
 function handleLightShaft(anchor, ctx) {
   const payload = anchor.payload;
   const canvas = ctx.canvas;
-  const c = canvas.getContext('2d');
+  const c = canvas.getContext('2d', { willReadFrequently: true });   // A4b triage 2026-05-31: hint Chrome to back this canvas with software (CPU) instead of Skia GL, dodging the GPU-resource-pressure cross-context contamination (see SESSION-A4B-VERIFICATION-PAUSE.md §1.6 item 4)
   if (!c) {
     console.warn('spotlight: ctx.canvas has no 2D rendering context');
     return { stop: () => {} };

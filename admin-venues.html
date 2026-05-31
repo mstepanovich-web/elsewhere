@@ -44,6 +44,13 @@
   <script type="module" src="shell/venue-renderers/audio.js"></script>
   <script type="module" src="shell/venue-renderers/particle.js"></script>
   <script type="module" src="shell/venue-renderers/spotlight.js"></script>
+  <!-- A4b — 3D venue effects. Three.js MUST load before the 3D builders
+       (they reference window.THREE). Builders self-register against
+       window.elsewhere.venueAnchorRenderers under distinct keys
+       'spotlight-3d' / 'particle-3d' (see shell/venue-renderers/*-3d.js). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script type="module" src="shell/venue-renderers/spotlight-3d.js"></script>
+  <script type="module" src="shell/venue-renderers/particle-3d.js"></script>
 
   <style>
     /* ─── Base ────────────────────────────────────────────────────── */
@@ -512,6 +519,7 @@
       background: rgba(0,0,0,.4);
       width: 100%;
       max-width: 480px;
+      aspect-ratio: 2/1;
     }
     .particle-preview-canvas {
       display: block;
@@ -622,8 +630,36 @@
       background: rgba(0,0,0,.4);
       width: 100%;
       max-width: 480px;
+      aspect-ratio: 2/1;
     }
     .spotlight-preview-canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 2/1;
+      background: transparent;
+    }
+
+    /* 3D preview wraps + canvases (A4b Fix 1-redo, 2026-05-31). Mirror
+       the 2D wrap/canvas rules above — closes the pre-existing CSS gap
+       flagged by the L2314 "parallels the 2D wrap class" comment. The
+       wrap's aspect-ratio:2/1 is the keystone for the canvas lifecycle:
+       keeps the bordered box visually stable when the canvas is removed
+       on Stop, so the row doesn't collapse vertically between Play
+       cycles. */
+    .particle-3d-preview-canvas-wrap,
+    .spotlight-3d-preview-canvas-wrap {
+      position: relative;
+      margin: 12px 0;
+      border: 1px dashed var(--color-border);
+      border-radius: 6px;
+      background: rgba(0,0,0,.4);
+      width: 100%;
+      max-width: 480px;
+      aspect-ratio: 2/1;
+    }
+    .particle-3d-preview-canvas,
+    .spotlight-3d-preview-canvas {
       display: block;
       width: 100%;
       height: auto;
@@ -635,7 +671,7 @@
 <body>
 
   <header id="header">
-    <div class="title">VENUE ADMIN <span class="version-stamp">v2.139</span></div>
+    <div class="title">VENUE ADMIN <span class="version-stamp">v2.140</span></div>
     <div class="user-info">
       <span id="user-display"></span>
       <span class="admin-badge" id="admin-badge" hidden>ADMIN</span>
@@ -748,6 +784,17 @@
         <section class="anchor-panel" id="particle-anchor-panel">
           <header class="anchor-panel-header">
             <h2>Particle anchors</h2>
+            <!-- A4b §6.3 — kind picker. Chosen kind fixes the new row's context
+                 for its lifetime (2D-suffix kinds → 2d-canvas; 3D-suffix kinds
+                 → 3d-three). The in-row kind dropdown only lists same-context
+                 kinds; to author across contexts, cancel + re-add. -->
+            <select id="particle-add-kind" class="anchor-add-kind-select">
+              <option value="point-cloud">point-cloud (2D)</option>
+              <option value="directional-emitter">directional-emitter (2D)</option>
+              <option value="volumetric">volumetric (2D)</option>
+              <option value="point-cloud-3d">point-cloud-3d (3D)</option>
+              <option value="volumetric-3d">volumetric-3d (3D)</option>
+            </select>
             <button id="btn-add-particle-anchor" type="button">+ Add particle anchor</button>
             <button id="btn-stop-particle-preview" type="button">⏹ Stop all previews</button>
           </header>
@@ -763,6 +810,14 @@
         <section class="anchor-panel" id="spotlight-anchor-panel">
           <header class="anchor-panel-header">
             <h2>Spotlight anchors</h2>
+            <!-- A4b §6.3 — kind picker (same model as particle panel). -->
+            <select id="spotlight-add-kind" class="anchor-add-kind-select">
+              <option value="swept-beam-2d">swept-beam-2d (2D)</option>
+              <option value="pulsed-laser">pulsed-laser (2D)</option>
+              <option value="light-shaft">light-shaft (2D)</option>
+              <option value="swept-beam-3d">swept-beam-3d (3D)</option>
+              <option value="point-light">point-light (3D)</option>
+            </select>
             <button id="btn-add-spotlight-anchor" type="button">+ Add spotlight anchor</button>
             <button id="btn-stop-all-spotlight-previews" type="button">⏹ Stop all previews</button>
           </header>
@@ -825,7 +880,22 @@
     //   no "preview ended" affordance is needed, unlike A3's
     //   directional-emitter one-shot kind.
 
-    const PARTICLE_KINDS = ['point-cloud', 'directional-emitter', 'volumetric'];
+    // ─── Stage A4b — 3D preview state ───────────────────────────────
+    // 3D anchors live in the same per-type Maps as 2D (state.spotlightAnchors,
+    // state.particleAnchors) — distinguished by payload.context === '3d-three'.
+    // Only the preview-state Maps are 3D-specific because 3D builders use the
+    // {update, dispose} contract (caller-owns-RAF) instead of A4a's {stop}
+    // self-RAF contract — different teardown sequencing (see tearDownPreview3d).
+    state.spotlight3dPreviewState = new Map();   // anchorId -> { rafId, webglRenderer, scene, camera, handle, canvasEl, disposed }
+    state.particle3dPreviewState  = new Map();   // anchorId -> { rafId, webglRenderer, scene, camera, handle, canvasEl, disposed }
+
+    const PARTICLE_KINDS    = ['point-cloud', 'directional-emitter', 'volumetric'];
+    // A4b §6.3 — context-scoped constants. 2D and 3D never mix in one in-row
+    // <select>: a row's context is fixed at "+ Add" time and remains stable
+    // for the row's lifetime (saved or pending). The _ALL constant feeds the
+    // panel-header "+ Add" picker only.
+    const PARTICLE_KINDS_3D  = ['point-cloud-3d', 'volumetric-3d'];
+    const PARTICLE_KINDS_ALL = [...PARTICLE_KINDS, ...PARTICLE_KINDS_3D];
 
     // Starter payload for "+ Add particle anchor" — produces a minimally-valid
     // anchor of the requested kind that the user then edits.
@@ -860,12 +930,100 @@
             color: { mode: 'fixed', value: 'rgb(200,200,200)' },
             render: { shape: 'circle', mode: 'gradient' },
           };
+        // A4b — 3D cases. Shapes mirror db/038's seeded payloads VERBATIM
+        // (see db/038_3d_anchor_seed.sql: anc_par_stadium_phonelights3d for
+        // point-cloud-3d; anc_par_speakeasy_smoke3d for volumetric-3d) so a
+        // freshly-added pending anchor produces a payload that particle-3d.js
+        // can consume directly. context:'3d-three' fixes the row's renderer
+        // dispatch in makeParticleAnchorRow.
+        //
+        // NB on JS numeric normalization: db/038's seed bytes include trailing
+        // zeros (e.g. 0.20, 1.0, 0.90) for human readability in the SQL file,
+        // but the JS Number type cannot preserve trailing-zero representation
+        // — JSON.stringify(0.20) yields "0.2". Postgres jsonb normalizes
+        // identically (spot-checked 2026-05-28: vy_range → [0.08, 0.2],
+        // opacity_max → 1). The defaults below use JS-normalized forms; a
+        // no-op save round-trips bit-identical. DO NOT "fix" 0.2→0.20 — it
+        // can't be done at the JS layer and isn't drift.
+        case 'point-cloud-3d':
+          // Mirrors anc_par_stadium_phonelights3d (db/038 L273-298).
+          // Renderer: shell/venue-renderers/particle-3d.js:handlePointCloud3d.
+          return {
+            kind: 'point-cloud-3d', context: '3d-three',
+            count: 2000,
+            color: '#ffffff',
+            sprite_size: 2.5,
+            size_attenuation: true,
+            base_opacity: 0.8,
+            depth_write: false,
+            transparent: true,
+            position_layout: 'hemisphere_flattened',
+            r_range: [460, 490],
+            phi_norm_range: [0.15, 0.85],
+            theta_range: [0, 6.283185],
+            y_flatten_factor: 0.4,
+            y_offset: -80,
+            twinkle: {
+              mode: 'per-particle-shader',
+              phase_init: 'random-2pi',
+              phase_omega_per_frame: 0.04,
+              alpha_center: 0.5,
+              alpha_swing: 0.3,
+            },
+            modulator: { name: 'crowd_brightness', target: 'opacity' },
+          };
+        case 'volumetric-3d':
+          // Mirrors anc_par_speakeasy_smoke3d (db/038 L321-357).
+          // Renderer: shell/venue-renderers/particle-3d.js:handleVolumetric3d.
+          // spawn_region_initial vs spawn_region_respawn intentionally have
+          // DIFFERENT phi_norm_range[0] (0.4 vs 0.55) — spec §2.7 byte-faithful
+          // asymmetry. Confirmed in prod 2026-05-28: both objects round-trip
+          // distinct. DO NOT collapse to a single spawn_region.
+          return {
+            kind: 'volumetric-3d', context: '3d-three',
+            count: 60,
+            respawn: true,
+            color: '#bbbbaa',
+            depth_write: false,
+            transparent: true,
+            sphere_geometry: { radius: 1, width_segments: 6, height_segments: 6, shared: true },
+            scale_range:   [15, 55],
+            opacity_range: [0.01, 0.05],
+            vy_range: [0.08, 0.2],
+            vx_range: [-0.025, 0.025],
+            vz_range: [-0.025, 0.025],
+            life_init_range: [0, 1],
+            life_increment_per_frame: 0.003,
+            opacity_curve: 'sin_pi',
+            respawn_threshold: 0.98,
+            spawn_region_initial: { r_range: [50, 350], phi_norm_range: [0.4, 0.9],  theta_range: [0, 6.283185] },
+            spawn_region_respawn: { r_range: [50, 350], phi_norm_range: [0.55, 0.9], theta_range: [0, 6.283185] },
+            y_flatten_factor: 0.5,
+            y_offset: -30,
+          };
         default:
           return { kind: 'point-cloud', context: '2d-canvas', count: 0 };
       }
     }
 
-    const SPOTLIGHT_KINDS = ['swept-beam-2d', 'pulsed-laser', 'light-shaft'];
+    // A4b §6.3 — pending-row starter label per kind. The "+ Add" picker
+    // chooses the kind; the pending row inherits the corresponding label
+    // (matches db/038's effect-descriptive labels for visual parity).
+    function defaultParticleLabelForKind(kind) {
+      switch (kind) {
+        case 'point-cloud':          return 'Particles';
+        case 'directional-emitter':  return 'Emitter';
+        case 'volumetric':           return 'Smoke';
+        case 'point-cloud-3d':       return 'Phone lights (3D)';
+        case 'volumetric-3d':        return 'Smoke (3D)';
+        default:                     return 'Particles';
+      }
+    }
+
+    const SPOTLIGHT_KINDS     = ['swept-beam-2d', 'pulsed-laser', 'light-shaft'];
+    // A4b §6.3 — context-scoped constants (see PARTICLE_KINDS_3D rationale).
+    const SPOTLIGHT_KINDS_3D  = ['swept-beam-3d', 'point-light'];
+    const SPOTLIGHT_KINDS_ALL = [...SPOTLIGHT_KINDS, ...SPOTLIGHT_KINDS_3D];
 
     // Starter payload for "+ Add spotlight anchor" — produces a
     // minimally-valid anchor of the requested kind that the user then
@@ -960,8 +1118,72 @@
             },
             color: { mode: 'fixed', value: 'rgb(255,210,140)' },
           };
+        // A4b — 3D cases. Shapes mirror db/038's seeded payloads VERBATIM
+        // (see db/038_3d_anchor_seed.sql: anc_spot_stadium_beams3d for
+        // swept-beam-3d; anc_spot_speakeasy_candles for point-light) so a
+        // freshly-added pending anchor produces a payload that
+        // spotlight-3d.js can consume directly. context:'3d-three' fixes
+        // the row's renderer dispatch in makeSpotlightAnchorRow.
+        //
+        // NB on JS numeric normalization: see the matching note in
+        // defaultParticlePayloadForKind — trailing-zero loss is a JS Number
+        // property, not a bug; Postgres jsonb normalizes identically
+        // (spot-checked 2026-05-28).
+        case 'swept-beam-3d':
+          // Mirrors anc_spot_stadium_beams3d (db/038 L179-207).
+          // Renderer: shell/venue-renderers/spotlight-3d.js:handleSweptBeam3d.
+          // phis / theta_init / colors / speeds are PER-ITEM arrays — length
+          // MUST equal count. Defaults ship 4 entries each matching count:4.
+          return {
+            kind: 'swept-beam-3d', context: '3d-three',
+            count: 4,
+            phis:       [0.15, 0.15, 0.12, 0.12],
+            theta_init: [0, 3.141593, 1.570796, -1.570796],
+            colors:     ['#fffce0', '#fffce0', '#fff0cc', '#fff0cc'],
+            speeds:     [0.003, -0.004, 0.005, -0.003],
+            sphere_radius: 380,
+            wobble_amplitude: 0.08,
+            wobble_speed: 0.01,
+            look_at: [0, 0, 0],
+            geometry: {
+              radius_top: 0, radius_bottom: 35, height: 300,
+              radial_segments: 16, height_segments: 1,
+              open_ended: true, translate_y: -150,
+            },
+            material: { opacity: 0.06, side: 'back', depth_write: false, transparent: true },
+          };
+        case 'point-light':
+          // Mirrors anc_spot_speakeasy_candles (db/038 L226-247).
+          // Renderer: shell/venue-renderers/spotlight-3d.js:handlePointLight.
+          return {
+            kind: 'point-light', context: '3d-three',
+            count: 40,
+            color: '#ffaa33',
+            sprite_size: 4,
+            size_attenuation: true,
+            base_opacity: 0.7,
+            depth_write: false,
+            transparent: true,
+            position_layout: 'ring',
+            r_range: [80, 330],
+            y_range: [-120, -80],
+            theta_range: [0, 6.283185],
+            flicker: { mode: 'global-sync-random', frame_period: 4, opacity_min: 0.5, opacity_max: 1 },
+          };
         default:
           return { kind: 'swept-beam-2d', context: '2d-canvas', count: 0 };
+      }
+    }
+
+    // A4b §6.3 — pending-row starter label per kind (mirrors db/038 conventions).
+    function defaultSpotlightLabelForKind(kind) {
+      switch (kind) {
+        case 'swept-beam-2d':  return 'Spotlights';
+        case 'pulsed-laser':   return 'Lasers';
+        case 'light-shaft':    return 'Light shafts';
+        case 'swept-beam-3d':  return 'Cone beams (3D)';
+        case 'point-light':    return 'Candles (3D)';
+        default:               return 'Spotlights';
       }
     }
 
@@ -1817,6 +2039,14 @@
     function renderParticlePanel(venueId) {
       const listEl  = document.getElementById('particle-anchor-list');
       const emptyEl = document.getElementById('particle-anchor-empty');
+      // Gate 7c — HAZARD C resolution: tear down active 3D previews BEFORE
+      // wiping the list. Without this, listEl.innerHTML = '' destroys the
+      // canvas elements but leaves the WebGLRenderer + RAF + handle in
+      // state.particle3dPreviewState with dangling refs — a leak that can
+      // exceed the WebGL context budget after a few pending-add/delete or
+      // kind-change cycles. Order matters: stopAll runs while rows still
+      // exist, so tearDownPreview3d sees valid canvas + button elements.
+      stopAllParticle3dPreviews();
       listEl.innerHTML = '';
 
       const savedRows = state.particleAnchors.get(venueId) || [];
@@ -1825,10 +2055,14 @@
       }
       for (const [pendingId, info] of state.particleAnchorNew) {
         if (info.venue_id === venueId) {
+          // A4b §6.3 — pending kind chosen from the "+ Add" picker is stored
+          // on info.kind and fixes the row's context for its lifetime.
+          const stubKind = info.kind || 'point-cloud';
           listEl.appendChild(makeParticleAnchorRow({
             id: pendingId, venue_id: venueId, type: 'particle',
-            payload: defaultParticlePayloadForKind('point-cloud'),
-            label: 'Particles', is_broken: false,
+            payload: defaultParticlePayloadForKind(stubKind),
+            label: defaultParticleLabelForKind(stubKind),
+            is_broken: false,
           }, /*pending*/ true));
         }
       }
@@ -1848,11 +2082,14 @@
     }
 
     function applyAddParticleAnchorButtonState(venueId) {
+      // A4b §4.5 / D2 — PERMIT (was: cap at 1). Multi-anchor authoring
+      // matches spotlight's PERMIT. Limit-note element retained in markup
+      // for stability but permanently hidden; venueId arg unused but kept
+      // for callsite parity with applyAddSpotlightAnchorButtonState.
       const btn     = document.getElementById('btn-add-particle-anchor');
       const limitEl = document.getElementById('particle-anchor-limit-note');
-      const count   = particleAnchorCount(venueId);
-      btn.hidden    = (count >= 1);
-      limitEl.hidden = !(count >= 1);
+      if (btn)     btn.hidden     = false;
+      if (limitEl) limitEl.hidden = true;
     }
 
     function makeParticleAnchorRow(anchor, isPending) {
@@ -1864,8 +2101,17 @@
       if (isDirty) li.classList.add('dirty');
 
       const payload = anchor.payload || {};
-      const kind = payload.kind || 'point-cloud';
-      li.innerHTML = renderParticleAnchorRowHTML(anchor, payload, kind, isPending, isDirty);
+      const kind    = payload.kind || 'point-cloud';
+      // A4b §6.1 — dispatch by payload.context. 2D rows keep the A3 renderer
+      // untouched; 3D rows route to the parallel 3D renderer. data-context
+      // on the <li> is set so Gate 8's panel-standardization pass (or any
+      // future handler) can branch without re-reading payload.
+      const context = payload.context === '3d-three' ? '3d-three' : '2d-canvas';
+      li.dataset.context = context;
+
+      li.innerHTML = (context === '3d-three')
+        ? renderParticle3dAnchorRowHTML(anchor, payload, kind, isPending, isDirty)
+        : renderParticleAnchorRowHTML(anchor, payload, kind, isPending, isDirty);
       return li;
     }
 
@@ -1887,9 +2133,17 @@
 
         <div class="particle-field-row">
           <label>kind</label>
-          <select data-field="kind">
-            ${PARTICLE_KINDS.map(k => `<option ${opt(k, kind)}>${k}</option>`).join('')}
-          </select>
+          ${isPending
+            ? `<select data-field="kind">
+                ${PARTICLE_KINDS.map(k => `<option ${opt(k, kind)}>${k}</option>`).join('')}
+              </select>`
+            : `<span class="fld-kind-readonly mono">${escapeHTML(kind)}</span>
+              <input type="hidden" data-field="kind" value="${escapeAttr(kind)}">`
+          }
+          <!-- Gate 8a — §6.1 retrofit: saved 2D rows show kind as
+               read-only label. Hidden [data-field=kind] input keeps
+               readParticlePayloadFromRow's getStr('kind') working
+               unchanged (A3 reader at L2554 uses [data-field=kind]). -->
         </div>
         <div class="particle-field-row">
           <label>label</label>
@@ -2021,6 +2275,7 @@
         <div class="anchor-row-actions">
           <button type="button" class="btn-play-particle-preview">▶ Play preview</button>
           <button type="button" class="btn-replay-particle-preview" hidden>↻ Replay</button>
+          <button type="button" class="btn-stop-particle-preview"   hidden>■ Stop</button>
           <button type="button" class="btn-anchor-save">Save</button>
           ${isPending
             ? '<button type="button" class="btn-anchor-cancel">Cancel</button>'
@@ -2028,6 +2283,286 @@
         </div>
         <div class="anchor-status" data-status></div>
       `;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ─── A4b — Particle 3D row renderers ───────────────────────────
+    // ═══════════════════════════════════════════════════════════════
+    // Mirrors renderParticleAnchorRowHTML's shape but emits 3D-specific
+    // canvas class (Gate 6 dimension helper takes the fast-path on the
+    // 480×240 attrs) and 3D-suffixed action buttons (`btn-*-3d`) so the
+    // existing event-delegated 2D handlers at the bottom of this file
+    // don't fire on 3D rows. 7c/7d add new handlers under the 3D names.
+    //
+    // Canonical action row per Gate 5: .anchor-row-actions (styled),
+    // "▶ Play preview" (NOT "▶ Preview"), ↻ U+21BB (NOT ⟳ U+27F3),
+    // <div class="anchor-status" data-status>. Cancel/Delete via
+    // ternary on isPending (NEVER both visible at once).
+    //
+    // In-row kind dropdown lists ONLY PARTICLE_KINDS_3D (context-scoped
+    // per §6.3) so 7b's hide/show toggle never re-dispatches across the
+    // 2D/3D boundary. To author a different-context kind, cancel + add.
+
+    function renderParticle3dAnchorRowHTML(anchor, payload, kind, isPending, isDirty) {
+      const opt = (val, cur) => `value="${val}"${val === cur ? ' selected' : ''}`;
+
+      return `
+        <div class="anchor-id-row">
+          <span class="anchor-id mono">${escapeHTML(anchor.id)}${isPending ? ' (pending)' : ''}</span>
+          <span class="anchor-kind-label">${escapeHTML(kind)} <span class="anchor-context-tag">3D</span></span>
+          <span class="anchor-dirty-dot"${isDirty ? '' : ' hidden'}>•</span>
+        </div>
+
+        <div class="particle-field-row">
+          <label>kind</label>
+          ${isPending
+            ? `<select class="fld-kind" data-field="kind">
+                ${PARTICLE_KINDS_3D.map(k => `<option ${opt(k, kind)}>${k}</option>`).join('')}
+              </select>`
+            : `<span class="fld-kind-readonly mono">${escapeHTML(kind)}</span>
+              <input type="hidden" data-field="kind" value="${escapeAttr(kind)}">`
+          }
+          <!-- §6.1: saved rows show kind as read-only label (kind locked).
+               Hidden [data-field=kind] input gives 7d's reader a uniform
+               source: row.querySelector('[data-field=kind]').value works
+               for both pending (the <select>) and saved (this hidden input). -->
+        </div>
+        <div class="particle-field-row">
+          <label>label</label>
+          <input type="text" data-field="label" value="${escapeAttr(anchor.label || defaultParticleLabelForKind(kind))}">
+        </div>
+        <div class="particle-field-row">
+          <label>count</label>
+          <input type="number" data-field="count" min="1" step="1" value="${payload.count ?? ''}">
+        </div>
+
+        ${renderParticle3dKindSection(kind, payload)}
+        ${renderParticle3dSharedSection(payload, kind)}
+
+        <!-- 3D preview canvas (Gate 6 bookmark: explicit width/height for the
+             deriveCanvasDimensions fast-path; *-3d-preview-canvas-wrap parallels
+             the 2D wrap class for max-width:480px bounding). -->
+        <div class="particle-3d-preview-canvas-wrap">
+          <canvas class="particle-3d-preview-canvas" width="480" height="240"></canvas>
+        </div>
+
+        <!-- Canonical action row (.anchor-row-actions, NOT .anchor-row-controls
+             — the latter is A4a 2D spotlight's zero-CSS-match class that Gate
+             8 retrofits). All buttons UNWIRED in 7a — 7c wires Play/Replay/
+             Stop, 7d wires Save/Cancel/Delete. Distinct *-3d class names
+             prevent collision with A4a's event-delegated 2D handlers. -->
+        <div class="anchor-row-actions">
+          <button type="button" class="btn-play-particle-3d-preview">▶ Play preview</button>
+          <button type="button" class="btn-replay-particle-3d-preview" hidden>↻ Replay</button>
+          <button type="button" class="btn-stop-particle-3d-preview"   hidden>■ Stop</button>
+          <button type="button" class="btn-anchor-save-3d">Save</button>
+          ${isPending
+            ? '<button type="button" class="btn-anchor-cancel-3d">Cancel</button>'
+            : '<button type="button" class="btn-anchor-delete-3d">Delete</button>'}
+        </div>
+        <div class="anchor-status" data-status></div>
+      `;
+    }
+
+    // Per-kind field section for 3D particle kinds. Each section wrapped in
+    // `<section class="particle-kind-section" data-kind-section="${kind}">`
+    // with `hidden` attribute on non-current sections — 7b adds the kind-
+    // change handler that toggles `hidden` between sections.
+    //
+    // GATE 7a-REDO (2026-05-28): rebuilt to mirror db/038's seeded payloads
+    // byte-faithfully. Each field's data-field name + shape matches what
+    // particle-3d.js (shell/venue-renderers/particle-3d.js) actually reads.
+    // Round-trip table proved against db/038 + renderer file:line traces;
+    // jsonb normalization spot-checked in prod 2026-05-28.
+    //
+    // Field-type conventions:
+    //   - data-array         JSON.parse expected; aggregate-to-error on fail
+    //   - data-array data-per-item   length === count invariant (3D particle
+    //                                kinds have NO per-item arrays, so this
+    //                                attr never appears here)
+    //   - data-object        JSON.parse expected; 2-space pretty-print
+    //   - bare input/checkbox/select   native value/checked
+    //
+    // 7d's reader drives the parse + aggregate-to-error pattern off these
+    // attrs. NO field name is emitted twice — collision-free per the 7b
+    // audit (and so the [data-kind-section] hidden-toggle is safe).
+    function renderParticle3dKindSection(kind, payload) {
+      const jsonOr = (v, fallback) => escapeAttr(v !== undefined && v !== null
+        ? JSON.stringify(v, null, 2)
+        : JSON.stringify(fallback, null, 2));
+      const arrOr  = (v, fallback) => escapeAttr(JSON.stringify(v ?? fallback));
+
+      // ── point-cloud-3d ──────────────────────────────────────────────
+      // Mirrors anc_par_stadium_phonelights3d (db/038 L273-298).
+      // Renderer: particle-3d.js:handlePointCloud3d (L349+).
+      const pointCloud3dSection = `
+        <section class="particle-kind-section" data-kind-section="point-cloud-3d"${kind === 'point-cloud-3d' ? '' : ' hidden'}>
+          <h4>point-cloud-3d fields</h4>
+          <div class="particle-field-row">
+            <label>color (hex)</label>
+            <input type="text" data-field="color" value="${escapeAttr(payload.color ?? '#ffffff')}">
+          </div>
+          <div class="particle-field-row">
+            <label>sprite_size</label>
+            <input type="number" step="0.1" data-field="sprite_size" value="${payload.sprite_size ?? ''}">
+          </div>
+          <div class="particle-field-row">
+            <label>size_attenuation</label>
+            <input type="checkbox" data-field="size_attenuation"${payload.size_attenuation ? ' checked' : ''}>
+          </div>
+          <div class="particle-field-row">
+            <label>base_opacity</label>
+            <input type="number" min="0" max="1" step="0.05" data-field="base_opacity" value="${payload.base_opacity ?? ''}">
+          </div>
+          <div class="particle-field-row">
+            <label>depth_write</label>
+            <input type="checkbox" data-field="depth_write"${payload.depth_write ? ' checked' : ''}>
+          </div>
+          <div class="particle-field-row">
+            <label>transparent</label>
+            <input type="checkbox" data-field="transparent"${payload.transparent ? ' checked' : ''}>
+          </div>
+          <div class="particle-field-row">
+            <label>position_layout</label>
+            <select data-field="position_layout">
+              <option value="hemisphere_flattened"${(payload.position_layout || 'hemisphere_flattened') === 'hemisphere_flattened' ? ' selected' : ''}>hemisphere_flattened</option>
+            </select>
+          </div>
+          <div class="particle-field-row">
+            <label>r_range</label>
+            <textarea data-field="r_range" data-array rows="1">${arrOr(payload.r_range, [460, 490])}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>phi_norm_range <span class="field-note">— normalized [0,1] × π</span></label>
+            <textarea data-field="phi_norm_range" data-array rows="1">${arrOr(payload.phi_norm_range, [0.15, 0.85])}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>theta_range</label>
+            <textarea data-field="theta_range" data-array rows="1">${arrOr(payload.theta_range, [0, 6.283185])}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>y_flatten_factor</label>
+            <input type="number" step="0.05" data-field="y_flatten_factor" value="${payload.y_flatten_factor ?? ''}">
+          </div>
+          <div class="particle-field-row">
+            <label>y_offset</label>
+            <input type="number" step="1" data-field="y_offset" value="${payload.y_offset ?? ''}">
+          </div>
+          <div class="particle-field-row">
+            <label>twinkle (object) <span class="field-note">— D-twinkle synthesis per spec §3.7</span></label>
+            <textarea data-field="twinkle" data-object rows="6">${jsonOr(payload.twinkle, { mode:'per-particle-shader', phase_init:'random-2pi', phase_omega_per_frame:0.04, alpha_center:0.5, alpha_swing:0.3 })}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>modulator (object) <span class="field-note">— D-modulator binding (§2.6 / §3.8)</span></label>
+            <textarea data-field="modulator" data-object rows="3">${jsonOr(payload.modulator, { name:'crowd_brightness', target:'opacity' })}</textarea>
+          </div>
+        </section>`;
+
+      // ── volumetric-3d ───────────────────────────────────────────────
+      // Mirrors anc_par_speakeasy_smoke3d (db/038 L321-357).
+      // Renderer: particle-3d.js:handleVolumetric3d (L529+).
+      //
+      // spawn_region_initial vs spawn_region_respawn are TWO SEPARATE
+      // objects with DIFFERENT phi_norm_range[0] (0.4 vs 0.55) per spec
+      // §2.7 byte-faithful asymmetry. Prod spot-check 2026-05-28 confirmed
+      // both round-trip distinct. DO NOT collapse to a single spawn_region
+      // — that's the failure mode 7a fell into.
+      const volumetric3dSection = `
+        <section class="particle-kind-section" data-kind-section="volumetric-3d"${kind === 'volumetric-3d' ? '' : ' hidden'}>
+          <h4>volumetric-3d fields</h4>
+          <div class="particle-field-row">
+            <label>color (hex)</label>
+            <input type="text" data-field="color" value="${escapeAttr(payload.color ?? '#bbbbaa')}">
+          </div>
+          <div class="particle-field-row">
+            <label>respawn</label>
+            <input type="checkbox" data-field="respawn"${payload.respawn ? ' checked' : ''}>
+          </div>
+          <div class="particle-field-row">
+            <label>depth_write</label>
+            <input type="checkbox" data-field="depth_write"${payload.depth_write ? ' checked' : ''}>
+          </div>
+          <div class="particle-field-row">
+            <label>transparent</label>
+            <input type="checkbox" data-field="transparent"${payload.transparent ? ' checked' : ''}>
+          </div>
+          <div class="particle-field-row">
+            <label>sphere_geometry (object) <span class="field-note">— SHARED low-poly sphere</span></label>
+            <textarea data-field="sphere_geometry" data-object rows="5">${jsonOr(payload.sphere_geometry, { radius:1, width_segments:6, height_segments:6, shared:true })}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>scale_range</label>
+            <textarea data-field="scale_range" data-array rows="1">${arrOr(payload.scale_range, [15, 55])}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>opacity_range</label>
+            <textarea data-field="opacity_range" data-array rows="1">${arrOr(payload.opacity_range, [0.01, 0.05])}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>vy_range <span class="field-note">— vertical velocity (positive = up)</span></label>
+            <textarea data-field="vy_range" data-array rows="1">${arrOr(payload.vy_range, [0.08, 0.2])}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>vx_range</label>
+            <textarea data-field="vx_range" data-array rows="1">${arrOr(payload.vx_range, [-0.025, 0.025])}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>vz_range</label>
+            <textarea data-field="vz_range" data-array rows="1">${arrOr(payload.vz_range, [-0.025, 0.025])}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>life_init_range</label>
+            <textarea data-field="life_init_range" data-array rows="1">${arrOr(payload.life_init_range, [0, 1])}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>life_increment_per_frame</label>
+            <input type="number" step="0.0001" data-field="life_increment_per_frame" value="${payload.life_increment_per_frame ?? ''}">
+          </div>
+          <div class="particle-field-row">
+            <label>opacity_curve</label>
+            <select data-field="opacity_curve">
+              <option value="sin_pi"${(payload.opacity_curve || 'sin_pi') === 'sin_pi' ? ' selected' : ''}>sin_pi</option>
+            </select>
+          </div>
+          <div class="particle-field-row">
+            <label>respawn_threshold</label>
+            <input type="number" min="0" max="1" step="0.01" data-field="respawn_threshold" value="${payload.respawn_threshold ?? ''}">
+          </div>
+          <div class="particle-field-row">
+            <label>spawn_region_initial (object) <span class="field-note">— wider phi than respawn (§2.7 asymmetry — wider initial spawn band)</span></label>
+            <textarea data-field="spawn_region_initial" data-object rows="4">${jsonOr(payload.spawn_region_initial, { r_range:[50,350], phi_norm_range:[0.4, 0.9], theta_range:[0, 6.283185] })}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>spawn_region_respawn (object) <span class="field-note">— NARROWER phi than initial (byte-faithful — DO NOT normalize to match initial)</span></label>
+            <textarea data-field="spawn_region_respawn" data-object rows="4">${jsonOr(payload.spawn_region_respawn, { r_range:[50,350], phi_norm_range:[0.55, 0.9], theta_range:[0, 6.283185] })}</textarea>
+          </div>
+          <div class="particle-field-row">
+            <label>y_flatten_factor</label>
+            <input type="number" step="0.05" data-field="y_flatten_factor" value="${payload.y_flatten_factor ?? ''}">
+          </div>
+          <div class="particle-field-row">
+            <label>y_offset</label>
+            <input type="number" step="1" data-field="y_offset" value="${payload.y_offset ?? ''}">
+          </div>
+        </section>`;
+
+      return pointCloud3dSection + volumetric3dSection;
+    }
+
+    // Shared fields for all 3D particle kinds. Trimmed in Gate 7a-REDO:
+    // only `context` is truly shared (every other "shared-looking" field
+    // turned out per-kind once we re-grepped db/038 — e.g. `color` is
+    // scalar in some kinds but in other contexts ships as array `colors[]`).
+    function renderParticle3dSharedSection(payload, kind) {
+      const _ = kind;  // currently no cross-kind branching needed
+      return `
+        <section class="particle-shared-section">
+          <input type="hidden" data-field="context" value="3d-three">
+          <div class="particle-field-row">
+            <label>context</label>
+            <span class="field-readonly mono">3d-three</span>
+          </div>
+        </section>`;
     }
 
     function onParticleAnchorFieldInput(event) {
@@ -2055,8 +2590,42 @@
     // particle uses anchor-level dirty (not field-level), so the
     // full payload is reconstructed from form state at save/preview time.
     function readParticlePayloadFromRow(row) {
+      // Gate 8c — scoped reader closes the velocity_range overlap bug.
+      // velocity_range is emitted in BOTH directional-emitter (L2173) and
+      // volumetric (L2193) sections. The OLD reader used an unscoped
+      // row.querySelector which returned the FIRST DOM match
+      // (directional-emitter, earlier in DOM) regardless of active kind.
+      // For saved volumetric particle anchors (e.g. anc_par_speakeasy in
+      // db/036), this meant editing velocity_range on the visible
+      // volumetric textarea + saving silently returned the directional-
+      // emitter section's UNTOUCHED V_loaded value, discarding the user's
+      // edit. Active production data loss, not a latent edge case.
+      //
+      // Fix: sectionEl scopes per-kind queries. The 2-step getEl falls
+      // back row-wide to preserve A3's design for 6 "universal-read"
+      // fields (alpha, color, render, turbulence, modulator, respawn)
+      // that are emitted ONLY in volumetric's section but read for ALL
+      // kinds — for non-volumetric kinds, the fallback finds them in
+      // volumetric (hidden). These fields are single-source (overlap
+      // audit confirmed velocity_range is the ONLY cross-section
+      // field-name overlap in the file), so the fallback is leak-safe.
+      //
+      // DO NOT simplify the row-wide fallback away — it preserves round-
+      // trip for point-cloud + directional-emitter anchors whose payloads
+      // carry alpha/color/render/turbulence/modulator/respawn.
       const errors = [];
-      const getEl = (name) => row.querySelector(`[data-field="${name}"]`);
+
+      // Read kind FIRST (row-level, outside any [data-kind-section]).
+      // Preserves A3's 'point-cloud' fallback for legacy/malformed rows.
+      const kind = row.querySelector('[data-field="kind"]')?.value || 'point-cloud';
+      const payload = { kind, context: '2d-canvas' };
+
+      const sectionEl = row.querySelector(`[data-kind-section="${kind}"]`);
+
+      // 2-step helper: sectionEl first (per-kind scoping), row fallback
+      // (for the volumetric-only-emitted "universal-read" fields A3 design).
+      const getEl = (name) => sectionEl?.querySelector(`[data-field="${name}"]`)
+                           || row.querySelector(`[data-field="${name}"]`);
       const getStr = (name) => getEl(name)?.value ?? '';
       const getBool = (name) => !!getEl(name)?.checked;
       function getNum(name) {
@@ -2073,9 +2642,6 @@
         try { return JSON.parse(raw); }
         catch (e) { errors.push({ field: name, message: e.message }); return undefined; }
       }
-
-      const kind = getStr('kind') || 'point-cloud';
-      const payload = { kind, context: '2d-canvas' };
 
       const count = getNum('count');
       if (count !== undefined) payload.count = count;
@@ -2198,9 +2764,13 @@
     function onAddParticleAnchor() {
       const venueId = state.selectedVenueId;
       if (!venueId) return;
-      if (particleAnchorCount(venueId) >= 1) return;
-      const newId = 'anc_' + (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '_' + Math.random().toString(36).slice(2)));
-      state.particleAnchorNew.set(newId, { venue_id: venueId });
+      // A4b §4.5 / D2 — PERMIT (was: `if (particleAnchorCount(venueId) >= 1) return;`).
+      // Multi-anchor authoring matches spotlight's PERMIT.
+      const kindSel = document.getElementById('particle-add-kind');
+      const kind    = (kindSel && kindSel.value) || 'point-cloud';
+      const newId   = 'anc_' + (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '_' + Math.random().toString(36).slice(2)));
+      // info.kind fixes the pending row's context for its lifetime per §6.3.
+      state.particleAnchorNew.set(newId, { venue_id: venueId, kind });
       state.particleAnchorDirty.add(newId);
       renderParticlePanel(venueId);
     }
@@ -2213,8 +2783,8 @@
 
     function onPlayParticlePreview(rowEl) {
       const anchorId = rowEl.dataset.anchorId;
-      const canvasEl = rowEl.querySelector('.particle-preview-canvas');
-      if (!canvasEl) return;
+      const wrapEl   = rowEl.querySelector('.particle-preview-canvas-wrap');
+      if (!wrapEl) return;
 
       const { payload, errors } = readParticlePayloadFromRow(rowEl);
       if (errors.length > 0) {
@@ -2222,6 +2792,17 @@
         return;
       }
       stopParticlePreview(anchorId);
+
+      // Canvas lifecycle parity (A4b triage 2026-05-31): see spotlight 2D
+      // handler for the full rationale. Mirrors the 3D onPlay lifecycle
+      // and the spotlight 2D handler above. Belt-and-suspenders against
+      // Chrome hardware-accel GPU-pressure cross-context contamination.
+      wrapEl.querySelectorAll('canvas').forEach(c => c.remove());
+      const canvasEl = document.createElement('canvas');
+      canvasEl.className = 'particle-preview-canvas';
+      canvasEl.width  = 480;
+      canvasEl.height = 240;
+      wrapEl.appendChild(canvasEl);
 
       const anchor = { id: anchorId, payload };
       try {
@@ -2234,6 +2815,7 @@
         }
         rowEl.querySelector('.btn-play-particle-preview').hidden = true;
         rowEl.querySelector('.btn-replay-particle-preview').hidden = false;
+        rowEl.querySelector('.btn-stop-particle-preview').hidden = false;
 
         // "Preview ended" soft-timeout is only meaningful for kinds that
         // produce one-shot effects which drain to an empty canvas. Per
@@ -2252,7 +2834,7 @@
           }, PARTICLE_PREVIEW_ENDED_THRESHOLD_MS);
         }
 
-        state.particlePreviewState.set(anchorId, { stopFn: handle.stop, endedTimerId });
+        state.particlePreviewState.set(anchorId, { stopFn: handle.stop, endedTimerId, canvasEl });
       } catch (e) {
         showAnchorStatus(anchorId, 'Preview failed: ' + (e.message || e), 'error');
       }
@@ -2271,11 +2853,16 @@
       if (!st) return;
       try { st.stopFn?.(); } catch (_) {}
       if (st.endedTimerId !== null && st.endedTimerId !== undefined) clearTimeout(st.endedTimerId);
+      // Lifecycle parity (A4b triage 2026-05-31): remove canvas — see
+      // stopSpotlightPreview for the full rationale.
+      try { st.canvasEl?.remove?.(); } catch (_) {}
       state.particlePreviewState.delete(anchorId);
       const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
       if (row) {
         row.querySelector('.btn-play-particle-preview').hidden = false;
         row.querySelector('.btn-replay-particle-preview').hidden = true;
+        const stopBtn = row.querySelector('.btn-stop-particle-preview');
+        if (stopBtn) stopBtn.hidden = true;
         const label = row.querySelector('.particle-preview-ended-label');
         if (label) label.hidden = true;
       }
@@ -2340,6 +2927,10 @@
       const listEl = document.getElementById('spotlight-anchor-list');
       const emptyEl = document.getElementById('spotlight-anchor-empty');
       if (!listEl) return;
+      // Gate 8a — pre-existing A4a divergence closed. Mirrors A3's
+      // loadAndRenderParticlePanel at L1992 — stops any active 2D previews
+      // before the list rebuild destroys their canvas elements.
+      stopAllSpotlightPreviews();
       listEl.innerHTML = '';
       const vs = await waitForVenueSettings();
       if (!vs) {
@@ -2362,6 +2953,11 @@
     function renderSpotlightPanel(venueId, anchors) {
       const listEl  = document.getElementById('spotlight-anchor-list');
       const emptyEl = document.getElementById('spotlight-anchor-empty');
+      // Gate 7c — HAZARD C resolution (mirrors renderParticlePanel).
+      // NB: A4a's 2D path (stopAllSpotlightPreviews) is NOT also called here
+      // — that's the pre-existing A4a stopAll gap, tracked for Gate 8 panel-
+      // standardization. 7c stays in scope (3D-only).
+      stopAllSpotlight3dPreviews();
       listEl.innerHTML = '';
       const liveAnchors = (anchors || []).filter(a => a.venue_id === venueId);
       const pendingForVenue = Array.from(state.spotlightAnchorNew.entries())
@@ -2372,10 +2968,14 @@
 
       liveAnchors.forEach(a => listEl.appendChild(makeSpotlightAnchorRow(a, false)));
       pendingForVenue.forEach(([pendingId, info]) => {
+        // A4b §6.3 — pending kind chosen from the "+ Add" picker is stored
+        // on info.kind and fixes the row's context for its lifetime.
+        const stubKind = info.kind || SPOTLIGHT_KINDS[0];
         const stub = {
           id: pendingId, venue_id: info.venue_id,
-          type: 'spotlight', label: 'Spotlights',
-          payload: defaultSpotlightPayloadForKind(SPOTLIGHT_KINDS[0]),
+          type: 'spotlight',
+          label: defaultSpotlightLabelForKind(stubKind),
+          payload: defaultSpotlightPayloadForKind(stubKind),
         };
         listEl.appendChild(makeSpotlightAnchorRow(stub, true));
       });
@@ -2392,8 +2992,15 @@
       if (isDirty) li.classList.add('dirty');
 
       const payload = anchor.payload || {};
-      const kind = payload.kind || 'swept-beam-2d';
-      li.innerHTML = renderSpotlightAnchorRowHTML(anchor, payload, kind, isPending, isDirty);
+      const kind    = payload.kind || 'swept-beam-2d';
+      // A4b §6.1 — dispatch by payload.context (mirrors makeParticleAnchorRow).
+      // 2D path UNTOUCHED; 3D path uses parallel renderer + 3D action buttons.
+      const context = payload.context === '3d-three' ? '3d-three' : '2d-canvas';
+      li.dataset.context = context;
+
+      li.innerHTML = (context === '3d-three')
+        ? renderSpotlight3dAnchorRowHTML(anchor, payload, kind, isPending, isDirty)
+        : renderSpotlightAnchorRowHTML(anchor, payload, kind, isPending, isDirty);
       return li;
     }
 
@@ -2408,9 +3015,18 @@
 
         <div class="spotlight-field-row">
           <label>kind</label>
-          <select class="fld-kind" data-field="kind">
-            ${SPOTLIGHT_KINDS.map(k => `<option ${opt(k, kind)}>${k}</option>`).join('')}
-          </select>
+          ${isPending
+            ? `<select class="fld-kind" data-field="kind">
+                ${SPOTLIGHT_KINDS.map(k => `<option ${opt(k, kind)}>${k}</option>`).join('')}
+              </select>`
+            : `<span class="fld-kind-readonly mono">${escapeHTML(kind)}</span>
+              <input type="hidden" class="fld-kind" data-field="kind" value="${escapeAttr(kind)}">`
+          }
+          <!-- Gate 8a — §6.1 retrofit. class="fld-kind" on the hidden
+               input is REQUIRED: readSpotlightPayloadFromRow at L3470
+               queries '.fld-kind' (NOT [data-field=kind]). Hidden input
+               carries both attrs so the reader keeps working unchanged.
+               Gate 8b may later unify the selector. -->
         </div>
         <div class="spotlight-field-row">
           <label>label</label>
@@ -2427,14 +3043,16 @@
         <div class="spotlight-preview-canvas-wrap">
           <canvas class="spotlight-preview-canvas" width="480" height="240"></canvas>
         </div>
-        <div class="anchor-row-controls">
-          <button class="btn-play-spotlight-preview"   type="button">▶ Preview</button>
-          <button class="btn-replay-spotlight-preview" type="button" hidden>⟳ Replay</button>
-          <button class="btn-anchor-save"   type="button" ${isDirty ? '' : 'disabled'}>Save</button>
-          <button class="btn-anchor-cancel" type="button" ${isDirty ? '' : 'disabled'}>Cancel</button>
-          <button class="btn-anchor-delete" type="button">Delete</button>
+        <div class="anchor-row-actions">
+          <button class="btn-play-spotlight-preview"   type="button">▶ Play preview</button>
+          <button class="btn-replay-spotlight-preview" type="button" hidden>↻ Replay</button>
+          <button class="btn-stop-spotlight-preview"   type="button" hidden>■ Stop</button>
+          <button class="btn-anchor-save" type="button" ${isDirty ? '' : 'disabled'}>Save</button>
+          ${isPending
+            ? '<button type="button" class="btn-anchor-cancel">Cancel</button>'
+            : '<button type="button" class="btn-anchor-delete">Delete</button>'}
         </div>
-        <div class="anchor-status"></div>
+        <div class="anchor-status" data-status></div>
       `;
     }
 
@@ -2445,10 +3063,19 @@
         .map(e => `<option ${opt(e, cur)}>${e}</option>`).join('');
       const perItemNote = `expected length: ${count} (matches count)`;
 
-      switch (kind) {
-        case 'swept-beam-2d':
-          return `
-        <section class="spotlight-kind-section">
+      // Gate 8b — emit-all-three pattern (mirrors A3 + 7a-REDO 3D).
+      // All 3 kind-sections in DOM with [hidden] on non-current. Kind
+      // toggle becomes hide/show (DEFERRED-e closed for 2D spotlight).
+      // readSpotlightPayloadFromRow scopes per-kind queries by
+      // [data-kind-section="${kind}"] so overlap fields (hues,
+      // angle_init, base_alpha_range) don't leak across kinds at save.
+      //
+      // The unknown-kind default branch is gone — makeSpotlightAnchorRow
+      // only routes 2D-context rows here; 2D spotlight kinds are
+      // constrained to SPOTLIGHT_KINDS at the +Add picker.
+
+      const sweptBeam2dSection = `
+        <section class="spotlight-kind-section" data-kind-section="swept-beam-2d"${kind === 'swept-beam-2d' ? '' : ' hidden'}>
           <h4>swept-beam-2d</h4>
           <div class="spotlight-field-row">
             <label>hues (per-item)</label>
@@ -2490,9 +3117,8 @@
           </div>
         </section>`;
 
-        case 'pulsed-laser':
-          return `
-        <section class="spotlight-kind-section">
+      const pulsedLaserSection = `
+        <section class="spotlight-kind-section" data-kind-section="pulsed-laser"${kind === 'pulsed-laser' ? '' : ' hidden'}>
           <h4>pulsed-laser</h4>
           <div class="spotlight-field-row">
             <label>hues (per-item)</label>
@@ -2564,9 +3190,8 @@
           </div>
         </section>`;
 
-        case 'light-shaft':
-          return `
-        <section class="spotlight-kind-section">
+      const lightShaftSection = `
+        <section class="spotlight-kind-section" data-kind-section="light-shaft"${kind === 'light-shaft' ? '' : ' hidden'}>
           <h4>light-shaft</h4>
           <div class="spotlight-field-row">
             <label>x_init_norm (per-item)</label>
@@ -2603,30 +3228,270 @@
             <label>drift_ease</label>
             <select data-field="drift_ease">${easeOpts(payload.drift_ease)}</select>
           </div>
-        </section>`;
-
-        default:
-          return `<section class="spotlight-kind-section"><h4>unknown kind: ${escapeHTML(kind)}</h4></section>`;
-      }
-    }
-
-    function renderSpotlightSharedSection(payload, kind) {
-      const geomJson = escapeAttr(JSON.stringify(payload.geometry ?? {}, null, 2));
-      const colorBlock = kind === 'light-shaft'
-        ? `
+          <!-- Gate 8b — color MOVED from renderSpotlightSharedSection. Per
+               spec §1.2 amendment d50cbc9, only light-shaft uses scalar
+               color (swept-beam-2d + pulsed-laser are hue-driven). Moving
+               it per-kind eliminates the §1.2-amendment-shaped conditional
+               from shared + scopes the read cleanly inside light-shaft's
+               branch in readSpotlightPayloadFromRow. -->
           <div class="spotlight-field-row">
             <label>color</label>
             <textarea data-field="color" data-object rows="2">${escapeAttr(JSON.stringify(payload.color ?? {}, null, 2))}</textarea>
-          </div>`
-        : `
-          <!-- color OMITTED for hue-driven kinds per spec §1.2 amendment d50cbc9. -->`;
+          </div>
+        </section>`;
+
+      return sweptBeam2dSection + pulsedLaserSection + lightShaftSection;
+    }
+
+    function renderSpotlightSharedSection(payload, kind) {
+      // Gate 8b — color MOVED to light-shaft kind-section. Shared now
+      // emits only geometry (universal across all 2D spotlight kinds).
+      // Light-shaft's color textarea is in renderSpotlightKindSection's
+      // lightShaftSection block; readSpotlightPayloadFromRow's
+      // light-shaft branch reads it via sectionEl-scoped getJSON.
+      const _ = kind;  // kept param for signature stability; unused after color move
+      const geomJson = escapeAttr(JSON.stringify(payload.geometry ?? {}, null, 2));
       return `
         <section class="spotlight-shared-section">
           <h4>Shared</h4>
           <div class="spotlight-field-row">
             <label>geometry (incl. gradient_stops)</label>
             <textarea data-field="geometry" data-object rows="10">${geomJson}</textarea>
-          </div>${colorBlock}
+          </div>
+        </section>`;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ─── A4b — Spotlight 3D row renderers ──────────────────────────
+    // ═══════════════════════════════════════════════════════════════
+    // Mirrors renderSpotlightAnchorRowHTML's shape but emits 3D-specific
+    // canvas class + 3D-suffixed action buttons (`*-3d`). Canonical action
+    // row per Gate 5: .anchor-row-actions (styled), "▶ Play preview",
+    // ↻ U+21BB, <div class="anchor-status" data-status>. Cancel/Delete via
+    // ternary on isPending. In-row kind dropdown is context-scoped to
+    // SPOTLIGHT_KINDS_3D only (§6.3 — context fixed at +Add time).
+
+    function renderSpotlight3dAnchorRowHTML(anchor, payload, kind, isPending, isDirty) {
+      const opt = (val, cur) => `value="${val}"${val === cur ? ' selected' : ''}`;
+
+      return `
+        <div class="anchor-id-row">
+          <span class="anchor-id mono">${escapeHTML(anchor.id)}${isPending ? ' (pending)' : ''}</span>
+          <span class="anchor-kind-label">${escapeHTML(kind)} <span class="anchor-context-tag">3D</span></span>
+          <span class="anchor-dirty-dot"${isDirty ? '' : ' hidden'}>•</span>
+        </div>
+
+        <div class="spotlight-field-row">
+          <label>kind</label>
+          ${isPending
+            ? `<select class="fld-kind" data-field="kind">
+                ${SPOTLIGHT_KINDS_3D.map(k => `<option ${opt(k, kind)}>${k}</option>`).join('')}
+              </select>`
+            : `<span class="fld-kind-readonly mono">${escapeHTML(kind)}</span>
+              <input type="hidden" data-field="kind" value="${escapeAttr(kind)}">`
+          }
+          <!-- §6.1: saved rows show kind as read-only label (kind locked).
+               Hidden [data-field=kind] input gives 7d's reader a uniform
+               source: row.querySelector('[data-field=kind]').value works
+               for both pending (the <select>) and saved (this hidden input). -->
+        </div>
+        <div class="spotlight-field-row">
+          <label>label</label>
+          <input class="fld-label" type="text" data-field="label"
+                 value="${escapeAttr(anchor.label || defaultSpotlightLabelForKind(kind))}">
+        </div>
+        <div class="spotlight-field-row">
+          <label>count</label>
+          <input class="fld-count" type="number" min="1" step="1"
+                 data-field="count" value="${payload.count ?? ''}">
+        </div>
+
+        ${renderSpotlight3dKindSection(kind, payload)}
+        ${renderSpotlight3dSharedSection(payload, kind)}
+
+        <!-- 3D preview canvas (Gate 6 bookmark). -->
+        <div class="spotlight-3d-preview-canvas-wrap">
+          <canvas class="spotlight-3d-preview-canvas" width="480" height="240"></canvas>
+        </div>
+
+        <!-- Canonical action row (.anchor-row-actions). All buttons UNWIRED
+             in 7a — 7c wires Play/Replay/Stop, 7d wires Save/Cancel/Delete.
+             3D-suffixed class names prevent collision with A4a's event-
+             delegated 2D handlers. -->
+        <div class="anchor-row-actions">
+          <button type="button" class="btn-play-spotlight-3d-preview">▶ Play preview</button>
+          <button type="button" class="btn-replay-spotlight-3d-preview" hidden>↻ Replay</button>
+          <button type="button" class="btn-stop-spotlight-3d-preview"   hidden>■ Stop</button>
+          <button type="button" class="btn-anchor-save-3d">Save</button>
+          ${isPending
+            ? '<button type="button" class="btn-anchor-cancel-3d">Cancel</button>'
+            : '<button type="button" class="btn-anchor-delete-3d">Delete</button>'}
+        </div>
+        <div class="anchor-status" data-status></div>
+      `;
+    }
+
+    // Per-kind field section for 3D spotlight kinds. Each section wrapped in
+    // `<section class="spotlight-kind-section" data-kind-section="${kind}">`
+    // with `hidden` on non-current sections — 7b's kind-change handler
+    // toggles `hidden` between sections (within-context only per §6.3).
+    //
+    // GATE 7a-REDO (2026-05-28): rebuilt to mirror db/038's seeded payloads
+    // byte-faithfully. Each field's data-field name + shape matches what
+    // spotlight-3d.js (shell/venue-renderers/spotlight-3d.js) actually reads.
+    // Round-trip table proved against db/038 + renderer file:line traces.
+    //
+    // HAZARD C (per-item array length === count invariant):
+    //   - swept-beam-3d has FOUR per-item arrays: phis, theta_init, colors,
+    //     speeds. ALL use `data-array data-per-item` so the existing inline
+    //     validator (validateSpotlightArrayLengthInline) fires on edit. 7d
+    //     MUST also invoke save-time length validation per
+    //     validateSpotlightPayloadArrayLengths to prevent oversized save
+    //     with stale arrays. Renderer indexes these by [i] (spotlight-3d.js
+    //     L254/L266/L267/L279) — out-of-bounds = NaN cone positions
+    //     (silent broken effect, not a crash).
+    //   - point-light has NO per-item arrays.
+    function renderSpotlight3dKindSection(kind, payload) {
+      const jsonOr = (v, fallback) => escapeAttr(v !== undefined && v !== null
+        ? JSON.stringify(v, null, 2)
+        : JSON.stringify(fallback, null, 2));
+      const arrOr  = (v, fallback) => escapeAttr(JSON.stringify(v ?? fallback));
+      const count = payload.count ?? 0;
+      const perItemNote = `expected length: ${count} (matches count)`;
+
+      // ── swept-beam-3d ───────────────────────────────────────────────
+      // Mirrors anc_spot_stadium_beams3d (db/038 L179-207).
+      // Renderer: spotlight-3d.js:handleSweptBeam3d (L232+).
+      const sweptBeam3dSection = `
+        <section class="spotlight-kind-section" data-kind-section="swept-beam-3d"${kind === 'swept-beam-3d' ? '' : ' hidden'}>
+          <h4>swept-beam-3d fields</h4>
+          <div class="spotlight-field-row">
+            <label>phis (per-item, length=count) <span class="field-note">— sphere phi per cone</span></label>
+            <div>
+              <textarea data-field="phis" data-array data-per-item rows="1">${arrOr(payload.phis, [])}</textarea>
+              <div class="array-length-note">${perItemNote}</div>
+            </div>
+          </div>
+          <div class="spotlight-field-row">
+            <label>theta_init (per-item)</label>
+            <div>
+              <textarea data-field="theta_init" data-array data-per-item rows="1">${arrOr(payload.theta_init, [])}</textarea>
+              <div class="array-length-note">${perItemNote}</div>
+            </div>
+          </div>
+          <div class="spotlight-field-row">
+            <label>colors (per-item, hex strings) <span class="field-note">— per-cone color, e.g. "#fffce0"</span></label>
+            <div>
+              <textarea data-field="colors" data-array data-per-item rows="1">${arrOr(payload.colors, [])}</textarea>
+              <div class="array-length-note">${perItemNote}</div>
+            </div>
+          </div>
+          <div class="spotlight-field-row">
+            <label>speeds (per-item) <span class="field-note">— angular velocity per cone; sign = direction</span></label>
+            <div>
+              <textarea data-field="speeds" data-array data-per-item rows="1">${arrOr(payload.speeds, [])}</textarea>
+              <div class="array-length-note">${perItemNote}</div>
+            </div>
+          </div>
+          <div class="spotlight-field-row">
+            <label>sphere_radius</label>
+            <input type="number" step="1" data-field="sphere_radius" value="${payload.sphere_radius ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>wobble_amplitude</label>
+            <input type="number" step="0.01" data-field="wobble_amplitude" value="${payload.wobble_amplitude ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>wobble_speed</label>
+            <input type="number" step="0.001" data-field="wobble_speed" value="${payload.wobble_speed ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>look_at (3-vec)</label>
+            <textarea data-field="look_at" data-array rows="1">${arrOr(payload.look_at, [0, 0, 0])}</textarea>
+          </div>
+          <div class="spotlight-field-row">
+            <label>geometry (cone shape)</label>
+            <textarea data-field="geometry" data-object rows="8">${jsonOr(payload.geometry, { radius_top:0, radius_bottom:35, height:300, radial_segments:16, height_segments:1, open_ended:true, translate_y:-150 })}</textarea>
+          </div>
+          <div class="spotlight-field-row">
+            <label>material (MeshBasicMaterial)</label>
+            <textarea data-field="material" data-object rows="5">${jsonOr(payload.material, { opacity:0.06, side:'back', depth_write:false, transparent:true })}</textarea>
+          </div>
+        </section>`;
+
+      // ── point-light ─────────────────────────────────────────────────
+      // Mirrors anc_spot_speakeasy_candles (db/038 L226-247).
+      // Renderer: spotlight-3d.js:handlePointLight (L374+).
+      const pointLightSection = `
+        <section class="spotlight-kind-section" data-kind-section="point-light"${kind === 'point-light' ? '' : ' hidden'}>
+          <h4>point-light fields</h4>
+          <div class="spotlight-field-row">
+            <label>color (hex)</label>
+            <input type="text" data-field="color" value="${escapeAttr(payload.color ?? '#ffaa33')}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>sprite_size</label>
+            <input type="number" step="0.1" min="0" data-field="sprite_size" value="${payload.sprite_size ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>size_attenuation</label>
+            <input type="checkbox" data-field="size_attenuation"${payload.size_attenuation ? ' checked' : ''}>
+          </div>
+          <div class="spotlight-field-row">
+            <label>base_opacity</label>
+            <input type="number" min="0" max="1" step="0.05" data-field="base_opacity" value="${payload.base_opacity ?? ''}">
+          </div>
+          <div class="spotlight-field-row">
+            <label>depth_write</label>
+            <input type="checkbox" data-field="depth_write"${payload.depth_write ? ' checked' : ''}>
+          </div>
+          <div class="spotlight-field-row">
+            <label>transparent</label>
+            <input type="checkbox" data-field="transparent"${payload.transparent ? ' checked' : ''}>
+          </div>
+          <div class="spotlight-field-row">
+            <label>position_layout</label>
+            <select data-field="position_layout">
+              <option value="ring"${(payload.position_layout || 'ring') === 'ring' ? ' selected' : ''}>ring</option>
+            </select>
+          </div>
+          <div class="spotlight-field-row">
+            <label>r_range (radial distance)</label>
+            <textarea data-field="r_range" data-array rows="1">${arrOr(payload.r_range, [80, 330])}</textarea>
+          </div>
+          <div class="spotlight-field-row">
+            <label>y_range (vertical)</label>
+            <textarea data-field="y_range" data-array rows="1">${arrOr(payload.y_range, [-120, -80])}</textarea>
+          </div>
+          <div class="spotlight-field-row">
+            <label>theta_range</label>
+            <textarea data-field="theta_range" data-array rows="1">${arrOr(payload.theta_range, [0, 6.283185])}</textarea>
+          </div>
+          <div class="spotlight-field-row">
+            <label>flicker (object)</label>
+            <textarea data-field="flicker" data-object rows="5">${jsonOr(payload.flicker, { mode:'global-sync-random', frame_period:4, opacity_min:0.5, opacity_max:1 })}</textarea>
+          </div>
+        </section>`;
+
+      return sweptBeam3dSection + pointLightSection;
+    }
+
+    // Shared fields for all 3D spotlight kinds. Trimmed in Gate 7a-REDO:
+    // only `context` is truly shared. The `color` field previously emitted
+    // here moved INTO each per-kind section because swept-beam-3d uses
+    // a per-cone `colors[]` array (string[count]) while point-light uses a
+    // scalar `color` (hex string). The two shapes share a name but not
+    // semantics — keeping `color` in shared would have leaked the scalar
+    // form into swept-beam-3d's reader.
+    function renderSpotlight3dSharedSection(payload, kind) {
+      const _ = kind;  // currently no cross-kind branching needed
+      return `
+        <section class="spotlight-shared-section">
+          <input type="hidden" data-field="context" value="3d-three">
+          <div class="spotlight-field-row">
+            <label>context</label>
+            <span class="field-readonly mono">3d-three</span>
+          </div>
         </section>`;
     }
 
@@ -2640,22 +3505,22 @@
 
       const fieldName = target.dataset.field;
 
-      // Kind selector: re-render the row from a fresh default payload of
-      // the new kind. The user's other-kind edits are lost — A4a accepts
-      // this trade per the proposal (kind switches are rare in practice).
-      // (NB: A3's particle panel uses hide/show via [data-kind-section]
-      // toggles; A4a's proposal locked re-render — different from A3.)
+      // Kind selector: unified hide/show toggle for both 2D and 3D rows
+      // (Gate 8b — DEFERRED-e closed for 2D spotlight). Both kind
+      // sections are emitted with [data-kind-section] + [hidden] on
+      // non-current; toggle swaps visibility. The scoped reader handles
+      // overlap-field safety at save time.
+      //
+      // Behavior change vs A4a's previous 2D re-render: switching kind
+      // PRESERVES other-kind sections' field values (§6.7 intent). It
+      // no longer resets new-kind fields to defaultSpotlightPayloadForKind
+      // defaults — sections show whatever was rendered at row creation
+      // time. The empty-fields-on-first-toggle cost is accepted as the
+      // intended DEFERRED-e fix.
       if (fieldName === 'kind') {
-        const newKind = target.value;
-        const freshPayload = defaultSpotlightPayloadForKind(newKind);
-        const labelEl = row.querySelector('.fld-label');
-        const newHTML = renderSpotlightAnchorRowHTML(
-          { id: anchorId, venue_id: row.dataset.venueId, label: labelEl ? labelEl.value : 'Spotlights' },
-          freshPayload, newKind,
-          state.spotlightAnchorNew.has(anchorId),
-          true
-        );
-        row.innerHTML = newHTML;
+        row.querySelectorAll('[data-kind-section]').forEach(s => {
+          s.hidden = (s.dataset.kindSection !== target.value);
+        });
         return;
       }
 
@@ -2672,7 +3537,18 @@
     }
 
     function validateSpotlightArrayLengthInline(row, ta) {
-      const countInput = row.querySelector('.fld-count');
+      // Gate 8b — skip hidden sections. After emit-all-three (8b refactor
+      // of renderSpotlightKindSection), the count-change branch in
+      // onSpotlightAnchorFieldInput iterates ALL [data-per-item] textareas
+      // including hidden ones; without this guard, hidden sections
+      // accumulate phantom .array-length-mismatch state that surfaces as
+      // red when the user toggles kind. The save path is NOT gated on
+      // inline state (validateSpotlightPayloadArrayLengths is payload-
+      // kind-scoped), so this guard is cosmetic-only — but still needed.
+      const section = ta.closest('[data-kind-section]');
+      if (section?.hidden) return;
+      // Gate 8b reader-unification: .fld-count → [data-field=count].
+      const countInput = row.querySelector('input[type="number"][data-field="count"]');
       const expectedCount = parseInt(countInput?.value ?? '0', 10);
       // The label-note lives in the same parent wrapper as the textarea.
       const note = ta.parentElement?.querySelector('.array-length-note');
@@ -2697,53 +3573,88 @@
     }
 
     function readSpotlightPayloadFromRow(row) {
-      const payload = {};
+      // Gate 8b — full rewrite. The previous universal forEach pattern
+      // worked because switch+return-one-section guaranteed only ONE
+      // kind's fields in DOM. After 8b's emit-all-three, ALL three kind-
+      // sections are in DOM with [hidden] on non-current — universal
+      // forEach would extract every kind's fields and corrupt the
+      // payload across the overlap fields (hues, angle_init,
+      // base_alpha_range). Solution: per-kind branches reading via
+      // sectionEl-scoped getEl, exactly like readSpotlight3dPayloadFromRow
+      // (7c). The active kind's section is the only one queried.
+      //
+      // Reader-selector unification: kind/count/label now read via
+      // [data-field="${name}"] (was .fld-kind / .fld-count / .fld-label).
+      // Markup classes retained for zero-risk on any external selector.
       const errors = [];
 
-      const kind  = row.querySelector('.fld-kind')?.value;
-      const count = parseInt(row.querySelector('.fld-count')?.value ?? '0', 10);
-      payload.kind    = kind;
-      payload.context = '2d-canvas';
-      payload.count   = count;
+      const kind = row.querySelector('[data-field="kind"]')?.value;
+      const countRaw = row.querySelector('input[type="number"][data-field="count"]')?.value ?? '0';
+      const count = parseInt(countRaw, 10);
+      const label = row.querySelector('[data-field="label"]')?.value ?? 'Spotlights';
 
-      // Scalar number inputs.
-      row.querySelectorAll('input[type="number"][data-field]').forEach(el => {
-        if (el.dataset.field === 'count') return;
-        const n = Number(el.value);
-        if (Number.isNaN(n)) errors.push({ field: el.dataset.field, message: 'not a number' });
-        else payload[el.dataset.field] = n;
-      });
+      const payload = { kind, context: '2d-canvas', count };
 
-      // Select inputs (ease enums + kind already handled).
-      row.querySelectorAll('select[data-field]').forEach(el => {
-        if (el.dataset.field === 'kind') return;
-        payload[el.dataset.field] = el.value;
-      });
+      // Section-scoped helpers — prevents overlap-field leak.
+      const sectionEl = row.querySelector(`[data-kind-section="${kind}"]`);
+      const sharedEl  = row.querySelector('.spotlight-shared-section');
+      if (!sectionEl) {
+        errors.push({ field: 'kind', message: `no [data-kind-section="${kind}"] element in row` });
+        return { payload, label, errors };
+      }
+      const getEl   = (name) => sectionEl.querySelector(`[data-field="${name}"]`)
+                             || sharedEl?.querySelector(`[data-field="${name}"]`);
+      const getStr  = (name) => getEl(name)?.value;
+      const getNum  = (name) => {
+        const v = getEl(name)?.value;
+        if (v == null || v === '') return undefined;
+        const n = Number(v);
+        if (Number.isNaN(n)) { errors.push({ field: name, message: 'not a number' }); return undefined; }
+        return n;
+      };
+      const getJSON = (name) => {
+        const v = getEl(name)?.value;
+        if (v == null || v === '') return undefined;
+        try { return JSON.parse(v); }
+        catch (e) { errors.push({ field: name, message: 'JSON parse failed: ' + e.message }); return undefined; }
+      };
 
-      // Array textareas.
-      row.querySelectorAll('textarea[data-array][data-field]').forEach(ta => {
-        try {
-          payload[ta.dataset.field] = JSON.parse(ta.value);
-        } catch (e) {
-          errors.push({ field: ta.dataset.field, message: 'JSON parse failed: ' + e.message });
+      if (kind === 'swept-beam-2d') {
+        for (const name of ['hues','angle_init','base_alpha_range','sweep_target_range','sweep_alpha_range','sweep_duration_range_ms']) {
+          const v = getJSON(name); if (v !== undefined) payload[name] = v;
         }
-      });
-
-      // Object textareas (geometry, color).
-      row.querySelectorAll('textarea[data-object][data-field]').forEach(ta => {
-        try {
-          payload[ta.dataset.field] = JSON.parse(ta.value);
-        } catch (e) {
-          errors.push({ field: ta.dataset.field, message: 'JSON parse failed: ' + e.message });
+        const ease = getStr('sweep_ease'); if (ease !== undefined) payload.sweep_ease = ease;
+        const stagger = getNum('stagger_ms'); if (stagger !== undefined) payload.stagger_ms = stagger;
+      } else if (kind === 'pulsed-laser') {
+        for (const name of ['hues','angle_init','drift_speeds','base_widths_px']) {
+          const v = getJSON(name); if (v !== undefined) payload[name] = v;
         }
-      });
+        for (const name of ['bpm','drift_range','base_alpha','peak_alpha','peak_width_mult','attack_ms','decay_ms','first_pulse_offset_beats']) {
+          const v = getNum(name); if (v !== undefined) payload[name] = v;
+        }
+        for (const name of ['attack_ease','decay_ease']) {
+          const v = getStr(name); if (v !== undefined) payload[name] = v;
+        }
+      } else if (kind === 'light-shaft') {
+        for (const name of ['x_init_norm','base_alpha_range','width_range_px','drift_alpha_range','drift_duration_range_ms']) {
+          const v = getJSON(name); if (v !== undefined) payload[name] = v;
+        }
+        for (const name of ['drift_distance_px','drift_stagger_max_ms']) {
+          const v = getNum(name); if (v !== undefined) payload[name] = v;
+        }
+        const ease = getStr('drift_ease'); if (ease !== undefined) payload.drift_ease = ease;
+        // Gate 8b — color now lives in light-shaft kind-section (was shared).
+        const color = getJSON('color'); if (color !== undefined) payload.color = color;
+      } else {
+        errors.push({ field: 'kind', message: `unknown 2D spotlight kind: "${kind}"` });
+      }
 
-      // Per-item array length check.
+      // Shared: geometry (universal across all 2D spotlight kinds).
+      const geom = getJSON('geometry'); if (geom !== undefined) payload.geometry = geom;
+
+      // Per-item array length validation (unchanged — payload-kind-scoped).
       const lengthErrors = validateSpotlightPayloadArrayLengths(payload).errors;
       errors.push(...lengthErrors);
-
-      const labelEl = row.querySelector('.fld-label');
-      const label = labelEl ? labelEl.value : 'Spotlights';
 
       return { payload, label, errors };
     }
@@ -2858,16 +3769,21 @@
       // PERMIT — no count gate (unlike A2/A3 PREVENT which short-circuit
       // when count >= 1). Multi-anchor authoring is the schema invariant
       // per spec §4.5 / D2.
-      const newId = 'anc_' + (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '_' + Math.random().toString(36).slice(2)));
-      state.spotlightAnchorNew.set(newId, { venue_id: venueId });
+      // A4b §6.3 — kind read from the panel-header picker. Chosen kind
+      // fixes the new row's context for its lifetime; in-row kind dropdown
+      // is context-scoped, so to author cross-context cancel + re-add.
+      const kindSel = document.getElementById('spotlight-add-kind');
+      const kind    = (kindSel && kindSel.value) || SPOTLIGHT_KINDS[0];
+      const newId   = 'anc_' + (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '_' + Math.random().toString(36).slice(2)));
+      state.spotlightAnchorNew.set(newId, { venue_id: venueId, kind });
       state.spotlightAnchorDirty.add(newId);
       loadAndRenderSpotlightPanel(venueId);
     }
 
     function onPlaySpotlightPreview(rowEl) {
       const anchorId = rowEl.dataset.anchorId;
-      const canvasEl = rowEl.querySelector('.spotlight-preview-canvas');
-      if (!canvasEl) return;
+      const wrapEl   = rowEl.querySelector('.spotlight-preview-canvas-wrap');
+      if (!wrapEl) return;
       const { payload, errors } = readSpotlightPayloadFromRow(rowEl);
       if (errors.length > 0) {
         showAnchorStatus(
@@ -2878,6 +3794,22 @@
         return;
       }
       stopSpotlightPreview(anchorId);
+
+      // Canvas lifecycle parity (A4b triage, 2026-05-31): fresh canvas per
+      // Play sidesteps the GPU-resource-pressure cross-context contamination
+      // documented in docs/SESSION-A4B-VERIFICATION-PAUSE.md §1.6 item 4 —
+      // Chrome's hardware-accelerated canvas allocator can refuse
+      // getContext('2d') after a prior WebGL context allocation, even
+      // after the WebGL context was disposed. Fresh DOM canvas per Play
+      // makes each 2D allocation independent of prior state. Mirrors the
+      // 3D onPlay lifecycle.
+      wrapEl.querySelectorAll('canvas').forEach(c => c.remove());
+      const canvasEl = document.createElement('canvas');
+      canvasEl.className = 'spotlight-preview-canvas';
+      canvasEl.width  = 480;
+      canvasEl.height = 240;
+      wrapEl.appendChild(canvasEl);
+
       const anchor = { id: anchorId, payload };
       try {
         const handle = window.elsewhere?.spotlightRenderer?.spotlightAnchorRenderer?.(
@@ -2887,9 +3819,10 @@
           showAnchorStatus(anchorId, 'Preview failed — renderer returned no handle', 'error');
           return;
         }
-        state.spotlightPreviewState.set(anchorId, { stopFn: handle.stop });
+        state.spotlightPreviewState.set(anchorId, { stopFn: handle.stop, canvasEl });
         rowEl.querySelector('.btn-play-spotlight-preview').hidden   = true;
         rowEl.querySelector('.btn-replay-spotlight-preview').hidden = false;
+        rowEl.querySelector('.btn-stop-spotlight-preview').hidden   = false;
       } catch (e) {
         showAnchorStatus(anchorId, 'Preview error: ' + (e.message || e), 'error');
       }
@@ -2905,13 +3838,19 @@
       const st = state.spotlightPreviewState.get(anchorId);
       if (!st) return;
       try { st.stopFn?.(); } catch (_) {}
+      // Lifecycle parity (A4b triage 2026-05-31): remove canvas from DOM
+      // so the next Play allocates a fresh element. Wrap's aspect-ratio
+      // CSS holds the bordered box shape stable while the wrap is empty.
+      try { st.canvasEl?.remove?.(); } catch (_) {}
       state.spotlightPreviewState.delete(anchorId);
       const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
       if (row) {
         const playBtn   = row.querySelector('.btn-play-spotlight-preview');
         const replayBtn = row.querySelector('.btn-replay-spotlight-preview');
+        const stopBtn   = row.querySelector('.btn-stop-spotlight-preview');
         if (playBtn)   playBtn.hidden   = false;
         if (replayBtn) replayBtn.hidden = true;
+        if (stopBtn)   stopBtn.hidden   = true;
       }
     }
 
@@ -2923,6 +3862,934 @@
 
     function onStopAllSpotlightPreviews() {
       stopAllSpotlightPreviews();
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // ─── Stage A4b — 3D preview infrastructure ─────────────────────
+    // ═══════════════════════════════════════════════════════════════
+    // Shared helpers for both 3D anchor types (spotlight-3d, particle-3d).
+    // Builders are loaded via shell/venue-renderers/{spotlight-3d,particle-3d}.js
+    // and registered under distinct registry keys ('spotlight-3d', 'particle-3d')
+    // — looked up by the A7 lookup-key pattern:
+    //   key = payload.context === '3d-three' ? anchor.type + '-3d' : anchor.type
+    // (anchor.type is the COLUMN on venue_anchors, NOT a payload field — see
+    // shell/venue-renderers/{spotlight,particle}-3d.js Entry dispatcher.)
+    //
+    // Contract differences from A4a:
+    //   - 3D builders return { update(t), dispose() } — caller owns RAF
+    //   - A4a builders return { stop() }              — self-driven RAF
+    //   - Teardown ordering is critical: disposed-flag FIRST, then cancel
+    //     RAF, then dispose builder, then dispose WebGL + force context loss
+    //   - createPreviewContext3d lazy-constructs the Three.js renderer per click
+
+    /**
+     * Derive deterministic (width, height) for a 3D preview canvas.
+     *
+     * The browser default for an attribute-less <canvas> is 300×150 — non-zero
+     * (so WebGLRenderer doesn't immediately error) but wrong for the preview
+     * surface (it'll be visually distorted by the CSS's aspect-ratio:2/1 sizing).
+     * A4a's preview canvas markup carries explicit `width="480" height="240"`
+     * attributes — Gate 7's 3D canvas markup follows the same pattern. This
+     * helper handles both paths defensively:
+     *
+     *   - Explicit attrs (A4a fast-path): canvasEl.width/.height return the
+     *     attribute values directly. Helper returns them as-is.
+     *   - CSS-sized, visible (defensive fallback A): explicit attrs missing →
+     *     fall back to getBoundingClientRect() for the rendered size, then push
+     *     derived values to canvasEl.width/.height so the buffer matches.
+     *   - Hidden / off-DOM (defensive fallback B): explicit attrs missing AND
+     *     getBoundingClientRect() returns zero → fall back to A4a's 480×240.
+     *
+     * Aspect is ALWAYS a finite non-zero number; WebGL buffer ALWAYS matches
+     * the dimensions reported.
+     */
+    function deriveCanvasDimensions(canvasEl) {
+      const FALLBACK_WIDTH    = 480;
+      const FALLBACK_HEIGHT   = 240;
+      // HEURISTIC sentinel: 300×150 is the browser's UA default for a canvas
+      // with NO width/height attribute set. This is a heuristic, not a
+      // guaranteed signal — has a harmless false-positive if someone authors
+      // a real 300×150 canvas (won't happen, Gate 7 emits 480×240 markup), and
+      // even the false-positive just re-derives a sane size via the fallbacks.
+      const BROWSER_DEFAULT_W = 300;
+      const BROWSER_DEFAULT_H = 150;
+
+      let w = canvasEl.width;
+      let h = canvasEl.height;
+      const hasExplicitAttrs = !(w === BROWSER_DEFAULT_W && h === BROWSER_DEFAULT_H);
+
+      if (!hasExplicitAttrs) {
+        const rect = canvasEl.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          w = Math.round(rect.width);
+          h = Math.round(rect.height);
+        } else {
+          w = FALLBACK_WIDTH;
+          h = FALLBACK_HEIGHT;
+        }
+        // Push derived values back so the drawing buffer is sized correctly
+        // and subsequent canvasEl.width/.height reads return the same values.
+        canvasEl.width  = w;
+        canvasEl.height = h;
+      }
+
+      return { width: w, height: h };
+    }
+
+    /**
+     * Per-kind FOV for the 3D preview camera.
+     *
+     * Each kind has a characteristic viewing angle tuned for the preview surface
+     * (480×240, 2:1 aspect). Looser FOV for cone-beams (visible across the
+     * sweep arc), tighter for point-cloud (close-up twinkle inspection).
+     */
+    function previewFovForKind(kind) {
+      switch (kind) {
+        case 'swept-beam-3d':  return 90;   // A4b triage 2026-05-31: 60° → 90° (panorama-center POV needs wide FOV; see positionCameraForKind below)
+        case 'point-light':    return 55;
+        case 'point-cloud-3d': return 50;
+        case 'volumetric-3d':  return 65;
+        default:               return 55;
+      }
+    }
+
+    /**
+     * Position the preview camera for the kind.
+     *
+     * Tuned per-kind to frame the effect's natural extent in the preview surface.
+     * Values mirror karaoke/stage.html's AMBIENT_PROFILES camera placements
+     * (where applicable) — keep visual parity between admin preview and stage.
+     */
+    function positionCameraForKind(camera, kind) {
+      // A4b triage 2026-05-31 — Fix 2 camera framing. Original values
+      // placed the camera at distance 5-18 from origin, but the source
+      // anchor geometry lives at sphere_radius 80-490 (cones, candles,
+      // smoke) — entirely outside the camera frustum. Updated values
+      // are MATH-DERIVED not visually confirmed; Mike eyeballs each and
+      // we iterate any off-frame.
+      switch (kind) {
+        case 'swept-beam-3d':
+          // Cones at sphere_radius=380, clustered near +Y (phi 0.12-0.15).
+          // Camera at origin matches karaoke's panorama-center POV; looks
+          // straight up at the cone cluster via the 90° FOV from
+          // previewFovForKind.
+          camera.position.set(0, 0, 0);
+          camera.lookAt(0, 380, 0);
+          break;
+        case 'point-light':
+          // 40 candles in a flat ring r=80-330 at y=-120 to -80.
+          // External viewpoint, camera high and forward, looking down.
+          camera.position.set(0, 80, 350);
+          camera.lookAt(0, -100, 0);
+          break;
+        case 'point-cloud-3d':
+          // UNCHANGED — Mike confirms the phone-lights render correctly
+          // from this near-origin POV (point sprites visible at any
+          // distance via sizeAttenuation).
+          camera.position.set(0, 1.5, 5);
+          camera.lookAt(0, 1, 0);
+          break;
+        case 'volumetric-3d':
+          // 60 smoke spheres r=50-350, y range ≈ -196 to +24 + drift up.
+          // External viewpoint far enough to see the drifting volume.
+          camera.position.set(0, 50, 450);
+          camera.lookAt(0, -50, 0);
+          break;
+        default:
+          camera.position.set(0, 5, 12);
+          camera.lookAt(0, 2, 0);
+      }
+    }
+
+    /**
+     * Construct a 3D preview context (WebGLRenderer + scene + camera).
+     *
+     * Lazy — called once per Play click. Returns null if window.THREE is not
+     * loaded (Three.js CDN script tag missing). Caller is responsible for
+     * disposing via tearDownPreview3d when the preview ends.
+     */
+    function createPreviewContext3d(canvasEl, kind) {
+      const THREE = window.THREE;
+      if (!THREE) {
+        console.warn('preview3d: window.THREE not loaded (CDN script tag missing at admin-venues.html top?)');
+        return null;
+      }
+
+      // Derive deterministic dimensions BEFORE constructing the renderer.
+      // Avoids the "black preview" failure mode where an attribute-less canvas
+      // returns browser-default 300×150 (wrong aspect for the CSS's 2:1 sizing)
+      // or a hidden-section canvas returns zero from CSS layout queries.
+      const dims = deriveCanvasDimensions(canvasEl);
+
+      const webglRenderer = new THREE.WebGLRenderer({
+        canvas:    canvasEl,
+        antialias: true,
+        alpha:     true,
+      });
+      webglRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      // setSize 3rd arg = false: don't override the canvas's CSS style — the
+      // preview surface is bounded by CSS (width:100%, aspect-ratio:2/1).
+      webglRenderer.setSize(dims.width, dims.height, false);
+
+      const scene  = new THREE.Scene();
+      const aspect = dims.width / dims.height;
+      const fov    = previewFovForKind(kind);
+      const camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 2000);
+      positionCameraForKind(camera, kind);
+
+      return { webglRenderer, scene, camera };
+    }
+
+    /**
+     * Per-frame tick for a 3D preview (caller-owns-RAF).
+     *
+     * Frame-guard FIRST: if the preview was torn down between RAF schedule and
+     * fire, st.disposed is true and we bail BEFORE touching the handle (which
+     * may already be disposed). The handle's internal _disposed guard is the
+     * second line of defense.
+     */
+    function tickPreview3d(st, timeMs) {
+      if (st.disposed) return;
+      try {
+        st.handle.update(timeMs);
+        st.webglRenderer.render(st.scene, st.camera);
+      } catch (e) {
+        console.warn('preview3d: tick error', e);
+        return;
+      }
+      st.rafId = requestAnimationFrame((t) => tickPreview3d(st, t));
+    }
+
+    /**
+     * Tear down a 3D preview surface — complete WebGL cleanup.
+     *
+     * Ordering is load-bearing:
+     *   1. Set st.disposed = true FIRST so any in-flight tickPreview3d RAF
+     *      that fires between cancelAnimationFrame and dispose returns early.
+     *   2. cancelAnimationFrame to prevent the next tick from being scheduled.
+     *   3. Dispose the builder handle (releases geometry/materials it owns).
+     *   4. Dispose the WebGLRenderer + force context loss (releases the WebGL
+     *      context — browsers cap active contexts ~8-16).
+     *
+     * Gate 7 will additionally restore the Play/Replay button visibility on
+     * the row when this is called from an explicit Stop click; that UI
+     * restoration is intentionally NOT in this helper because it shouldn't
+     * fire on the path where teardown is triggered by row removal (Gate 7
+     * delete-anchor path).
+     */
+    function tearDownPreview3d(st) {
+      if (!st) return;
+      st.disposed = true;
+      if (st.rafId) {
+        cancelAnimationFrame(st.rafId);
+        st.rafId = null;
+      }
+      try { st.handle?.dispose?.(); } catch (_) {}
+      try {
+        st.webglRenderer?.dispose?.();
+        st.webglRenderer?.forceContextLoss?.();
+      } catch (_) {}
+      // Canvas lifecycle (A4b Fix 1-redo, 2026-05-31): remove the canvas
+      // from the DOM after disposing the renderer. The wrap div's
+      // aspect-ratio:2/1 CSS keeps its bounding box stable when empty
+      // — no layout jump. Next Play creates a fresh canvas in the wrap
+      // (see onPlay{Spotlight,Particle}3dPreview's lifecycle block).
+      try { st.canvasEl?.remove?.(); } catch (_) {}
+      st.canvasEl      = null;
+      st.handle        = null;
+      st.webglRenderer = null;
+      st.scene         = null;
+      st.camera        = null;
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // ─── Stage A4b GATE 7c — 3D preview readers + lifecycle ────────
+    // ═══════════════════════════════════════════════════════════════
+    // Per-row Preview/Replay/Stop wiring for 3D rows + the per-section-
+    // scoped payload readers that BOTH Preview AND Save (Gate 7d) call.
+    //
+    // KEY INVARIANTS (the 7d acceptance criteria locked at 7a-REDO):
+    //   - Reader query scoping: every per-kind field read goes through
+    //     getEl() which routes to sectionEl.querySelector(...) — NEVER
+    //     row-wide. Prevents leak across kind-section duplicate-named
+    //     fields (color/depth_write/transparent/y_flatten_factor/y_offset
+    //     in particle 3D).
+    //   - Kind source: [data-field="kind"] — matches pending <select>
+    //     AND saved hidden input (the 7b uniform-source pattern).
+    //   - JSON aggregate-to-error: all 25 JSON fields flow through
+    //     getJSON's try/catch + errors.push. NO silent drops.
+    //   - context: '3d-three' from shared hidden input, literal fallback.
+    //   - Per-item length invariant (swept-beam-3d's phis/theta_init/
+    //     colors/speeds): length === count check → errors.push.
+    //   - Preview blocks on errors > 0 (matches A4a 2D L3631-3638).
+    //
+    // ONE-AT-A-TIME 3D BUDGET (HAZARD B):
+    //   - Starting a 3D preview on ANY row tears down ALL OTHER 3D
+    //     previews (across spotlight AND particle 3D Maps — both
+    //     compete for the ~16 WebGL context cap). 2D previews are
+    //     independent and persist.
+    //
+    // REPLAY = PLAY (per 7c review): no separate onReplay function.
+    //   The Play handler always re-allocates fresh context + fresh
+    //   handle, which IS Replay's semantics. Wire handler routes both
+    //   .btn-play-X-3d-preview AND .btn-replay-X-3d-preview to the
+    //   same on...3dPreview handler.
+
+    /**
+     * Read a 3D spotlight row's form state into a renderer-consumable payload.
+     * Shared by Preview (7c) AND Save (Gate 7d).
+     *
+     * Returns { payload, errors, label }.
+     *   - errors: array of {field, message}. Caller bails BEFORE consuming
+     *     payload when errors.length > 0.
+     *   - label: row-level label input value (returned alongside so callers
+     *     don't re-query).
+     */
+    function readSpotlight3dPayloadFromRow(row) {
+      const errors = [];
+
+      // ── Row-level reads (NOT scoped to any [data-kind-section]). ──
+      // Kind: [data-field="kind"] matches pending <select> AND saved hidden
+      // input. Uniform source per 7b.
+      const kind = row.querySelector('[data-field="kind"]')?.value;
+      if (!kind) {
+        errors.push({ field: 'kind', message: 'no kind element found on row' });
+        return { payload: { context: '3d-three' }, errors, label: '' };
+      }
+      const countRaw = row.querySelector('input[type="number"][data-field="count"]')?.value;
+      const count = parseInt(countRaw ?? '', 10);
+      if (Number.isNaN(count)) errors.push({ field: 'count', message: 'count not a valid integer' });
+      // Label: DOM-order first match. No kind-section emits a label field
+      // (verified in renderSpotlight3dKindSection), so the first hit is the
+      // row-top-level input.
+      const label = row.querySelector('[data-field="label"]')?.value ?? '';
+
+      // ── Section-scoped helpers (the per-kind-section query scoping). ──
+      const sectionEl = row.querySelector(`[data-kind-section="${kind}"]`);
+      const sharedEl  = row.querySelector('.spotlight-shared-section');
+      if (!sectionEl) {
+        errors.push({ field: 'kind', message: `no [data-kind-section="${kind}"] element in row` });
+        return { payload: { kind, context: '3d-three' }, errors, label };
+      }
+      const getEl   = (name) => sectionEl.querySelector(`[data-field="${name}"]`)
+                             || sharedEl?.querySelector(`[data-field="${name}"]`);
+      const getStr  = (name) => getEl(name)?.value;
+      const getBool = (name) => !!getEl(name)?.checked;
+      const getNum  = (name) => {
+        const v = getEl(name)?.value;
+        if (v == null || v === '') return undefined;
+        const n = Number(v);
+        if (Number.isNaN(n)) { errors.push({ field: name, message: 'not a number' }); return undefined; }
+        return n;
+      };
+      const getJSON = (name) => {
+        const v = getEl(name)?.value;
+        if (v == null || v === '') return undefined;
+        try { return JSON.parse(v); }
+        catch (e) { errors.push({ field: name, message: 'JSON parse: ' + e.message }); return undefined; }
+      };
+
+      const contextEl = sharedEl?.querySelector('[data-field="context"]');
+      const context = contextEl?.value || '3d-three';
+      const payload = { kind, context, count };
+
+      if (kind === 'swept-beam-3d') {
+        // Per-item arrays — HAZARD C length-vs-count validation.
+        const perItem = {
+          phis:       getJSON('phis'),
+          theta_init: getJSON('theta_init'),
+          colors:     getJSON('colors'),
+          speeds:     getJSON('speeds'),
+        };
+        for (const [name, arr] of Object.entries(perItem)) {
+          if (arr === undefined) continue;  // getJSON already pushed parse error
+          if (!Array.isArray(arr)) {
+            errors.push({ field: name, message: 'expected JSON array' });
+            continue;
+          }
+          if (!Number.isNaN(count) && arr.length !== count) {
+            errors.push({ field: name, message: `length ${arr.length} ≠ count ${count}` });
+          }
+          payload[name] = arr;
+        }
+        for (const name of ['sphere_radius', 'wobble_amplitude', 'wobble_speed']) {
+          const v = getNum(name); if (v !== undefined) payload[name] = v;
+        }
+        for (const name of ['look_at', 'geometry', 'material']) {
+          const v = getJSON(name); if (v !== undefined) payload[name] = v;
+        }
+      } else if (kind === 'point-light') {
+        const color = getStr('color'); if (color !== undefined) payload.color = color;
+        for (const name of ['sprite_size', 'base_opacity']) {
+          const v = getNum(name); if (v !== undefined) payload[name] = v;
+        }
+        // Bools — every checkbox is guaranteed-emitted in point-light section
+        // (size_attenuation L3311, depth_write L3319, transparent L3323).
+        for (const name of ['size_attenuation', 'depth_write', 'transparent']) {
+          payload[name] = getBool(name);
+        }
+        const posLayout = getStr('position_layout'); if (posLayout !== undefined) payload.position_layout = posLayout;
+        for (const name of ['r_range', 'y_range', 'theta_range', 'flicker']) {
+          const v = getJSON(name); if (v !== undefined) payload[name] = v;
+        }
+      } else {
+        errors.push({ field: 'kind', message: `unknown 3D spotlight kind: "${kind}"` });
+      }
+
+      return { payload, errors, label };
+    }
+
+    /**
+     * Read a 3D particle row's form state into a renderer-consumable payload.
+     * Same contract + invariants as readSpotlight3dPayloadFromRow.
+     *
+     * §2.7 asymmetry: spawn_region_initial and spawn_region_respawn are
+     * read INDEPENDENTLY into distinct payload keys (NEVER collapsed).
+     * Distinct phi_norm_range values (0.4 vs 0.55) survive round-trip.
+     */
+    function readParticle3dPayloadFromRow(row) {
+      const errors = [];
+
+      const kind = row.querySelector('[data-field="kind"]')?.value;
+      if (!kind) {
+        errors.push({ field: 'kind', message: 'no kind element found on row' });
+        return { payload: { context: '3d-three' }, errors, label: '' };
+      }
+      const countRaw = row.querySelector('input[type="number"][data-field="count"]')?.value;
+      const count = parseInt(countRaw ?? '', 10);
+      if (Number.isNaN(count)) errors.push({ field: 'count', message: 'count not a valid integer' });
+      const label = row.querySelector('[data-field="label"]')?.value ?? '';
+
+      const sectionEl = row.querySelector(`[data-kind-section="${kind}"]`);
+      const sharedEl  = row.querySelector('.particle-shared-section');
+      if (!sectionEl) {
+        errors.push({ field: 'kind', message: `no [data-kind-section="${kind}"] element in row` });
+        return { payload: { kind, context: '3d-three' }, errors, label };
+      }
+      const getEl   = (name) => sectionEl.querySelector(`[data-field="${name}"]`)
+                             || sharedEl?.querySelector(`[data-field="${name}"]`);
+      const getStr  = (name) => getEl(name)?.value;
+      const getBool = (name) => !!getEl(name)?.checked;
+      const getNum  = (name) => {
+        const v = getEl(name)?.value;
+        if (v == null || v === '') return undefined;
+        const n = Number(v);
+        if (Number.isNaN(n)) { errors.push({ field: name, message: 'not a number' }); return undefined; }
+        return n;
+      };
+      const getJSON = (name) => {
+        const v = getEl(name)?.value;
+        if (v == null || v === '') return undefined;
+        try { return JSON.parse(v); }
+        catch (e) { errors.push({ field: name, message: 'JSON parse: ' + e.message }); return undefined; }
+      };
+
+      const contextEl = sharedEl?.querySelector('[data-field="context"]');
+      const context = contextEl?.value || '3d-three';
+      const payload = { kind, context, count };
+
+      if (kind === 'point-cloud-3d') {
+        const color = getStr('color'); if (color !== undefined) payload.color = color;
+        for (const name of ['sprite_size', 'base_opacity', 'y_flatten_factor', 'y_offset']) {
+          const v = getNum(name); if (v !== undefined) payload[name] = v;
+        }
+        // Bools — guaranteed-emitted in point-cloud-3d section
+        // (size_attenuation L2365, depth_write L2373, transparent L2377).
+        for (const name of ['size_attenuation', 'depth_write', 'transparent']) {
+          payload[name] = getBool(name);
+        }
+        const posLayout = getStr('position_layout'); if (posLayout !== undefined) payload.position_layout = posLayout;
+        for (const name of ['r_range', 'phi_norm_range', 'theta_range', 'twinkle', 'modulator']) {
+          const v = getJSON(name); if (v !== undefined) payload[name] = v;
+        }
+      } else if (kind === 'volumetric-3d') {
+        const color = getStr('color'); if (color !== undefined) payload.color = color;
+        // Bools — guaranteed-emitted in volumetric-3d section
+        // (respawn L2433, depth_write L2437, transparent L2441).
+        for (const name of ['respawn', 'depth_write', 'transparent']) {
+          payload[name] = getBool(name);
+        }
+        for (const name of ['life_increment_per_frame', 'respawn_threshold', 'y_flatten_factor', 'y_offset']) {
+          const v = getNum(name); if (v !== undefined) payload[name] = v;
+        }
+        const opacityCurve = getStr('opacity_curve'); if (opacityCurve !== undefined) payload.opacity_curve = opacityCurve;
+        // JSON ranges (7) + nested objects (sphere_geometry + the TWO spawn regions).
+        // spawn_region_initial and spawn_region_respawn read independently —
+        // §2.7 asymmetry preservation (distinct phi_norm_range 0.4 vs 0.55).
+        for (const name of [
+          'sphere_geometry',
+          'scale_range', 'opacity_range',
+          'vy_range', 'vx_range', 'vz_range',
+          'life_init_range',
+          'spawn_region_initial',
+          'spawn_region_respawn',
+        ]) {
+          const v = getJSON(name); if (v !== undefined) payload[name] = v;
+        }
+      } else {
+        errors.push({ field: 'kind', message: `unknown 3D particle kind: "${kind}"` });
+      }
+
+      return { payload, errors, label };
+    }
+
+    /**
+     * Tear down every active 3D preview that is NOT for currentAnchorId.
+     * Iterates BOTH state Maps because spotlight 3D and particle 3D both
+     * compete for the same WebGL context budget (~16 contexts/page).
+     */
+    function stopAllOther3dPreviews(currentAnchorId) {
+      for (const anchorId of Array.from(state.spotlight3dPreviewState.keys())) {
+        if (anchorId !== currentAnchorId) stopSpotlight3dPreview(anchorId);
+      }
+      for (const anchorId of Array.from(state.particle3dPreviewState.keys())) {
+        if (anchorId !== currentAnchorId) stopParticle3dPreview(anchorId);
+      }
+    }
+
+    /**
+     * Per-row Preview/Replay for 3D spotlight rows.
+     *
+     * Wired against BOTH .btn-play-spotlight-3d-preview AND
+     * .btn-replay-spotlight-3d-preview — Replay IS Play (fresh context +
+     * fresh handle every invocation). No separate onReplay function.
+     */
+    function onPlaySpotlight3dPreview(rowEl) {
+      const anchorId = rowEl.dataset.anchorId;
+      const wrapEl   = rowEl.querySelector('.spotlight-3d-preview-canvas-wrap');
+      if (!wrapEl) return;
+
+      const { payload, errors, label } = readSpotlight3dPayloadFromRow(rowEl);
+      if (errors.length > 0) {
+        showAnchorStatus(
+          anchorId,
+          'Fix before preview: ' + errors.map(e => e.field + (e.message ? ` (${e.message})` : '')).join('; '),
+          'error'
+        );
+        return;
+      }
+
+      // One-at-a-time across BOTH 3D Maps. Also tears down same-row preview
+      // (Replay use case) — onPlay is the single source of "play fresh."
+      stopAllOther3dPreviews(anchorId);
+      stopSpotlight3dPreview(anchorId);
+
+      // Canvas lifecycle (A4b Fix 1-redo, 2026-05-31): tearDownPreview3d
+      // removes the canvas from the DOM on Stop, so wrapEl is empty by
+      // now. Clearing here is defense-in-depth — catches the initial
+      // template canvas on first Play AND any stale node from a missed
+      // teardown path. Then create a fresh canvas (no prior WebGL
+      // context → no precision crash) and append. Three plain DOM ops
+      // with unambiguous semantics — no replaceChild dependency.
+      wrapEl.querySelectorAll('canvas').forEach(c => c.remove());
+      const canvasEl = document.createElement('canvas');
+      canvasEl.className = 'spotlight-3d-preview-canvas';
+      canvasEl.width  = 480;
+      canvasEl.height = 240;
+      wrapEl.appendChild(canvasEl);
+
+      const ctx = createPreviewContext3d(canvasEl, payload.kind);
+      if (!ctx) {
+        showAnchorStatus(anchorId, 'Preview failed — Three.js CDN not loaded', 'error');
+        return;
+      }
+      const { webglRenderer, scene, camera } = ctx;
+
+      const anchor = { id: anchorId, type: 'spotlight', label, payload };
+      let handle;
+      try {
+        handle = window.elsewhere?.spotlight3dRenderer?.spotlightAnchor3dRenderer?.(
+          anchor, { scene, camera }
+        );
+      } catch (e) {
+        try { webglRenderer.dispose(); webglRenderer.forceContextLoss(); } catch (_) {}
+        showAnchorStatus(anchorId, 'Preview error: ' + (e.message || e), 'error');
+        return;
+      }
+      if (!handle || typeof handle.update !== 'function' || typeof handle.dispose !== 'function') {
+        try { webglRenderer.dispose(); webglRenderer.forceContextLoss(); } catch (_) {}
+        showAnchorStatus(anchorId, 'Preview failed — renderer returned no D-contract handle', 'error');
+        return;
+      }
+
+      const st = {
+        rafId: null,
+        webglRenderer, scene, camera, handle, canvasEl,
+        disposed: false,
+      };
+      state.spotlight3dPreviewState.set(anchorId, st);
+
+      // UI restore (the toggle Gate 6 deferred to Gate 7).
+      rowEl.querySelector('.btn-play-spotlight-3d-preview').hidden   = true;
+      rowEl.querySelector('.btn-replay-spotlight-3d-preview').hidden = false;
+      rowEl.querySelector('.btn-stop-spotlight-3d-preview').hidden   = false;
+
+      // Start RAF — signature matches the written Gate 6 tickPreview3d(st, timeMs).
+      st.rafId = requestAnimationFrame((t) => tickPreview3d(st, t));
+    }
+
+    /**
+     * Replay = Play (per 7c Fix 2 decision). Thin pass-through preserved
+     * as a named function for symmetry with A4a's onReplaySpotlightPreview
+     * and to keep "Replay" discoverable in the codebase. onPlay always
+     * re-allocates a fresh WebGL context + fresh renderer handle, which IS
+     * Replay's semantics — fresh randoms, fresh state. ONE code path.
+     */
+    function onReplaySpotlight3dPreview(rowEl) {
+      return onPlaySpotlight3dPreview(rowEl);
+    }
+
+    function stopSpotlight3dPreview(anchorId) {
+      const st = state.spotlight3dPreviewState.get(anchorId);
+      if (!st) return;
+      tearDownPreview3d(st);  // Gate 6 — disposed FIRST, RAF cancel, handle.dispose, webglRenderer.dispose + forceContextLoss
+      state.spotlight3dPreviewState.delete(anchorId);
+      // UI restore (skipped silently if row already removed by renderPanel).
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (row) {
+        const playBtn   = row.querySelector('.btn-play-spotlight-3d-preview');
+        const replayBtn = row.querySelector('.btn-replay-spotlight-3d-preview');
+        const stopBtn   = row.querySelector('.btn-stop-spotlight-3d-preview');
+        if (playBtn)   playBtn.hidden   = false;
+        if (replayBtn) replayBtn.hidden = true;
+        if (stopBtn)   stopBtn.hidden   = true;
+      }
+    }
+
+    function stopAllSpotlight3dPreviews() {
+      for (const anchorId of Array.from(state.spotlight3dPreviewState.keys())) {
+        stopSpotlight3dPreview(anchorId);
+      }
+    }
+
+    /**
+     * Per-row Preview/Replay for 3D particle rows. Same shape as the
+     * spotlight handlers above with particle class names, state Map,
+     * and window global lookup.
+     */
+    function onPlayParticle3dPreview(rowEl) {
+      const anchorId = rowEl.dataset.anchorId;
+      const wrapEl   = rowEl.querySelector('.particle-3d-preview-canvas-wrap');
+      if (!wrapEl) return;
+
+      const { payload, errors, label } = readParticle3dPayloadFromRow(rowEl);
+      if (errors.length > 0) {
+        showAnchorStatus(
+          anchorId,
+          'Fix before preview: ' + errors.map(e => e.field + (e.message ? ` (${e.message})` : '')).join('; '),
+          'error'
+        );
+        return;
+      }
+
+      stopAllOther3dPreviews(anchorId);
+      stopParticle3dPreview(anchorId);
+
+      // Canvas lifecycle (A4b Fix 1-redo, 2026-05-31): same pattern as
+      // onPlaySpotlight3dPreview — wrap is the stable parent, canvas
+      // is purely transient (created here, removed in tearDownPreview3d).
+      // Defense-in-depth removal handles initial template canvas + any
+      // stale node from missed teardown paths.
+      wrapEl.querySelectorAll('canvas').forEach(c => c.remove());
+      const canvasEl = document.createElement('canvas');
+      canvasEl.className = 'particle-3d-preview-canvas';
+      canvasEl.width  = 480;
+      canvasEl.height = 240;
+      wrapEl.appendChild(canvasEl);
+
+      const ctx = createPreviewContext3d(canvasEl, payload.kind);
+      if (!ctx) {
+        showAnchorStatus(anchorId, 'Preview failed — Three.js CDN not loaded', 'error');
+        return;
+      }
+      const { webglRenderer, scene, camera } = ctx;
+
+      const anchor = { id: anchorId, type: 'particle', label, payload };
+      let handle;
+      try {
+        handle = window.elsewhere?.particle3dRenderer?.particleAnchor3dRenderer?.(
+          anchor, { scene, camera }
+        );
+      } catch (e) {
+        try { webglRenderer.dispose(); webglRenderer.forceContextLoss(); } catch (_) {}
+        showAnchorStatus(anchorId, 'Preview error: ' + (e.message || e), 'error');
+        return;
+      }
+      if (!handle || typeof handle.update !== 'function' || typeof handle.dispose !== 'function') {
+        try { webglRenderer.dispose(); webglRenderer.forceContextLoss(); } catch (_) {}
+        showAnchorStatus(anchorId, 'Preview failed — renderer returned no D-contract handle', 'error');
+        return;
+      }
+
+      const st = {
+        rafId: null,
+        webglRenderer, scene, camera, handle, canvasEl,
+        disposed: false,
+      };
+      state.particle3dPreviewState.set(anchorId, st);
+
+      rowEl.querySelector('.btn-play-particle-3d-preview').hidden   = true;
+      rowEl.querySelector('.btn-replay-particle-3d-preview').hidden = false;
+      rowEl.querySelector('.btn-stop-particle-3d-preview').hidden   = false;
+
+      st.rafId = requestAnimationFrame((t) => tickPreview3d(st, t));
+    }
+
+    // Replay = Play — see onReplaySpotlight3dPreview for rationale.
+    function onReplayParticle3dPreview(rowEl) {
+      return onPlayParticle3dPreview(rowEl);
+    }
+
+    function stopParticle3dPreview(anchorId) {
+      const st = state.particle3dPreviewState.get(anchorId);
+      if (!st) return;
+      tearDownPreview3d(st);
+      state.particle3dPreviewState.delete(anchorId);
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (row) {
+        const playBtn   = row.querySelector('.btn-play-particle-3d-preview');
+        const replayBtn = row.querySelector('.btn-replay-particle-3d-preview');
+        const stopBtn   = row.querySelector('.btn-stop-particle-3d-preview');
+        if (playBtn)   playBtn.hidden   = false;
+        if (replayBtn) replayBtn.hidden = true;
+        if (stopBtn)   stopBtn.hidden   = true;
+      }
+    }
+
+    function stopAllParticle3dPreviews() {
+      for (const anchorId of Array.from(state.particle3dPreviewState.keys())) {
+        stopParticle3dPreview(anchorId);
+      }
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // ─── Stage A4b GATE 7d — Save / Cancel / Delete handlers ───────
+    // ═══════════════════════════════════════════════════════════════
+    // Mirrors A4a 2D + A3 2D save/cancel/delete patterns. Calls the 7c
+    // readers (built shared for preview + save). Reuses the EXISTING
+    // state.{spotlight,particle}Anchors / AnchorNew / AnchorDirty Maps —
+    // 3D anchors live in the same Maps as 2D, distinguished by
+    // payload.context === '3d-three'.
+    //
+    // RPC contract per db/035 L72 + L215:
+    //   rpc_venue_anchor_upsert(p_id text, p_venue_id text, p_partial jsonb)
+    //     → existence-driven UPSERT (UPDATE if row present, INSERT if not).
+    //       INSERT requires p_partial.type (NOT NULL column).
+    //       p_partial allowed keys: type, yaw_deg, pitch_deg, label,
+    //       start_sec, end_sec, link, payload, is_broken.
+    //   rpc_venue_anchor_delete(p_id text)
+    //     → raises P0002 if no row matches.
+    //
+    // type COLUMN: 'spotlight' or 'particle' — the SAME column type as the
+    // 2D rows. 2D vs 3D distinction is payload.context, NOT type.
+    //
+    // INHERITED DIVERGENCE (confirmed via pre-write grep — Gate 8 retro):
+    //   - particle save uses local Map surgery + renderParticlePanel
+    //     (mirrors A3 L2645-2654); spotlight save re-fetches via
+    //     loadAndRenderSpotlightPanel (mirrors A4a L3573-3577).
+    //   - particle save reads state.selectedVenueId (mirrors A3 L2622);
+    //     spotlight save reads row.dataset.venueId (mirrors A4a L3543).
+    //   Each 3D handler matches its 2D sibling. Cross-panel alignment is
+    //   Gate 8 panel-standardization scope, not 7d.
+    //
+    // TEARDOWN-BEFORE-DELETE (3D-specific ordering — A4b §6.4):
+    //   confirm → if confirmed (or pending), stopX3dPreview(anchorId)
+    //   FIRST, THEN state mutation / RPC. WebGL contexts orphan otherwise.
+    //   stopX3dPreview is idempotent (no-op if no preview running).
+
+    // ─── Spotlight 3D — save / cancel / delete ─────────────────────
+
+    async function onSpotlight3dAnchorSave(anchorId) {
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (!row) return;
+      const venueId = row.dataset.venueId;
+
+      const { payload, label, errors } = readSpotlight3dPayloadFromRow(row);
+      if (errors.length > 0) {
+        showAnchorStatus(
+          anchorId,
+          'Fix before save: ' + errors.map(e => e.field + ' (' + e.message + ')').join('; '),
+          'error'
+        );
+        return;
+      }
+
+      const partial = { type: 'spotlight', payload, label };
+      showAnchorStatus(anchorId, 'Saving…', null);
+      try {
+        const { data, error } = await window.sb.rpc('rpc_venue_anchor_upsert', {
+          p_id:       anchorId,
+          p_venue_id: venueId,
+          p_partial:  partial,
+        });
+        if (error) {
+          showAnchorStatus(anchorId, 'Save failed: ' + error.message, 'error');
+          return;
+        }
+        if (!data) {
+          showAnchorStatus(anchorId, 'Save failed: rpc returned no row', 'error');
+          return;
+        }
+        state.spotlightAnchorDirty.delete(anchorId);
+        state.spotlightAnchorNew.delete(anchorId);
+        // Explicit stop BEFORE re-render — clean intent; the
+        // renderSpotlightPanel guard from 7c would also handle this.
+        stopSpotlight3dPreview(anchorId);
+        showAnchorStatus(anchorId, 'Saved.', 'ok');
+        // Re-fetch from DB (A4a strategy — see inherited-divergence note above).
+        await loadAndRenderSpotlightPanel(venueId);
+      } catch (e) {
+        showAnchorStatus(anchorId, 'Save error: ' + (e.message || e), 'error');
+      }
+    }
+
+    function onSpotlight3dAnchorCancel(anchorId) {
+      stopSpotlight3dPreview(anchorId);
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      const venueId = row?.dataset.venueId || state.selectedVenueId;
+      state.spotlightAnchorNew.delete(anchorId);
+      state.spotlightAnchorDirty.delete(anchorId);
+      loadAndRenderSpotlightPanel(venueId);
+      // No pending-vs-saved branch needed: clearing AnchorNew + AnchorDirty
+      // handles both — pending row vanishes; saved row repopulates from
+      // state.spotlightAnchors's last-loaded values via the re-render.
+    }
+
+    async function onSpotlight3dAnchorDelete(anchorId) {
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (!row) return;
+      const venueId = row.dataset.venueId;
+      const isPending = state.spotlightAnchorNew.has(anchorId);
+
+      // Kind-aware confirm per spec §6.4. Read kind from [data-field="kind"]
+      // — uniform per 7b (pending <select> OR saved hidden input).
+      const kind = row.querySelector('[data-field="kind"]')?.value || anchorId;
+      if (!isPending && !window.confirm(`Delete spotlight anchor (kind: ${kind}) for ${venueId}?`)) return;
+
+      // Teardown BEFORE state mutation / RPC — 3D-specific WebGL context
+      // release (detached canvas would orphan the RAF + context otherwise).
+      // Idempotent: no-op if no preview is running for this anchorId.
+      stopSpotlight3dPreview(anchorId);
+
+      if (isPending) {
+        state.spotlightAnchorNew.delete(anchorId);
+        state.spotlightAnchorDirty.delete(anchorId);
+        await loadAndRenderSpotlightPanel(venueId);
+        return;
+      }
+
+      try {
+        const { error } = await window.sb.rpc('rpc_venue_anchor_delete', { p_id: anchorId });
+        if (error) {
+          showAnchorStatus(anchorId, 'Delete failed: ' + error.message, 'error');
+          return;
+        }
+        state.spotlightAnchorDirty.delete(anchorId);
+        await loadAndRenderSpotlightPanel(venueId);
+      } catch (e) {
+        showAnchorStatus(anchorId, 'Delete error: ' + (e.message || e), 'error');
+      }
+    }
+
+    // ─── Particle 3D — save / cancel / delete ──────────────────────
+
+    async function onParticle3dAnchorSave(anchorId) {
+      const venueId = state.selectedVenueId;
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (!row) return;
+
+      const { payload, label, errors } = readParticle3dPayloadFromRow(row);
+      if (errors.length > 0) {
+        showAnchorStatus(
+          anchorId,
+          'Fix before save: ' + errors.map(e => e.field + ' (' + e.message + ')').join('; '),
+          'error'
+        );
+        return;
+      }
+
+      const isPending = state.particleAnchorNew.has(anchorId);
+      const partial = { type: 'particle', payload, label };
+
+      showAnchorStatus(anchorId, 'Saving…', null);
+      try {
+        const { data, error } = await window.sb.rpc('rpc_venue_anchor_upsert', {
+          p_id:       anchorId,
+          p_venue_id: venueId,
+          p_partial:  partial,
+        });
+        if (error) throw error;
+        if (!data) throw new Error('rpc returned no row');
+
+        // In-place Map surgery (A3 strategy — see inherited-divergence note above).
+        const savedAnchors = state.particleAnchors.get(venueId) || [];
+        if (isPending) {
+          savedAnchors.push(data);
+          state.particleAnchorNew.delete(anchorId);
+        } else {
+          const idx = savedAnchors.findIndex(a => a.id === anchorId);
+          if (idx >= 0) savedAnchors[idx] = data; else savedAnchors.push(data);
+        }
+        state.particleAnchors.set(venueId, savedAnchors);
+        state.particleAnchorDirty.delete(anchorId);
+        stopParticle3dPreview(anchorId);
+        renderParticlePanel(venueId);
+
+        showAnchorStatus(data.id, 'Saved', 'success');
+        setTimeout(() => clearAnchorStatus(data.id), 2000);
+      } catch (e) {
+        const code = e?.code ? ' [' + e.code + ']' : '';
+        showAnchorStatus(anchorId, 'Save failed' + code + ': ' + (e.message || e), 'error');
+      }
+    }
+
+    function onParticle3dAnchorCancel(anchorId) {
+      stopParticle3dPreview(anchorId);
+      state.particleAnchorNew.delete(anchorId);
+      state.particleAnchorDirty.delete(anchorId);
+      renderParticlePanel(state.selectedVenueId);
+    }
+
+    async function onParticle3dAnchorDelete(anchorId) {
+      const venueId = state.selectedVenueId;
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (!row) return;
+      const isPending = state.particleAnchorNew.has(anchorId);
+
+      // Kind-aware confirm per spec §6.4 (A3 L2672 already does this for 2D).
+      const kind = row.querySelector('[data-field="kind"]')?.value || anchorId;
+      if (!isPending && !window.confirm(`Delete particle anchor (kind: ${kind}) for ${venueId}?`)) return;
+
+      // Teardown BEFORE state mutation / RPC (3D WebGL context release).
+      stopParticle3dPreview(anchorId);
+
+      if (isPending) {
+        // Defensive — A3 2D doesn't explicitly branch here (the Cancel/Delete
+        // ternary normally prevents Delete on pending rows), but A4a 2D does.
+        // 7d mirrors A4a's defensive shape for the 3D path.
+        state.particleAnchorNew.delete(anchorId);
+        state.particleAnchorDirty.delete(anchorId);
+        renderParticlePanel(venueId);
+        return;
+      }
+
+      showAnchorStatus(anchorId, 'Deleting…', null);
+      try {
+        const { error } = await window.sb.rpc('rpc_venue_anchor_delete', { p_id: anchorId });
+        if (error) throw error;
+        state.particleAnchors.set(
+          venueId,
+          (state.particleAnchors.get(venueId) || []).filter(a => a.id !== anchorId)
+        );
+        state.particleAnchorDirty.delete(anchorId);
+        renderParticlePanel(venueId);
+      } catch (e) {
+        const code = e?.code ? ' [' + e.code + ']' : '';
+        showAnchorStatus(anchorId, 'Delete failed' + code + ': ' + (e.message || e), 'error');
+      }
     }
 
 
@@ -2967,9 +4834,20 @@
         const anchorId = row.dataset.anchorId;
         if (e.target.matches('.btn-play-particle-preview'))   return onPlayParticlePreview(row);
         if (e.target.matches('.btn-replay-particle-preview')) return onReplayParticlePreview(row);
+        if (e.target.matches('.btn-stop-particle-preview'))   return stopParticlePreview(anchorId);
         if (e.target.matches('.btn-anchor-save'))             return onParticleAnchorSave(anchorId);
         if (e.target.matches('.btn-anchor-delete'))           return onParticleAnchorDelete(anchorId);
         if (e.target.matches('.btn-anchor-cancel'))           return onParticleAnchorCancel(anchorId);
+        // Gate 7c — 3D button routing. Replay is a thin pass-through to
+        // Play (per Fix 2 decision: onPlay always re-allocates fresh
+        // context + handle, which IS Replay's semantics).
+        if (e.target.matches('.btn-play-particle-3d-preview'))   return onPlayParticle3dPreview(row);
+        if (e.target.matches('.btn-replay-particle-3d-preview')) return onReplayParticle3dPreview(row);
+        if (e.target.matches('.btn-stop-particle-3d-preview'))   return stopParticle3dPreview(anchorId);
+        // Gate 7d — Save / Cancel / Delete 3D routing.
+        if (e.target.matches('.btn-anchor-save-3d'))             return onParticle3dAnchorSave(anchorId);
+        if (e.target.matches('.btn-anchor-cancel-3d'))           return onParticle3dAnchorCancel(anchorId);
+        if (e.target.matches('.btn-anchor-delete-3d'))           return onParticle3dAnchorDelete(anchorId);
       });
 
       // Stage A4a — spotlight anchor panel wiring (event delegation on the list)
@@ -2984,9 +4862,18 @@
         const anchorId = row.dataset.anchorId;
         if (e.target.matches('.btn-play-spotlight-preview'))   return onPlaySpotlightPreview(row);
         if (e.target.matches('.btn-replay-spotlight-preview')) return onReplaySpotlightPreview(row);
+        if (e.target.matches('.btn-stop-spotlight-preview'))   return stopSpotlightPreview(anchorId);
         if (e.target.matches('.btn-anchor-save'))              return onSpotlightAnchorSave(anchorId);
         if (e.target.matches('.btn-anchor-delete'))            return onSpotlightAnchorDelete(anchorId);
         if (e.target.matches('.btn-anchor-cancel'))            return onSpotlightAnchorCancel(anchorId);
+        // Gate 7c — 3D button routing (parallels particle 3D above).
+        if (e.target.matches('.btn-play-spotlight-3d-preview'))   return onPlaySpotlight3dPreview(row);
+        if (e.target.matches('.btn-replay-spotlight-3d-preview')) return onReplaySpotlight3dPreview(row);
+        if (e.target.matches('.btn-stop-spotlight-3d-preview'))   return stopSpotlight3dPreview(anchorId);
+        // Gate 7d — Save / Cancel / Delete 3D routing.
+        if (e.target.matches('.btn-anchor-save-3d'))              return onSpotlight3dAnchorSave(anchorId);
+        if (e.target.matches('.btn-anchor-cancel-3d'))            return onSpotlight3dAnchorCancel(anchorId);
+        if (e.target.matches('.btn-anchor-delete-3d'))            return onSpotlight3dAnchorDelete(anchorId);
       });
 
       window.addEventListener('beforeunload', (e) => {
