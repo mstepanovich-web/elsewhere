@@ -209,7 +209,9 @@ Every procedural constant → payload field. Source = `karaoke/stage.html` @ `1f
 
 ## §3 — Renderer design: `shell/venue-renderers/overlay.js`
 
-**New file, sibling to `audio.js` / `particle.js` / `spotlight.js`.** 2D-canvas, self-RAF, `{ stop }` contract (D-renderer). Before writing, read `particle.js` + `spotlight.js` to match the exact registration call (`window.elsewhere.anchorRegistry`, per the A2 §8.2 correction) and the exact render-function signature + `ctx` shape they consume. overlay.js conforms to that contract — it does NOT invent a new one.
+**New file, sibling to `audio.js` / `particle.js` / `spotlight.js`.** 2D-canvas, self-RAF, `{ stop }` contract (D-renderer). Before writing, read `particle.js` + `spotlight.js` to match the exact registration call and the exact render-function signature + `ctx` shape they consume. overlay.js conforms to that contract — it does NOT invent a new one.
+
+> **Correction (verified against source at build time):** renderers register by `import { registerAnchorRenderer } from '../venue-registry.js'` and call `registerAnchorRenderer('overlay', overlayAnchorRenderer)` at module load — NOT by reaching into `window.elsewhere.anchorRegistry` (that global is the *published API mirror* `venue-registry.js` exposes for non-module consumers, not the self-registration path). The render signature is `renderer(anchor, ctx)` → `{ stop }`, with the canvas at `ctx.canvas` (`canvas.getContext('2d', { willReadFrequently: true })` per the A4b GPU-triage). Each renderer also publishes itself on `window.elsewhere.<type>Renderer` (e.g. `window.elsewhere.overlayRenderer.overlayAnchorRenderer`) — that is the handle the admin preview calls. The earlier `window.elsewhere.anchorRegistry` wording in this spec (§4, §8, §10) is superseded by this note.
 
 ### 3.1 Module shape
 - Self-contained state per render call: the beat scheduler / stochastic RNG state, current alpha, the active envelope tween (for `pulse`), a RAF handle.
@@ -232,7 +234,7 @@ Unlike `particle.js`/`spotlight.js`, overlay.js needs **no built-in preview osci
 
 ## §4 — Registry + script tags
 
-- **Register** overlay.js against `type:"overlay"` on `window.elsewhere.anchorRegistry` at module load (match the exact API used by audio/particle/spotlight — verify the property name in source; the A2 closeout corrected an earlier `window.getAnchorRenderer` mistake to `window.elsewhere.anchorRegistry`).
+- **Register** overlay.js against `type:"overlay"` via `import { registerAnchorRenderer } from '../venue-registry.js'` → `registerAnchorRenderer('overlay', overlayAnchorRenderer)` at module load, and publish `window.elsewhere.overlayRenderer = { overlayAnchorRenderer }` for the admin preview (the §3 correction note). **Note:** `registerAnchorRenderer` emits a one-time `console.warn` because `'overlay'` is not yet in `venue-registry.js`'s `ANCHOR_TYPE_VOCABULARY` array (still the original 7) — the registry explicitly ALLOWS unknown types (vocabulary is extensible) and the warn is harmless. Adding `'overlay'` to that frozen array in `venue-registry.js` is an optional one-line cleanup to silence it (same situation as any post-db/032 type); not required for 4.5 to function.
 - **Script tags — BOTH locations** (the A4a Check-21 lesson; enumerate both):
   1. `admin-venues.html` — `<script type="module" src="shell/venue-renderers/overlay.js"></script>` (the real consumer — preview path). Place alongside the existing audio/particle/spotlight renderer tags.
   2. `karaoke/stage.html` — `<script type="module" src="../shell/venue-renderers/overlay.js"></script>` (**registration-only**, not a read-path change per D8 and the A2/A3/A4a precedent). **No version bump on `karaoke/stage.html`** (registration-only precedent). Place alongside the existing renderer tags (currently audio/particle/spotlight at the top of the file).

@@ -44,6 +44,8 @@
   <script type="module" src="shell/venue-renderers/audio.js"></script>
   <script type="module" src="shell/venue-renderers/particle.js"></script>
   <script type="module" src="shell/venue-renderers/spotlight.js"></script>
+  <!-- Stage 4.5 — overlay anchor renderer (2D-canvas, self-driving). -->
+  <script type="module" src="shell/venue-renderers/overlay.js"></script>
   <!-- A4b — 3D venue effects. Three.js MUST load before the 3D builders
        (they reference window.THREE). Builders self-register against
        window.elsewhere.venueAnchorRenderers under distinct keys
@@ -640,6 +642,87 @@
       background: transparent;
     }
 
+    /* ─── Stage 4.5 — overlay anchor panel (mirrors spotlight 2D rules) ─── */
+    .overlay-region-section,
+    .overlay-fill-section,
+    .overlay-mod-section,
+    .overlay-env-section {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-left: 2px solid var(--color-border);
+      background: rgba(255,255,255,.02);
+    }
+    .overlay-region-section h4,
+    .overlay-fill-section h4,
+    .overlay-mod-section h4,
+    .overlay-env-section h4 {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--color-gold-dim, rgba(212,176,116,.6));
+      margin: 0 0 8px;
+    }
+    .overlay-field-row {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 8px;
+      align-items: start;
+      margin-bottom: 6px;
+    }
+    .overlay-field-row label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-text-faint);
+      padding-top: 4px;
+    }
+    .overlay-field-row input[type="number"],
+    .overlay-field-row input[type="text"],
+    .overlay-field-row select {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 4px 8px;
+    }
+    .overlay-field-row textarea {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 4px 8px;
+      min-height: 56px;
+      resize: vertical;
+      width: 100%;
+    }
+    .overlay-field-note {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-text-faint);
+      padding: 2px 0;
+    }
+    .overlay-preview-canvas-wrap {
+      position: relative;
+      margin: 12px 0;
+      border: 1px dashed var(--color-border);
+      border-radius: 6px;
+      background: rgba(0,0,0,.4);
+      width: 100%;
+      max-width: 480px;
+      aspect-ratio: 2/1;
+    }
+    .overlay-preview-canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 2/1;
+      background: transparent;
+    }
+
     /* 3D preview wraps + canvases (A4b Fix 1-redo, 2026-05-31). Mirror
        the 2D wrap/canvas rules above — closes the pre-existing CSS gap
        flagged by the L2314 "parallels the 2D wrap class" comment. The
@@ -671,7 +754,7 @@
 <body>
 
   <header id="header">
-    <div class="title">VENUE ADMIN <span class="version-stamp">v2.140</span></div>
+    <div class="title">VENUE ADMIN <span class="version-stamp">v2.141</span></div>
     <div class="user-info">
       <span id="user-display"></span>
       <span class="admin-badge" id="admin-badge" hidden>ADMIN</span>
@@ -826,6 +909,27 @@
             No spotlight anchors yet for this venue. Click "+ Add spotlight anchor" to create one.
           </div>
         </section>
+
+        <section class="anchor-panel" id="overlay-anchor-panel">
+          <header class="anchor-panel-header">
+            <h2>Overlay anchors</h2>
+            <!-- Stage 4.5 — kind picker (paint shape only; modulator/envelope
+                 are separate selectors inside the row). -->
+            <select id="overlay-add-kind" class="anchor-add-kind-select">
+              <option value="solid-fill">solid-fill</option>
+              <option value="gradient-fill">gradient-fill</option>
+            </select>
+            <button id="btn-add-overlay-anchor" type="button">+ Add overlay anchor</button>
+            <button id="btn-stop-all-overlay-previews" type="button">⏹ Stop all previews</button>
+          </header>
+          <div class="anchor-limit-note" id="overlay-anchor-limit-note" hidden>
+            This venue already has an overlay anchor. Edit or delete the existing anchor to change the effect.
+          </div>
+          <ul class="anchor-list" id="overlay-anchor-list"></ul>
+          <div class="anchor-empty" id="overlay-anchor-empty" hidden>
+            No overlay anchors yet for this venue. Click "+ Add overlay anchor" to create one.
+          </div>
+        </section>
       </div>
     </section>
   </main>
@@ -879,6 +983,16 @@
     //   (swept-beam-2d, pulsed-laser, light-shaft) are all eternal, so
     //   no "preview ended" affordance is needed, unlike A3's
     //   directional-emitter one-shot kind.
+
+    // ─── Stage 4.5 — overlay anchor state ───────────────────────────
+    // Mirrors the spotlight Set-based anchor-level dirty pattern. Single
+    // anchor per venue (PREVENT, spec D-panel) — but the Map/Set shapes
+    // match the multi-anchor panels for callsite parity. All three overlay
+    // effects are eternal loops, so no endedTimerId (like spotlight).
+    state.overlayAnchors      = new Map();   // venueId -> array of saved overlay anchor rows
+    state.overlayAnchorDirty  = new Set();   // anchorId — presence = dirty
+    state.overlayAnchorNew    = new Map();   // pendingAnchorId -> { venue_id, kind }
+    state.overlayPreviewState = new Map();   // anchorId -> { stopFn, canvasEl }
 
     // ─── Stage A4b — 3D preview state ───────────────────────────────
     // 3D anchors live in the same per-type Maps as 2D (state.spotlightAnchors,
@@ -1406,6 +1520,8 @@
       loadAndRenderParticlePanel(venueId);
       // Stage A4a — load + render the spotlight anchor panel.
       loadAndRenderSpotlightPanel(venueId);
+      // Stage 4.5 — load + render the overlay anchor panel.
+      loadAndRenderOverlayPanel(venueId);
     }
 
     // Combined dirty check across venue_defaults editor + audio anchors + particle anchors.
@@ -1436,6 +1552,14 @@
       const venueSpotlights = state.spotlightAnchors.get(venueId) || [];
       for (const a of venueSpotlights) {
         if (state.spotlightAnchorDirty.has(a.id)) return true;
+      }
+      // Stage 4.5 — overlay anchor dirty state
+      for (const [, info] of state.overlayAnchorNew) {
+        if (info.venue_id === venueId) return true;
+      }
+      const venueOverlays = state.overlayAnchors.get(venueId) || [];
+      for (const a of venueOverlays) {
+        if (state.overlayAnchorDirty.has(a.id)) return true;
       }
       return false;
     }
@@ -1475,6 +1599,19 @@
           stopSpotlightPreview(id);
           state.spotlightAnchorNew.delete(id);
           state.spotlightAnchorDirty.delete(id);
+        }
+      }
+      // Stage 4.5 — clear overlay anchor dirty + pending-new + active previews
+      const venueOverlays = state.overlayAnchors.get(venueId) || [];
+      for (const a of venueOverlays) {
+        state.overlayAnchorDirty.delete(a.id);
+        stopOverlayPreview(a.id);
+      }
+      for (const [id, info] of state.overlayAnchorNew) {
+        if (info.venue_id === venueId) {
+          stopOverlayPreview(id);
+          state.overlayAnchorNew.delete(id);
+          state.overlayAnchorDirty.delete(id);
         }
       }
     }
@@ -3866,6 +4003,546 @@
 
 
     // ═══════════════════════════════════════════════════════════════
+    // ─── Stage 4.5 — Overlay anchor panel ──────────────────────────
+    // ═══════════════════════════════════════════════════════════════
+    // Screen-space visual overlays (type='overlay'). Renderer:
+    // shell/venue-renderers/overlay.js via window.elsewhere.overlayRenderer.
+    // 2D-canvas (NOT WebGL) — reuses the A3/A4a 2D preview infra.
+    //
+    // The row has THREE independent hide/show section groups (the overlay
+    // contract's orthogonal axes): kind → fill section (solid vs gradient),
+    // modulator.type → modulator section (beat vs stochastic), envelope.shape
+    // → envelope section (pulse vs hold). All sections are emitted with
+    // [hidden] on the non-current one; the field-input handler toggles
+    // visibility (hide/show, NOT re-render — built correct-by-construction
+    // to the post-A4b standard, closing the DEFERRED-e re-render pattern by
+    // construction). Payload is reconstructed from form state at save/preview.
+    //
+    // Single anchor per venue (PREVENT, spec D-panel): "+ Add" hidden at
+    // count >= 1. overlay's modulators self-drive (beat clock from bpm,
+    // stochastic RNG), so the preview animates straight from the payload —
+    // no preview oscillator needed (unlike particle/spotlight).
+
+    const OVERLAY_KINDS      = ['solid-fill', 'gradient-fill'];
+    const OVERLAY_MODULATORS = ['beat', 'stochastic'];
+    const OVERLAY_ENVELOPES  = ['pulse', 'hold'];
+    // Ease vocabulary = overlay.js EASE_FNS keys + the "default" sentinel
+    // (resolves to power1.out, GSAP's default ease).
+    const OVERLAY_EASES      = ['default', 'power1.out', 'power2.in', 'power3.out'];
+
+    function defaultOverlayLabelForKind(_kind) { return 'Overlay'; }
+
+    function defaultOverlayPayloadForKind(kind) {
+      if (kind === 'gradient-fill') {
+        return {
+          kind: 'gradient-fill',
+          region: { x: 0, y: 0.6, w: 1, h: 0.4 },
+          fill: { direction: 'vertical', stops: [
+            { pos: 0, color: '255,255,255', alpha_scale: 1.0 },
+            { pos: 1, color: '255,255,255', alpha_scale: 0.0 },
+          ] },
+          modulator: { type: 'beat', bpm: 120, first_trigger_beats: 0.5, interval_beats: 1, target_alpha: 0.2 },
+          envelope: { shape: 'pulse', rest_alpha: 0,
+            attack: { duration_sec: 0.05, ease: 'power3.out' },
+            decay:  { duration_sec: 0.4,  ease: 'power2.in' } },
+        };
+      }
+      // solid-fill default
+      return {
+        kind: 'solid-fill',
+        region: { x: 0, y: 0, w: 1, h: 1 },
+        fill: { color: '255,255,255' },
+        modulator: { type: 'beat', bpm: 120, first_trigger_beats: 0, interval_beats: 4, target_alpha: 0.25 },
+        envelope: { shape: 'pulse', rest_alpha: 0,
+          attack: { duration_sec: 0.04, ease: 'default' },
+          decay:  { duration_sec: 0.2,  ease: 'default' } },
+      };
+    }
+
+    function markOverlayAnchorDirty(anchorId) {
+      state.overlayAnchorDirty.add(anchorId);
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (!row) return;
+      row.classList.add('dirty');
+      const dot = row.querySelector('.anchor-dirty-dot');
+      if (dot) dot.hidden = false;
+      row.querySelector('.btn-anchor-save')?.removeAttribute('disabled');
+      row.querySelector('.btn-anchor-cancel')?.removeAttribute('disabled');
+    }
+
+    function overlayAnchorCount(venueId) {
+      const live = (state.overlayAnchors.get(venueId) || [])
+        .filter(a => a.venue_id === venueId).length;
+      let pending = 0;
+      for (const [, info] of state.overlayAnchorNew) {
+        if (info.venue_id === venueId) pending++;
+      }
+      return live + pending;
+    }
+
+    function applyAddOverlayAnchorButtonState(venueId) {
+      // PREVENT per spec D-panel — one overlay anchor per venue. Hide "+ Add"
+      // + show the limit note when an anchor already exists (the A2/A3
+      // PREVENT pattern; particle/spotlight moved to PERMIT in A4b, but no
+      // venue has more than one overlay).
+      const btn     = document.getElementById('btn-add-overlay-anchor');
+      const limitEl = document.getElementById('overlay-anchor-limit-note');
+      const has = overlayAnchorCount(venueId) >= 1;
+      if (btn)     btn.hidden     = has;
+      if (limitEl) limitEl.hidden = !has;
+    }
+
+    async function loadAndRenderOverlayPanel(venueId) {
+      const listEl  = document.getElementById('overlay-anchor-list');
+      const emptyEl = document.getElementById('overlay-anchor-empty');
+      if (!listEl) return;
+      stopAllOverlayPreviews();
+      listEl.innerHTML = '';
+      const vs = await waitForVenueSettings();
+      if (!vs) { emptyEl.hidden = false; return; }
+      try {
+        const anchors = await vs.loadVenueAnchors({ venueId, type: 'overlay' });
+        state.overlayAnchors.set(venueId, anchors || []);
+        renderOverlayPanel(venueId, anchors);
+      } catch (e) {
+        console.warn('loadVenueAnchors(overlay) failed:', e);
+        state.overlayAnchors.set(venueId, []);
+        emptyEl.hidden = false;
+        emptyEl.textContent = 'Failed to load overlay anchors: ' + (e.message || e);
+      }
+      applyAddOverlayAnchorButtonState(venueId);
+    }
+
+    function renderOverlayPanel(venueId, anchors) {
+      const listEl  = document.getElementById('overlay-anchor-list');
+      const emptyEl = document.getElementById('overlay-anchor-empty');
+      listEl.innerHTML = '';
+      const liveAnchors = (anchors || []).filter(a => a.venue_id === venueId);
+      const pendingForVenue = Array.from(state.overlayAnchorNew.entries())
+        .filter(([_id, info]) => info.venue_id === venueId);
+      const totalCount = liveAnchors.length + pendingForVenue.length;
+      emptyEl.hidden = totalCount > 0;
+
+      liveAnchors.forEach(a => listEl.appendChild(makeOverlayAnchorRow(a, false)));
+      pendingForVenue.forEach(([pendingId, info]) => {
+        const stubKind = info.kind || OVERLAY_KINDS[0];
+        const stub = {
+          id: pendingId, venue_id: info.venue_id, type: 'overlay',
+          label: defaultOverlayLabelForKind(stubKind),
+          payload: defaultOverlayPayloadForKind(stubKind),
+        };
+        listEl.appendChild(makeOverlayAnchorRow(stub, true));
+      });
+      applyAddOverlayAnchorButtonState(venueId);
+    }
+
+    function makeOverlayAnchorRow(anchor, isPending) {
+      const li = document.createElement('li');
+      li.className = 'anchor-row';
+      li.dataset.anchorId = anchor.id;
+      li.dataset.venueId  = anchor.venue_id;
+      li.dataset.pending  = isPending ? '1' : '0';
+      const isDirty = state.overlayAnchorDirty.has(anchor.id) || isPending;
+      if (isDirty) li.classList.add('dirty');
+      const payload = anchor.payload || {};
+      li.innerHTML = renderOverlayAnchorRowHTML(anchor, payload, isPending, isDirty);
+      return li;
+    }
+
+    function renderOverlayAnchorRowHTML(anchor, payload, isPending, isDirty) {
+      const kind     = payload.kind || 'solid-fill';
+      const mod      = payload.modulator || {};
+      const env      = payload.envelope || {};
+      const modType  = mod.type || 'beat';
+      const envShape = env.shape || 'pulse';
+      const region   = payload.region || { x: 0, y: 0, w: 1, h: 1 };
+      const opt = (val, cur) => `value="${val}"${val === cur ? ' selected' : ''}`;
+
+      return `
+        <div class="anchor-id-row">
+          <span class="anchor-id mono">${escapeHTML(anchor.id)}${isPending ? ' (pending)' : ''}</span>
+          <span class="anchor-dirty-dot"${isDirty ? '' : ' hidden'}>•</span>
+        </div>
+
+        <div class="overlay-field-row">
+          <label>kind</label>
+          ${isPending
+            ? `<select class="fld-kind" data-field="kind">
+                ${OVERLAY_KINDS.map(k => `<option ${opt(k, kind)}>${k}</option>`).join('')}
+              </select>`
+            : `<span class="fld-kind-readonly mono">${escapeHTML(kind)}</span>
+              <input type="hidden" class="fld-kind" data-field="kind" value="${escapeAttr(kind)}">`
+          }
+        </div>
+        <div class="overlay-field-row">
+          <label>label</label>
+          <input class="fld-label" type="text" data-field="label" value="${escapeAttr(anchor.label || 'Overlay')}">
+        </div>
+
+        <section class="overlay-region-section">
+          <h4>region (normalized 0–1)</h4>
+          <div class="overlay-field-row"><label>x</label><input type="number" step="0.01" data-field="region_x" value="${region.x ?? 0}"></div>
+          <div class="overlay-field-row"><label>y</label><input type="number" step="0.01" data-field="region_y" value="${region.y ?? 0}"></div>
+          <div class="overlay-field-row"><label>w</label><input type="number" step="0.01" data-field="region_w" value="${region.w ?? 1}"></div>
+          <div class="overlay-field-row"><label>h</label><input type="number" step="0.01" data-field="region_h" value="${region.h ?? 1}"></div>
+        </section>
+
+        ${renderOverlayFillSections(kind, payload.fill || {})}
+
+        <div class="overlay-field-row">
+          <label>modulator.type</label>
+          <select data-field="modulator_type">
+            ${OVERLAY_MODULATORS.map(m => `<option ${opt(m, modType)}>${m}</option>`).join('')}
+          </select>
+        </div>
+        ${renderOverlayModulatorSections(modType, mod)}
+
+        <div class="overlay-field-row">
+          <label>envelope.shape</label>
+          <select data-field="envelope_shape">
+            ${OVERLAY_ENVELOPES.map(s => `<option ${opt(s, envShape)}>${s}</option>`).join('')}
+          </select>
+        </div>
+        ${renderOverlayEnvelopeSections(envShape, env)}
+
+        <div class="overlay-preview-canvas-wrap">
+          <canvas class="overlay-preview-canvas" width="480" height="240"></canvas>
+        </div>
+        <div class="anchor-row-actions">
+          <button class="btn-play-overlay-preview"   type="button">▶ Play preview</button>
+          <button class="btn-replay-overlay-preview" type="button" hidden>↻ Replay</button>
+          <button class="btn-stop-overlay-preview"   type="button" hidden>■ Stop</button>
+          <button class="btn-anchor-save" type="button" ${isDirty ? '' : 'disabled'}>Save</button>
+          ${isPending
+            ? '<button type="button" class="btn-anchor-cancel">Cancel</button>'
+            : '<button type="button" class="btn-anchor-delete">Delete</button>'}
+        </div>
+        <div class="anchor-status" data-status></div>
+      `;
+    }
+
+    function renderOverlayFillSections(kind, fill) {
+      const solid = `
+        <section class="overlay-fill-section" data-fill-section="solid-fill"${kind === 'solid-fill' ? '' : ' hidden'}>
+          <h4>fill — solid</h4>
+          <div class="overlay-field-row">
+            <label>color (r,g,b)</label>
+            <input type="text" data-field="solid_color" value="${escapeAttr(fill.color || '255,255,255')}">
+          </div>
+        </section>`;
+      const gradient = `
+        <section class="overlay-fill-section" data-fill-section="gradient-fill"${kind === 'gradient-fill' ? '' : ' hidden'}>
+          <h4>fill — gradient</h4>
+          <div class="overlay-field-row">
+            <label>direction</label>
+            <select data-field="gradient_direction">
+              <option value="vertical"${(fill.direction || 'vertical') === 'vertical' ? ' selected' : ''}>vertical</option>
+            </select>
+          </div>
+          <div class="overlay-field-row">
+            <label>stops [{pos,color,alpha_scale}]</label>
+            <textarea data-field="gradient_stops" data-array rows="6">${escapeAttr(JSON.stringify(fill.stops ?? [], null, 2))}</textarea>
+          </div>
+        </section>`;
+      return solid + gradient;
+    }
+
+    function renderOverlayModulatorSections(modType, mod) {
+      const beat = `
+        <section class="overlay-mod-section" data-mod-section="beat"${modType === 'beat' ? '' : ' hidden'}>
+          <h4>modulator — beat</h4>
+          <div class="overlay-field-row"><label>bpm</label><input type="number" min="20" max="300" step="1" data-field="beat_bpm" value="${mod.bpm ?? ''}"></div>
+          <div class="overlay-field-row"><label>first_trigger_beats</label><input type="number" min="0" step="0.1" data-field="beat_first_trigger_beats" value="${mod.first_trigger_beats ?? ''}"></div>
+          <div class="overlay-field-row"><label>interval_beats</label><input type="number" min="0" step="0.1" data-field="beat_interval_beats" value="${mod.interval_beats ?? ''}"></div>
+          <div class="overlay-field-row"><label>target_alpha</label><input type="number" min="0" max="1" step="0.001" data-field="beat_target_alpha" value="${mod.target_alpha ?? ''}"></div>
+        </section>`;
+      const stochastic = `
+        <section class="overlay-mod-section" data-mod-section="stochastic"${modType === 'stochastic' ? '' : ' hidden'}>
+          <h4>modulator — stochastic</h4>
+          <div class="overlay-field-row"><label>cooldown_frames</label><input type="number" min="0" step="1" data-field="stoch_cooldown_frames" value="${mod.cooldown_frames ?? ''}"></div>
+          <div class="overlay-field-row"><label>change_probability</label><input type="number" min="0" max="1" step="0.001" data-field="stoch_change_probability" value="${mod.change_probability ?? ''}"></div>
+          <div class="overlay-field-row"><label>states [low,high]</label><textarea data-field="stoch_states" data-array rows="1">${escapeAttr(JSON.stringify(mod.states ?? []))}</textarea></div>
+          <div class="overlay-field-row"><label>low_state_probability</label><input type="number" min="0" max="1" step="0.001" data-field="stoch_low_state_probability" value="${mod.low_state_probability ?? ''}"></div>
+          <div class="overlay-field-row"><label>initial_state</label><input type="number" step="0.001" data-field="stoch_initial_state" value="${mod.initial_state ?? ''}"></div>
+          <div class="overlay-field-row"><label>alpha_scale</label><input type="number" min="0" max="1" step="0.001" data-field="stoch_alpha_scale" value="${mod.alpha_scale ?? ''}"></div>
+        </section>`;
+      return beat + stochastic;
+    }
+
+    function renderOverlayEnvelopeSections(envShape, env) {
+      const attack = env.attack || {};
+      const decay  = env.decay || {};
+      const easeOpts = (cur) => OVERLAY_EASES
+        .map(e => `<option value="${e}"${e === cur ? ' selected' : ''}>${e}</option>`).join('');
+      const pulse = `
+        <section class="overlay-env-section" data-env-section="pulse"${envShape === 'pulse' ? '' : ' hidden'}>
+          <h4>envelope — pulse</h4>
+          <div class="overlay-field-row"><label>rest_alpha</label><input type="number" min="0" max="1" step="0.001" data-field="pulse_rest_alpha" value="${env.rest_alpha ?? 0}"></div>
+          <div class="overlay-field-row"><label>attack.duration_sec</label><input type="number" min="0" step="0.001" data-field="pulse_attack_duration_sec" value="${attack.duration_sec ?? ''}"></div>
+          <div class="overlay-field-row"><label>attack.ease</label><select data-field="pulse_attack_ease">${easeOpts(attack.ease)}</select></div>
+          <div class="overlay-field-row"><label>decay.duration_sec</label><input type="number" min="0" step="0.001" data-field="pulse_decay_duration_sec" value="${decay.duration_sec ?? ''}"></div>
+          <div class="overlay-field-row"><label>decay.ease</label><select data-field="pulse_decay_ease">${easeOpts(decay.ease)}</select></div>
+        </section>`;
+      const hold = `
+        <section class="overlay-env-section" data-env-section="hold"${envShape === 'hold' ? '' : ' hidden'}>
+          <h4>envelope — hold</h4>
+          <div class="overlay-field-note">Hold has no parameters — alpha jumps to each modulator event's target and persists until the next event.</div>
+        </section>`;
+      return pulse + hold;
+    }
+
+    function onOverlayAnchorFieldInput(event) {
+      const target = event.target;
+      if (!target.matches('[data-field]')) return;
+      const row = target.closest('.anchor-row');
+      if (!row) return;
+      markOverlayAnchorDirty(row.dataset.anchorId);
+      const fieldName = target.dataset.field;
+      // Three independent hide/show toggles — kind (fill), modulator.type,
+      // envelope.shape. Hide/show PRESERVES the other sections' field values
+      // (no re-render), correct-by-construction per the DEFERRED-e fix.
+      if (fieldName === 'kind') {
+        row.querySelectorAll('[data-fill-section]').forEach(s => {
+          s.hidden = (s.dataset.fillSection !== target.value);
+        });
+      } else if (fieldName === 'modulator_type') {
+        row.querySelectorAll('[data-mod-section]').forEach(s => {
+          s.hidden = (s.dataset.modSection !== target.value);
+        });
+      } else if (fieldName === 'envelope_shape') {
+        row.querySelectorAll('[data-env-section]').forEach(s => {
+          s.hidden = (s.dataset.envSection !== target.value);
+        });
+      }
+    }
+
+    function readOverlayPayloadFromRow(row) {
+      const errors = [];
+      const kind  = row.querySelector('[data-field="kind"]')?.value;
+      const label = row.querySelector('[data-field="label"]')?.value ?? 'Overlay';
+
+      const num = (name) => {
+        const v = row.querySelector(`[data-field="${name}"]`)?.value;
+        if (v == null || v === '') return undefined;
+        const n = Number(v);
+        if (Number.isNaN(n)) { errors.push({ field: name, message: 'not a number' }); return undefined; }
+        return n;
+      };
+      const str = (name) => row.querySelector(`[data-field="${name}"]`)?.value;
+      const json = (name) => {
+        const v = row.querySelector(`[data-field="${name}"]`)?.value;
+        if (v == null || v === '') return undefined;
+        try { return JSON.parse(v); }
+        catch (e) { errors.push({ field: name, message: 'JSON parse failed: ' + e.message }); return undefined; }
+      };
+
+      // region (always present)
+      const region = {
+        x: num('region_x') ?? 0, y: num('region_y') ?? 0,
+        w: num('region_w') ?? 1, h: num('region_h') ?? 1,
+      };
+
+      // fill — dispatch on kind
+      let fill;
+      if (kind === 'solid-fill') {
+        fill = { color: str('solid_color') ?? '255,255,255' };
+      } else if (kind === 'gradient-fill') {
+        fill = { direction: str('gradient_direction') ?? 'vertical' };
+        const stops = json('gradient_stops'); if (stops !== undefined) fill.stops = stops;
+      } else {
+        errors.push({ field: 'kind', message: `unknown overlay kind: "${kind}"` });
+        fill = {};
+      }
+
+      // modulator — dispatch on modulator.type
+      const modType = str('modulator_type');
+      const modulator = { type: modType };
+      if (modType === 'beat') {
+        const bpm = num('beat_bpm');                 if (bpm !== undefined) modulator.bpm = bpm;
+        const ft  = num('beat_first_trigger_beats'); if (ft  !== undefined) modulator.first_trigger_beats = ft;
+        const iv  = num('beat_interval_beats');      if (iv  !== undefined) modulator.interval_beats = iv;
+        const ta  = num('beat_target_alpha');        if (ta  !== undefined) modulator.target_alpha = ta;
+      } else if (modType === 'stochastic') {
+        const cd = num('stoch_cooldown_frames');       if (cd !== undefined) modulator.cooldown_frames = cd;
+        const cp = num('stoch_change_probability');    if (cp !== undefined) modulator.change_probability = cp;
+        const st = json('stoch_states');               if (st !== undefined) modulator.states = st;
+        const lp = num('stoch_low_state_probability'); if (lp !== undefined) modulator.low_state_probability = lp;
+        const is = num('stoch_initial_state');         if (is !== undefined) modulator.initial_state = is;
+        const as = num('stoch_alpha_scale');           if (as !== undefined) modulator.alpha_scale = as;
+      } else {
+        errors.push({ field: 'modulator_type', message: `unknown modulator type: "${modType}"` });
+      }
+
+      // envelope — dispatch on envelope.shape
+      const envShape = str('envelope_shape');
+      const envelope = { shape: envShape };
+      if (envShape === 'pulse') {
+        envelope.rest_alpha = num('pulse_rest_alpha') ?? 0;
+        envelope.attack = {};
+        const ad = num('pulse_attack_duration_sec'); if (ad !== undefined) envelope.attack.duration_sec = ad;
+        const ae = str('pulse_attack_ease');         if (ae !== undefined) envelope.attack.ease = ae;
+        envelope.decay = {};
+        const dd = num('pulse_decay_duration_sec'); if (dd !== undefined) envelope.decay.duration_sec = dd;
+        const de = str('pulse_decay_ease');         if (de !== undefined) envelope.decay.ease = de;
+      } else if (envShape === 'hold') {
+        // no parameters
+      } else {
+        errors.push({ field: 'envelope_shape', message: `unknown envelope shape: "${envShape}"` });
+      }
+
+      const payload = { kind, region, fill, modulator, envelope };
+      return { payload, label, errors };
+    }
+
+    async function onOverlayAnchorSave(anchorId) {
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (!row) return;
+      const venueId = row.dataset.venueId;
+      const { payload, label, errors } = readOverlayPayloadFromRow(row);
+      if (errors.length > 0) {
+        showAnchorStatus(anchorId,
+          'Fix before save: ' + errors.map(e => e.field + ' (' + e.message + ')').join('; '),
+          'error');
+        return;
+      }
+      // db/035 RPC signature: 3 args (p_id, p_venue_id, p_partial). 'type'
+      // always included (RPC requires it for INSERT, no-op on UPDATE).
+      const partial = { type: 'overlay', payload, label };
+      showAnchorStatus(anchorId, 'Saving…', null);
+      try {
+        const { data, error } = await window.sb.rpc('rpc_venue_anchor_upsert', {
+          p_id: anchorId, p_venue_id: venueId, p_partial: partial,
+        });
+        if (error) { showAnchorStatus(anchorId, 'Save failed: ' + error.message, 'error'); return; }
+        if (!data)  { showAnchorStatus(anchorId, 'Save failed: rpc returned no row', 'error'); return; }
+        state.overlayAnchorDirty.delete(anchorId);
+        state.overlayAnchorNew.delete(anchorId);
+        showAnchorStatus(anchorId, 'Saved.', 'success');   // 'success' (NOT 'ok') — the canonical .anchor-status class
+        await loadAndRenderOverlayPanel(venueId);
+      } catch (e) {
+        showAnchorStatus(anchorId, 'Save error: ' + (e.message || e), 'error');
+      }
+    }
+
+    async function onOverlayAnchorDelete(anchorId) {
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (!row) return;
+      const venueId = row.dataset.venueId;
+      const isPending = state.overlayAnchorNew.has(anchorId);
+      if (!isPending && !window.confirm('Delete this overlay anchor?')) return;
+      stopOverlayPreview(anchorId);
+      if (isPending) {
+        state.overlayAnchorNew.delete(anchorId);
+        state.overlayAnchorDirty.delete(anchorId);
+        await loadAndRenderOverlayPanel(venueId);
+        return;
+      }
+      try {
+        const { error } = await window.sb.rpc('rpc_venue_anchor_delete', { p_id: anchorId });
+        if (error) { showAnchorStatus(anchorId, 'Delete failed: ' + error.message, 'error'); return; }
+        state.overlayAnchorDirty.delete(anchorId);
+        await loadAndRenderOverlayPanel(venueId);
+      } catch (e) {
+        showAnchorStatus(anchorId, 'Delete error: ' + (e.message || e), 'error');
+      }
+    }
+
+    function onOverlayAnchorCancel(anchorId) {
+      stopOverlayPreview(anchorId);
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      const venueId = row?.dataset.venueId || state.selectedVenueId;
+      state.overlayAnchorNew.delete(anchorId);
+      state.overlayAnchorDirty.delete(anchorId);
+      loadAndRenderOverlayPanel(venueId);
+    }
+
+    function onAddOverlayAnchor() {
+      const venueId = state.selectedVenueId;
+      if (!venueId) return;
+      // PREVENT — single overlay anchor per venue (spec D-panel). The button
+      // is hidden at count >= 1, but guard here too (defensive, mirrors A2/A3).
+      if (overlayAnchorCount(venueId) >= 1) return;
+      const kindSel = document.getElementById('overlay-add-kind');
+      const kind    = (kindSel && kindSel.value) || OVERLAY_KINDS[0];
+      const newId   = 'anc_' + (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '_' + Math.random().toString(36).slice(2)));
+      state.overlayAnchorNew.set(newId, { venue_id: venueId, kind });
+      state.overlayAnchorDirty.add(newId);
+      loadAndRenderOverlayPanel(venueId);
+    }
+
+    function onPlayOverlayPreview(rowEl) {
+      const anchorId = rowEl.dataset.anchorId;
+      const wrapEl   = rowEl.querySelector('.overlay-preview-canvas-wrap');
+      if (!wrapEl) return;
+      const { payload, errors } = readOverlayPayloadFromRow(rowEl);
+      if (errors.length > 0) {
+        showAnchorStatus(anchorId,
+          'Fix before preview: ' + errors.map(e => e.field + (e.message ? ` (${e.message})` : '')).join('; '),
+          'error');
+        return;
+      }
+      stopOverlayPreview(anchorId);
+      // Fresh canvas per Play (A4b triage lifecycle parity — the wrap's
+      // aspect-ratio:2/1 holds the box stable while empty between Plays).
+      wrapEl.querySelectorAll('canvas').forEach(c => c.remove());
+      const canvasEl = document.createElement('canvas');
+      canvasEl.className = 'overlay-preview-canvas';
+      canvasEl.width  = 480;
+      canvasEl.height = 240;
+      wrapEl.appendChild(canvasEl);
+
+      const anchor = { id: anchorId, payload };
+      try {
+        const handle = window.elsewhere?.overlayRenderer?.overlayAnchorRenderer?.(
+          anchor, { canvas: canvasEl }
+        );
+        if (!handle || typeof handle.stop !== 'function') {
+          showAnchorStatus(anchorId, 'Preview failed — renderer returned no handle', 'error');
+          return;
+        }
+        state.overlayPreviewState.set(anchorId, { stopFn: handle.stop, canvasEl });
+        rowEl.querySelector('.btn-play-overlay-preview').hidden   = true;
+        rowEl.querySelector('.btn-replay-overlay-preview').hidden = false;
+        rowEl.querySelector('.btn-stop-overlay-preview').hidden   = false;
+      } catch (e) {
+        showAnchorStatus(anchorId, 'Preview error: ' + (e.message || e), 'error');
+      }
+    }
+
+    function onReplayOverlayPreview(rowEl) {
+      stopOverlayPreview(rowEl.dataset.anchorId);
+      onPlayOverlayPreview(rowEl);
+    }
+
+    function stopOverlayPreview(anchorId) {
+      const st = state.overlayPreviewState.get(anchorId);
+      if (!st) return;
+      try { st.stopFn?.(); } catch (_) {}
+      try { st.canvasEl?.remove?.(); } catch (_) {}
+      state.overlayPreviewState.delete(anchorId);
+      const row = document.querySelector(`.anchor-row[data-anchor-id="${anchorId}"]`);
+      if (row) {
+        const playBtn   = row.querySelector('.btn-play-overlay-preview');
+        const replayBtn = row.querySelector('.btn-replay-overlay-preview');
+        const stopBtn   = row.querySelector('.btn-stop-overlay-preview');
+        if (playBtn)   playBtn.hidden   = false;
+        if (replayBtn) replayBtn.hidden = true;
+        if (stopBtn)   stopBtn.hidden   = true;
+      }
+    }
+
+    function stopAllOverlayPreviews() {
+      for (const anchorId of Array.from(state.overlayPreviewState.keys())) {
+        stopOverlayPreview(anchorId);
+      }
+    }
+
+    function onStopAllOverlayPreviews() {
+      stopAllOverlayPreviews();
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
     // ─── Stage A4b — 3D preview infrastructure ─────────────────────
     // ═══════════════════════════════════════════════════════════════
     // Shared helpers for both 3D anchor types (spotlight-3d, particle-3d).
@@ -4876,6 +5553,24 @@
         if (e.target.matches('.btn-anchor-delete-3d'))            return onSpotlight3dAnchorDelete(anchorId);
       });
 
+      // ─── Stage 4.5 — overlay panel wiring ───────────────────────────
+      document.getElementById('btn-add-overlay-anchor').addEventListener('click', onAddOverlayAnchor);
+      document.getElementById('btn-stop-all-overlay-previews').addEventListener('click', onStopAllOverlayPreviews);
+      const overlayListEl = document.getElementById('overlay-anchor-list');
+      overlayListEl.addEventListener('input',  onOverlayAnchorFieldInput);
+      overlayListEl.addEventListener('change', onOverlayAnchorFieldInput);
+      overlayListEl.addEventListener('click', (e) => {
+        const row = e.target.closest('.anchor-row');
+        if (!row) return;
+        const anchorId = row.dataset.anchorId;
+        if (e.target.matches('.btn-play-overlay-preview'))   return onPlayOverlayPreview(row);
+        if (e.target.matches('.btn-replay-overlay-preview')) return onReplayOverlayPreview(row);
+        if (e.target.matches('.btn-stop-overlay-preview'))   return stopOverlayPreview(anchorId);
+        if (e.target.matches('.btn-anchor-save'))            return onOverlayAnchorSave(anchorId);
+        if (e.target.matches('.btn-anchor-delete'))          return onOverlayAnchorDelete(anchorId);
+        if (e.target.matches('.btn-anchor-cancel'))          return onOverlayAnchorCancel(anchorId);
+      });
+
       window.addEventListener('beforeunload', (e) => {
         // Extended per Stage A4a: includes spotlight anchor dirty state.
         const anyDirty = state.dirty.size > 0
@@ -4884,7 +5579,9 @@
                       || state.particleAnchorDirty.size > 0
                       || state.particleAnchorNew.size > 0
                       || state.spotlightAnchorDirty.size > 0
-                      || state.spotlightAnchorNew.size > 0;
+                      || state.spotlightAnchorNew.size > 0
+                      || state.overlayAnchorDirty.size > 0
+                      || state.overlayAnchorNew.size > 0;
         if (anyDirty) {
           e.preventDefault();
           e.returnValue = '';
