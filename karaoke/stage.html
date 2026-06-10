@@ -462,7 +462,7 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:var(--color-gold);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.103</div>
+    <div style="font-size:14px;color:var(--color-gold);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.104</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -619,7 +619,7 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:var(--color-gold-dim);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.103</div>
+  <div style="margin-top:12px;font-size:14px;color:var(--color-gold-dim);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.104</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -754,28 +754,16 @@ function hideStageVenuePicker(){
   document.getElementById('stage-venue-overlay').style.display = 'none';
 }
 
-// ─── Stage 7b — venue read-path flag (default OFF: procedural stays canonical) ───
-// Seeded once at load from ?venuepath=data. `activeVenuePath` is captured ONCE per
-// venue init (top of initVenueMode below) and read by all dispatch points + the
-// render loop — never the live flag — so a mid-session flip cannot half-switch a
-// venue. GATE 1 (this block) wires the flag in DORMANT: nothing branches on
-// activeVenuePath yet (the data path isn't built until later 7b gates). Flag stays
-// through 7c; nothing deletes until 7d.
-window.elsewhere = window.elsewhere || {};
-window.elsewhere.useDataPath = new URLSearchParams(location.search).get('venuepath') === 'data';
-let activeVenuePath = 'procedural';   // 'data' | 'procedural' — set at top of initVenueMode
-// Stage 7b data-path handle lists. Declared here (before the render loop at the
-// kickoff) so there is no temporal-dead-zone risk when the loop reads them.
-// {stop} for audio + 2D anchors; {update,dispose} for 3D anchors. Empty until gate 6.
+// ─── Stage 7d — the venue read path is now DATA-ONLY (the flag is removed) ───
+// The ?venuepath=data flag + activeVenuePath are gone: 7c signed off that the data
+// path renders every venue identically, so it is now the only path. These handle
+// lists survive (the data path uses them). Declared before the render-loop kickoff so
+// there is no temporal-dead-zone when the loop reads them. {stop} for audio + 2D
+// anchors; {update,dispose} for 3D anchors.
 let dataPath2DHandles = [];
 let dataPath3DHandles = [];
 
 function initVenueMode(){
-  // Capture the path ONCE for this venue's full lifecycle (D-flag-once). initVenueMode
-  // is the single venue-init entry — it fires both the 2D/audio arm (startAmbient) and
-  // the async 3D arm (addVenueEffects3D via the panorama build), so capturing here makes
-  // both arms agree on one path. GATE 1: no behavior change — nothing reads this yet.
-  activeVenuePath = window.elsewhere?.useDataPath ? 'data' : 'procedural';
   const venue = VENUES.find(v=>v.id===selectedVenueId);
   log('initVenueMode — selectedVenueId:'+selectedVenueId+' venue:'+(venue?venue.name:'NOT FOUND')+' skyboxId:'+(venue?venue.skyboxId:'n/a')+' panReady:'+panReady+' viewMode:'+viewMode, 'info');
   if(!venue || !venue.skyboxId){
@@ -2696,9 +2684,8 @@ function buildPanorama(){
     log('buildPanorama: reusing renderer', 'info');
   }
 
-  // Clear existing meshes
-  // Dispose any existing 3D venue effects
-  if(venueEffects3D){ venueEffects3D.dispose(); venueEffects3D=null; }
+  // Clear existing meshes (7d: procedural-3D dispose removed — venueEffects3D is never set
+  // on the data path; data 3D is handled by addVenueEffects3D's async self-clear + teardownDataPath)
   while(panScene.children.length) panScene.remove(panScene.children[0]);
   panReady = false;
 
@@ -2880,20 +2867,16 @@ function buildProgrammaticPanorama(){
 let venueEffects3D = null; // holds { update, dispose } for current venue
 
 function addVenueEffects3D(venueId){
-  // ─── 7b read-path branch (default OFF → procedural). Data branch returns early so the
-  // EXISTING procedural code below is BYTE-UNCHANGED. Teardown here: dispose any outgoing
-  // PROCEDURAL 3D (the procedural→data cross case — startAmbient's teardownDataPath only
-  // touches data handles), AND dispose any existing data-3D handles (idempotent re-init
-  // safety — on a normal venue change teardownDataPath already cleared them; this guards
-  // a same-venue panorama rebuild from appending duplicates to the list). ───
-  if(activeVenuePath === 'data'){
-    if(venueEffects3D){ venueEffects3D.dispose(); venueEffects3D=null; }                  // outgoing procedural 3D
-    for(const h of dataPath3DHandles){ try{ h && h.dispose && h.dispose(); }catch(_){} }  // existing data 3D
-    dataPath3DHandles = [];
-    renderVenueFromAnchors3D(venueId);
-    return;
-  }
-  // Clean up previous effects
+  // ─── 7d Step 1: data path is the only path (flag removed), now unconditional. The
+  // old data-branch's `venueEffects3D` dispose is gone — venueEffects3D is never set on
+  // the data path (procedural-only). Disposes any existing data-3D handles before the
+  // async render (re-init safety against a same-venue panorama rebuild). Everything below
+  // the return is UNREACHABLE dead procedural code, retained until Step 2. ───
+  for(const h of dataPath3DHandles){ try{ h && h.dispose && h.dispose(); }catch(_){} }  // existing data 3D
+  dataPath3DHandles = [];
+  renderVenueFromAnchors3D(venueId);
+  return;
+  // Clean up previous effects (DEAD — unreachable; deleted in Step 2)
   if(venueEffects3D){ venueEffects3D.dispose(); venueEffects3D=null; }
 
   if(venueId === 'stadium') venueEffects3D = buildStadiumEffects3D();
@@ -3557,8 +3540,7 @@ function handleAudienceMsg(msg){
       selectedVenueId = v.id;
       panReady = false;
       cancelVenueTour();
-      if(venueEffects3D){ venueEffects3D.dispose(); venueEffects3D=null; }
-      if(panScene) while(panScene.children.length) panScene.remove(panScene.children[0]);
+      if(panScene) while(panScene.children.length) panScene.remove(panScene.children[0]);   // 7d: procedural-3D dispose removed (data 3D handled by addVenueEffects3D + teardownDataPath)
       buildPanorama();
       tYaw = v.startYaw || 0; cYaw = v.startYaw || 0;
       log('set-venue: found id='+v.id+' skyboxId='+v.skyboxId+' viewMode='+viewMode, 'ok');
@@ -4054,12 +4036,10 @@ const DIRS=[[-175,-130,'Behind'],[- 130,-90,'Far Left'],[-90,-55,'Stage Left —
 
 function renderLoop(now){
   requestAnimationFrame(renderLoop); fc++;
-  // Stage 7b: advance the venue modulator drivers once per frame off the render loop's
-  // own `now` (driver-clock == render-clock). Gated on the data path; ALSO a no-op when
-  // no driver is active (procedural never calls activateVenueDrivers → active stays null
-  // → tickVenueModulators early-returns). `now` is undefined only on the initial direct
-  // renderLoop() kickoff below — skip the tick that one frame.
-  if(activeVenuePath === 'data' && now !== undefined) tickVenueModulators(now);
+  // 7d: advance the venue modulator drivers once per frame off the render loop's own
+  // `now` (driver-clock == render-clock). No-op when no driver is active (tickVenueModulators
+  // early-returns). `now` is undefined only on the initial direct renderLoop() kickoff — skip it.
+  if(now !== undefined) tickVenueModulators(now);
 
   if(viewMode==='panorama'){
     // ── SINGER VIEW — head-tracked / manual ──
@@ -4072,8 +4052,7 @@ function renderLoop(now){
     panCamera3.fov = 80; panCamera3.updateProjectionMatrix();
     panCamera3.rotation.y = -(headTrackingAuto ? cYaw   : manualYaw  ) * D2R * YS;
     panCamera3.rotation.x = -(headTrackingAuto ? clamp(cPitch,-MU,MD) : clamp(manualPitch,-MU,MD)) * D2R * PS;
-    if(venueEffects3D) venueEffects3D.update();
-    for(const h of dataPath3DHandles) h.update();   // 7b data-path 3D (empty flag-OFF; procedural line above untouched)
+    for(const h of dataPath3DHandles) h.update();   // 7d data-path 3D (the only 3D update now)
     panRenderer.render(panScene, panCamera3);
     if(fc%3===0){
       document.getElementById('cneedle').style.transform=`translateX(-50%) translateY(-100%) rotate(${cYaw*YS}deg)`;
@@ -4099,8 +4078,7 @@ function renderLoop(now){
         panCamera3.rotation.x = -venuePitch * D2R;
       }
       // Update 3D venue effects before rendering
-      if(venueEffects3D) venueEffects3D.update();
-      for(const h of dataPath3DHandles) h.update();   // 7b data-path 3D (empty flag-OFF; procedural line above untouched)
+      for(const h of dataPath3DHandles) h.update();   // 7d data-path 3D (the only 3D update now)
       panRenderer.render(panScene, panCamera3);
       const pl = document.getElementById('pan-layer');
       if(pl.style.opacity !== '1'){
@@ -4433,7 +4411,7 @@ document.addEventListener('keydown',e=>{
 
 const ambientCtx = document.getElementById('ambient-layer').getContext('2d');
 let ambientW = window.innerWidth, ambientH = window.innerHeight;
-function resizeAmbient(){ ambientW=window.innerWidth; ambientH=window.innerHeight; document.getElementById('ambient-layer').width=ambientW; document.getElementById('ambient-layer').height=ambientH; }
+function resizeAmbient(){ ambientW=window.innerWidth; ambientH=window.innerHeight; }  // 7d: #ambient-layer resize dropped (procedural canvas now dead; data-path stack canvases are sized in makeStackCanvas from ambientW/ambientH)
 resizeAmbient();
 window.addEventListener('resize', resizeAmbient);
 
@@ -5184,24 +5162,19 @@ function startAmbient(venueId){
   if(currentAmbientVenue === venueId) return;
   log('startAmbient — from:'+currentAmbientVenue+' to:'+venueId, 'info');
   currentAmbientVenue = venueId;
-  stopAmbientAudio();
-  stopAmbientAnim();
-  teardownDataPath();   // 7b: tear down the OUTGOING venue's data path (stops 2D/audio handles,
+  teardownDataPath();   // 7d: tear down the outgoing venue's data path (stops 2D/audio handles,
                         // clears the canvas stack, disposes 3D handles, deactivates drivers).
-                        // Idempotent no-op if the outgoing venue was procedural — BOTH teardowns
-                        // run every venue change, each releasing only its own path's resources.
   if(!venueId || venueId==='default'){
     log('startAmbient — classic stage, no ambient', 'info');
     return;
   }
-  // ─── 7b read-path branch (default OFF → procedural). activeVenuePath is captured once at
-  // initVenueMode. The data branch returns early, so the EXISTING procedural code below is
-  // reached only on the procedural path and is BYTE-UNCHANGED (not re-indented into an else). ───
-  if(activeVenuePath === 'data'){
-    activateVenueDrivers(venueId);      // stadium/disco only; no-op for venues with no driver
-    renderVenueFromAnchors2D(venueId);  // audio anchors + layered 2D canvases (the 3D arm is addVenueEffects3D)
-    return;
-  }
+  // ─── 7d Step 1: the flag is gone — the data path is the ONLY path, now unconditional.
+  // Everything below the return (getProfile + the startAudio closure + profile.anim) is now
+  // UNREACHABLE dead procedural code, physically retained until Step 2 deletes the proven-dead
+  // blocks (transform-first-delete-later). ───
+  activateVenueDrivers(venueId);      // stadium/disco only; no-op for venues with no driver
+  renderVenueFromAnchors2D(venueId);  // audio anchors + layered 2D canvases (3D arm = addVenueEffects3D)
+  return;
   const profile = getProfile(venueId);
   if(!profile){
     log('startAmbient — no profile for: '+venueId+', no ambient', 'info');
