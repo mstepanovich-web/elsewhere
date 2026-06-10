@@ -293,6 +293,9 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
 <canvas id="aud-layer"></canvas>
 <canvas id="pan-layer"></canvas>
 <canvas id="ambient-layer" style="position:fixed;inset:0;z-index:3;pointer-events:none;"></canvas>
+<!-- Stage 7b data path: per-2D-anchor layered canvases stack here (flag ON). Same
+     z-slot as #ambient-layer (which serves flag-OFF procedural). Empty until gate 6. -->
+<div id="ambient-stack" style="position:fixed;inset:0;z-index:3;pointer-events:none;"></div>
 
 <!-- DeepAR offscreen canvas — receives filtered output, composited into AC -->
 <canvas id="deepar-canvas" style="display:none;"></canvas>
@@ -459,7 +462,7 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="bi"><div class="dot of" id="adot"></div><span id="albl">0 watching</span></div>
-    <div style="font-size:14px;color:var(--color-gold);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.102</div>
+    <div style="font-size:14px;color:var(--color-gold);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.103</div>
     <div id="htoggle" onclick="toggleHeadTracking()" title="Toggle head tracking"
       style="padding:5px 10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.4);border-radius:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-green-dim);cursor:pointer;display:none;">Manual</div>
     <div id="vtoggle" onclick="onToggleView()">🎤 Singer View</div>
@@ -616,7 +619,7 @@ body{background:var(--color-bg);overflow:hidden;width:100vw;height:100vh;font-fa
 
   <div class="sb" onclick="enterStage()">Step on Stage →</div>
   <div id="shint">Allow camera when prompted · F = fullscreen · Space = play/pause</div>
-  <div style="margin-top:12px;font-size:14px;color:var(--color-gold-dim);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.102</div>
+  <div style="margin-top:12px;font-size:14px;color:var(--color-gold-dim);letter-spacing:.12em;font-family:var(--font-mono);font-weight:bold;">v2.103</div>
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
@@ -751,7 +754,28 @@ function hideStageVenuePicker(){
   document.getElementById('stage-venue-overlay').style.display = 'none';
 }
 
+// ─── Stage 7b — venue read-path flag (default OFF: procedural stays canonical) ───
+// Seeded once at load from ?venuepath=data. `activeVenuePath` is captured ONCE per
+// venue init (top of initVenueMode below) and read by all dispatch points + the
+// render loop — never the live flag — so a mid-session flip cannot half-switch a
+// venue. GATE 1 (this block) wires the flag in DORMANT: nothing branches on
+// activeVenuePath yet (the data path isn't built until later 7b gates). Flag stays
+// through 7c; nothing deletes until 7d.
+window.elsewhere = window.elsewhere || {};
+window.elsewhere.useDataPath = new URLSearchParams(location.search).get('venuepath') === 'data';
+let activeVenuePath = 'procedural';   // 'data' | 'procedural' — set at top of initVenueMode
+// Stage 7b data-path handle lists. Declared here (before the render loop at the
+// kickoff) so there is no temporal-dead-zone risk when the loop reads them.
+// {stop} for audio + 2D anchors; {update,dispose} for 3D anchors. Empty until gate 6.
+let dataPath2DHandles = [];
+let dataPath3DHandles = [];
+
 function initVenueMode(){
+  // Capture the path ONCE for this venue's full lifecycle (D-flag-once). initVenueMode
+  // is the single venue-init entry — it fires both the 2D/audio arm (startAmbient) and
+  // the async 3D arm (addVenueEffects3D via the panorama build), so capturing here makes
+  // both arms agree on one path. GATE 1: no behavior change — nothing reads this yet.
+  activeVenuePath = window.elsewhere?.useDataPath ? 'data' : 'procedural';
   const venue = VENUES.find(v=>v.id===selectedVenueId);
   log('initVenueMode — selectedVenueId:'+selectedVenueId+' venue:'+(venue?venue.name:'NOT FOUND')+' skyboxId:'+(venue?venue.skyboxId:'n/a')+' panReady:'+panReady+' viewMode:'+viewMode, 'info');
   if(!venue || !venue.skyboxId){
@@ -2856,6 +2880,19 @@ function buildProgrammaticPanorama(){
 let venueEffects3D = null; // holds { update, dispose } for current venue
 
 function addVenueEffects3D(venueId){
+  // ─── 7b read-path branch (default OFF → procedural). Data branch returns early so the
+  // EXISTING procedural code below is BYTE-UNCHANGED. Teardown here: dispose any outgoing
+  // PROCEDURAL 3D (the procedural→data cross case — startAmbient's teardownDataPath only
+  // touches data handles), AND dispose any existing data-3D handles (idempotent re-init
+  // safety — on a normal venue change teardownDataPath already cleared them; this guards
+  // a same-venue panorama rebuild from appending duplicates to the list). ───
+  if(activeVenuePath === 'data'){
+    if(venueEffects3D){ venueEffects3D.dispose(); venueEffects3D=null; }                  // outgoing procedural 3D
+    for(const h of dataPath3DHandles){ try{ h && h.dispose && h.dispose(); }catch(_){} }  // existing data 3D
+    dataPath3DHandles = [];
+    renderVenueFromAnchors3D(venueId);
+    return;
+  }
   // Clean up previous effects
   if(venueEffects3D){ venueEffects3D.dispose(); venueEffects3D=null; }
 
@@ -4015,8 +4052,14 @@ async function triggerSongEndRpc() {
 const DIRS=[[-175,-130,'Behind'],[- 130,-90,'Far Left'],[-90,-55,'Stage Left — Guitar 🎸'],[-55,-20,'Left of Centre'],[-20,20,'Centre — Crowd 👥'],[20,55,'Right of Centre'],[55,90,'Stage Right — Bass 🎸'],[90,130,'Far Right'],[130,175,'Behind']];
 // fc declared at top of script
 
-function renderLoop(){
+function renderLoop(now){
   requestAnimationFrame(renderLoop); fc++;
+  // Stage 7b: advance the venue modulator drivers once per frame off the render loop's
+  // own `now` (driver-clock == render-clock). Gated on the data path; ALSO a no-op when
+  // no driver is active (procedural never calls activateVenueDrivers → active stays null
+  // → tickVenueModulators early-returns). `now` is undefined only on the initial direct
+  // renderLoop() kickoff below — skip the tick that one frame.
+  if(activeVenuePath === 'data' && now !== undefined) tickVenueModulators(now);
 
   if(viewMode==='panorama'){
     // ── SINGER VIEW — head-tracked / manual ──
@@ -4030,6 +4073,7 @@ function renderLoop(){
     panCamera3.rotation.y = -(headTrackingAuto ? cYaw   : manualYaw  ) * D2R * YS;
     panCamera3.rotation.x = -(headTrackingAuto ? clamp(cPitch,-MU,MD) : clamp(manualPitch,-MU,MD)) * D2R * PS;
     if(venueEffects3D) venueEffects3D.update();
+    for(const h of dataPath3DHandles) h.update();   // 7b data-path 3D (empty flag-OFF; procedural line above untouched)
     panRenderer.render(panScene, panCamera3);
     if(fc%3===0){
       document.getElementById('cneedle').style.transform=`translateX(-50%) translateY(-100%) rotate(${cYaw*YS}deg)`;
@@ -4056,6 +4100,7 @@ function renderLoop(){
       }
       // Update 3D venue effects before rendering
       if(venueEffects3D) venueEffects3D.update();
+      for(const h of dataPath3DHandles) h.update();   // 7b data-path 3D (empty flag-OFF; procedural line above untouched)
       panRenderer.render(panScene, panCamera3);
       const pl = document.getElementById('pan-layer');
       if(pl.style.opacity !== '1'){
@@ -4518,6 +4563,130 @@ function stopAmbientAnim(){
   ambientCtx.clearRect(0,0,ambientW,ambientH);
   // Hide the canvas entirely when not animating so nothing bleeds through
   document.getElementById('ambient-layer').style.opacity = '0';
+}
+
+// ─── Stage 7b data-path scaffolding (GATE 2 — called by nothing until gate 6) ───
+// makeStackCanvas: create one transparent per-anchor canvas in #ambient-stack,
+// sized to the viewport, appended in LAYER_ORDER order (DOM order = z-stack).
+// Each 2D renderer self-RAFs on its OWN canvas, so per-renderer full-clears can't
+// collide (the collision the layered design resolves). No behavior change in gate 2.
+function makeStackCanvas(){
+  const c = document.createElement('canvas');
+  c.width  = ambientW;
+  c.height = ambientH;
+  c.style.cssText = 'position:absolute;inset:0;';
+  document.getElementById('ambient-stack').appendChild(c);
+  return c;
+}
+
+// teardownDataPath: release the previous venue's data-path handles before the next
+// venue activates — stop the 2D/audio {stop} handles, clear the canvas stack,
+// dispose the 3D {update,dispose} handles, and deactivate the venue modulators.
+// Symmetric with the procedural stopAmbientAudio()/stopAmbientAnim() teardown.
+function teardownDataPath(){
+  for(const h of dataPath2DHandles){ try{ h && h.stop && h.stop(); }catch(_){} }
+  dataPath2DHandles = [];
+  const stack = document.getElementById('ambient-stack');
+  if(stack) stack.replaceChildren();
+  for(const h of dataPath3DHandles){ try{ h && h.dispose && h.dispose(); }catch(_){} }
+  dataPath3DHandles = [];
+  try{ window.elsewhere?.modulators?.deactivateVenueDrivers?.(); }catch(_){}
+}
+
+// ─── Stage 7b data-path dispatch — 2D/audio (GATE 3 — wired to nothing until gate 6) ───
+// renderVenueFromAnchors2D resolves a venue's anchors via the canonical Phase-2 path
+// (loadVenueAnchors → resolveAnchorSet with the karaoke anchor_patch) and renders the
+// audio + 2D-canvas anchors. 3D anchors (payload.context === '3d-three') are skipped
+// here — gate 4 adds renderVenueFromAnchors3D. Called by nothing until gate 6.
+
+// Per-venue 2D-canvas layer order, bottom → top. VERIFIED against the procedural draw
+// order (spawnParticles call order = particles[] order = draw order = depth). Each entry
+// cites the source line(s) proving it. NO global family order: stadium/speakeasy put
+// particle BELOW spotlight, but festival puts particle ABOVE spotlight — per-venue.
+// (D-zorder B; this table is the eventual migration's source-of-truth → anchor.payload.z.)
+const LAYER_ORDER = {
+  stadium:   ['particle', 'spotlight'],            // phone-lights :4637 BEFORE beams :4652 → particle below
+  disco:     ['overlay', 'particle'],              // floor-flash draw :4715 BEFORE mirror-ball :4722 (closure :4712) → overlay below
+  speakeasy: ['particle', 'spotlight'],            // smoke :4794 BEFORE light-shaft :4816 → particle below
+  festival:  ['overlay', 'spotlight', 'particle'], // strobe :4898 BEFORE lasers :4900 (closure :4894); confetti :4913 AFTER → overlay<spotlight<particle
+  honkytonk: ['overlay'],                          // single overlay — no stacking
+};
+
+// One modulators getter passed as ctx.modulators to both 2D + 3D renderers.
+// (name, target): 2D's computeModulatorTargets passes both (gate 5); 3D's
+// ctx.modulators(name) passes name-only → the clean D-guard warn. venue-modulators.js (7a).
+const karaokeModulators = (name, target) => window.elsewhere?.modulators?.resolveModulator?.(name, target);
+
+// Registry lookup — venue-registry.js publishes window.elsewhere.anchorRegistry.
+function getRendererFor(key){ return window.elsewhere?.anchorRegistry?.getAnchorRenderer?.(key) || null; }
+
+// Canonical Phase-2 anchor resolution for one venue: loadVenueAnchors (defaults) →
+// resolveAnchorSet (apply karaoke anchor_patch — empty in prod → defaults unchanged).
+// Cached per venueId (anchors are static content) so the 2D + 3D dispatch share one fetch.
+let _venueAnchorCache = new Map();
+let _karaokeOverridesPromise = null;
+async function _getKaraokeOverrides(){
+  if(!_karaokeOverridesPromise){
+    _karaokeOverridesPromise = (async () => {
+      const vs = await waitForVenueSettings();
+      if(!vs) return [];
+      try { return (await vs.loadVenueSettings('karaoke')).overrides || []; }
+      catch(e){ log('7b: karaoke overrides load failed: '+(e?.message||e), 'warn'); return []; }
+    })();
+  }
+  return _karaokeOverridesPromise;
+}
+async function resolveVenueAnchors(venueId){
+  if(_venueAnchorCache.has(venueId)) return _venueAnchorCache.get(venueId);
+  const vs = await waitForVenueSettings();
+  if(!vs) return [];
+  const [defaults, overrides] = await Promise.all([
+    vs.loadVenueAnchors({ venueId }),
+    _getKaraokeOverrides(),
+  ]);
+  const patch = overrides.find(o => o.venue_id === venueId)?.anchor_patch || null;
+  const resolved = vs.resolveAnchorSet(defaults, patch);   // READ-ONLY — must not mutate anchors/payloads
+  _venueAnchorCache.set(venueId, resolved);
+  return resolved;
+}
+
+async function renderVenueFromAnchors2D(venueId){
+  const anchors = await resolveVenueAnchors(venueId);
+  // Venue-change guard: bail if the venue changed during the async resolve
+  // (matches the procedural startAudio staleness check at the old :5032).
+  if(currentAmbientVenue !== venueId) return;
+  // Audio anchors — Web Audio renderer, no canvas.
+  for(const a of anchors.filter(x => x.type === 'audio')){
+    const r = getRendererFor('audio'); if(!r) continue;
+    dataPath2DHandles.push(r(a, {}));
+  }
+  // 2D-canvas effects: type in {particle, spotlight, overlay}, context !== '3d-three',
+  // ordered bottom→top by LAYER_ORDER. One layered canvas each (no clear collision).
+  const order = LAYER_ORDER[venueId] || [];
+  const twoD = anchors
+    .filter(x => x.type !== 'audio' && x.payload?.context !== '3d-three')
+    .sort((a,b) => order.indexOf(a.type) - order.indexOf(b.type));
+  for(const a of twoD){
+    const r = getRendererFor(a.type); if(!r) continue;
+    const canvas = makeStackCanvas();
+    dataPath2DHandles.push(r(a, { canvas, modulators: karaokeModulators }));
+  }
+}
+
+// ─── Stage 7b data-path dispatch — 3D (GATE 4 — wired to nothing until gate 6) ───
+// renderVenueFromAnchors3D renders a venue's 3D anchors (payload.context === '3d-three')
+// into the existing panScene via the 3D renderers ({update,dispose}, caller-driven).
+// Handles go to dataPath3DHandles, iterated in the render loop. Shares the per-venue
+// resolveVenueAnchors cache with the 2D dispatch. Called by nothing until gate 6.
+async function renderVenueFromAnchors3D(venueId){
+  const anchors = await resolveVenueAnchors(venueId);
+  if(currentAmbientVenue !== venueId) return;   // venue-change guard (caller addVenueEffects3D also guards)
+  for(const a of anchors.filter(x => x.payload?.context === '3d-three')){
+    const key = a.type + '-3d';                  // the A7 lookup-key: spotlight-3d / particle-3d
+    const r = getRendererFor(key); if(!r) continue;
+    const handle = r(a, { scene: panScene, modulators: karaokeModulators });   // {update, dispose}
+    if(handle) dataPath3DHandles.push(handle);
+  }
 }
 
 function spawnParticles(config){
@@ -5017,8 +5186,20 @@ function startAmbient(venueId){
   currentAmbientVenue = venueId;
   stopAmbientAudio();
   stopAmbientAnim();
+  teardownDataPath();   // 7b: tear down the OUTGOING venue's data path (stops 2D/audio handles,
+                        // clears the canvas stack, disposes 3D handles, deactivates drivers).
+                        // Idempotent no-op if the outgoing venue was procedural — BOTH teardowns
+                        // run every venue change, each releasing only its own path's resources.
   if(!venueId || venueId==='default'){
     log('startAmbient — classic stage, no ambient', 'info');
+    return;
+  }
+  // ─── 7b read-path branch (default OFF → procedural). activeVenuePath is captured once at
+  // initVenueMode. The data branch returns early, so the EXISTING procedural code below is
+  // reached only on the procedural path and is BYTE-UNCHANGED (not re-indented into an else). ───
+  if(activeVenuePath === 'data'){
+    activateVenueDrivers(venueId);      // stadium/disco only; no-op for venues with no driver
+    renderVenueFromAnchors2D(venueId);  // audio anchors + layered 2D canvases (the 3D arm is addVenueEffects3D)
     return;
   }
   const profile = getProfile(venueId);

@@ -91,14 +91,21 @@ const DEFAULT_OSCILLATOR = () => 1.0;
 // Computes the per-frame multiplier for each modulator target.
 // Returns { alpha, size } with default 1.0 for any unbound target.
 // Accepts both single-object and array forms (§1.6 / CLR-1).
-function computeModulatorTargets(modulator, elapsedMs) {
+//
+// Stage 7b: optional `resolver(name, target) => scalar` (the venue-modulator
+// live driver, passed by karaoke via ctx.modulators). When resolver is ABSENT
+// (admin preview, or any caller passing no ctx.modulators) the function falls
+// back to the existing PREVIEW_OSCILLATORS path — BYTE-IDENTICAL to pre-7b
+// behavior, so the admin preview is unchanged.
+function computeModulatorTargets(modulator, elapsedMs, resolver) {
   const targets = { alpha: 1.0, size: 1.0 };
   if (!modulator) return targets;
   const bindings = Array.isArray(modulator) ? modulator : [modulator];
   for (const b of bindings) {
     if (!b || !b.name || !b.target) continue;
-    const osc = PREVIEW_OSCILLATORS[b.name] || DEFAULT_OSCILLATOR;
-    targets[b.target] = osc(elapsedMs);
+    targets[b.target] = resolver
+      ? resolver(b.name, b.target)                                  // karaoke — live driver
+      : (PREVIEW_OSCILLATORS[b.name] || DEFAULT_OSCILLATOR)(elapsedMs); // admin / no-resolver — unchanged
   }
   return targets;
 }
@@ -579,9 +586,10 @@ export function particleAnchorRenderer(anchor, ctx) {
     const w = canvas.width;
     const h = canvas.height;
 
-    // Modulator values for this frame
+    // Modulator values for this frame. ctx.modulators is the live resolver in
+    // karaoke (7b) and UNDEFINED in the admin preview → PREVIEW_OSCILLATORS fallback.
     const elapsed = now - t0;
-    const mods = computeModulatorTargets(payload.modulator, elapsed);
+    const mods = computeModulatorTargets(payload.modulator, elapsed, ctx.modulators);
 
     // Clear (full canvas — A3 assumes one effect per canvas)
     c.clearRect(0, 0, w, h);

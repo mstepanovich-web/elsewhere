@@ -192,7 +192,12 @@ function resolveModulator(name, target) {
   if (active && Object.prototype.hasOwnProperty.call(active.scalars, name)) {
     return active.scalars[name];
   }
-  console.warn(`[venue-modulators] unresolved driver '${name}' for target '${target}' — returning identity 1.0`);
+  // D-guard — loud + specific on EVERY unresolved call. `target` is optional (7b: 3D
+  // callers pass name-only); when absent, drop the "for target" clause rather than
+  // print "for target 'undefined'". The WARN is the load-bearing signal; identity 1.0
+  // keeps the effect deterministic + visible. NEVER a silent oscillator fallback.
+  const where = (target === undefined || target === null) ? '' : ` for target '${target}'`;
+  console.warn(`[venue-modulators] unresolved driver '${name}'${where} — returning identity 1.0`);
   return 1.0;
 }
 
