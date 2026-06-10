@@ -5520,3 +5520,32 @@ When a venue's overlay requires a non-rectangular region. No pull today.
 - `docs/VENUE-ADMIN-UI-DIRECTION.md` §7 — the "gradient/rectangle/polygon" framing
 - `docs/VENUE-ADMIN-UI-A4.5-BUILD-SPEC.md` §2.1 (D-region) + §9
 - `shell/venue-renderers/overlay.js` — `regionToPx` (rect-only today)
+
+
+### Deferred: iOS Capacitor resync for the Stage 4.5 web-bundle changes
+
+**Deferred in:** Phase 3 / Plan B Stage 4.5 closeout
+**Deferred on:** 2026-06-10
+**Priority:** Low — bundle-currency hygiene, not a functional fix
+**Area:** iOS Capacitor app (`~/Projects/elsewhere-app/`) — web bundle sync
+**Status:** Deferred — explicit per the CLAUDE.md "session explicitly defers iOS verification with a tracked DEFERRED entry naming the trigger" path
+
+#### Context
+
+Stage 4.5 changed the web bundle (`shell/venue-renderers/overlay.js` new, `admin-venues.html` overlay panel, `karaoke/stage.html` registration tag). The CLAUDE.md session-closing ritual normally ends with `~/sync-app.sh` + `npx cap sync ios` + Xcode rebuild/install. Mike deferred it at the 4.5 closeout (2026-06-10).
+
+Justification for deferring rather than running: (a) **D8 dormancy** — the overlay anchors are dormant data; karaoke behavior is unchanged, so the karaoke surface the iOS app actually bundles (`games/player.html` per the app's payload; karaoke is the venue-renderer consumer) sees no functional change. (b) `admin-venues.html` is **not in the iOS bundle** at all (admin is a web-only surface). So the only bundle delta that reaches iOS is the registration-only `overlay.js` tag in `karaoke/stage.html`, which registers a renderer karaoke does not yet consult (Stage 7). Net iOS-facing behavior change: zero.
+
+#### What's deferred
+
+The `~/sync-app.sh` → `npx cap sync ios` → Xcode rebuild + install + smoke-test chain for the Stage 4.5 web-bundle changes.
+
+#### When to pick this up
+
+**Trigger:** batch with the next functional iOS-relevant change (any stage that ships a user-facing change to a surface the iOS app bundles — e.g. a `games/player.html` change, a push/Capacitor-plugin change, or Stage 7's karaoke read-path switch which makes the venue renderers load-bearing). Drift is acceptable until then because no Stage 4.5 change is iOS-functional.
+
+#### Related
+
+- `CLAUDE.md` — "iOS Capacitor sync — session-closing ritual" (the deferral-with-tracked-entry path)
+- `docs/SESSION-LOGS/2026-06-10-A4.5-verification-result.md` — Carry-over section
+- Memory `ios_app_wrapper.md` — the app bundles `games/player.html`; sync via `~/sync-app.sh`
