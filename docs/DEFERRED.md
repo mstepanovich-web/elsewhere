@@ -5020,7 +5020,7 @@ Before A4b's §9 step 4 proposal locks. The process improvement most directly af
 **Deferred on:** 2026-05-28
 **Priority:** Low — UX-only divergence; functional behavior is correct
 **Area:** admin-venues.html — spotlight panel kind dispatch
-**Status:** Deferred
+**Status:** Completed in A4b. The §6.7 DEFERRED-e fix shipped the emit-all-kind-sections + `[hidden]`-toggle (hide/show) pattern for the 2D spotlight panel, replacing the per-kind re-render. Verified by the A4b verification log C2.5 (`docs/SESSION-LOGS/2026-05-31-A4b-verification-result.md`): a pending swept-beam-2d row's hues survived a kind toggle to pulsed-laser and back. db/038's MIGRATIONS_APPLIED note records the same ("A3 hide/show pattern adopted for pending-row kind switches per §6.7 — closes A4a closeout DEFERRED-(e)"). No residual. The status sat stale at "Deferred" because it was never updated at A4b closeout (a CLAUDE.md item-4 bookkeeping slip) — corrected at Stage 4.5 closeout (2026-06-10). The overlay panel (4.5) uses the same hide/show pattern correct-by-construction across its three section groups.
 
 #### Context
 
@@ -5064,7 +5064,7 @@ During A4b implementation, alongside the anchor-list multi-anchor restructuring.
 **Deferred on:** 2026-05-28
 **Priority:** Low — UI polish, no functional impact
 **Area:** admin-venues.html — both particle (A3) + spotlight (A4a) anchor panels
-**Status:** Deferred
+**Status:** Partially resolved in A4b; residual open. A4b's panel-standardization retrofit (D-standardize) applied the canonical `.anchor-row-actions` container with legible themed buttons across all 5 panels (A4b verification C2.1) — the **button-styling** half (item 1) is resolved. The **Stop-button-placement** half (item 2) is NOT fully resolved: A4b added per-row Stop to particle/spotlight (2D+3D), but the audio panel still uses a panel-level "Stop all" at row-top-right outside `.anchor-row-actions` (A4b verification C2.1 + the A4b UX-bundle "Stop-button location inconsistency" finding). Residual carries to the panel-standardization unification pass (Stage 6 candidate per the A4b UX-bundle note). Status sat stale at "Deferred" (never updated at A4b closeout) — corrected at Stage 4.5 closeout (2026-06-10). The overlay panel (4.5) ships conforming and does NOT inherit this residual.
 
 #### Context
 
@@ -5103,7 +5103,7 @@ A4b implementation cycle, or anytime before Admin UI Part 2 widens the surface.
 **Deferred on:** 2026-05-28
 **Priority:** Low — UX-only; the global "Stop all" already provides functional stop
 **Area:** admin-venues.html — both particle (A3) + spotlight (A4a) preview lifecycle
-**Status:** Deferred
+**Status:** Partially resolved in A4b; audio residual open. A4b's D-standardize added the per-row ■ Stop button to all preview-capable rows on the particle (2D+3D) and spotlight (2D+3D) panels (A4b verification C2.1; db/038 MIGRATIONS note: "per-row Stop button applied across all 3 panels per §7 — closes A4a closeout DEFERRED-(f) + DEFERRED-(g)"). The **audio panel is the sole residual** — it keeps its A2 panel-level "Stop all" rather than a per-row Stop (C2.1: "Audio panel uses a panel-level stop-all rather than per-row Stop ... recorded ... as a future panel-standardization unification item"). Residual carries to the unification pass (Stage 6 candidate). Status sat stale at "Deferred" (never updated at A4b closeout) — corrected at Stage 4.5 closeout (2026-06-10). The overlay panel (4.5) ships with per-row Stop correct-by-construction.
 
 #### Context
 
@@ -5423,3 +5423,100 @@ Before Stage 6 (per-app override editor), since (c)'s sign-out fix is a pre-req 
 - `docs/SESSION-A4B-VERIFICATION-PAUSE.md` §1.6 item 6 — pause-doc pointer
 - `docs/SESSION-LOGS/2026-05-31-A4b-verification-result.md` — Bugs section + Conclusion's carry-over note
 - A4b `showAnchorStatus` at admin-venues.html:2002 — the helper that takes the `kind` class
+
+
+### Deferred: Honkytonk overlay stochastic time-normalization (frame-rate dependence)
+
+**Deferred in:** Phase 3 / Plan B Stage 4.5 closeout
+**Deferred on:** 2026-06-10
+**Priority:** Low — bounded, benign; only surfaces on non-60fps devices and only as a cadence difference, not a break
+**Area:** shell/venue-renderers/overlay.js — stochastic modulator
+**Status:** Deferred
+
+#### Context
+
+honkytonk's neon-tint flicker (the `stochastic` overlay modulator) is **frame-counted** in the source (`karaoke/stage.html:4839` — `neonTimer++` per frame, `neonTimer > 180` cooldown, `Math.random() < 0.02` per-frame trial). overlay.js reproduces this faithfully: the trial runs once per `requestAnimationFrame` tick with `frameCount > cooldown_frames`. This is inherently frame-rate-coupled (180 frames ≈ 3.0s @ 60fps, ≈ 6.0s @ 30fps).
+
+Stage 4.5 **deliberately preserved frame-counting** (spec §2.4 D-framerate, argued not asserted): the §8 verification bar is "renders visually identically to the procedural ancestor," and the ancestor is frame-counted — a frame-counted reproduction matches it on any given device, whereas wall-clock normalization would *diverge* from the ancestor whenever fps ≠ 60. Wall-clock is also not more principled: converting 180 frames → ms requires assuming 60fps anyway, baking in the assumption while losing ancestor fidelity.
+
+#### What's deferred
+
+Converting the stochastic cooldown from frames to wall-clock time (`cooldown_frames` → a duration, run the trial on a time delta) — IF Stage 7's load-bearing read-path or a low-fps device shows visible cadence drift.
+
+#### Options when picking up
+
+- **Leave frame-counted (current).** Correct for the dormant data path and for ancestor parity. The coupling is bounded — a slow ambient flicker, not a beat-locked element; at 30fps it flickers half as often, an aesthetic difference, not a break.
+- **Normalize to wall-clock at Stage 7.** When the read-path becomes load-bearing and runs on arbitrary devices/refresh rates side-by-side with live karaoke, re-evaluate; convert if drift is visible.
+
+#### When to pick this up
+
+Stage 7 read-path adoption, or earlier if observed low-fps cadence drift is reported. Not before — optimizing a dormant data path against a hypothetical.
+
+#### Related
+
+- `docs/VENUE-ADMIN-UI-A4.5-BUILD-SPEC.md` §2.4 (D-framerate, the argued decision) + §9 DEFERRED enumeration
+- `karaoke/stage.html:4837-4842` — the frame-counted procedural ancestor
+- `shell/venue-renderers/overlay.js` — the stochastic trial in the RAF frame
+
+
+### Deferred: Overlay gradient generality (vertical / 2-stop only)
+
+**Deferred in:** Phase 3 / Plan B Stage 4.5 closeout
+**Deferred on:** 2026-06-10
+**Priority:** Low — no current consumer needs more than vertical linear
+**Area:** shell/venue-renderers/overlay.js + admin-venues.html overlay panel — gradient-fill kind
+**Status:** Deferred
+
+#### Context
+
+The `gradient-fill` overlay kind exercises only `direction: "vertical"`, 2-stop, linear gradients (disco's floor-flash). overlay.js's paint branch builds a vertical `createLinearGradient` over the region's vertical extent; the panel's direction selector currently offers only `vertical`.
+
+#### What's deferred
+
+Generalizing the gradient: arbitrary direction (horizontal / diagonal via normalized endpoint vector), radial gradients, and N-stop authoring UX beyond the JSON-textarea `stops` field. Deferred until a venue's overlay needs a non-vertical or radial gradient.
+
+#### Options when picking up
+
+- **Add direction options when a venue needs them.** The `fill.direction` field + stops array already accommodate the data shape; the renderer's gradient construction is the change.
+- **Leave vertical-only.** Sufficient for every overlay-class effect identified so far.
+
+#### When to pick this up
+
+When a new or migrated venue's overlay requires a non-vertical/radial gradient. No pull today.
+
+#### Related
+
+- `docs/VENUE-ADMIN-UI-A4.5-BUILD-SPEC.md` §2.1 (D-fill) + §9
+- `shell/venue-renderers/overlay.js` — the `gradient-fill` paint branch (vertical only)
+
+
+### Deferred: Polygon overlay regions
+
+**Deferred in:** Phase 3 / Plan B Stage 4.5 closeout
+**Deferred on:** 2026-06-10
+**Priority:** Low — named in Direction §7 but no effect uses it
+**Area:** shell/venue-renderers/overlay.js + admin-venues.html overlay panel — region model
+**Status:** Deferred
+
+#### Context
+
+`docs/VENUE-ADMIN-UI-DIRECTION.md` §7 describes the overlay type as covering "gradient/rectangle/**polygon** screen overlays." None of the three Stage 4.5 effects (disco/festival/honkytonk) use a polygon region — all are either full-canvas or a single rectangle. Stage 4.5's `region` model is therefore rect-only: a normalized `{x,y,w,h}` mapped to `c.fillRect`.
+
+#### What's deferred
+
+Polygon (arbitrary-vertex) overlay regions — a `region` shape beyond the rectangle, with a path-fill renderer branch and a vertex-authoring UX. Deferred until a venue's overlay needs a non-rectangular clip.
+
+#### Options when picking up
+
+- **Add a polygon region variant when needed.** Would extend the `region` model from `{x,y,w,h}` to a discriminated shape (rect | polygon), with `c.beginPath`/`c.fill` in the renderer.
+- **Leave rect-only.** Sufficient for all overlay-class effects identified so far.
+
+#### When to pick this up
+
+When a venue's overlay requires a non-rectangular region. No pull today.
+
+#### Related
+
+- `docs/VENUE-ADMIN-UI-DIRECTION.md` §7 — the "gradient/rectangle/polygon" framing
+- `docs/VENUE-ADMIN-UI-A4.5-BUILD-SPEC.md` §2.1 (D-region) + §9
+- `shell/venue-renderers/overlay.js` — `regionToPx` (rect-only today)

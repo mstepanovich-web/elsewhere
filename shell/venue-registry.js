@@ -90,6 +90,7 @@
  *   - audio         (media)
  *   - video         (media)
  *   - link-hotspot  (navigation; overlaps with callout/pin + link field set per spec §3.2)
+ *   - overlay       (effect; screen-space gradient/solid fills — added db/039, Stage 4.5)
  *
  * Exported frozen so callers may iterate or validate against the
  * vocabulary without risk of mutation. `Object.freeze` is shallow but
@@ -103,6 +104,7 @@ export const ANCHOR_TYPE_VOCABULARY = Object.freeze([
   'audio',
   'video',
   'link-hotspot',
+  'overlay',
 ]);
 
 
