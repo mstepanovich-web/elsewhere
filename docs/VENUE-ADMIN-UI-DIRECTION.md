@@ -448,6 +448,23 @@ registry-resolved drivers that replace particle.js + spotlight.js's
 preview-oscillator heuristics, which the dormant stages don't need but
 the canonical read-path does. Net ~−1500 LOC from `stage.html`.
 
+> **STAGE 7 SCOPING NOTE — extract immersive compositing as app-neutral at
+> the rewire.** When Stage 7 rewires karaoke's compositing (the
+> `AMBIENT_PROFILES`/`addVenueEffects3D` → data-driven switch), the
+> user-into-venue compositing + costume-overlay application currently lives
+> INLINE in karaoke (Layer 4). The Phase 2 architecture review (2026-06-10)
+> confirmed the venue *substrate* is app-agnostic and games was designed in
+> as a future consumer — but this Layer-4 compositing *capability* is
+> provisioned-but-unbuilt as shared code. The rewire is the natural and
+> cheapest moment to extract immersive compositing as an APP-NEUTRAL Layer-4
+> capability (honoring `UNIFIED-APP-PLAN.md` §2's "exactly one capability,
+> identical across all apps") rather than re-inlining it karaoke-specifically.
+> If it is re-inlined, games-venues (post-Phase-5) inherits a karaoke pattern
+> to COPY instead of shared code to CALL — the build-twice trap relocated to
+> Layer 4. Cross-reference the existing `DEFERRED.md` "Games TV rendering
+> matrix" entry. This is a Phase-3/Stage-7 rendering-layer decision, NOT a
+> substrate change. Flag to whoever owns the Stage 7 karaoke rewire.
+
 **Stage 8 — Costume library + suggested-costumes editor.** Consumes
 the Phase-3 costume seed migration described in
 `PHASE-2-BUILD-SPEC.md` §6 (the migration that seeds `costumes` from
