@@ -22,6 +22,12 @@
 <!-- Stage 4.5: overlay renderer registration only (D8 — not a reader-path
      change; karaoke reads AMBIENT_PROFILES until Stage 7). No version bump
      per the A2/A3/A4a registration-only precedent. -->
+<!-- Stage 7d fix: load the venue modulator system. 7a shipped venue-modulators.js
+     UNREFERENCED; 7b was to add this tag with the first consumer but never did — so
+     window.elsewhere.modulators was never published and the read path's modulator
+     calls failed (latent because they were gated behind the flag). This tag publishes
+     activate/tick/deactivate/resolveModulator. -->
+<script type="module" src="../shell/venue-modulators.js"></script>
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -4039,7 +4045,7 @@ function renderLoop(now){
   // 7d: advance the venue modulator drivers once per frame off the render loop's own
   // `now` (driver-clock == render-clock). No-op when no driver is active (tickVenueModulators
   // early-returns). `now` is undefined only on the initial direct renderLoop() kickoff — skip it.
-  if(now !== undefined) tickVenueModulators(now);
+  if(now !== undefined) window.elsewhere?.modulators?.tickVenueModulators?.(now);
 
   if(viewMode==='panorama'){
     // ── SINGER VIEW — head-tracked / manual ──
@@ -5172,7 +5178,7 @@ function startAmbient(venueId){
   // Everything below the return (getProfile + the startAudio closure + profile.anim) is now
   // UNREACHABLE dead procedural code, physically retained until Step 2 deletes the proven-dead
   // blocks (transform-first-delete-later). ───
-  activateVenueDrivers(venueId);      // stadium/disco only; no-op for venues with no driver
+  window.elsewhere?.modulators?.activateVenueDrivers?.(venueId);   // stadium/disco only; no-op for venues with no driver
   renderVenueFromAnchors2D(venueId);  // audio anchors + layered 2D canvases (3D arm = addVenueEffects3D)
   return;
   const profile = getProfile(venueId);
