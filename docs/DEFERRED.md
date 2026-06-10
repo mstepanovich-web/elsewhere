@@ -5522,7 +5522,7 @@ When a venue's overlay requires a non-rectangular region. No pull today.
 - `shell/venue-renderers/overlay.js` — `regionToPx` (rect-only today)
 
 
-### Deferred: iOS Capacitor resync for the Stage 4.5 web-bundle changes
+### Deferred: iOS Capacitor resync for the Stage 4.5 + 7b web-bundle changes
 
 **Deferred in:** Phase 3 / Plan B Stage 4.5 closeout
 **Deferred on:** 2026-06-10
@@ -5542,7 +5542,9 @@ The `~/sync-app.sh` → `npx cap sync ios` → Xcode rebuild + install + smoke-t
 
 #### When to pick this up
 
-**Trigger:** batch with the next functional iOS-relevant change (any stage that ships a user-facing change to a surface the iOS app bundles — e.g. a `games/player.html` change, a push/Capacitor-plugin change, or Stage 7's karaoke read-path switch which makes the venue renderers load-bearing). Drift is acceptable until then because no Stage 4.5 change is iOS-functional.
+**Trigger:** batch with the next functional iOS-relevant change (any stage that ships a user-facing change to a surface the iOS app bundles — e.g. a `games/player.html` change, a push/Capacitor-plugin change). Drift is acceptable until then because no change through Stage 7b is iOS-functional.
+
+**Stage 7b update (2026-06-10, `fafbfae`):** Stage 7b changed `karaoke/stage.html` (the read-path switch) + `shell/venue-renderers/particle.js` + `shell/venue-modulators.js`. Deferred again on the **same logic**: 7b ships the data path behind a flag **DEFAULT-OFF**, so the bundled karaoke surface is byte-identical procedural for all real visitors — the data path only activates with `?venuepath=data` (our A/B sessions). Net iOS-facing behavior change: zero. **The real iOS trigger is Stage 7d** — when the procedural fallback is deleted and the data path becomes the only path, the venue renderers become load-bearing for everyone, and the iOS bundle MUST be synced + smoke-tested at that close (the 7b verification was browser/branch-deploy only; 7d needs native confirmation). Until 7d, drift remains acceptable.
 
 #### Related
 

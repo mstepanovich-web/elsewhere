@@ -239,6 +239,12 @@ setTimeout(pulseBeat, BEAT);
    [venue-modulators] unresolved driver '<name>' for target '<target>' — returning identity 1.0
    ```
    Names **both** the unresolved driver AND the target it was for. Every call warns — a missing driver in the 7b read path fires per-frame, which is the intended "impossible to ignore" property (a missing driver is a bug to fix immediately, not live with).
+
+   > **Updated in Stage 7b (`fafbfae`):** `target` is now **optional** — 3D callers (`particle-3d.js` / `spotlight-3d.js`) invoke `ctx.modulators(name)` with name only. The warn drops the "for target" clause when `target` is absent rather than printing `for target 'undefined'`:
+   > - target present → `[venue-modulators] unresolved driver 'X' for target 'Y' — returning identity 1.0`
+   > - target absent  → `[venue-modulators] unresolved driver 'X' — returning identity 1.0`
+   >
+   > The §6.2 harness assertion was updated accordingly (both cases) and re-run GREEN at the 7b gate-5. Everything else in this §4 spec holds verbatim.
 2. **Return identity `1.0`** — deterministic, non-crashing. The effect renders **un-modulated** (visibly missing its pulse, so you can still see *which* effect on *which* venue is wrong), while the console names exactly what failed. Returning `0` is rejected: it would vanish the effect, discarding the "see the effect" diagnostic half and risking misreading the effect itself as broken.
 3. **NO fallback to `PREVIEW_OSCILLATORS`** — silent substitution is the exact bug class D-injection exists to prevent ("prod silently used the preview oscillator"). The karaoke resolver knows only live drivers; a miss is loud, never papered over.
 
